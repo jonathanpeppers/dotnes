@@ -19,8 +19,8 @@ public class NESWriterTests
         using var s = new MemoryStream();
         using var r = new NESWriter(s)
         {
-            PRG_ROM = 2,
-            CHR_ROM = 1,
+            PRG_ROM = new byte[2 * 16384],
+            CHR_ROM = new byte[1 * 8192],
         };
         r.WriteHeader();
         r.Flush();
@@ -30,5 +30,24 @@ public class NESWriterTests
         {
             Assert.Equal(data[i], actual[i]);
         }
+    }
+
+    [Fact]
+    public void Write()
+    {
+        using var s = new MemoryStream();
+        using var r = new NESWriter(s)
+        {
+            PRG_ROM = new byte[2 * 16384],
+            CHR_ROM = new byte[1 * 8192],
+        };
+
+        Array.Copy(data, 16, r.PRG_ROM, 0, 2 * 16384);
+        Array.Copy(data, 16 + 2 * 16384, r.CHR_ROM, 0, 8192);
+
+        r.Write();
+        r.Flush();
+
+        Assert.Equal(data, s.ToArray());
     }
 }

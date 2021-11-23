@@ -14,14 +14,24 @@ class NESWriter : IDisposable
     public NESWriter(Stream stream) => _writer = new BinaryWriter(stream, Encoding.ASCII);
 
     /// <summary>
-    /// Size of PRG ROM in 16 KB units
+    /// Trainer, if present (0 or 512 bytes)
     /// </summary>
-    public byte PRG_ROM { get; set; }
+    public byte[]? Trainer { get; set; }
 
     /// <summary>
-    /// Size of CHR ROM in 8 KB units (Value 0 means the board uses CHR RAM)
+    /// PRG ROM data (16384 * x bytes)
     /// </summary>
-    public byte CHR_ROM { get; set; }
+    public byte[] PRG_ROM { get; set; } = Array.Empty<byte>();
+
+    /// <summary>
+    /// CHR ROM data, if present (8192 * y bytes)
+    /// </summary>
+    public byte[]? CHR_ROM { get; set; }
+
+    /// <summary>
+    /// PlayChoice INST-ROM, if present (0 or 8192 bytes)
+    /// </summary>
+    public byte[]? INST_ROM { get; set; }
 
     /// <summary>
     /// Mapper, mirroring, battery, trainer
@@ -54,8 +64,13 @@ class NESWriter : IDisposable
         _writer.Write('E');
         _writer.Write('S');
         _writer.Write('\x1A');
-        _writer.Write(PRG_ROM);
-        _writer.Write(CHR_ROM);
+        // Size of PRG ROM in 16 KB units
+        _writer.Write(checked ((byte)(PRG_ROM.Length / 16384)));
+        // Size of CHR ROM in 8 KB units (Value 0 means the board uses CHR RAM)
+        if (CHR_ROM != null)
+            _writer.Write(checked((byte)(CHR_ROM.Length / 8192)));
+        else
+            _writer.Write((byte)0);
         _writer.Write(Flags6);
         _writer.Write(Flags7);
         _writer.Write(Flags8);
@@ -66,6 +81,18 @@ class NESWriter : IDisposable
         {
             _writer.Write((byte)0);
         }
+    }
+
+    public void Write()
+    {
+        WriteHeader();
+        _writer.Write(PRG_ROM);
+        if (CHR_ROM != null)
+            _writer.Write(CHR_ROM);
+        if (Trainer != null)
+            _writer.Write(Trainer);
+        if (INST_ROM != null)
+            _writer.Write(INST_ROM);
     }
 
     public void Flush() => _writer.Flush();
