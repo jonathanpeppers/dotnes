@@ -27,7 +27,9 @@ public class NESWriterTests
 
     void AssertInstructions(string assembly)
     {
-        Assert.Equal(toByteArray(assembly.Replace(" ", "")), stream.ToArray());
+        var expected = toByteArray(assembly.Replace(" ", ""));
+        var actual = stream.ToArray();
+        Assert.Equal(expected, actual);
 
         static byte[] toByteArray(string text)
         {
@@ -122,5 +124,23 @@ public class NESWriterTests
         r.WriteBuiltIn(nameof(NESLib.pal_bg));
         r.Flush();
         AssertInstructions("8517 8618 A200 A910 D0E4");
+    }
+
+    [Fact]
+    public void Write_pal_spr()
+    {
+        using var r = GetWriter();
+        r.WriteBuiltIn(nameof(NESLib.pal_spr));
+        r.Flush();
+        AssertInstructions("8517 8618 A210 8A D0DB");
+    }
+
+    [Fact]
+    public void Write_pal_col()
+    {
+        using var r = GetWriter();
+        r.WriteBuiltIn(nameof(NESLib.pal_col));
+        r.Flush();
+        AssertInstructions("8517 205085 291F AA A517 9DC001 E607 60");
     }
 }

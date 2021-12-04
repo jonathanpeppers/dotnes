@@ -53,6 +53,46 @@ enum Instruction : byte
     /// Jump to New Location Saving Return Address
     /// </summary>
     JSR       = 0x20,
+    /// <summary>
+    /// AND Memory with Accumulator
+    /// </summary>
+    AND_X_ind = 0x21,
+    /// <summary>
+    /// Test Bits in Memory with Accumulator
+    /// </summary>
+    BIT_zpg   = 0x24,
+    /// <summary>
+    /// AND Memory with Accumulator
+    /// </summary>
+    AND_zpg   = 0x25,
+    /// <summary>
+    /// Rotate One Bit Left (Memory or Accumulator)
+    /// </summary>
+    ROL_zpg   = 0x26,
+    /// <summary>
+    /// Pull Processor Status from Stack
+    /// </summary>
+    PLP_impl  = 0x28,
+    /// <summary>
+    /// AND Memory with Accumulator
+    /// </summary>
+    AND       = 0x29,
+    /// <summary>
+    /// Rotate One Bit Left (Memory or Accumulator)
+    /// </summary>
+    ROL_A     = 0x2A,
+    /// <summary>
+    /// Test Bits in Memory with Accumulator
+    /// </summary>
+    BIT_abs   = 0x2C,
+    /// <summary>
+    /// AND Memory with Accumulator
+    /// </summary>
+    AND_abs   = 0x2D,
+    /// <summary>
+    /// Rotate One Bit Left (Memory or Accumulator)
+    /// </summary>
+    ROL_abs   = 0x2E,
 
     // 3
 
@@ -65,15 +105,46 @@ enum Instruction : byte
     //TODO: 4-5
 
     // 6
+
+    /// <summary>
+    /// Return from Subroutine
+    /// </summary>
     RTS_impl  = 0x60,
+    /// <summary>
+    /// Add Memory to Accumulator with Carry
+    /// </summary>
     ADC_X_ind = 0x61,
+    /// <summary>
+    /// Add Memory to Accumulator with Carry
+    /// </summary>
     ADC_X_zpg = 0x65,
+    /// <summary>
+    /// Rotate One Bit Right (Memory or Accumulator)
+    /// </summary>
     ROR_zpg   = 0x66,
+    /// <summary>
+    /// Pull Accumulator from Stack
+    /// </summary>
     PLA_impl  = 0x68,
+    /// <summary>
+    /// Add Memory to Accumulator with Carry
+    /// </summary>
     ADC       = 0x69,
+    /// <summary>
+    /// Rotate One Bit Right (Memory or Accumulator)
+    /// </summary>
     ROR_A     = 0x6A,
+    /// <summary>
+    /// Jump to New Location
+    /// </summary>
     JMP_ind   = 0x6C,
+    /// <summary>
+    /// Add Memory to Accumulator with Carry
+    /// </summary>
     ADC_abs   = 0x6D,
+    /// <summary>
+    /// Rotate One Bit Right (Memory or Accumulator)
+    /// </summary>
     ROR_abs   = 0x6E,
 
     //TODO: 7
@@ -116,6 +187,11 @@ enum Instruction : byte
     STX_abs   = 0x8C,
 
     //TODO: 9
+
+    /// <summary>
+    /// Store Accumulator in Memory
+    /// </summary>
+    STA_abs_X = 0x9D,
 
     // A
 
@@ -203,5 +279,11 @@ enum Instruction : byte
     /// </summary>
     DEC_abs_X = 0xDE,
 
-    //TODO: E-F
+    /// <summary>
+    /// Increment Memory by One
+    /// </summary>
+    INC_zpg   = 0xE6,
+    //TODO: rest of E
+
+    //TODO: F
 }

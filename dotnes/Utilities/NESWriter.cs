@@ -9,6 +9,8 @@ namespace dotnes;
 /// </summary>
 class NESWriter : IDisposable
 {
+    const int TEMP = 0x17;
+
     readonly BinaryWriter _writer;
 
     public NESWriter(Stream stream, bool leaveOpen = false) => _writer = new BinaryWriter(stream, Encoding.ASCII, leaveOpen);
@@ -97,8 +99,8 @@ class NESWriter : IDisposable
                  * 8215	A200          	LDX #$00                      
                  * 8217	A920          	LDA #$20                      
                  */
-                STA(0x17);
-                STX(0x18);
+                STA(TEMP);
+                STX(TEMP + 1);
                 LDX(0x00);
                 LDA(0x20);
                 break;
@@ -119,11 +121,45 @@ class NESWriter : IDisposable
                  * 8231	A910          	LDA #$10                      
                  * 8233	D0E4          	BNE pal_copy
                  */
-                STA(0x17);
-                STX(0x18);
+                STA(TEMP);
+                STX(TEMP + 1);
                 LDX(0x00);
                 LDA(0x10);
                 BNE(0xE4);
+                break;
+            case nameof (NESLib.pal_spr):
+                /*
+                 * 8235	8517          	STA TEMP                      ; _pal_spr
+                 * 8237	8618          	STX TEMP+1                    
+                 * 8239	A210          	LDX #$10                      
+                 * 823B	8A            	TXA                           
+                 * 823C	D0DB          	BNE pal_copy
+                 */
+                STA(TEMP);
+                STX(TEMP + 1);
+                LDX(0x10);
+                TXA();
+                BNE(0xDB);
+                break;
+            case nameof (NESLib.pal_col):
+                /*
+                 * 823E	8517          	STA TEMP                      ; _pal_col
+                 * 8240	205085        	JSR popa                      
+                 * 8243	291F          	AND #$1F                      
+                 * 8245	AA            	TAX                           
+                 * 8246	A517          	LDA TEMP                      
+                 * 8248	9DC001        	STA $01C0,x                   
+                 * 824B	E607          	INC PAL_UPDATE                
+                 * 824D	60            	RTS
+                 */
+                STA(TEMP);
+                JSR(0x8550);
+                AND(0x1F);
+                TAX();
+                LDA_zpg(TEMP);
+                STA_abs_X(0x01C0);
+                INC(0x07);
+                RTS();
                 break;
             default:
                 throw new NotImplementedException($"{name} is not implemented!");
@@ -138,6 +174,21 @@ class NESWriter : IDisposable
         _writer.Write((byte)Instruction.JSR);
         _writer.Write(address);
     }
+
+    /// <summary>
+    /// 29: AND Memory with Accumulator
+    /// </summary>
+    public void AND(byte n)
+    {
+        _writer.Write((byte)Instruction.AND);
+        _writer.Write(n);
+    }
+
+    /// <summary>
+    /// 60: Return from Subroutine
+    /// </summary>
+
+    public void RTS() => _writer.Write((byte)Instruction.RTS_impl);
 
     /// <summary>
     /// 85: Store Accumulator in Memory
@@ -155,6 +206,20 @@ class NESWriter : IDisposable
     {
         _writer.Write((byte)Instruction.STX_zpg);
         _writer.Write(n);
+    }
+
+    /// <summary>
+    /// 8A: Transfer Index X to Accumulator
+    /// </summary>
+    public void TXA() => _writer.Write((byte)Instruction.TXA_impl);
+
+    /// <summary>
+    /// 9D: Store Accumulator in Memory
+    /// </summary>
+    public void STA_abs_X(ushort address)
+    {
+        _writer.Write((byte)Instruction.STA_abs_X);
+        _writer.Write(address);
     }
 
     /// <summary>
@@ -176,6 +241,15 @@ class NESWriter : IDisposable
     }
 
     /// <summary>
+    /// A5: Load Accumulator with Memory
+    /// </summary>
+    public void LDA_zpg(byte n)
+    {
+        _writer.Write((byte)Instruction.LDA_zpg);
+        _writer.Write(n);
+    }
+
+    /// <summary>
     /// A9: Load Accumulator with Memory
     /// </summary>
     public void LDA(byte n)
@@ -185,11 +259,25 @@ class NESWriter : IDisposable
     }
 
     /// <summary>
+    /// AA: Transfer Accumulator to Index X
+    /// </summary>
+    public void TAX() => _writer.Write((byte)Instruction.TAX_impl);
+
+    /// <summary>
     /// D0: Branch on Result not Zero
     /// </summary>
     public void BNE(byte n)
     {
         _writer.Write((byte)Instruction.BNE_rel);
+        _writer.Write(n);
+    }
+
+    /// <summary>
+    /// E6: Increment Memory by One
+    /// </summary>
+    public void INC(byte n)
+    {
+        _writer.Write((byte)Instruction.INC_zpg);
         _writer.Write(n);
     }
 
