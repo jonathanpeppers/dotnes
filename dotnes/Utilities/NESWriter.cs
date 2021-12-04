@@ -11,7 +11,7 @@ class NESWriter : IDisposable
 {
     readonly BinaryWriter _writer;
 
-    public NESWriter(Stream stream) => _writer = new BinaryWriter(stream, Encoding.ASCII);
+    public NESWriter(Stream stream, bool leaveOpen = false) => _writer = new BinaryWriter(stream, Encoding.ASCII, leaveOpen);
 
     /// <summary>
     /// Trainer, if present (0 or 512 bytes)
@@ -21,7 +21,7 @@ class NESWriter : IDisposable
     /// <summary>
     /// PRG ROM data (16384 * x bytes)
     /// </summary>
-    public byte[] PRG_ROM { get; set; } = Array.Empty<byte>();
+    public byte[]? PRG_ROM { get; set; }
 
     /// <summary>
     /// CHR ROM data, if present (8192 * y bytes)
@@ -83,10 +83,17 @@ class NESWriter : IDisposable
         }
     }
 
+    public void LDA(byte n)
+    {
+        _writer.Write((byte)Instruction.LDA);
+        _writer.Write(n);
+    }
+
     public void Write()
     {
         WriteHeader();
-        _writer.Write(PRG_ROM);
+        if (PRG_ROM != null)
+            _writer.Write(PRG_ROM);
         if (CHR_ROM != null)
             _writer.Write(CHR_ROM);
         if (Trainer != null)

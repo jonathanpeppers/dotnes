@@ -3,6 +3,7 @@
 public class NESWriterTests
 {
     readonly byte[] data;
+    readonly MemoryStream stream = new MemoryStream();
 
     public NESWriterTests()
     {
@@ -13,19 +14,25 @@ public class NESWriterTests
         s.Read(data, 0, data.Length);
     }
 
+    NESWriter GetWriter(byte[]? PRG_ROM = null, byte[]? CHR_ROM = null)
+    {
+        stream.SetLength(0);
+
+        return new NESWriter(stream, leaveOpen: true)
+        {
+            PRG_ROM = PRG_ROM,
+            CHR_ROM = CHR_ROM,
+        };
+    }
+
     [Fact]
     public void WriteHeader()
     {
-        using var s = new MemoryStream();
-        using var r = new NESWriter(s)
-        {
-            PRG_ROM = new byte[2 * 16384],
-            CHR_ROM = new byte[1 * 8192],
-        };
-        r.WriteHeader();
-        r.Flush();
+        using var writer = GetWriter(new byte[2 * 16384], new byte[1 * 8192]);
+        writer.WriteHeader();
+        writer.Flush();
 
-        var actual = s.ToArray();
+        var actual = stream.ToArray();
         for (int i = 0; i < 16; i++)
         {
             Assert.Equal(data[i], actual[i]);
@@ -35,19 +42,25 @@ public class NESWriterTests
     [Fact]
     public void Write()
     {
-        using var s = new MemoryStream();
-        using var r = new NESWriter(s)
-        {
-            PRG_ROM = new byte[2 * 16384],
-            CHR_ROM = new byte[1 * 8192],
-        };
+        using var writer = GetWriter(new byte[2 * 16384], new byte[1 * 8192]);
 
-        Array.Copy(data, 16, r.PRG_ROM, 0, 2 * 16384);
-        Array.Copy(data, 16 + 2 * 16384, r.CHR_ROM, 0, 8192);
+        Array.Copy(data, 16, writer.PRG_ROM!, 0, 2 * 16384);
+        Array.Copy(data, 16 + 2 * 16384, writer.CHR_ROM!, 0, 8192);
 
-        r.Write();
+        writer.Write();
+        writer.Flush();
+
+        Assert.Equal(data, stream.ToArray());
+    }
+
+    [Fact]
+    public void WriteLDA()
+    {
+        using var r = GetWriter();
+        r.LDA(0x08);
         r.Flush();
 
-        Assert.Equal(data, s.ToArray());
+        // 8076	A908          	LDA #$08  
+        Assert.Equal(new byte[] { 0xA9, 0x08 }, stream.ToArray());
     }
 }
