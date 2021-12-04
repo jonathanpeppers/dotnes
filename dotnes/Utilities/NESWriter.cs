@@ -83,6 +83,9 @@ class NESWriter : IDisposable
         }
     }
 
+    /// <summary>
+    /// Load Accumulator with Memory
+    /// </summary>
     public void LDA(byte n)
     {
         _writer.Write((byte)Instruction.LDA);
