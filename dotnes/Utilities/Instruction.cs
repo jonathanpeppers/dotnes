@@ -46,7 +46,13 @@ enum Instruction : byte
     /// </summary>
     ASL_abs   = 0x0E,
 
-    //TODO: 1-2
+    //TODO: 1
+
+    // 2
+    /// <summary>
+    /// Jump to New Location Saving Return Address
+    /// </summary>
+    JSR       = 0x20,
 
     // 3
 

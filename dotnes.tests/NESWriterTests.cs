@@ -63,4 +63,15 @@ public class NESWriterTests
         // 8076	A908          	LDA #$08  
         Assert.Equal(new byte[] { 0xA9, 0x08 }, stream.ToArray());
     }
+
+    [Fact]
+    public void WriteJSR()
+    {
+        using var r = GetWriter();
+        r.JSR(0x84F4);
+        r.Flush();
+
+        // 807A	20F484        	JSR initlib
+        Assert.Equal(new byte[] { 0x20, 0xF4, 0x84 }, stream.ToArray());
+    }
 }

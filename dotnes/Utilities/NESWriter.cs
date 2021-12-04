@@ -92,6 +92,15 @@ class NESWriter : IDisposable
         _writer.Write(n);
     }
 
+    /// <summary>
+    /// Jump to New Location Saving Return Address
+    /// </summary>
+    public void JSR(ushort address)
+    {
+        _writer.Write((byte)Instruction.JSR);
+        _writer.Write(address);
+    }
+
     public void Write()
     {
         WriteHeader();
