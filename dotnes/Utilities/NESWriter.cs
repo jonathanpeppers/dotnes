@@ -102,13 +102,45 @@ class NESWriter : IDisposable
                 LDX(0x00);
                 LDA(0x20);
                 break;
+            // NOTE: this one is internal, not in neslib.h
+            case "pal_copy":
+                /*
+                 * 8219	8519          	STA $19                       ; pal_copy
+                 * 821B	A000          	LDY #$00
+                 */
+                STA(0x19);
+                LDY(0x00);
+                break;
+            case nameof(NESLib.pal_bg):
+                /*
+                 * 822B	8517          	STA TEMP                      ; _pal_bg
+                 * 822D	8618          	STX TEMP+1                    
+                 * 822F	A200          	LDX #$00                      
+                 * 8231	A910          	LDA #$10                      
+                 * 8233	D0E4          	BNE pal_copy
+                 */
+                STA(0x17);
+                STX(0x18);
+                LDX(0x00);
+                LDA(0x10);
+                BNE(0xE4);
+                break;
             default:
                 throw new NotImplementedException($"{name} is not implemented!");
         }
     }
 
     /// <summary>
-    /// Store Accumulator in Memory
+    /// 20: Jump to New Location Saving Return Address
+    /// </summary>
+    public void JSR(ushort address)
+    {
+        _writer.Write((byte)Instruction.JSR);
+        _writer.Write(address);
+    }
+
+    /// <summary>
+    /// 85: Store Accumulator in Memory
     /// </summary>
     public void STA(byte n)
     {
@@ -117,7 +149,7 @@ class NESWriter : IDisposable
     }
 
     /// <summary>
-    /// Store Index X in Memory
+    /// 86: Store Index X in Memory
     /// </summary>
     public void STX(byte n)
     {
@@ -126,16 +158,16 @@ class NESWriter : IDisposable
     }
 
     /// <summary>
-    /// Load Accumulator with Memory
+    /// A0: Load Index Y with Memory
     /// </summary>
-    public void LDA(byte n)
+    public void LDY(byte n)
     {
-        _writer.Write((byte)Instruction.LDA);
+        _writer.Write((byte)Instruction.LDY);
         _writer.Write(n);
     }
 
     /// <summary>
-    /// Load Index X with Memory
+    /// A2: Load Index X with Memory
     /// </summary>
     public void LDX(byte n)
     {
@@ -144,12 +176,21 @@ class NESWriter : IDisposable
     }
 
     /// <summary>
-    /// Jump to New Location Saving Return Address
+    /// A9: Load Accumulator with Memory
     /// </summary>
-    public void JSR(ushort address)
+    public void LDA(byte n)
     {
-        _writer.Write((byte)Instruction.JSR);
-        _writer.Write(address);
+        _writer.Write((byte)Instruction.LDA);
+        _writer.Write(n);
+    }
+
+    /// <summary>
+    /// D0: Branch on Result not Zero
+    /// </summary>
+    public void BNE(byte n)
+    {
+        _writer.Write((byte)Instruction.BNE_rel);
+        _writer.Write(n);
     }
 
     public void Write()

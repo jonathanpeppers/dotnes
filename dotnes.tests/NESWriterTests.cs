@@ -105,4 +105,22 @@ public class NESWriterTests
         r.Flush();
         AssertInstructions("8517 8618 A200 A920");
     }
+
+    [Fact]
+    public void Write_pal_copy()
+    {
+        using var r = GetWriter();
+        r.WriteBuiltIn("pal_copy");
+        r.Flush();
+        AssertInstructions("8519 A000");
+    }
+
+    [Fact]
+    public void Write_pal_bg()
+    {
+        using var r = GetWriter();
+        r.WriteBuiltIn(nameof(NESLib.pal_bg));
+        r.Flush();
+        AssertInstructions("8517 8618 A200 A910 D0E4");
+    }
 }

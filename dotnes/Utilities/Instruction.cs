@@ -167,4 +167,41 @@ enum Instruction : byte
     /// Load Index X with Memory
     /// </summary>
     LDX_abs   = 0xAE,
+
+    //TODO: B-C
+
+    /// <summary>
+    /// Branch on Result not Zero
+    /// </summary>
+    BNE_rel   = 0xD0,
+    /// <summary>
+    /// Compare Memory with Accumulator
+    /// </summary>
+    CMP_ind_Y = 0xD1,
+    /// <summary>
+    /// Compare Memory with Accumulator
+    /// </summary>
+    CMP_zpg_X = 0xD5,
+    /// <summary>
+    /// Decrement Memory by One
+    /// </summary>
+    DEC_zpg_X = 0xD6,
+    /// <summary>
+    /// Clear Decimal Mode
+    /// </summary>
+    CLD_impl  = 0xD8,
+    /// <summary>
+    /// Compare Memory with Accumulator
+    /// </summary>
+    CMP_abs_Y = 0XD9,
+    /// <summary>
+    /// Compare Memory with Accumulator
+    /// </summary>
+    CMP_abs_X = 0xDD,
+    /// <summary>
+    /// Decrement Memory by One
+    /// </summary>
+    DEC_abs_X = 0xDE,
+
+    //TODO: E-F
 }
