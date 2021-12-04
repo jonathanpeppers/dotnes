@@ -180,11 +180,11 @@ enum Instruction : byte
     /// <summary>
     /// Store Accumulator in Memory
     /// </summary>
-    STA_abs   = 0x8C,
+    STA_abs   = 0x8D,
     /// <summary>
     /// Store Index X in Memory
     /// </summary>
-    STX_abs   = 0x8C,
+    STX_abs   = 0x8E,
 
     //TODO: 9
 
@@ -244,7 +244,18 @@ enum Instruction : byte
     /// </summary>
     LDX_abs   = 0xAE,
 
-    //TODO: B-C
+    //TODO: B
+
+    /// <summary>
+    /// Load Accumulator with Memory
+    /// </summary>
+    LDA_ind_Y = 0xB1,
+
+    //TODO:C
+    /// <summary>
+    /// Decrement Memory by One
+    /// </summary>
+    DEC_zpg   = 0xC6,
 
     /// <summary>
     /// Branch on Result not Zero

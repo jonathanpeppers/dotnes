@@ -99,8 +99,8 @@ class NESWriter : IDisposable
                  * 8215	A200          	LDX #$00                      
                  * 8217	A920          	LDA #$20                      
                  */
-                STA(TEMP);
-                STX(TEMP + 1);
+                STA_zpg(TEMP);
+                STX_zpg(TEMP + 1);
                 LDX(0x00);
                 LDA(0x20);
                 break;
@@ -110,7 +110,7 @@ class NESWriter : IDisposable
                  * 8219	8519          	STA $19                       ; pal_copy
                  * 821B	A000          	LDY #$00
                  */
-                STA(0x19);
+                STA_zpg(0x19);
                 LDY(0x00);
                 break;
             case nameof(NESLib.pal_bg):
@@ -121,13 +121,13 @@ class NESWriter : IDisposable
                  * 8231	A910          	LDA #$10                      
                  * 8233	D0E4          	BNE pal_copy
                  */
-                STA(TEMP);
-                STX(TEMP + 1);
+                STA_zpg(TEMP);
+                STX_zpg(TEMP + 1);
                 LDX(0x00);
                 LDA(0x10);
                 BNE(0xE4);
                 break;
-            case nameof (NESLib.pal_spr):
+            case nameof(NESLib.pal_spr):
                 /*
                  * 8235	8517          	STA TEMP                      ; _pal_spr
                  * 8237	8618          	STX TEMP+1                    
@@ -135,13 +135,13 @@ class NESWriter : IDisposable
                  * 823B	8A            	TXA                           
                  * 823C	D0DB          	BNE pal_copy
                  */
-                STA(TEMP);
-                STX(TEMP + 1);
+                STA_zpg(TEMP);
+                STX_zpg(TEMP + 1);
                 LDX(0x10);
                 TXA();
                 BNE(0xDB);
                 break;
-            case nameof (NESLib.pal_col):
+            case nameof(NESLib.pal_col):
                 /*
                  * 823E	8517          	STA TEMP                      ; _pal_col
                  * 8240	205085        	JSR popa                      
@@ -152,18 +152,79 @@ class NESWriter : IDisposable
                  * 824B	E607          	INC PAL_UPDATE                
                  * 824D	60            	RTS
                  */
-                STA(TEMP);
+                STA_zpg(TEMP);
                 JSR(0x8550);
                 AND(0x1F);
                 TAX();
                 LDA_zpg(TEMP);
                 STA_abs_X(0x01C0);
-                INC(0x07);
+                INC_zpg(0x07);
+                RTS();
+                break;
+            case nameof(NESLib.vram_adr):
+                /*
+                 * 83D4	8E0620        	STX $2006                     ; _vram_adr
+                 * 83D7	8D0620        	STA $2006                     
+                 * 83DA	60            	RTS
+                 */
+                STX_abs(0x2006);
+                STA_abs(0x2006);
+                RTS();
+                break;
+            case nameof(NESLib.vram_write):
+                /*
+                 * 834F	8517          	STA TEMP                      ; _vram_write
+                 * 8351	8618          	STX TEMP+1                    
+                 * 8353	203A85        	JSR popax                     
+                 * 8356	8519          	STA $19                       
+                 * 8358	861A          	STX $1A                       
+                 * 835A	A000          	LDY #$00                      
+                 * 835C	B119          	LDA ($19),y                   
+                 * 835E	8D0720        	STA $2007                     
+                 * 8361	E619          	INC $19                       
+                 * 8363	D002          	BNE $8367                     
+                 * 8365	E61A          	INC $1A                       
+                 * 8367	A517          	LDA TEMP                      
+                 * 8369	D002          	BNE $836D                     
+                 * 836B	C618          	DEC TEMP+1                    
+                 * 836D	C617          	DEC TEMP                      
+                 * 836F	A517          	LDA TEMP                      
+                 * 8371	0518          	ORA TEMP+1                    
+                 * 8373	D0E7          	BNE $835C                     
+                 * 8375	60            	RTS
+                 */
+                STA_zpg(TEMP);
+                STX_zpg(TEMP + 1);
+                JSR(0x853A);
+                STA_zpg(0x19);
+                STX_zpg(0x1A);
+                LDY(0x00);
+                LDA_ind_Y(0x19);
+                STA_abs(0x2007);
+                INC_zpg(0x19);
+                BNE(0x02);
+                INC_zpg(0x1A);
+                LDA_zpg(TEMP);
+                BNE(0x02);
+                DEC_zpg(TEMP + 1);
+                DEC_zpg(TEMP);
+                LDA_zpg(TEMP);
+                ORA_zpg(TEMP + 1);
+                BNE(0xE7);
                 RTS();
                 break;
             default:
                 throw new NotImplementedException($"{name} is not implemented!");
         }
+    }
+
+    /// <summary>
+    /// 05: OR Memory with Accumulator
+    /// </summary>
+    public void ORA_zpg(byte n)
+    {
+        _writer.Write((byte)Instruction.ORA_zpg);
+        _writer.Write(n);
     }
 
     /// <summary>
@@ -193,7 +254,7 @@ class NESWriter : IDisposable
     /// <summary>
     /// 85: Store Accumulator in Memory
     /// </summary>
-    public void STA(byte n)
+    public void STA_zpg(byte n)
     {
         _writer.Write((byte)Instruction.STA_zpg);
         _writer.Write(n);
@@ -202,10 +263,28 @@ class NESWriter : IDisposable
     /// <summary>
     /// 86: Store Index X in Memory
     /// </summary>
-    public void STX(byte n)
+    public void STX_zpg(byte n)
     {
         _writer.Write((byte)Instruction.STX_zpg);
         _writer.Write(n);
+    }
+
+    /// <summary>
+    /// 8D: Store Accumulator in Memory
+    /// </summary>
+    public void STA_abs(ushort address)
+    {
+        _writer.Write((byte)Instruction.STA_abs);
+        _writer.Write(address);
+    }
+
+    /// <summary>
+    /// 8E: Store Index X in Memory
+    /// </summary>
+    public void STX_abs(ushort address)
+    {
+        _writer.Write((byte)Instruction.STX_abs);
+        _writer.Write(address);
     }
 
     /// <summary>
@@ -264,6 +343,25 @@ class NESWriter : IDisposable
     public void TAX() => _writer.Write((byte)Instruction.TAX_impl);
 
     /// <summary>
+    /// B1: Load Accumulator with Memory
+    /// </summary>
+    public void LDA_ind_Y(byte n)
+    {
+        _writer.Write((byte)Instruction.LDA_ind_Y);
+        _writer.Write(n);
+    }
+
+    /// <summary>
+    /// C6: Decrement Memory by One
+    /// </summary>
+    /// <param name="n"></param>
+    public void DEC_zpg(byte n)
+    {
+        _writer.Write((byte)Instruction.DEC_zpg);
+        _writer.Write(n);
+    }
+
+    /// <summary>
     /// D0: Branch on Result not Zero
     /// </summary>
     public void BNE(byte n)
@@ -275,7 +373,7 @@ class NESWriter : IDisposable
     /// <summary>
     /// E6: Increment Memory by One
     /// </summary>
-    public void INC(byte n)
+    public void INC_zpg(byte n)
     {
         _writer.Write((byte)Instruction.INC_zpg);
         _writer.Write(n);
