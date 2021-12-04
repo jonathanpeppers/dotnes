@@ -7,6 +7,21 @@
 public static class NESLib
 {
     /// <summary>
+    /// set bg and spr palettes, data is 32 bytes array
+    /// </summary>
+    public static void pal_all(byte[] data) { }
+
+    /// <summary>
+    /// set bg palette only, data is 16 bytes array
+    /// </summary>
+    public static void pal_bg(byte[] data) { }
+
+    /// <summary>
+    /// set spr palette only, data is 16 bytes array
+    /// </summary>
+    public static void pal_spr(byte[] data) { }
+
+    /// <summary>
     /// set a palette entry, index is 0..31
     /// </summary>
     public static void pal_col(byte index, byte color) { }

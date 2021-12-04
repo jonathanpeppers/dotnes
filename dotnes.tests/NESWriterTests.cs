@@ -74,4 +74,15 @@ public class NESWriterTests
         // 807A	20F484        	JSR initlib
         Assert.Equal(new byte[] { 0x20, 0xF4, 0x84 }, stream.ToArray());
     }
+
+    [Fact]
+    public void Write_pal_bg()
+    {
+        using var r = GetWriter();
+        r.WriteBuiltIn(nameof (NESLib.pal_bg));
+        r.Flush();
+
+        // TODO: these tests should emit the actual instructions and compare
+        Assert.Equal(new byte[] { 0x85, 0x17, 0x86, 0x18, 0xA2, 0x00, 0xA9, 0x20 }, stream.ToArray());
+    }
 }

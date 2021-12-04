@@ -11,10 +11,15 @@
     <Using Remove="System.Threading.Tasks" />
     <Using Include="Microsoft.Build.Framework" />
     <Using Include="Microsoft.Build.Utilities" />
+	<Using Include="NES" />
     <InternalsVisibleTo Include="dotnes.tests" />
     <PackageReference Include="Microsoft.Build.Tasks.Core" Version="17.0.0" />
     <PackageReference Include="Microsoft.Build.Utilities.Core" Version="17.0.0" />
     <PackageReference Include="System.Reflection.Metadata" Version="6.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\neslib\neslib.csproj" />
   </ItemGroup>
 
 </Project>

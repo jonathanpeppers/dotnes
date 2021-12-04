@@ -84,6 +84,34 @@ class NESWriter : IDisposable
     }
 
     /// <summary>
+    /// Writes a built-in method from NESLib
+    /// </summary>
+    public void WriteBuiltIn(string name)
+    {
+        switch (name)
+        {
+            case nameof(NESLib.pal_bg):
+                /*
+                 * 8211	8517          	STA TEMP                      ; _pal_all
+                 * 8213	8618          	STX TEMP+1                    
+                 * 8215	A200          	LDX #$00                      
+                 * 8217	A920          	LDA #$20                      
+                 */
+                _writer.Write((byte)0x85);
+                _writer.Write((byte)0x17);
+                _writer.Write((byte)0x86);
+                _writer.Write((byte)0x18);
+                _writer.Write((byte)0xA2);
+                _writer.Write((byte)0x00);
+                _writer.Write((byte)0xA9);
+                _writer.Write((byte)0x20);
+                break;
+            default:
+                throw new NotImplementedException($"{name} is not implemented!");
+        }
+    }
+
+    /// <summary>
     /// Load Accumulator with Memory
     /// </summary>
     public void LDA(byte n)
