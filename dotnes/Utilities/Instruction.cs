@@ -76,9 +76,49 @@ enum Instruction : byte
     ADC_abs   = 0x6D,
     ROR_abs   = 0x6E,
 
-    //TODO: 7-9
+    //TODO: 7
+
+    /// <summary>
+    /// Store Accumulator in Memory
+    /// </summary>
+    STA_X_ind = 0x81,
+    /// <summary>
+    /// Store Index Y in Memory
+    /// </summary>
+    STY_zpg   = 0x84,
+    /// <summary>
+    /// Store Accumulator in Memory
+    /// </summary>
+    STA_zpg   = 0x85,
+    /// <summary>
+    /// Store Index X in Memory
+    /// </summary>
+    STX_zpg   = 0x86,
+    /// <summary>
+    /// Decrement Index Y by One
+    /// </summary>
+    DEY_impl  = 0x88,
+    /// <summary>
+    /// Transfer Index X to Accumulator
+    /// </summary>
+    TXA_impl  = 0x8A,
+    /// <summary>
+    /// Store Index Y in Memory
+    /// </summary>
+    STY_abs   = 0x8C,
+    /// <summary>
+    /// Store Accumulator in Memory
+    /// </summary>
+    STA_abs   = 0x8C,
+    /// <summary>
+    /// Store Index X in Memory
+    /// </summary>
+    STX_abs   = 0x8C,
+
+    //TODO: 9
 
     // A
+
     /// <summary>
     /// Load Index Y with Memory
     /// </summary>

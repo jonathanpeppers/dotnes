@@ -25,6 +25,28 @@ public class NESWriterTests
         };
     }
 
+    void AssertInstructions(string assembly)
+    {
+        Assert.Equal(toByteArray(assembly.Replace(" ", "")), stream.ToArray());
+
+        static byte[] toByteArray(string text)
+        {
+            int length = text.Length >> 1;
+            var bytes = new byte[length];
+            for (int i = 0; i < length; i++)
+            {
+                bytes[i] = (byte)((toHex(text[i << 1]) << 4) + (toHex(text[(i << 1) + 1])));
+            }
+            return bytes;
+        }
+
+        static int toHex(char ch)
+        {
+            int value = (int)ch;
+            return value - (value < 58 ? 48 : (value < 97 ? 55 : 87));
+        }
+    }
+
     [Fact]
     public void WriteHeader()
     {
@@ -40,7 +62,7 @@ public class NESWriterTests
     }
 
     [Fact]
-    public void Write()
+    public void WriteFullROM()
     {
         using var writer = GetWriter(new byte[2 * 16384], new byte[1 * 8192]);
 
@@ -76,13 +98,11 @@ public class NESWriterTests
     }
 
     [Fact]
-    public void Write_pal_bg()
+    public void Write_pal_all()
     {
         using var r = GetWriter();
-        r.WriteBuiltIn(nameof (NESLib.pal_bg));
+        r.WriteBuiltIn(nameof(NESLib.pal_all));
         r.Flush();
-
-        // TODO: these tests should emit the actual instructions and compare
-        Assert.Equal(new byte[] { 0x85, 0x17, 0x86, 0x18, 0xA2, 0x00, 0xA9, 0x20 }, stream.ToArray());
+        AssertInstructions("8517 8618 A200 A920");
     }
 }

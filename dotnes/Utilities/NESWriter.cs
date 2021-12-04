@@ -90,25 +90,39 @@ class NESWriter : IDisposable
     {
         switch (name)
         {
-            case nameof(NESLib.pal_bg):
+            case nameof(NESLib.pal_all):
                 /*
                  * 8211	8517          	STA TEMP                      ; _pal_all
                  * 8213	8618          	STX TEMP+1                    
                  * 8215	A200          	LDX #$00                      
                  * 8217	A920          	LDA #$20                      
                  */
-                _writer.Write((byte)0x85);
-                _writer.Write((byte)0x17);
-                _writer.Write((byte)0x86);
-                _writer.Write((byte)0x18);
-                _writer.Write((byte)0xA2);
-                _writer.Write((byte)0x00);
-                _writer.Write((byte)0xA9);
-                _writer.Write((byte)0x20);
+                STA(0x17);
+                STX(0x18);
+                LDX(0x00);
+                LDA(0x20);
                 break;
             default:
                 throw new NotImplementedException($"{name} is not implemented!");
         }
+    }
+
+    /// <summary>
+    /// Store Accumulator in Memory
+    /// </summary>
+    public void STA(byte n)
+    {
+        _writer.Write((byte)Instruction.STA_zpg);
+        _writer.Write(n);
+    }
+
+    /// <summary>
+    /// Store Index X in Memory
+    /// </summary>
+    public void STX(byte n)
+    {
+        _writer.Write((byte)Instruction.STX_zpg);
+        _writer.Write(n);
     }
 
     /// <summary>
@@ -117,6 +131,15 @@ class NESWriter : IDisposable
     public void LDA(byte n)
     {
         _writer.Write((byte)Instruction.LDA);
+        _writer.Write(n);
+    }
+
+    /// <summary>
+    /// Load Index X with Memory
+    /// </summary>
+    public void LDX(byte n)
+    {
+        _writer.Write((byte)Instruction.LDX);
         _writer.Write(n);
     }
 
