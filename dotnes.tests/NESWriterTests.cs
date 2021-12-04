@@ -161,4 +161,22 @@ public class NESWriterTests
         r.Flush();
         AssertInstructions("8517 8618 203A85 8519 861A A000 B119 8D0720 E619 D002 E61A A517 D002 C618 C617 A517 0518 D0E7 60");
     }
+
+    [Fact]
+    public void Write_ppu_on_all()
+    {
+        using var r = GetWriter();
+        r.WriteBuiltIn(nameof(NESLib.ppu_on_all));
+        r.Flush();
+        AssertInstructions("A512 0918 8512 4CF082");
+    }
+
+    [Fact]
+    public void Write_popa()
+    {
+        using var r = GetWriter();
+        r.WriteBuiltIn("popa");
+        r.Flush();
+        AssertInstructions("A000 B122 E622 F001 60");
+    }
 }

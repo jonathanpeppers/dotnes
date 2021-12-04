@@ -104,8 +104,8 @@ class NESWriter : IDisposable
                 Write(Instruction.LDX, 0x00);
                 Write(Instruction.LDA, 0x20);
                 break;
-            // NOTE: this one is internal, not in neslib.h
             case "pal_copy":
+                // NOTE: this one is internal, not in neslib.h
                 /*
                  * 8219	8519          	STA $19                       ; pal_copy
                  * 821B	A000          	LDY #$00
@@ -211,6 +211,34 @@ class NESWriter : IDisposable
                 Write(Instruction.LDA_zpg, TEMP);
                 Write(Instruction.ORA_zpg, TEMP + 1);
                 Write(Instruction.BNE_rel, 0xE7);
+                Write(Instruction.RTS_impl);
+                break;
+            case nameof(NESLib.ppu_on_all):
+                //TODO: not sure if we should emit ppu_onoff at the same place
+                /*
+                 * 8289	A512          	LDA PPU_MASK_VAR              ; _ppu_on_all
+                 * 828B	0918          	ORA #$18   
+                 * 828D	8512          	STA PPU_MASK_VAR              ; ppu_onoff
+                 * 828F	4CF082        	JMP _ppu_wait_nmi  
+                 */
+                Write(Instruction.LDA_zpg, 0x12);
+                Write(Instruction.ORA, 0x18);
+                Write(Instruction.STA_zpg, 0x12);
+                Write(Instruction.JMP_abs, 0x82F0);
+                break;
+            case "popa":
+                //NOTE: seems to be some internal subroutine
+                /*
+                 * 8592	A000          	LDY #$00                      ; popa
+                 * 8594	B122          	LDA (sp),y                    
+                 * 8596	E622          	INC sp                        
+                 * 8598	F001          	BEQ $859B                     
+                 * 859A	60            	RTS  
+                 */
+                Write(Instruction.LDY, 0x00);
+                Write(Instruction.LDA_ind_Y, 0x22);
+                Write(Instruction.INC_zpg, 0x22);
+                Write(Instruction.BEQ_rel, 0x01);
                 Write(Instruction.RTS_impl);
                 break;
             default:

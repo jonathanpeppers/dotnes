@@ -102,6 +102,10 @@ enum Instruction : byte
     BMI       = 0x30,
     //TODO: rest of 3
 
+    /// <summary>
+    /// Jump to New Location
+    /// </summary>
+    JMP_abs   = 0x4C,
     //TODO: 4-5
 
     // 6
@@ -297,4 +301,9 @@ enum Instruction : byte
     //TODO: rest of E
 
     //TODO: F
+
+    /// <summary>
+    /// Branch on Result Zero
+    /// </summary>
+    BEQ_rel   = 0xF0,
 }
