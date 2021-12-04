@@ -226,6 +226,22 @@ class NESWriter : IDisposable
                 Write(Instruction.STA_zpg, 0x12);
                 Write(Instruction.JMP_abs, 0x82F0);
                 break;
+            case nameof(NESLib.ppu_wait_nmi):
+                /*
+                 * 82F0	A901          	LDA #$01                      ; _ppu_wait_nmi
+                 * 82F2	8503          	STA VRAM_UPDATE               
+                 * 82F4	A501          	LDA __STARTUP__               
+                 * 82F6	C501          	CMP __STARTUP__               
+                 * 82F8	F0FC          	BEQ $82F6                     
+                 * 82FA	60            	RTS
+                 */
+                Write(Instruction.LDA, 0x01);
+                Write(Instruction.STA_zpg, 0x03);
+                Write(Instruction.LDA_zpg, 0x01);
+                Write(Instruction.CMP_zpg, 0x01);
+                Write(Instruction.BEQ_rel, 0xFC);
+                Write(Instruction.RTS_impl);
+                break;
             case "popa":
                 //NOTE: seems to be some internal subroutine
                 /*

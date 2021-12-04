@@ -179,4 +179,13 @@ public class NESWriterTests
         r.Flush();
         AssertInstructions("A000 B122 E622 F001 60");
     }
+
+    [Fact]
+    public void Write_ppu_wait_nmi()
+    {
+        using var r = GetWriter();
+        r.WriteBuiltIn(nameof(NESLib.ppu_wait_nmi));
+        r.Flush();
+        AssertInstructions("A901 8503 A501 C501 F0FC 60");
+    }
 }

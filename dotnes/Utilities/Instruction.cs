@@ -257,6 +257,10 @@ enum Instruction : byte
 
     //TODO:C
     /// <summary>
+    /// Compare Memory with Accumulator
+    /// </summary>
+    CMP_zpg   = 0xC5,
+    /// <summary>
     /// Decrement Memory by One
     /// </summary>
     DEC_zpg   = 0xC6,
