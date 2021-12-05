@@ -50,7 +50,7 @@ enum Instruction : byte
 
     // 2
     /// <summary>
-    /// Jump to New Location Saving Return Address
+    /// 20: Jump to New Location Saving Return Address
     /// </summary>
     JSR       = 0x20,
     /// <summary>
@@ -193,7 +193,12 @@ enum Instruction : byte
     //TODO: 9
 
     /// <summary>
-    /// Store Accumulator in Memory
+    /// 91: Store Accumulator in Memory
+    /// </summary>
+    STA_ind_Y = 0x91,
+    //TODO: rest of 9
+    /// <summary>
+    /// 9D: Store Accumulator in Memory
     /// </summary>
     STA_abs_X = 0x9D,
 
@@ -228,7 +233,7 @@ enum Instruction : byte
     /// </summary>
     TAY_impl  = 0xA8,
     /// <summary>
-    /// Load Accumulator with Memory
+    /// A9: Load Accumulator with Memory
     /// </summary>
     LDA       = 0xA9,
     /// <summary>

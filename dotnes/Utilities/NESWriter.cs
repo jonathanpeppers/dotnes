@@ -10,6 +10,7 @@ namespace dotnes;
 class NESWriter : IDisposable
 {
     const int TEMP = 0x17;
+    const int sp = 0x22;
 
     readonly BinaryWriter _writer;
 
@@ -245,8 +246,25 @@ class NESWriter : IDisposable
                 Write(Instruction.BEQ_rel, 0xFC);
                 Write(Instruction.RTS_impl);
                 break;
+            case "pusha":
+                //NOTE: seems to be an internal subroutine
+                /*
+                * 85A2	A422          	LDY sp                        ; pusha
+                * 85A4	F007          	BEQ $85AD                     
+                * 85A6	C622          	DEC sp                        
+                * 85A8	A000          	LDY #$00                      
+                * 85AA	9122          	STA (sp),y                    
+                * 85AC	60            	RTS                           
+                */
+                Write(Instruction.LDY_zpg, sp);
+                Write(Instruction.BEQ_rel, 0x07);
+                Write(Instruction.DEC_zpg, sp);
+                Write(Instruction.LDY, 0x00);
+                Write(Instruction.STA_ind_Y, sp);
+                Write(Instruction.RTS_impl);
+                break;
             case "popa":
-                //NOTE: seems to be some internal subroutine
+                //NOTE: seems to be an internal subroutine
                 /*
                  * 8592	A000          	LDY #$00                      ; popa
                  * 8594	B122          	LDA (sp),y                    
@@ -255,8 +273,8 @@ class NESWriter : IDisposable
                  * 859A	60            	RTS  
                  */
                 Write(Instruction.LDY, 0x00);
-                Write(Instruction.LDA_ind_Y, 0x22);
-                Write(Instruction.INC_zpg, 0x22);
+                Write(Instruction.LDA_ind_Y, sp);
+                Write(Instruction.INC_zpg, sp);
                 Write(Instruction.BEQ_rel, 0x01);
                 Write(Instruction.RTS_impl);
                 break;

@@ -172,6 +172,15 @@ public class NESWriterTests
     }
 
     [Fact]
+    public void Write_pusha()
+    {
+        using var r = GetWriter();
+        r.WriteBuiltIn("pusha");
+        r.Flush();
+        AssertInstructions("A422 F007 C622 A000 9122 60");
+    }
+
+    [Fact]
     public void Write_popa()
     {
         using var r = GetWriter();
@@ -187,5 +196,50 @@ public class NESWriterTests
         r.WriteBuiltIn(nameof(NESLib.ppu_wait_nmi));
         r.Flush();
         AssertInstructions("A901 8503 A501 C501 F0FC 60");
+    }
+
+    [Fact]
+    public void Write_Main()
+    {
+        using var r = GetWriter();
+        //TODO:
+        r.Write(Instruction.LDA, 0x00);
+        r.Write(Instruction.JSR, 0x85A2);
+        r.Write(Instruction.LDA, 0x02);
+        r.Write(Instruction.JSR, 0x823E);
+        r.Flush();
+        /*
+        * 8500	A900          	LDA #$00                      ; _main
+        * 8502	20A285        	JSR pusha                     
+        * 8505	A902          	LDA #$02                      
+        * 8507	203E82        	JSR _pal_col                  
+        * 850A	A901          	LDA #$01                      
+        * 850C	20A285        	JSR pusha                     
+        * 850F	A914          	LDA #$14                      
+        * 8511	203E82        	JSR _pal_col                  
+        * 8514	A902          	LDA #$02                      
+        * 8516	20A285        	JSR pusha                     
+        * 8519	A920          	LDA #$20                      
+        * 851B	203E82        	JSR _pal_col                  
+        * 851E	A903          	LDA #$03                      
+        * 8520	20A285        	JSR pusha                     
+        * 8523	A930          	LDA #$30                      
+        * 8525	203E82        	JSR _pal_col                  
+        * 8528	A220          	LDX #$20                      
+        * 852A	A942          	LDA #$42                      
+        * 852C	20D483        	JSR _vram_adr                 
+        * 852F	A9F1          	LDA #$F1                      
+        * 8531	A285          	LDX #$85                      
+        * 8533	20B885        	JSR pushax                    
+        * 8536	A200          	LDX #$00                      
+        * 8538	A90D          	LDA #$0D                      
+        * 853A	204F83        	JSR _vram_write               
+        * 853D	208982        	JSR _ppu_on_all               
+        * 8540	4C4085        	JMP $8540                     
+        * 8543	A000          	LDY #$00                      ; donelib
+        */
+
+        //TODO: rest of instructions? This test even helpful?
+        AssertInstructions("A900 20A285 A902 203E82");
     }
 }
