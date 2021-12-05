@@ -67,7 +67,10 @@ class NESWriter : IDisposable
         _writer.Write('S');
         _writer.Write('\x1A');
         // Size of PRG ROM in 16 KB units
-        _writer.Write(checked ((byte)(PRG_ROM.Length / 16384)));
+        if (PRG_ROM != null)
+            _writer.Write(checked ((byte)(PRG_ROM.Length / 16384)));
+        else
+            _writer.Write(0);
         // Size of CHR ROM in 8 KB units (Value 0 means the board uses CHR RAM)
         if (CHR_ROM != null)
             _writer.Write(checked((byte)(CHR_ROM.Length / 8192)));
