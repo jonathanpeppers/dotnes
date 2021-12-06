@@ -247,7 +247,6 @@ public class NESWriterTests
         * 853A	204F83        	JSR _vram_write               
         * 853D	208982        	JSR _ppu_on_all               
         * 8540	4C4085        	JMP $8540                     
-        * 8543	A000          	LDY #$00                      ; donelib
         */
 
         ushort pusha = 0x85A2;
@@ -300,14 +299,13 @@ public class NESWriterTests
         // while (true) ;
         r.Write(Instruction.JMP_abs, 0x8540); // Jump to self
 
-        // ;donelib
-        r.Write(Instruction.LDY, 0x00);
+        r.WriteSegment(1);
+        r.WriteString("HELLO, WORLD!");
+        r.WriteSegment(2);
 
-        //r.WriteSegment(1);
-        //r.WriteString("HELLO, WORLD!");
-        //r.WriteSegment(2);
+        //TODO: now pad bunch of 0s?
+
         r.Flush();
-
         var actual = stream.ToArray();
         //Assert.Equal(data.Length, actual.Length);
         for (int i = 0; i < actual.Length; i++)

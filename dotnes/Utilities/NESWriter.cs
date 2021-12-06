@@ -1,4 +1,5 @@
-﻿using System.Text;
+﻿using System.Buffers;
+using System.Text;
 
 namespace dotnes;
 
@@ -9,12 +10,14 @@ namespace dotnes;
 /// </summary>
 class NESWriter : IDisposable
 {
+    public static readonly Encoding Encoding = Encoding.ASCII;
+
     const int TEMP = 0x17;
     const int sp = 0x22;
 
     readonly BinaryWriter _writer;
 
-    public NESWriter(Stream stream, bool leaveOpen = false) => _writer = new BinaryWriter(stream, Encoding.ASCII, leaveOpen);
+    public NESWriter(Stream stream, bool leaveOpen = false) => _writer = new BinaryWriter(stream, Encoding, leaveOpen);
 
     /// <summary>
     /// Trainer, if present (0 or 512 bytes)
@@ -98,7 +101,25 @@ class NESWriter : IDisposable
         stream.CopyTo(_writer.BaseStream);
     }
 
-    public void WriteString(string text) => _writer.Write(text);
+    /// <summary>
+    /// Writes a string in ASCI form, including a trailing \0
+    /// </summary>
+    public void WriteString(string text)
+    {
+        int length = Encoding.GetByteCount(text);
+        var bytes = ArrayPool<byte>.Shared.Rent(length);
+        try
+        {
+            length = Encoding.GetBytes(text, 0, text.Length, bytes, 0);
+            _writer.Write(bytes, 0, length);
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(bytes);
+        }
+        //TODO: I don't know if there is a 0 between each string, or if this denotes the end of the table
+        _writer.Write((byte)0);
+    }
 
     /// <summary>
     /// Writes a built-in method from NESLib
