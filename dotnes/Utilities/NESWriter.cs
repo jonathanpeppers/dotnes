@@ -30,9 +30,11 @@ class NESWriter : IDisposable
     protected const ushort vram_write = 0x834F;
     protected const ushort ppu_on_all = 0x8289;
 
-    readonly BinaryWriter _writer;
+    protected readonly BinaryWriter _writer;
 
     public NESWriter(Stream stream, bool leaveOpen = false) => _writer = new BinaryWriter(stream, Encoding, leaveOpen);
+
+    public Stream BaseStream => _writer.BaseStream;
 
     /// <summary>
     /// Trainer, if present (0 or 512 bytes)

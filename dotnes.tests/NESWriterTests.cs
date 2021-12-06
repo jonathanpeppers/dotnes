@@ -88,17 +88,16 @@ public class NESWriterTests
         Array.Copy(data, 16 + 2 * 16384, writer.CHR_ROM, 0, writer.CHR_ROM.Length);
 
         writer.Write();
-        writer.Flush();
 
-        Assert.Equal(data, stream.ToArray());
+        AssertEx.Equal(data, writer);
     }
 
     [Fact]
     public void WriteLDA()
     {
-        using var r = GetWriter();
-        r.Write(Instruction.LDA, 0x08);
-        r.Flush();
+        using var writer = GetWriter();
+        writer.Write(Instruction.LDA, 0x08);
+        writer.Flush();
 
         // 8076	A908          	LDA #$08  
         AssertInstructions("A908");
@@ -107,9 +106,9 @@ public class NESWriterTests
     [Fact]
     public void WriteJSR()
     {
-        using var r = GetWriter();
-        r.Write(Instruction.JSR, 0x84F4);
-        r.Flush();
+        using var writer = GetWriter();
+        writer.Write(Instruction.JSR, 0x84F4);
+        writer.Flush();
 
         // 807A	20F484        	JSR initlib
         AssertInstructions("20F484");
@@ -118,108 +117,108 @@ public class NESWriterTests
     [Fact]
     public void Write_pal_all()
     {
-        using var r = GetWriter();
-        r.WriteBuiltIn(nameof(NESLib.pal_all));
-        r.Flush();
+        using var writer = GetWriter();
+        writer.WriteBuiltIn(nameof(NESLib.pal_all));
+        writer.Flush();
         AssertInstructions("8517 8618 A200 A920");
     }
 
     [Fact]
     public void Write_pal_copy()
     {
-        using var r = GetWriter();
-        r.WriteBuiltIn("pal_copy");
-        r.Flush();
+        using var writer = GetWriter();
+        writer.WriteBuiltIn("pal_copy");
+        writer.Flush();
         AssertInstructions("8519 A000");
     }
 
     [Fact]
     public void Write_pal_bg()
     {
-        using var r = GetWriter();
-        r.WriteBuiltIn(nameof(NESLib.pal_bg));
-        r.Flush();
+        using var writer = GetWriter();
+        writer.WriteBuiltIn(nameof(NESLib.pal_bg));
+        writer.Flush();
         AssertInstructions("8517 8618 A200 A910 D0E4");
     }
 
     [Fact]
     public void Write_pal_spr()
     {
-        using var r = GetWriter();
-        r.WriteBuiltIn(nameof(NESLib.pal_spr));
-        r.Flush();
+        using var writer = GetWriter();
+        writer.WriteBuiltIn(nameof(NESLib.pal_spr));
+        writer.Flush();
         AssertInstructions("8517 8618 A210 8A D0DB");
     }
 
     [Fact]
     public void Write_pal_col()
     {
-        using var r = GetWriter();
-        r.WriteBuiltIn(nameof(NESLib.pal_col));
-        r.Flush();
+        using var writer = GetWriter();
+        writer.WriteBuiltIn(nameof(NESLib.pal_col));
+        writer.Flush();
         AssertInstructions("8517 205085 291F AA A517 9DC001 E607 60");
     }
 
     [Fact]
     public void Write_vram_adr()
     {
-        using var r = GetWriter();
-        r.WriteBuiltIn(nameof(NESLib.vram_adr));
-        r.Flush();
+        using var writer = GetWriter();
+        writer.WriteBuiltIn(nameof(NESLib.vram_adr));
+        writer.Flush();
         AssertInstructions("8E0620 8D0620 60");
     }
 
     [Fact]
     public void Write_vram_write()
     {
-        using var r = GetWriter();
-        r.WriteBuiltIn(nameof(NESLib.vram_write));
-        r.Flush();
+        using var writer = GetWriter();
+        writer.WriteBuiltIn(nameof(NESLib.vram_write));
+        writer.Flush();
         AssertInstructions("8517 8618 203A85 8519 861A A000 B119 8D0720 E619 D002 E61A A517 D002 C618 C617 A517 0518 D0E7 60");
     }
 
     [Fact]
     public void Write_ppu_on_all()
     {
-        using var r = GetWriter();
-        r.WriteBuiltIn(nameof(NESLib.ppu_on_all));
-        r.Flush();
+        using var writer = GetWriter();
+        writer.WriteBuiltIn(nameof(NESLib.ppu_on_all));
+        writer.Flush();
         AssertInstructions("A512 0918 8512 4CF082");
     }
 
     [Fact]
     public void Write_pusha()
     {
-        using var r = GetWriter();
-        r.WriteBuiltIn("pusha");
-        r.Flush();
+        using var writer = GetWriter();
+        writer.WriteBuiltIn("pusha");
+        writer.Flush();
         AssertInstructions("A422 F007 C622 A000 9122 60");
     }
 
     [Fact]
     public void Write_popa()
     {
-        using var r = GetWriter();
-        r.WriteBuiltIn("popa");
-        r.Flush();
+        using var writer = GetWriter();
+        writer.WriteBuiltIn("popa");
+        writer.Flush();
         AssertInstructions("A000 B122 E622 F001 60");
     }
 
     [Fact]
     public void Write_ppu_wait_nmi()
     {
-        using var r = GetWriter();
-        r.WriteBuiltIn(nameof(NESLib.ppu_wait_nmi));
-        r.Flush();
+        using var writer = GetWriter();
+        writer.WriteBuiltIn(nameof(NESLib.ppu_wait_nmi));
+        writer.Flush();
         AssertInstructions("A901 8503 A501 C501 F0FC 60");
     }
 
     [Fact]
     public void Write_Main()
     {
-        using var r = GetWriter();
-        r.WriteHeader(PRG_ROM_SIZE: 2, CHR_ROM_SIZE: 1);
-        r.WriteSegment(0);
+        using var writer = GetWriter();
+        writer.WriteHeader(PRG_ROM_SIZE: 2, CHR_ROM_SIZE: 1);
+        writer.WriteSegment(0);
 
         /*
         * 8500	A900          	LDA #$00                      ; _main
@@ -259,70 +258,63 @@ public class NESWriterTests
         ushort ppu_on_all = 0x8289;
 
         // pal_col(0, 0x02);
-        r.Write(Instruction.LDA, 0x00);
-        r.Write(Instruction.JSR, pusha);
-        r.Write(Instruction.LDA, 0x02);
-        r.Write(Instruction.JSR, pal_col);
+        writer.Write(Instruction.LDA, 0x00);
+        writer.Write(Instruction.JSR, pusha);
+        writer.Write(Instruction.LDA, 0x02);
+        writer.Write(Instruction.JSR, pal_col);
 
         // pal_col(1, 0x14);
-        r.Write(Instruction.LDA, 0x01);
-        r.Write(Instruction.JSR, pusha);
-        r.Write(Instruction.LDA, 0x14);
-        r.Write(Instruction.JSR, pal_col);
+        writer.Write(Instruction.LDA, 0x01);
+        writer.Write(Instruction.JSR, pusha);
+        writer.Write(Instruction.LDA, 0x14);
+        writer.Write(Instruction.JSR, pal_col);
 
         // pal_col(2, 0x20);
-        r.Write(Instruction.LDA, 0x02);
-        r.Write(Instruction.JSR, pusha);
-        r.Write(Instruction.LDA, 0x20);
-        r.Write(Instruction.JSR, pal_col);
+        writer.Write(Instruction.LDA, 0x02);
+        writer.Write(Instruction.JSR, pusha);
+        writer.Write(Instruction.LDA, 0x20);
+        writer.Write(Instruction.JSR, pal_col);
 
         // pal_col(3, 0x30);
-        r.Write(Instruction.LDA, 0x03);
-        r.Write(Instruction.JSR, pusha);
-        r.Write(Instruction.LDA, 0x30);
-        r.Write(Instruction.JSR, pal_col);
+        writer.Write(Instruction.LDA, 0x03);
+        writer.Write(Instruction.JSR, pusha);
+        writer.Write(Instruction.LDA, 0x30);
+        writer.Write(Instruction.JSR, pal_col);
 
         // vram_adr(NTADR_A(2, 2));
-        r.Write(Instruction.LDX, 0x20);
-        r.Write(Instruction.LDA, 0x42);
-        r.Write(Instruction.JSR, vram_adr);
+        writer.Write(Instruction.LDX, 0x20);
+        writer.Write(Instruction.LDA, 0x42);
+        writer.Write(Instruction.JSR, vram_adr);
 
         // vram_write("HELLO, WORLD!", 13);
-        r.Write(Instruction.LDA, 0xF1);
-        r.Write(Instruction.LDX, 0x85);
-        r.Write(Instruction.JSR, pushax);
-        r.Write(Instruction.LDX, 0x00);
-        r.Write(Instruction.LDA, 0x0D);
-        r.Write(Instruction.JSR, vram_write);
+        writer.Write(Instruction.LDA, 0xF1);
+        writer.Write(Instruction.LDX, 0x85);
+        writer.Write(Instruction.JSR, pushax);
+        writer.Write(Instruction.LDX, 0x00);
+        writer.Write(Instruction.LDA, 0x0D);
+        writer.Write(Instruction.JSR, vram_write);
 
         // ppu_on_all();
-        r.Write(Instruction.JSR, ppu_on_all);
+        writer.Write(Instruction.JSR, ppu_on_all);
 
         // while (true) ;
-        r.Write(Instruction.JMP_abs, 0x8540); // Jump to self
+        writer.Write(Instruction.JMP_abs, 0x8540); // Jump to self
 
-        r.WriteSegment(1);
-        r.WriteString("HELLO, WORLD!");
-        r.WriteSegment(2);
+        writer.WriteSegment(1);
+        writer.WriteString("HELLO, WORLD!");
+        writer.WriteSegment(2);
 
         // Pad 0s
-        int PRG_ROM_SIZE = (int)r.Length - 16;
-        r.WriteZeroes(NESWriter.PRG_ROM_BLOCK_SIZE - (PRG_ROM_SIZE % NESWriter.PRG_ROM_BLOCK_SIZE));
-        r.WriteZeroes(NESWriter.PRG_ROM_BLOCK_SIZE - 6);
+        int PRG_ROM_SIZE = (int)writer.Length - 16;
+        writer.WriteZeroes(NESWriter.PRG_ROM_BLOCK_SIZE - (PRG_ROM_SIZE % NESWriter.PRG_ROM_BLOCK_SIZE));
+        writer.WriteZeroes(NESWriter.PRG_ROM_BLOCK_SIZE - 6);
 
         //TODO: no idea what these are???
-        r.Write(new byte[] { 0xBC, 0x80, 0x00, 0x80, 0x02, 0x82 });
+        writer.Write(new byte[] { 0xBC, 0x80, 0x00, 0x80, 0x02, 0x82 });
 
         // Use CHR_ROM from hello.nes
-        r.Write(data, (int)r.Length, NESWriter.CHR_ROM_BLOCK_SIZE);
+        writer.Write(data, (int)writer.Length, NESWriter.CHR_ROM_BLOCK_SIZE);
 
-        r.Flush();
-        var actual = stream.ToArray();
-        Assert.Equal(data.Length, actual.Length);
-        for (int i = 0; i < actual.Length; i++)
-        {
-            if (data[i] != actual[i])
-                throw new Exception($"Index: {i}, Expected: {data[i]}, Actual: {actual[i]}");
-        }
+        AssertEx.Equal(data, writer);
     }
 }
