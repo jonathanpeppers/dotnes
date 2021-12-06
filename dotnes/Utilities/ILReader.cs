@@ -6,12 +6,12 @@ using System.Text;
 
 namespace dotnes;
 
-class IL2Assembly : IDisposable
+class ILReader : IDisposable
 {
     readonly PEReader pe;
     readonly MetadataReader reader;
 
-    public IL2Assembly(string path)
+    public ILReader(string path)
     {
         pe = new PEReader(File.OpenRead(path));
         reader = pe.GetMetadataReader();

@@ -1,10 +1,10 @@
 ﻿namespace dotnes.tests;
 
-public class IL2AssemblyTests
+public class IL2ReaderTests
 {
     readonly string path;
 
-    public IL2AssemblyTests()
+    public IL2ReaderTests()
     {
         var dir = Path.GetDirectoryName(GetType().Assembly.Location)!;
         path = Path.Combine(dir, "dotnes.sample.dll");
@@ -13,7 +13,7 @@ public class IL2AssemblyTests
     [Fact]
     public void StaticVoidMain()
     {
-        using var il = new IL2Assembly(path);
+        using var il = new ILReader(path);
         Assert.Equal(
 @"Ldc_i4_0
 Ldc_i4_2
