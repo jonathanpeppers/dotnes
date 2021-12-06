@@ -21,8 +21,14 @@ class NESWriter : IDisposable
     /// </summary>
     public const int CHR_ROM_BLOCK_SIZE = 8192;
 
-    const int TEMP = 0x17;
-    const int sp = 0x22;
+    protected const int TEMP = 0x17;
+    protected const int sp = 0x22;
+    protected const ushort pusha = 0x85A2;
+    protected const ushort pushax = 0x85B8;
+    protected const ushort pal_col = 0x823E;
+    protected const ushort vram_adr = 0x83D4;
+    protected const ushort vram_write = 0x834F;
+    protected const ushort ppu_on_all = 0x8289;
 
     readonly BinaryWriter _writer;
 

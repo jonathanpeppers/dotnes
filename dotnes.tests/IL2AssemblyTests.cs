@@ -14,7 +14,8 @@ public class IL2AssemblyTests
     public void StaticVoidMain()
     {
         using var il = new IL2Assembly(path);
-        Assert.Equal(@"Ldc_i4_0
+        Assert.Equal(
+@"Ldc_i4_0
 Ldc_i4_2
 Call pal_col
 Call pal_col
