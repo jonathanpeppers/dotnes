@@ -1,6 +1,7 @@
 {
     "recommendations": [
         "ms-dotnettools.csharp",
+        "ms-vscode.hexeditor",
         "formulahendry.dotnet-test-explorer"
     ]
 }
