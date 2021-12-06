@@ -49,6 +49,20 @@ public class NESWriterTests
         }
     }
 
+    /// <summary>
+    /// Just used to slice apart 'hello.nes' for use
+    /// </summary>
+    //[Fact]
+    public void Slice()
+    {
+        using var segment0 = File.Create("segment0.nes");
+        segment0.Write(data, 16, 0x510 - 16);
+        using var segment1 = File.Create("segment1.nes");
+        segment1.Write(data, 0x553, 0x600 - 0x553);
+        using var segment2 = File.Create("segment2.nes");
+        segment2.Write(data, 0x60F, 0x634 - 0x60F);
+    }
+
     [Fact]
     public void WriteHeader()
     {
@@ -202,12 +216,9 @@ public class NESWriterTests
     public void Write_Main()
     {
         using var r = GetWriter();
-        //TODO:
-        r.Write(Instruction.LDA, 0x00);
-        r.Write(Instruction.JSR, 0x85A2);
-        r.Write(Instruction.LDA, 0x02);
-        r.Write(Instruction.JSR, 0x823E);
-        r.Flush();
+        r.WriteHeader(PRG_ROM_SIZE: 2, CHR_ROM_SIZE: 1);
+        r.WriteSegment(0);
+
         /*
         * 8500	A900          	LDA #$00                      ; _main
         * 8502	20A285        	JSR pusha                     
@@ -239,7 +250,70 @@ public class NESWriterTests
         * 8543	A000          	LDY #$00                      ; donelib
         */
 
-        //TODO: rest of instructions? This test even helpful?
-        AssertInstructions("A900 20A285 A902 203E82");
+        ushort pusha = 0x85A2;
+        ushort pushax = 0x85B8;
+        ushort pal_col = 0x823E;
+        ushort vram_adr = 0x83D4;
+        ushort vram_write = 0x834F;
+        ushort ppu_on_all = 0x8289;
+
+        // pal_col(0, 0x02);
+        r.Write(Instruction.LDA, 0x00);
+        r.Write(Instruction.JSR, pusha);
+        r.Write(Instruction.LDA, 0x02);
+        r.Write(Instruction.JSR, pal_col);
+
+        // pal_col(1, 0x14);
+        r.Write(Instruction.LDA, 0x01);
+        r.Write(Instruction.JSR, pusha);
+        r.Write(Instruction.LDA, 0x14);
+        r.Write(Instruction.JSR, pal_col);
+
+        // pal_col(2, 0x20);
+        r.Write(Instruction.LDA, 0x02);
+        r.Write(Instruction.JSR, pusha);
+        r.Write(Instruction.LDA, 0x20);
+        r.Write(Instruction.JSR, pal_col);
+
+        // pal_col(3, 0x30);
+        r.Write(Instruction.LDA, 0x03);
+        r.Write(Instruction.JSR, pusha);
+        r.Write(Instruction.LDA, 0x30);
+        r.Write(Instruction.JSR, pal_col);
+
+        // vram_adr(NTADR_A(2, 2));
+        r.Write(Instruction.LDX, 0x20);
+        r.Write(Instruction.LDA, 0x42);
+        r.Write(Instruction.JSR, vram_adr);
+
+        // vram_write("HELLO, WORLD!", 13);
+        r.Write(Instruction.LDA, 0xF1);
+        r.Write(Instruction.LDX, 0x85);
+        r.Write(Instruction.JSR, pushax);
+        r.Write(Instruction.LDX, 0x00);
+        r.Write(Instruction.LDA, 0x0D);
+        r.Write(Instruction.JSR, vram_write);
+
+        // ppu_on_all();
+        r.Write(Instruction.JSR, ppu_on_all);
+
+        // while (true) ;
+        r.Write(Instruction.JMP_abs, 0x8540); // Jump to self
+
+        // ;donelib
+        r.Write(Instruction.LDY, 0x00);
+
+        //r.WriteSegment(1);
+        //r.WriteString("HELLO, WORLD!");
+        //r.WriteSegment(2);
+        r.Flush();
+
+        var actual = stream.ToArray();
+        //Assert.Equal(data.Length, actual.Length);
+        for (int i = 0; i < actual.Length; i++)
+        {
+            if (data[i] != actual[i])
+                throw new Exception($"Index: {i}, Expected: {data[i]}, Actual: {actual[i]}");
+        }
     }
 }

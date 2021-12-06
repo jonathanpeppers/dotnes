@@ -61,7 +61,7 @@ class NESWriter : IDisposable
     /// </summary>
     public byte Flags10 { get; set; }
 
-    public void WriteHeader()
+    public void WriteHeader(byte PRG_ROM_SIZE = 0, byte CHR_ROM_SIZE = 0)
     {
         _writer.Write('N');
         _writer.Write('E');
@@ -71,12 +71,12 @@ class NESWriter : IDisposable
         if (PRG_ROM != null)
             _writer.Write(checked ((byte)(PRG_ROM.Length / 16384)));
         else
-            _writer.Write(0);
+            _writer.Write(PRG_ROM_SIZE);
         // Size of CHR ROM in 8 KB units (Value 0 means the board uses CHR RAM)
         if (CHR_ROM != null)
             _writer.Write(checked((byte)(CHR_ROM.Length / 8192)));
         else
-            _writer.Write((byte)0);
+            _writer.Write(CHR_ROM_SIZE);
         _writer.Write(Flags6);
         _writer.Write(Flags7);
         _writer.Write(Flags8);
@@ -88,6 +88,17 @@ class NESWriter : IDisposable
             _writer.Write((byte)0);
         }
     }
+
+    /// <summary>
+    /// These are pre-stored segments
+    /// </summary>
+    public void WriteSegment(int index)
+    {
+        using var stream = GetType().Assembly.GetManifestResourceStream($"segment{index}.nes");
+        stream.CopyTo(_writer.BaseStream);
+    }
+
+    public void WriteString(string text) => _writer.Write(text);
 
     /// <summary>
     /// Writes a built-in method from NESLib

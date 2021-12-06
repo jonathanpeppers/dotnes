@@ -205,7 +205,7 @@ enum Instruction : byte
     // A
 
     /// <summary>
-    /// Load Index Y with Memory
+    /// A0: Load Index Y with Memory
     /// </summary>
     LDY       = 0xA0,
     /// <summary>
@@ -213,7 +213,7 @@ enum Instruction : byte
     /// </summary>
     LDA_X_ind = 0xA1,
     /// <summary>
-    /// Load Index X with Memory
+    /// A2: Load Index X with Memory
     /// </summary>
     LDX       = 0xA2,
     /// <summary>

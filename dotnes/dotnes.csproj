@@ -9,9 +9,10 @@
 
   <ItemGroup>
     <Using Remove="System.Threading.Tasks" />
+    <EmbeddedResource Include="*.nes" LogicalName="%(FileName)%(Extension)" />
     <Using Include="Microsoft.Build.Framework" />
     <Using Include="Microsoft.Build.Utilities" />
-	<Using Include="NES" />
+    <Using Include="NES" />
     <InternalsVisibleTo Include="dotnes.tests" />
     <PackageReference Include="Microsoft.Build.Tasks.Core" Version="17.0.0" />
     <PackageReference Include="Microsoft.Build.Utilities.Core" Version="17.0.0" />
