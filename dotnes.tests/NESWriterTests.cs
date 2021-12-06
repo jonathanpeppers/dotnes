@@ -66,7 +66,7 @@ public class NESWriterTests
     [Fact]
     public void WriteHeader()
     {
-        using var writer = GetWriter(new byte[2 * 16384], new byte[1 * 8192]);
+        using var writer = GetWriter(new byte[2 * NESWriter.PRG_ROM_BLOCK_SIZE], new byte[NESWriter.CHR_ROM_BLOCK_SIZE]);
         writer.WriteHeader();
         writer.Flush();
 
@@ -80,10 +80,12 @@ public class NESWriterTests
     [Fact]
     public void WriteFullROM()
     {
-        using var writer = GetWriter(new byte[2 * 16384], new byte[1 * 8192]);
+        using var writer = GetWriter(new byte[2 * NESWriter.PRG_ROM_BLOCK_SIZE], new byte[NESWriter.CHR_ROM_BLOCK_SIZE]);
+        ArgumentNullException.ThrowIfNull(writer.PRG_ROM, nameof(writer.PRG_ROM));
+        ArgumentNullException.ThrowIfNull(writer.CHR_ROM, nameof(writer.CHR_ROM));
 
-        Array.Copy(data, 16, writer.PRG_ROM!, 0, 2 * 16384);
-        Array.Copy(data, 16 + 2 * 16384, writer.CHR_ROM!, 0, 8192);
+        Array.Copy(data, 16, writer.PRG_ROM, 0, writer.PRG_ROM.Length);
+        Array.Copy(data, 16 + 2 * 16384, writer.CHR_ROM, 0, writer.CHR_ROM.Length);
 
         writer.Write();
         writer.Flush();
@@ -303,11 +305,20 @@ public class NESWriterTests
         r.WriteString("HELLO, WORLD!");
         r.WriteSegment(2);
 
-        //TODO: now pad bunch of 0s?
+        // Pad 0s
+        int PRG_ROM_SIZE = (int)r.Length - 16;
+        r.WriteZeroes(NESWriter.PRG_ROM_BLOCK_SIZE - (PRG_ROM_SIZE % NESWriter.PRG_ROM_BLOCK_SIZE));
+        r.WriteZeroes(NESWriter.PRG_ROM_BLOCK_SIZE - 6);
+
+        //TODO: no idea what these are???
+        r.Write(new byte[] { 0xBC, 0x80, 0x00, 0x80, 0x02, 0x82 });
+
+        // Use CHR_ROM from hello.nes
+        r.Write(data, (int)r.Length, NESWriter.CHR_ROM_BLOCK_SIZE);
 
         r.Flush();
         var actual = stream.ToArray();
-        //Assert.Equal(data.Length, actual.Length);
+        Assert.Equal(data.Length, actual.Length);
         for (int i = 0; i < actual.Length; i++)
         {
             if (data[i] != actual[i])

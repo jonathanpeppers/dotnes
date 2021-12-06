@@ -12,6 +12,15 @@ class NESWriter : IDisposable
 {
     public static readonly Encoding Encoding = Encoding.ASCII;
 
+    /// <summary>
+    /// PRG_ROM is in 16 KB units
+    /// </summary>
+    public const int PRG_ROM_BLOCK_SIZE = 16384;
+    /// <summary>
+    /// CHR ROM in in 8 KB units
+    /// </summary>
+    public const int CHR_ROM_BLOCK_SIZE = 8192;
+
     const int TEMP = 0x17;
     const int sp = 0x22;
 
@@ -64,6 +73,8 @@ class NESWriter : IDisposable
     /// </summary>
     public byte Flags10 { get; set; }
 
+    public long Length => _writer.BaseStream.Length;
+
     public void WriteHeader(byte PRG_ROM_SIZE = 0, byte CHR_ROM_SIZE = 0)
     {
         _writer.Write('N');
@@ -72,12 +83,12 @@ class NESWriter : IDisposable
         _writer.Write('\x1A');
         // Size of PRG ROM in 16 KB units
         if (PRG_ROM != null)
-            _writer.Write(checked ((byte)(PRG_ROM.Length / 16384)));
+            _writer.Write(checked ((byte)(PRG_ROM.Length / PRG_ROM_BLOCK_SIZE)));
         else
             _writer.Write(PRG_ROM_SIZE);
         // Size of CHR ROM in 8 KB units (Value 0 means the board uses CHR RAM)
         if (CHR_ROM != null)
-            _writer.Write(checked((byte)(CHR_ROM.Length / 8192)));
+            _writer.Write(checked((byte)(CHR_ROM.Length / CHR_ROM_BLOCK_SIZE)));
         else
             _writer.Write(CHR_ROM_SIZE);
         _writer.Write(Flags6);
@@ -86,11 +97,23 @@ class NESWriter : IDisposable
         _writer.Write(Flags9);
         _writer.Write(Flags10);
         // 5 bytes of padding
-        for (int i = 0; i < 5; i++)
+        WriteZeroes(5);
+    }
+
+    /// <summary>
+    /// Writes N zero-d bytes
+    /// </summary>
+    public void WriteZeroes(long length)
+    {
+        for (long i = 0; i < length; i++)
         {
             _writer.Write((byte)0);
         }
     }
+
+    public void Write(byte[] buffer) => _writer.Write(buffer);
+
+    public void Write(byte[] buffer, int index, int count) => _writer.Write(buffer, index, count);
 
     /// <summary>
     /// These are pre-stored segments
