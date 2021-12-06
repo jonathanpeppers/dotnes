@@ -130,23 +130,23 @@ public static class NESLib
     /// macro to calculate nametable address from X,Y in compile time
     /// #define NTADR_A(x,y)	 	(NAMETABLE_A|(((y)<<5)|(x)))
     /// </summary>
-    public static ushort NTADR_A(byte x, byte y) => (ushort)(NAMETABLE_A | (((y) << 5) | (x)));
+    public static ushort NTADR_A(byte x, byte y) => (ushort)(NAMETABLE_A | ((y << 5) | x));
 
     /// <summary>
     /// macro to calculate nametable address from X,Y in compile time
     /// #define NTADR_B(x,y) 		(NAMETABLE_B|(((y)<<5)|(x)))
     /// </summary>
-    public static ushort NTADR_B(byte x, byte y) => (ushort)(NAMETABLE_B | (((y) << 5) | (x)));
+    public static ushort NTADR_B(byte x, byte y) => (ushort)(NAMETABLE_B | ((y << 5) | x));
 
     /// <summary>
     /// macro to calculate nametable address from X,Y in compile time
     /// #define NTADR_C(x,y) 		(NAMETABLE_C|(((y)<<5)|(x)))
     /// </summary>
-    public static ushort NTADR_C(byte x, byte y) => (ushort)(NAMETABLE_C | (((y) << 5) | (x)));
+    public static ushort NTADR_C(byte x, byte y) => (ushort)(NAMETABLE_C | ((y << 5) | x));
 
     /// <summary>
     /// macro to calculate nametable address from X,Y in compile time
     /// #define NTADR_D(x,y) 		(NAMETABLE_D|(((y)<<5)|(x)))
     /// </summary>
-    public static ushort NTADR_D(byte x, byte y) => (ushort)(NAMETABLE_D | (((y) << 5) | (x)));
+    public static ushort NTADR_D(byte x, byte y) => (ushort)(NAMETABLE_D | ((y << 5) | x));
 }
