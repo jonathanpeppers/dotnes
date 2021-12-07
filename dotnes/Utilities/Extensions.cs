@@ -16,6 +16,10 @@ static class Extensions
 	/// </summary>
 	public static unsafe Stream GetEmbeddedResourceStream(this PEReader peReader, ManifestResource resource)
 	{
+		var header = peReader.PEHeaders.CorHeader;
+		if (header == null)
+			throw new BadImageFormatException("PEHeaders.CorHeader is null.");
+
 		checked // arithmetic overflow here could cause AV
 		{
 			// Locate start and end of PE image in unmanaged memory.
@@ -27,7 +31,7 @@ static class Extensions
 
 			// Locate offset to resources within PE image.
 			int offsetToResources;
-			if (!peReader.PEHeaders.TryGetDirectoryOffset(peReader.PEHeaders.CorHeader.ResourcesDirectory, out offsetToResources))
+			if (!peReader.PEHeaders.TryGetDirectoryOffset(header.ResourcesDirectory, out offsetToResources))
 			{
 				throw new BadImageFormatException("Failed to get offset to resources in PE file.");
 			}
