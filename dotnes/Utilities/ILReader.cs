@@ -2,7 +2,6 @@
 using System.Reflection.Metadata;
 using System.Reflection.Metadata.Ecma335;
 using System.Reflection.PortableExecutable;
-using System.Text;
 
 namespace dotnes;
 
@@ -20,9 +19,8 @@ class ILReader : IDisposable
     /// <summary>
     /// Based on: https://github.com/icsharpcode/ILSpy/blob/8c508d9bbbc6a21cc244e930122ff5bca19cd11c/ILSpy/Analyzers/Builtin/MethodUsesAnalyzer.cs#L51
     /// </summary>
-    public string ReadStaticVoidMain()
+    public IEnumerable<ILInstruction> ReadStaticVoidMain()
     {
-        var builder = new StringBuilder();
         foreach (var h in reader.MethodDefinitions)
         {
             var method = reader.GetMethodDefinition(h);
@@ -37,13 +35,11 @@ class ILReader : IDisposable
 
                 while (blob.RemainingBytes > 0)
                 {
-                    if (builder.Length > 0)
-                        builder.AppendLine();
-
                     ILOpCode opCode = DecodeOpCode(ref blob);
-                    builder.Append(opCode);
 
                     OperandType operandType = GetOperandType(opCode);
+                    string? stringValue = null;
+                    int? intValue = null;
 
                     switch (operandType)
                     {
@@ -58,36 +54,61 @@ class ILReader : IDisposable
                             switch (member.Kind)
                             {
                                 case HandleKind.TypeDefinition:
-                                    builder.Append(' ');
-                                    builder.Append(reader.GetString(reader.GetTypeDefinition((TypeDefinitionHandle)member).Name));
+                                    stringValue = reader.GetString(reader.GetTypeDefinition((TypeDefinitionHandle)member).Name);
                                     break;
                                 case HandleKind.TypeReference:
-                                    builder.Append(' ');
-                                    builder.Append(reader.GetString(reader.GetTypeReference((TypeReferenceHandle)member).Name));
+                                    stringValue = reader.GetString(reader.GetTypeReference((TypeReferenceHandle)member).Name);
                                     break;
                                 case HandleKind.MethodDefinition:
-                                    builder.Append(' ');
-                                    builder.Append(reader.GetString(reader.GetMethodDefinition((MethodDefinitionHandle)member).Name));
+                                    stringValue = reader.GetString(reader.GetMethodDefinition((MethodDefinitionHandle)member).Name);
                                     break;
                                 case HandleKind.MemberReference:
-                                    builder.Append(' ');
-                                    builder.Append(reader.GetString(reader.GetMemberReference((MemberReferenceHandle)member).Name));
+                                    stringValue = reader.GetString(reader.GetMemberReference((MemberReferenceHandle)member).Name);
                                     break;
                                 case HandleKind.FieldDefinition:
-                                    builder.Append(' ');
-                                    builder.Append(reader.GetString(reader.GetFieldDefinition((FieldDefinitionHandle)member).Name));
+                                    stringValue = reader.GetString(reader.GetFieldDefinition((FieldDefinitionHandle)member).Name);
                                     break;
                             }
                             break;
-                        default:
+                        // 64-bit
+                        case OperandType.I8:
+                        case OperandType.R:
+                            goto default;
+                        // 32-bit
+                        case OperandType.BrTarget:
+                        case OperandType.I:
+                        case OperandType.Type:
+                        case OperandType.ShortR:
+                            intValue = blob.ReadInt32();
                             break;
+                        case OperandType.String:
+                            stringValue = reader.GetUserString(MetadataTokens.UserStringHandle(blob.ReadInt32()));
+                            break;
+                        // (n + 1) * 32-bit
+                        case OperandType.Switch:
+                            //uint n = blob.ReadUInt32();
+                            //blob.Offset += (int)(n * 4);
+                            goto default;
+                        // 16-bit
+                        case OperandType.Variable:
+                            intValue = blob.ReadInt16();
+                            break;
+                        // 8-bit
+                        case OperandType.ShortVariable:
+                        case OperandType.ShortBrTarget:
+                        case OperandType.ShortI:
+                            intValue = blob.ReadByte();
+                            break;
+                        case OperandType.None:
+                            break;
+                        default:
+                            throw new NotSupportedException($"{opCode}, OperandType={operandType} is not supported.");
                     }
 
-                    SkipOperand(ref blob, operandType);
+                    yield return new ILInstruction(opCode, intValue, stringValue);
                 }
             }
         }
-        return builder.ToString();
     }
 
     static ILOpCode DecodeOpCode(ref BlobReader blob)
@@ -104,45 +125,6 @@ class ILReader : IDisposable
         if (index >= operandTypes.Length)
             return (OperandType)255;
         return (OperandType)operandTypes[index];
-    }
-
-    static void SkipOperand(ref BlobReader blob, OperandType operandType)
-    {
-        switch (operandType)
-        {
-            // 64-bit
-            case OperandType.I8:
-            case OperandType.R:
-                blob.Offset += 8;
-                break;
-            // 32-bit
-            case OperandType.BrTarget:
-            case OperandType.Field:
-            case OperandType.Method:
-            case OperandType.I:
-            case OperandType.Sig:
-            case OperandType.String:
-            case OperandType.Tok:
-            case OperandType.Type:
-            case OperandType.ShortR:
-                blob.Offset += 4;
-                break;
-            // (n + 1) * 32-bit
-            case OperandType.Switch:
-                uint n = blob.ReadUInt32();
-                blob.Offset += (int)(n * 4);
-                break;
-            // 16-bit
-            case OperandType.Variable:
-                blob.Offset += 2;
-                break;
-            // 8-bit
-            case OperandType.ShortVariable:
-            case OperandType.ShortBrTarget:
-            case OperandType.ShortI:
-                blob.Offset++;
-                break;
-        }
     }
 
     enum OperandType
