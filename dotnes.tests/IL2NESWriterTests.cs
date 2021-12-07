@@ -62,7 +62,7 @@ public class IL2NESWriterTests
         writer.Write(ILOpCode.Call, nameof(vram_adr));
 
         // vram_write("HELLO, WORLD!", 13);
-        writer.Write(ILOpCode.Ldstr, "HELLO, WORLD!");
+        writer.Write(ILOpCode.Ldstr, "HELLO, .NET!");
         writer.Write(ILOpCode.Ldc_i4_s, 13);
         writer.Write(ILOpCode.Call, nameof(vram_write));
 
@@ -74,8 +74,17 @@ public class IL2NESWriterTests
         // while (true) { bool flag = true; }
         writer.Write(NESInstruction.JMP_abs, 0x8540); // Jump to self
 
+        // String table something?
+        writer.Write(NESInstruction.LDY, 0x00);
+        writer.Write(NESInstruction.BEQ_rel, 0x07);
+        writer.Write(NESInstruction.LDA, 0xFE);
+        writer.Write(NESInstruction.LDX, 0x85);
+        writer.Write(NESInstruction.JMP_abs, 0x0300);
+        writer.Write(NESInstruction.RTS_impl);
+        writer.Write(NESInstruction.LDA, 0xFE);
+
         writer.WriteSegment(1);
-        writer.WriteString("HELLO, WORLD!");
+        writer.WriteString("HELLO, .NET!");
         writer.WriteSegment(2);
 
         // Pad 0s

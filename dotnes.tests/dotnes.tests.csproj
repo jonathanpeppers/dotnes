@@ -26,7 +26,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\dotnes.sample\dotnes.sample.csproj" />
+    <ProjectReference Include="..\dotnes.sample\dotnes.sample.csproj" ReferenceOutputAssembly="false" />
     <ProjectReference Include="..\dotnes\dotnes.csproj" />
     <ProjectReference Include="..\neslib\neslib.csproj" />
   </ItemGroup>

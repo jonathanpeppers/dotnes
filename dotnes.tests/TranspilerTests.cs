@@ -9,7 +9,7 @@ public class TranspilerTests
     public TranspilerTests()
     {
         var dir = Path.GetDirectoryName(GetType().Assembly.Location)!;
-        path = Path.Combine(dir, "dotnes.sample.dll");
+        path = Path.Combine(dir, "..", "..", "..", "..", "dotnes.sample", "bin", "Debug", "net6.0", "dotnes.sample.dll");
     }
 
     [Fact]
@@ -46,7 +46,7 @@ ILInstruction { OpCode = Ldc_i4_2, Integer = , String =  }
 ILInstruction { OpCode = Call, Integer = , String = NTADR_A }
 ILInstruction { OpCode = Call, Integer = , String = vram_adr }
 ILInstruction { OpCode = Nop, Integer = , String =  }
-ILInstruction { OpCode = Ldstr, Integer = , String = HELLO, WORLD! }
+ILInstruction { OpCode = Ldstr, Integer = , String = HELLO, .NET! }
 ILInstruction { OpCode = Ldc_i4_s, Integer = 13, String =  }
 ILInstruction { OpCode = Call, Integer = , String = vram_write }
 ILInstruction { OpCode = Nop, Integer = , String =  }

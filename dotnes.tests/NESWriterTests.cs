@@ -53,17 +53,17 @@ public class NESWriterTests
     /// Just used to slice apart 'hello.nes' for use
     /// </summary>
     //[Fact]
-    public void Slice()
-    {
-        using var segment0 = File.Create("segment0.nes");
-        segment0.Write(data, 16, 0x510 - 16);
-        using var segment1 = File.Create("segment1.nes");
-        segment1.Write(data, 0x553, 0x600 - 0x553);
-        using var segment2 = File.Create("segment2.nes");
-        segment2.Write(data, 0x60F, 0x634 - 0x60F);
-        using var chr_rom = File.Create("CHR_ROM.nes");
-        chr_rom.Write(data, 16 + 2 * NESWriter.PRG_ROM_BLOCK_SIZE, NESWriter.CHR_ROM_BLOCK_SIZE);
-    }
+    //public void Slice()
+    //{
+    //    using var segment0 = File.Create("segment0.nes");
+    //    segment0.Write(data, 16, 0x510 - 16);
+    //    using var segment1 = File.Create("segment1.nes");
+    //    segment1.Write(data, 0x561, 0x601 - 0x561);
+    //    using var segment2 = File.Create("segment2.nes");
+    //    segment2.Write(data, 0x60F, 0x634 - 0x60F);
+    //    using var chr_rom = File.Create("CHR_ROM.nes");
+    //    chr_rom.Write(data, 16 + 2 * NESWriter.PRG_ROM_BLOCK_SIZE, NESWriter.CHR_ROM_BLOCK_SIZE);
+    //}
 
     [Fact]
     public void WriteHeader()
@@ -302,8 +302,17 @@ public class NESWriterTests
         // while (true) ;
         writer.Write(NESInstruction.JMP_abs, 0x8540); // Jump to self
 
+        // String table something?
+        writer.Write(NESInstruction.LDY, 0x00);
+        writer.Write(NESInstruction.BEQ_rel, 0x07);
+        writer.Write(NESInstruction.LDA, 0xFE);
+        writer.Write(NESInstruction.LDX, 0x85);
+        writer.Write(NESInstruction.JMP_abs, 0x0300);
+        writer.Write(NESInstruction.RTS_impl);
+        writer.Write(NESInstruction.LDA, 0xFE);
+
         writer.WriteSegment(1);
-        writer.WriteString("HELLO, WORLD!");
+        writer.WriteString("HELLO, .NET!");
         writer.WriteSegment(2);
 
         // Pad 0s

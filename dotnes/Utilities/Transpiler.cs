@@ -70,9 +70,18 @@ class Transpiler : IDisposable
             }
         }
 
+        // TODO: String table something?
+        writer.Write(NESInstruction.LDY, 0x00);
+        writer.Write(NESInstruction.BEQ_rel, 0x07);
+        writer.Write(NESInstruction.LDA, 0xFE);
+        writer.Write(NESInstruction.LDX, 0x85);
+        writer.Write(NESInstruction.JMP_abs, 0x0300);
+        writer.Write(NESInstruction.RTS_impl);
+        writer.Write(NESInstruction.LDA, 0xFE);
+
         writer.WriteSegment(1);
         //TODO: should be actual string table
-        writer.WriteString("HELLO, WORLD!");
+        writer.WriteString("HELLO, .NET!");
         writer.WriteSegment(2);
 
         // Pad 0s
