@@ -80,8 +80,24 @@ class Transpiler : IDisposable
         writer.Write(NESInstruction.LDA, 0xFE);
 
         writer.WriteSegment(1);
-        //TODO: should be actual string table
-        writer.WriteString("HELLO, .NET!");
+
+        // Write C# string table
+        int stringHeapSize = reader.GetHeapSize(HeapIndex.UserString);
+        if (stringHeapSize > 0)
+        {
+            var handle = MetadataTokens.UserStringHandle(0);
+            do
+            {
+                string value = reader.GetUserString(handle);
+                if (!string.IsNullOrEmpty(value))
+                {
+                    writer.WriteString(value);
+                }
+                handle = reader.GetNextHandle(handle);
+            }
+            while (!handle.IsNil);
+        }
+
         writer.WriteSegment(2);
 
         // Pad 0s
