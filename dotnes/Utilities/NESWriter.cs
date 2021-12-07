@@ -166,10 +166,10 @@ class NESWriter : IDisposable
                  * 8215	A200          	LDX #$00                      
                  * 8217	A920          	LDA #$20                      
                  */
-                Write(Instruction.STA_zpg, TEMP);
-                Write(Instruction.STX_zpg, TEMP + 1);
-                Write(Instruction.LDX, 0x00);
-                Write(Instruction.LDA, 0x20);
+                Write(NESInstruction.STA_zpg, TEMP);
+                Write(NESInstruction.STX_zpg, TEMP + 1);
+                Write(NESInstruction.LDX, 0x00);
+                Write(NESInstruction.LDA, 0x20);
                 break;
             case "pal_copy":
                 // NOTE: this one is internal, not in neslib.h
@@ -177,8 +177,8 @@ class NESWriter : IDisposable
                  * 8219	8519          	STA $19                       ; pal_copy
                  * 821B	A000          	LDY #$00
                  */
-                Write(Instruction.STA_zpg, 0x19);
-                Write(Instruction.LDY, 0x00);
+                Write(NESInstruction.STA_zpg, 0x19);
+                Write(NESInstruction.LDY, 0x00);
                 break;
             case nameof(NESLib.pal_bg):
                 /*
@@ -188,11 +188,11 @@ class NESWriter : IDisposable
                  * 8231	A910          	LDA #$10                      
                  * 8233	D0E4          	BNE pal_copy
                  */
-                Write(Instruction.STA_zpg, TEMP);
-                Write(Instruction.STX_zpg, TEMP + 1);
-                Write(Instruction.LDX, 0x00);
-                Write(Instruction.LDA, 0x10);
-                Write(Instruction.BNE_rel, 0xE4);
+                Write(NESInstruction.STA_zpg, TEMP);
+                Write(NESInstruction.STX_zpg, TEMP + 1);
+                Write(NESInstruction.LDX, 0x00);
+                Write(NESInstruction.LDA, 0x10);
+                Write(NESInstruction.BNE_rel, 0xE4);
                 break;
             case nameof(NESLib.pal_spr):
                 /*
@@ -202,11 +202,11 @@ class NESWriter : IDisposable
                  * 823B	8A            	TXA                           
                  * 823C	D0DB          	BNE pal_copy
                  */
-                Write(Instruction.STA_zpg, TEMP);
-                Write(Instruction.STX_zpg, TEMP + 1);
-                Write(Instruction.LDX, 0x10);
-                Write(Instruction.TXA_impl);
-                Write(Instruction.BNE_rel, 0xDB);
+                Write(NESInstruction.STA_zpg, TEMP);
+                Write(NESInstruction.STX_zpg, TEMP + 1);
+                Write(NESInstruction.LDX, 0x10);
+                Write(NESInstruction.TXA_impl);
+                Write(NESInstruction.BNE_rel, 0xDB);
                 break;
             case nameof(NESLib.pal_col):
                 /*
@@ -219,14 +219,14 @@ class NESWriter : IDisposable
                  * 824B	E607          	INC PAL_UPDATE                
                  * 824D	60            	RTS
                  */
-                Write(Instruction.STA_zpg, TEMP);
-                Write(Instruction.JSR, 0x8550);
-                Write(Instruction.AND, 0x1F);
-                Write(Instruction.TAX_impl);
-                Write(Instruction.LDA_zpg, TEMP);
-                Write(Instruction.STA_abs_X, 0x01C0);
-                Write(Instruction.INC_zpg, 0x07);
-                Write(Instruction.RTS_impl);
+                Write(NESInstruction.STA_zpg, TEMP);
+                Write(NESInstruction.JSR, 0x8550);
+                Write(NESInstruction.AND, 0x1F);
+                Write(NESInstruction.TAX_impl);
+                Write(NESInstruction.LDA_zpg, TEMP);
+                Write(NESInstruction.STA_abs_X, 0x01C0);
+                Write(NESInstruction.INC_zpg, 0x07);
+                Write(NESInstruction.RTS_impl);
                 break;
             case nameof(NESLib.vram_adr):
                 /*
@@ -234,9 +234,9 @@ class NESWriter : IDisposable
                  * 83D7	8D0620        	STA $2006                     
                  * 83DA	60            	RTS
                  */
-                Write(Instruction.STX_abs, 0x2006);
-                Write(Instruction.STA_abs, 0x2006);
-                Write(Instruction.RTS_impl);
+                Write(NESInstruction.STX_abs, 0x2006);
+                Write(NESInstruction.STA_abs, 0x2006);
+                Write(NESInstruction.RTS_impl);
                 break;
             case nameof(NESLib.vram_write):
                 /*
@@ -260,25 +260,25 @@ class NESWriter : IDisposable
                  * 8373	D0E7          	BNE $835C                     
                  * 8375	60            	RTS
                  */
-                Write(Instruction.STA_zpg, TEMP);
-                Write(Instruction.STX_zpg, TEMP + 1);
-                Write(Instruction.JSR, 0x853A);
-                Write(Instruction.STA_zpg, 0x19);
-                Write(Instruction.STX_zpg, 0x1A);
-                Write(Instruction.LDY, 0x00);
-                Write(Instruction.LDA_ind_Y, 0x19);
-                Write(Instruction.STA_abs, 0x2007);
-                Write(Instruction.INC_zpg, 0x19);
-                Write(Instruction.BNE_rel, 0x02);
-                Write(Instruction.INC_zpg, 0x1A);
-                Write(Instruction.LDA_zpg, TEMP);
-                Write(Instruction.BNE_rel, 0x02);
-                Write(Instruction.DEC_zpg, TEMP + 1);
-                Write(Instruction.DEC_zpg, TEMP);
-                Write(Instruction.LDA_zpg, TEMP);
-                Write(Instruction.ORA_zpg, TEMP + 1);
-                Write(Instruction.BNE_rel, 0xE7);
-                Write(Instruction.RTS_impl);
+                Write(NESInstruction.STA_zpg, TEMP);
+                Write(NESInstruction.STX_zpg, TEMP + 1);
+                Write(NESInstruction.JSR, 0x853A);
+                Write(NESInstruction.STA_zpg, 0x19);
+                Write(NESInstruction.STX_zpg, 0x1A);
+                Write(NESInstruction.LDY, 0x00);
+                Write(NESInstruction.LDA_ind_Y, 0x19);
+                Write(NESInstruction.STA_abs, 0x2007);
+                Write(NESInstruction.INC_zpg, 0x19);
+                Write(NESInstruction.BNE_rel, 0x02);
+                Write(NESInstruction.INC_zpg, 0x1A);
+                Write(NESInstruction.LDA_zpg, TEMP);
+                Write(NESInstruction.BNE_rel, 0x02);
+                Write(NESInstruction.DEC_zpg, TEMP + 1);
+                Write(NESInstruction.DEC_zpg, TEMP);
+                Write(NESInstruction.LDA_zpg, TEMP);
+                Write(NESInstruction.ORA_zpg, TEMP + 1);
+                Write(NESInstruction.BNE_rel, 0xE7);
+                Write(NESInstruction.RTS_impl);
                 break;
             case nameof(NESLib.ppu_on_all):
                 //TODO: not sure if we should emit ppu_onoff at the same place
@@ -288,10 +288,10 @@ class NESWriter : IDisposable
                  * 828D	8512          	STA PPU_MASK_VAR              ; ppu_onoff
                  * 828F	4CF082        	JMP _ppu_wait_nmi  
                  */
-                Write(Instruction.LDA_zpg, 0x12);
-                Write(Instruction.ORA, 0x18);
-                Write(Instruction.STA_zpg, 0x12);
-                Write(Instruction.JMP_abs, 0x82F0);
+                Write(NESInstruction.LDA_zpg, 0x12);
+                Write(NESInstruction.ORA, 0x18);
+                Write(NESInstruction.STA_zpg, 0x12);
+                Write(NESInstruction.JMP_abs, 0x82F0);
                 break;
             case nameof(NESLib.ppu_wait_nmi):
                 /*
@@ -302,12 +302,12 @@ class NESWriter : IDisposable
                  * 82F8	F0FC          	BEQ $82F6                     
                  * 82FA	60            	RTS
                  */
-                Write(Instruction.LDA, 0x01);
-                Write(Instruction.STA_zpg, 0x03);
-                Write(Instruction.LDA_zpg, 0x01);
-                Write(Instruction.CMP_zpg, 0x01);
-                Write(Instruction.BEQ_rel, 0xFC);
-                Write(Instruction.RTS_impl);
+                Write(NESInstruction.LDA, 0x01);
+                Write(NESInstruction.STA_zpg, 0x03);
+                Write(NESInstruction.LDA_zpg, 0x01);
+                Write(NESInstruction.CMP_zpg, 0x01);
+                Write(NESInstruction.BEQ_rel, 0xFC);
+                Write(NESInstruction.RTS_impl);
                 break;
             case "pusha":
                 //NOTE: seems to be an internal subroutine
@@ -319,12 +319,12 @@ class NESWriter : IDisposable
                 * 85AA	9122          	STA (sp),y                    
                 * 85AC	60            	RTS                           
                 */
-                Write(Instruction.LDY_zpg, sp);
-                Write(Instruction.BEQ_rel, 0x07);
-                Write(Instruction.DEC_zpg, sp);
-                Write(Instruction.LDY, 0x00);
-                Write(Instruction.STA_ind_Y, sp);
-                Write(Instruction.RTS_impl);
+                Write(NESInstruction.LDY_zpg, sp);
+                Write(NESInstruction.BEQ_rel, 0x07);
+                Write(NESInstruction.DEC_zpg, sp);
+                Write(NESInstruction.LDY, 0x00);
+                Write(NESInstruction.STA_ind_Y, sp);
+                Write(NESInstruction.RTS_impl);
                 break;
             case "popa":
                 //NOTE: seems to be an internal subroutine
@@ -335,11 +335,11 @@ class NESWriter : IDisposable
                  * 8598	F001          	BEQ $859B                     
                  * 859A	60            	RTS  
                  */
-                Write(Instruction.LDY, 0x00);
-                Write(Instruction.LDA_ind_Y, sp);
-                Write(Instruction.INC_zpg, sp);
-                Write(Instruction.BEQ_rel, 0x01);
-                Write(Instruction.RTS_impl);
+                Write(NESInstruction.LDY, 0x00);
+                Write(NESInstruction.LDA_ind_Y, sp);
+                Write(NESInstruction.INC_zpg, sp);
+                Write(NESInstruction.BEQ_rel, 0x01);
+                Write(NESInstruction.RTS_impl);
                 break;
             default:
                 throw new NotImplementedException($"{name} is not implemented!");
@@ -349,12 +349,12 @@ class NESWriter : IDisposable
     /// <summary>
     /// Writes an "implied" instruction that has no argument
     /// </summary>
-    public void Write(Instruction i) => _writer.Write((byte)i);
+    public void Write(NESInstruction i) => _writer.Write((byte)i);
 
     /// <summary>
     /// Writes an instruction with a single byte argument
     /// </summary>
-    public void Write (Instruction i, byte @byte)
+    public void Write (NESInstruction i, byte @byte)
     {
         _writer.Write((byte)i);
         _writer.Write(@byte);
@@ -363,7 +363,7 @@ class NESWriter : IDisposable
     /// <summary>
     /// Writes an instruction with an address argument (2 bytes)
     /// </summary>
-    public void Write(Instruction i, ushort address)
+    public void Write(NESInstruction i, ushort address)
     {
         _writer.Write((byte)i);
         _writer.Write(address);

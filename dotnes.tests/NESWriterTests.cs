@@ -96,7 +96,7 @@ public class NESWriterTests
     public void WriteLDA()
     {
         using var writer = GetWriter();
-        writer.Write(Instruction.LDA, 0x08);
+        writer.Write(NESInstruction.LDA, 0x08);
         writer.Flush();
 
         // 8076	A908          	LDA #$08  
@@ -107,7 +107,7 @@ public class NESWriterTests
     public void WriteJSR()
     {
         using var writer = GetWriter();
-        writer.Write(Instruction.JSR, 0x84F4);
+        writer.Write(NESInstruction.JSR, 0x84F4);
         writer.Flush();
 
         // 807A	20F484        	JSR initlib
@@ -258,47 +258,47 @@ public class NESWriterTests
         ushort ppu_on_all = 0x8289;
 
         // pal_col(0, 0x02);
-        writer.Write(Instruction.LDA, 0x00);
-        writer.Write(Instruction.JSR, pusha);
-        writer.Write(Instruction.LDA, 0x02);
-        writer.Write(Instruction.JSR, pal_col);
+        writer.Write(NESInstruction.LDA, 0x00);
+        writer.Write(NESInstruction.JSR, pusha);
+        writer.Write(NESInstruction.LDA, 0x02);
+        writer.Write(NESInstruction.JSR, pal_col);
 
         // pal_col(1, 0x14);
-        writer.Write(Instruction.LDA, 0x01);
-        writer.Write(Instruction.JSR, pusha);
-        writer.Write(Instruction.LDA, 0x14);
-        writer.Write(Instruction.JSR, pal_col);
+        writer.Write(NESInstruction.LDA, 0x01);
+        writer.Write(NESInstruction.JSR, pusha);
+        writer.Write(NESInstruction.LDA, 0x14);
+        writer.Write(NESInstruction.JSR, pal_col);
 
         // pal_col(2, 0x20);
-        writer.Write(Instruction.LDA, 0x02);
-        writer.Write(Instruction.JSR, pusha);
-        writer.Write(Instruction.LDA, 0x20);
-        writer.Write(Instruction.JSR, pal_col);
+        writer.Write(NESInstruction.LDA, 0x02);
+        writer.Write(NESInstruction.JSR, pusha);
+        writer.Write(NESInstruction.LDA, 0x20);
+        writer.Write(NESInstruction.JSR, pal_col);
 
         // pal_col(3, 0x30);
-        writer.Write(Instruction.LDA, 0x03);
-        writer.Write(Instruction.JSR, pusha);
-        writer.Write(Instruction.LDA, 0x30);
-        writer.Write(Instruction.JSR, pal_col);
+        writer.Write(NESInstruction.LDA, 0x03);
+        writer.Write(NESInstruction.JSR, pusha);
+        writer.Write(NESInstruction.LDA, 0x30);
+        writer.Write(NESInstruction.JSR, pal_col);
 
         // vram_adr(NTADR_A(2, 2));
-        writer.Write(Instruction.LDX, 0x20);
-        writer.Write(Instruction.LDA, 0x42);
-        writer.Write(Instruction.JSR, vram_adr);
+        writer.Write(NESInstruction.LDX, 0x20);
+        writer.Write(NESInstruction.LDA, 0x42);
+        writer.Write(NESInstruction.JSR, vram_adr);
 
         // vram_write("HELLO, WORLD!", 13);
-        writer.Write(Instruction.LDA, 0xF1);
-        writer.Write(Instruction.LDX, 0x85);
-        writer.Write(Instruction.JSR, pushax);
-        writer.Write(Instruction.LDX, 0x00);
-        writer.Write(Instruction.LDA, 0x0D);
-        writer.Write(Instruction.JSR, vram_write);
+        writer.Write(NESInstruction.LDA, 0xF1);
+        writer.Write(NESInstruction.LDX, 0x85);
+        writer.Write(NESInstruction.JSR, pushax);
+        writer.Write(NESInstruction.LDX, 0x00);
+        writer.Write(NESInstruction.LDA, 0x0D);
+        writer.Write(NESInstruction.JSR, vram_write);
 
         // ppu_on_all();
-        writer.Write(Instruction.JSR, ppu_on_all);
+        writer.Write(NESInstruction.JSR, ppu_on_all);
 
         // while (true) ;
-        writer.Write(Instruction.JMP_abs, 0x8540); // Jump to self
+        writer.Write(NESInstruction.JMP_abs, 0x8540); // Jump to self
 
         writer.WriteSegment(1);
         writer.WriteString("HELLO, WORLD!");

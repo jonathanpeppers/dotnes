@@ -60,7 +60,7 @@ class IL2NESWriter : NESWriter
                 WriteLdc(checked((byte)operand));
                 break;
             case ILOpCode.Br_s:
-                Write(Instruction.JMP_abs, checked((ushort)operand));
+                Write(NESInstruction.JMP_abs, checked((ushort)operand));
                 break;
             default:
                 throw new NotImplementedException($"OpCode {code} with Int32 operand is not implemented!");
@@ -75,10 +75,10 @@ class IL2NESWriter : NESWriter
                 break;
             case ILOpCode.Ldstr:
                 //TODO: hardcoded until string table figured out
-                Write(Instruction.LDA, 0xF1);
-                Write(Instruction.LDX, 0x85);
-                Write(Instruction.JSR, pushax);
-                Write(Instruction.LDX, 0x00);
+                Write(NESInstruction.LDA, 0xF1);
+                Write(NESInstruction.LDX, 0x85);
+                Write(NESInstruction.JSR, pushax);
+                Write(NESInstruction.LDX, 0x00);
                 break;
             case ILOpCode.Call:
                 switch (operand)
@@ -91,12 +91,12 @@ class IL2NESWriter : NESWriter
                         ushort address = NTADR_A(checked((byte)A.Pop()), checked((byte)A.Pop()));
                         _writer.BaseStream.SetLength(_writer.BaseStream.Length - 7);
                         //TODO: these are hardcoded until I figure this out
-                        Write(Instruction.LDX, 0x20);
-                        Write(Instruction.LDA, 0x42);
+                        Write(NESInstruction.LDX, 0x20);
+                        Write(NESInstruction.LDA, 0x42);
                         A.Push(address);
                         break;
                     default:
-                        Write(Instruction.JSR, GetAddress(operand));
+                        Write(NESInstruction.JSR, GetAddress(operand));
                         break;
                 }
                 A.Clear();
@@ -127,9 +127,9 @@ class IL2NESWriter : NESWriter
     {
         if (A.Count > 0)
         {
-            Write(Instruction.JSR, pusha);
+            Write(NESInstruction.JSR, pusha);
         }
-        Write(Instruction.LDA, checked((byte)operand));
+        Write(NESInstruction.LDA, checked((byte)operand));
         A.Push(operand);
     }
 }

@@ -5,7 +5,7 @@
 /// 
 /// See: https://www.masswerk.at/6502/6502_instruction_set.html
 /// </summary>
-enum Instruction : byte
+enum NESInstruction : byte
 {
     // 0
 
