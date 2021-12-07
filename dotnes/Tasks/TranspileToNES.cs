@@ -1,6 +1,6 @@
 ﻿namespace dotnes;
 
-public class CompileToNES : Task
+public class TranspileToNES : Task
 {
     [Required]
     public string TargetPath { get; set; } = "";
@@ -11,8 +11,8 @@ public class CompileToNES : Task
     public override bool Execute()
     {
         using var fs = File.Create(OutputPath);
-        using var writer = new NESWriter(fs);
-        writer.Write();
+        using var transpiler = new Transpiler(TargetPath);
+        transpiler.Write(fs);
 
         return !Log.HasLoggedErrors;
     }

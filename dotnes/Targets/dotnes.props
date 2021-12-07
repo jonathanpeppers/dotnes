@@ -1,0 +1,9 @@
+<Project>
+  <PropertyGroup>
+    <NoStdLib>true</NoStdLib>
+  </PropertyGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="*.nes" LogicalName="%(FileName)%(Extension)" />
+    <Using Include="NES.NESLib" Static="true" />
+  </ItemGroup>
+</Project>

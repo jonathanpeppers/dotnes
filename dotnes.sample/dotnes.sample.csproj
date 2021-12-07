@@ -1,4 +1,7 @@
-<Project Sdk="Microsoft.NET.Sdk">
+<Project>
+
+  <Import Sdk="Microsoft.NET.Sdk" Project="Sdk.props" />
+  <Import Project="..\dotnes\bin\$(Configuration)\netstandard2.0\dotnes.props" />
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
@@ -8,12 +11,11 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <EmbeddedResource Include="*.nes" LogicalName="%(FileName)%(Extension)" />
+    <ProjectReference Include="..\neslib\neslib.csproj" />
+    <ProjectReference Include="..\dotnes\dotnes.csproj" ReferenceOutputAssembly="false" />
   </ItemGroup>
 
-  <ItemGroup>
-    <Using Include="NES.NESLib" Static="true" />
-    <ProjectReference Include="..\neslib\neslib.csproj" />
-  </ItemGroup>
+  <Import Sdk="Microsoft.NET.Sdk" Project="Sdk.targets" />
+  <Import Project="..\dotnes\bin\$(Configuration)\netstandard2.0\dotnes.targets" />
 
 </Project>
