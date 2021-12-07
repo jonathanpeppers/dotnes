@@ -72,7 +72,7 @@ public class IL2NESWriterTests
         // while (true) ;
         // TODO: for some reason the IL is:
         // while (true) { bool flag = true; }
-        writer.Write(ILOpCode.Br_s, 0x8540); // Jump to self
+        writer.Write(NESInstruction.JMP_abs, 0x8540); // Jump to self
 
         writer.WriteSegment(1);
         writer.WriteString("HELLO, WORLD!");

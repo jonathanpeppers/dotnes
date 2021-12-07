@@ -8,6 +8,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <EmbeddedResource Include="*.nes" LogicalName="%(FileName)%(Extension)" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Using Include="NES.NESLib" Static="true" />
     <ProjectReference Include="..\neslib\neslib.csproj" />
   </ItemGroup>

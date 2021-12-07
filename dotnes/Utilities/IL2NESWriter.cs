@@ -59,9 +59,9 @@ class IL2NESWriter : NESWriter
             case ILOpCode.Ldc_i4_s:
                 WriteLdc(checked((byte)operand));
                 break;
-            case ILOpCode.Br_s:
-                Write(NESInstruction.JMP_abs, checked((ushort)operand));
-                break;
+            //case ILOpCode.Br_s:
+            //    Write(NESInstruction.JMP_abs, checked((ushort)operand));
+            //    break;
             default:
                 throw new NotImplementedException($"OpCode {code} with Int32 operand is not implemented!");
         }

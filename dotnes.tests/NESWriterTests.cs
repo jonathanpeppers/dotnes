@@ -61,6 +61,8 @@ public class NESWriterTests
         segment1.Write(data, 0x553, 0x600 - 0x553);
         using var segment2 = File.Create("segment2.nes");
         segment2.Write(data, 0x60F, 0x634 - 0x60F);
+        using var chr_rom = File.Create("CHR_ROM.nes");
+        chr_rom.Write(data, 16 + 2 * NESWriter.PRG_ROM_BLOCK_SIZE, NESWriter.CHR_ROM_BLOCK_SIZE);
     }
 
     [Fact]
@@ -85,7 +87,7 @@ public class NESWriterTests
         ArgumentNullException.ThrowIfNull(writer.CHR_ROM, nameof(writer.CHR_ROM));
 
         Array.Copy(data, 16, writer.PRG_ROM, 0, writer.PRG_ROM.Length);
-        Array.Copy(data, 16 + 2 * 16384, writer.CHR_ROM, 0, writer.CHR_ROM.Length);
+        Array.Copy(data, 16 + 2 * NESWriter.PRG_ROM_BLOCK_SIZE, writer.CHR_ROM, 0, writer.CHR_ROM.Length);
 
         writer.Write();
 

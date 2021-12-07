@@ -5,15 +5,101 @@ using System.Reflection.PortableExecutable;
 
 namespace dotnes;
 
-class ILReader : IDisposable
+class Transpiler : IDisposable
 {
     readonly PEReader pe;
     readonly MetadataReader reader;
 
-    public ILReader(string path)
+    public Transpiler(string dotnetAssembly)
     {
-        pe = new PEReader(File.OpenRead(path));
+        pe = new PEReader(File.OpenRead(dotnetAssembly));
         reader = pe.GetMetadataReader();
+    }
+
+    public void Write(Stream stream)
+    {
+        using var chr_rom = Get_CHR_ROM();
+        int CHR_ROM_SIZE = 0;
+        if (chr_rom != null)
+        {
+            if (chr_rom.Length % NESWriter.CHR_ROM_BLOCK_SIZE != 0)
+                throw new InvalidOperationException($"CHR_ROM must be in blocks of {NESWriter.CHR_ROM_BLOCK_SIZE}");
+
+            CHR_ROM_SIZE = (int)(chr_rom.Length / NESWriter.CHR_ROM_BLOCK_SIZE);
+        }
+
+        using var writer = new IL2NESWriter(stream);
+        writer.WriteHeader(PRG_ROM_SIZE: 2, CHR_ROM_SIZE: 1);
+        writer.WriteSegment(0);
+
+        // Read it all into an array, so we can "read ahead"
+        var instructions = ReadStaticVoidMain().ToArray();
+        for (int i = 0; i < instructions.Length; i++)
+        {
+            var instruction = instructions[i];
+
+            // Check for `while(true) ;`
+            // emitted as
+            // `while (true) { bool flag = true; }`
+            if (instruction.OpCode == ILOpCode.Br_s && instruction.Integer == 1 && i + 4 < instructions.Length)
+            {
+                var jump = instructions[i + 4];
+                if (instructions[i + 1].OpCode == ILOpCode.Nop &&
+                    instructions[i + 2].OpCode == ILOpCode.Ldc_i4_1 &&
+                    instructions[i + 3].OpCode == ILOpCode.Stloc_0 &&
+                    jump.OpCode == ILOpCode.Br_s && jump.Integer == 251)
+                {
+                    writer.Write(NESInstruction.JMP_abs, 0x8540);
+                    i += 4;
+                    continue;
+                }
+            }
+
+            // Default cases
+            if (instruction.Integer != null)
+            {
+                writer.Write(instruction.OpCode, instruction.Integer.Value);
+            }
+            else if (instruction.String != null)
+            {
+                writer.Write(instruction.OpCode, instruction.String);
+            }
+            else
+            {
+                writer.Write(instruction.OpCode);
+            }
+        }
+
+        writer.WriteSegment(1);
+        //TODO: should be actual string table
+        writer.WriteString("HELLO, WORLD!");
+        writer.WriteSegment(2);
+
+        // Pad 0s
+        int PRG_ROM_SIZE = (int)writer.Length - 16;
+        writer.WriteZeroes(NESWriter.PRG_ROM_BLOCK_SIZE - (PRG_ROM_SIZE % NESWriter.PRG_ROM_BLOCK_SIZE));
+        writer.WriteZeroes(NESWriter.PRG_ROM_BLOCK_SIZE - 6);
+
+        //TODO: no idea what these are???
+        writer.Write(new byte[] { 0xBC, 0x80, 0x00, 0x80, 0x02, 0x82 });
+
+        if (chr_rom != null)
+            chr_rom.CopyTo(writer.BaseStream);
+        writer.Flush();
+    }
+
+    Stream? Get_CHR_ROM()
+    {
+        foreach (var h in reader.ManifestResources)
+        {
+            var resource = reader.GetManifestResource(h);
+            var name = reader.GetString(resource.Name);
+            if (name == "CHR_ROM.nes")
+            {
+                return pe.GetEmbeddedResourceStream(resource);
+            }
+        }
+        return null;
     }
 
     /// <summary>

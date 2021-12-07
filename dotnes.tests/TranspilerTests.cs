@@ -2,20 +2,20 @@
 
 namespace dotnes.tests;
 
-public class IL2ReaderTests
+public class TranspilerTests
 {
     readonly string path;
 
-    public IL2ReaderTests()
+    public TranspilerTests()
     {
         var dir = Path.GetDirectoryName(GetType().Assembly.Location)!;
         path = Path.Combine(dir, "dotnes.sample.dll");
     }
 
     [Fact]
-    public void StaticVoidMain()
+    public void ReadStaticVoidMain()
     {
-        using var il = new ILReader(path);
+        using var il = new Transpiler(path);
         var builder = new StringBuilder();
         foreach (var instruction in il.ReadStaticVoidMain())
         {
@@ -57,5 +57,21 @@ ILInstruction { OpCode = Nop, Integer = , String =  }
 ILInstruction { OpCode = Ldc_i4_1, Integer = , String =  }
 ILInstruction { OpCode = Stloc_0, Integer = , String =  }
 ILInstruction { OpCode = Br_s, Integer = 251, String =  }", builder.ToString());
+    }
+
+    [Fact]
+    public void Write()
+    {
+        using var s = GetType().Assembly.GetManifestResourceStream("dotnes.tests.Data.hello.nes");
+        if (s == null)
+            throw new Exception("Cannot load hello.nes!");
+        var expected = new byte[s.Length];
+        s.Read(expected, 0, expected.Length);
+
+        using var ms = new MemoryStream();
+        using var il = new Transpiler(path);
+        il.Write(ms);
+        
+        AssertEx.Equal(expected, ms.ToArray());
     }
 }
