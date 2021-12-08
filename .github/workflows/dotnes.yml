@@ -8,20 +8,31 @@ on:
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
-
+    env:
+      Configuration: Release
     steps:
     - uses: actions/checkout@v2
-    - name: Setup .NET
+    - name: install .NET 6
       uses: actions/setup-dotnet@v1
       with:
         dotnet-version: 6.0.x
-    - name: Restore dependencies
-      run: dotnet restore
-    - name: Build
-      run: dotnet build --no-restore
-    - name: Test
+    - name: build
+      run: dotnet build -bl:build.binlog
+    - name: test
       run: dotnet test --no-build --verbosity normal
-    - name: Samples
-      run: dotnet build samples/samples.sln
+    - name: samples
+      run: dotnet build samples/samples.sln -bl:samples.binlog
+    - name: upload logs
+      uses: actions/upload-artifact@v2
+      with:
+        name: logs
+        path: *.binlog
+        if: always()
+        if-no-files-found: error
+    - name: upload ROMs
+      uses: actions/upload-artifact@v2
+      with:
+        name: ROMs
+        path: samples/**/*.nes
+        if-no-files-found: error
