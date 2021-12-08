@@ -20,19 +20,17 @@ jobs:
         dotnet-version: 6.0.x
     - name: build
       run: dotnet build -bl:build.binlog
-      continue-on-error: true
     - name: test
       run: dotnet test --no-build --verbosity normal
-      continue-on-error: true
     - name: samples
       #TODO: should build samples.sln when all are working
       run: dotnet build samples/hello/hello.csproj -bl:samples.binlog
-      continue-on-error: true
     - name: upload logs
       uses: actions/upload-artifact@v2
       with:
         name: logs
         path: '*.binlog'
+        if: failure()
         if-no-files-found: error
     - name: upload ROMs
       uses: actions/upload-artifact@v2
@@ -42,6 +40,3 @@ jobs:
           samples/*/bin/**/*.nes
           samples/*/bin/**/*.dll
         if-no-files-found: error
-    - name: check failures
-      if: steps.build.outcome != 'success' || steps.test.outcome != 'success' || steps.samples.outcome != 'success'
-      run: exit 1
