@@ -7,7 +7,7 @@ public class NESWriterTests
 
     public NESWriterTests()
     {
-        using var s = GetType().Assembly.GetManifestResourceStream("dotnes.tests.Data.hello.nes");
+        using var s = GetType().Assembly.GetManifestResourceStream("hello.nes");
         if (s == null)
             throw new Exception("Cannot load hello.nes!");
         data = new byte[s.Length];

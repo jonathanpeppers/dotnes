@@ -4,18 +4,13 @@ namespace dotnes.tests;
 
 public class TranspilerTests
 {
-    readonly string path;
-
-    public TranspilerTests()
-    {
-        var dir = Path.GetDirectoryName(GetType().Assembly.Location)!;
-        path = Path.Combine(dir, "..", "..", "..", "..", "dotnes.sample", "bin", "Debug", "net6.0", "dotnes.sample.dll");
-    }
-
     [Fact]
     public void ReadStaticVoidMain()
     {
-        using var il = new Transpiler(path);
+        using var hello_dll = GetType().Assembly.GetManifestResourceStream("hello.dll");
+        if (hello_dll == null)
+            throw new Exception("Cannot load hello.dll!");
+        using var il = new Transpiler(hello_dll);
         var builder = new StringBuilder();
         foreach (var instruction in il.ReadStaticVoidMain())
         {
@@ -62,14 +57,17 @@ ILInstruction { OpCode = Br_s, Integer = 251, String =  }", builder.ToString());
     [Fact]
     public void Write()
     {
-        using var s = GetType().Assembly.GetManifestResourceStream("dotnes.tests.Data.hello.nes");
-        if (s == null)
+        using var hello_nes = GetType().Assembly.GetManifestResourceStream("hello.nes");
+        if (hello_nes == null)
             throw new Exception("Cannot load hello.nes!");
-        var expected = new byte[s.Length];
-        s.Read(expected, 0, expected.Length);
+        using var hello_dll = GetType().Assembly.GetManifestResourceStream("hello.dll");
+        if (hello_dll == null)
+            throw new Exception("Cannot load hello.dll!");
+        var expected = new byte[hello_nes.Length];
+        hello_nes.Read(expected, 0, expected.Length);
 
         using var ms = new MemoryStream();
-        using var il = new Transpiler(path);
+        using var il = new Transpiler(hello_dll);
         il.Write(ms);
         
         AssertEx.Equal(expected, ms.ToArray());

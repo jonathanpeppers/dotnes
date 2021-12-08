@@ -1,0 +1,6 @@
+<Project>
+  <PropertyGroup>
+    <RestorePackagesPath>$(MSBuildThisFileDirectory)packages</RestorePackagesPath>
+    <RestoreAdditionalProjectSources>$(MSBuildThisFileDirectory)../bin/$(Configuration)/</RestoreAdditionalProjectSources >
+  </PropertyGroup>
+</Project>

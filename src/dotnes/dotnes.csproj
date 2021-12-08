@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.Build.NoTargets">
+  <PropertyGroup>
+    <TargetFramework>net6.0</TargetFramework>
+    <OutputPath>../../bin/$(Configuration)/</OutputPath>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <Description>.NET for the NES game console: a toy project for creating 6502 NES applications in C#</Description>
+    <Authors>Jonathan Peppers</Authors>
+    <PackageProjectUrl>https://github.com/jonathanpeppers/dotnes</PackageProjectUrl>
+    <PackageTags>.NET C# NES</PackageTags>
+    <PackageLicenseFile>LICENSE</PackageLicenseFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\dotnes.tasks\dotnes.tasks.csproj" />
+    <ProjectReference Include="..\neslib\neslib.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="../../LICENSE" Pack="true" PackagePath="" />
+    <None Include="../dotnes.tasks/bin/$(Configuration)/netstandard2.0/dotnes.tasks.dll" Pack="true" PackagePath="build" />
+    <None Include="../dotnes.tasks/bin/$(Configuration)/netstandard2.0/dotnes.tasks.pdb" Pack="true" PackagePath="build" />
+    <None Include="../dotnes.tasks/bin/$(Configuration)/netstandard2.0/dotnes.props" Pack="true" PackagePath="build" />
+    <None Include="../dotnes.tasks/bin/$(Configuration)/netstandard2.0/dotnes.targets" Pack="true" PackagePath="build" />
+    <None Include="../dotnes.tasks/bin/$(Configuration)/netstandard2.0/neslib.dll" Pack="true" PackagePath="build;lib/net6.0" />
+    <None Include="../dotnes.tasks/bin/$(Configuration)/netstandard2.0/neslib.pdb" Pack="true" PackagePath="build;lib/net6.0" />
+  </ItemGroup>
+  <Target Name="_ClearNuGetCache" BeforeTargets="Build">
+    <RemoveDir Directories="$(MSBuildThisFileDirectory)../../samples/packages" />
+  </Target>
+</Project>

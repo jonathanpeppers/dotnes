@@ -1,5 +1,5 @@
 <Project>
-  <UsingTask TaskName="dotnes.TranspileToNES" AssemblyFile="dotnes.dll" />
+  <UsingTask TaskName="dotnes.TranspileToNES" AssemblyFile="dotnes.tasks.dll" />
   <PropertyGroup>
     <NESTargetPath>$(OutputPath)$(TargetName).nes</NESTargetPath>
     <IncrementalCleanDependsOn>$(IncrementalCleanDependsOn);Transpile</IncrementalCleanDependsOn>

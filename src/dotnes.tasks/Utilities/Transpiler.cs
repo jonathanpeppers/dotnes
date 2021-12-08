@@ -10,9 +10,9 @@ class Transpiler : IDisposable
     readonly PEReader pe;
     readonly MetadataReader reader;
 
-    public Transpiler(string dotnetAssembly)
+    public Transpiler(Stream stream)
     {
-        pe = new PEReader(File.OpenRead(dotnetAssembly));
+        pe = new PEReader(stream);
         reader = pe.GetMetadataReader();
     }
 

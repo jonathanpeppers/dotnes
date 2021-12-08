@@ -10,9 +10,10 @@ public class TranspileToNES : Task
 
     public override bool Execute()
     {
-        using var fs = File.Create(OutputPath);
-        using var transpiler = new Transpiler(TargetPath);
-        transpiler.Write(fs);
+        using var input = File.OpenRead(TargetPath);
+        using var output = File.Create(OutputPath);
+        using var transpiler = new Transpiler(input);
+        transpiler.Write(output);
 
         return !Log.HasLoggedErrors;
     }
