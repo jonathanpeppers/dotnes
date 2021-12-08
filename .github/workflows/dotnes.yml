@@ -37,7 +37,9 @@ jobs:
       uses: actions/upload-artifact@v2
       with:
         name: ROMs
-        path: samples/**/*.nes
+        path: |
+          samples/*/bin/**/*.nes
+          samples/*/bin/**/*.dll
         if-no-files-found: error
     - name: check failures
       if: steps.build.outcome != 'success' || steps.test.outcome != 'success' || steps.samples.outcome != 'success'
