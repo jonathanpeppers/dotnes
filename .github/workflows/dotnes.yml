@@ -1,0 +1,41 @@
+name: .NES
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    #TODO: Release is broken
+    #env:
+    #  Configuration: Release
+    steps:
+    - uses: actions/checkout@v2
+    - name: install .NET 6
+      uses: actions/setup-dotnet@v1
+      with:
+        dotnet-version: 6.0.x
+    - name: build
+      run: dotnet build -bl:build.binlog
+    - name: test
+      run: dotnet test --no-build --verbosity normal
+    - name: samples
+      #TODO: should build samples.sln when all are working
+      run: dotnet build samples/hello/hello.csproj -bl:samples.binlog
+    - name: upload logs
+      uses: actions/upload-artifact@v2
+      with:
+        name: logs
+        path: '*.binlog'
+        if-no-files-found: error
+    - name: upload ROMs
+      uses: actions/upload-artifact@v2
+      with:
+        name: ROMs
+        path: |
+          samples/*/bin/**/*.nes
+          samples/*/bin/**/*.dll
+        if-no-files-found: error

@@ -1,4 +1,4 @@
-# dotnes
+# .NES ("dot" NES)
 
 .NET for the NES game console
 
