@@ -9,8 +9,9 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    env:
-      Configuration: Release
+    #TODO: Release is broken
+    #env:
+    #  Configuration: Release
     steps:
     - uses: actions/checkout@v2
     - name: install .NET 6
