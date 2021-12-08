@@ -1,4 +1,4 @@
-name: .NET
+name: .NES
 
 on:
   push:
@@ -30,7 +30,6 @@ jobs:
       with:
         name: logs
         path: '*.binlog'
-        if: failure()
         if-no-files-found: error
     - name: upload ROMs
       uses: actions/upload-artifact@v2
