@@ -27,7 +27,7 @@ jobs:
       uses: actions/upload-artifact@v2
       with:
         name: logs
-        path: *.binlog
+        path: '*.binlog'
         if: always()
         if-no-files-found: error
     - name: upload ROMs
