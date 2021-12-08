@@ -20,6 +20,8 @@
     <None Include="../dotnes.tasks/bin/$(Configuration)/netstandard2.0/dotnes.tasks.pdb" Pack="true" PackagePath="build" />
     <None Include="../dotnes.tasks/bin/$(Configuration)/netstandard2.0/dotnes.props" Pack="true" PackagePath="build" />
     <None Include="../dotnes.tasks/bin/$(Configuration)/netstandard2.0/dotnes.targets" Pack="true" PackagePath="build" />
+    <None Include="../dotnes.tasks/bin/$(Configuration)/netstandard2.0/System.Reflection.Metadata.dll" Pack="true" PackagePath="build" />
+    <None Include="../dotnes.tasks/bin/$(Configuration)/netstandard2.0/System.Collections.Immutable.dll" Pack="true" PackagePath="build" />
     <None Include="../dotnes.tasks/bin/$(Configuration)/netstandard2.0/neslib.dll" Pack="true" PackagePath="build;lib/net6.0" />
     <None Include="../dotnes.tasks/bin/$(Configuration)/netstandard2.0/neslib.pdb" Pack="true" PackagePath="build;lib/net6.0" />
   </ItemGroup>
