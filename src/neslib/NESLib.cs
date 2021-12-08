@@ -115,9 +115,19 @@ public static class NESLib
     public static void vram_adr(ushort adr) { }
 
     /// <summary>
+    /// fill a block with a byte at current vram address, works only when rendering is turned off
+    /// </summary>
+    public static void vram_fill(byte n, uint len) { }
+
+    /// <summary>
     /// write a block to current address of vram, works only when rendering is turned off
     /// </summary>
     public static void vram_write(string src, ushort size) { }
+
+    /// <summary>
+    /// write a block to current address of vram, works only when rendering is turned off
+    /// </summary>
+    public static void vram_write(byte[] src) { }
 
     public const ushort NAMETABLE_A = 0x2000;
     public const ushort NAMETABLE_B = 0x2400;
