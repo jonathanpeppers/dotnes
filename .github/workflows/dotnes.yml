@@ -19,10 +19,13 @@ jobs:
         dotnet-version: 6.0.x
     - name: build
       run: dotnet build -bl:build.binlog
+      continue-on-error: true
     - name: test
       run: dotnet test --no-build --verbosity normal
+      continue-on-error: true
     - name: samples
       run: dotnet build samples/samples.sln -bl:samples.binlog
+      continue-on-error: true
     - name: upload logs
       uses: actions/upload-artifact@v2
       with:
