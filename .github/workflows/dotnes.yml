@@ -31,7 +31,6 @@ jobs:
       with:
         name: logs
         path: '*.binlog'
-        if: always()
         if-no-files-found: error
     - name: upload ROMs
       uses: actions/upload-artifact@v2
@@ -39,3 +38,6 @@ jobs:
         name: ROMs
         path: samples/**/*.nes
         if-no-files-found: error
+    - name: check failures
+      if: steps.build.outcome != 'success' || steps.test.outcome != 'success' || steps.samples.outcome != 'success'
+      run: exit 1
