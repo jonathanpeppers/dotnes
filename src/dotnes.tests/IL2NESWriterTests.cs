@@ -10,9 +10,7 @@ public class IL2NESWriterTests
 
     public IL2NESWriterTests()
     {
-        using var s = GetType().Assembly.GetManifestResourceStream("hello.nes");
-        if (s == null)
-            throw new Exception("Cannot load hello.nes!");
+        using var s = Utilities.GetResource("hello.nes");
         data = new byte[s.Length];
         s.Read(data, 0, data.Length);
     }

@@ -128,7 +128,10 @@ class NESWriter : IDisposable
     /// </summary>
     public void WriteSegment(int index)
     {
-        using var stream = GetType().Assembly.GetManifestResourceStream($"segment{index}.nes");
+        var name = $"segment{index}.nes";
+        using var stream = GetType().Assembly.GetManifestResourceStream(name);
+        if (stream == null)
+            throw new InvalidOperationException($"Cannot load {name}!");
         stream.CopyTo(_writer.BaseStream);
     }
 
