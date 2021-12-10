@@ -46,18 +46,20 @@ ILInstruction { OpCode = Br_s, Integer = 254, String =  }";
     }
 
     [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public void Write(bool debug)
+    [InlineData("attributetable", true)]
+    [InlineData("attributetable", false)]
+    [InlineData("hello", true)]
+    [InlineData("hello", false)]
+    public void Write(string name, bool debug)
     {
-        var name = debug ? "debug" : "release";
-        using var hello_nes = Utilities.GetResource("hello.nes");
-        using var hello_dll = Utilities.GetResource($"hello.{name}.dll");
-        var expected = new byte[hello_nes.Length];
-        hello_nes.Read(expected, 0, expected.Length);
+        var configuration = debug ? "debug" : "release";
+        using var rom = Utilities.GetResource($"{name}.nes");
+        var expected = new byte[rom.Length];
+        rom.Read(expected, 0, expected.Length);
 
+        using var dll = Utilities.GetResource($"{name}.{configuration}.dll");
+        using var il = new Transpiler(dll);
         using var ms = new MemoryStream();
-        using var il = new Transpiler(hello_dll);
         il.Write(ms);
         
         AssertEx.Equal(expected, ms.ToArray());

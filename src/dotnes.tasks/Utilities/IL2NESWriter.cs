@@ -1,4 +1,5 @@
 ﻿using System.Reflection.Metadata;
+using System.Reflection.Metadata.Ecma335;
 using static NES.NESLib;
 
 namespace dotnes;
@@ -16,6 +17,9 @@ class IL2NESWriter : NESWriter
         switch (code)
         {
             case ILOpCode.Nop:
+                break;
+            case ILOpCode.Dup:
+                //TODO: do something?
                 break;
             case ILOpCode.Ldc_i4_0:
                 WriteLdc(0, sizeOfMain);
@@ -61,6 +65,9 @@ class IL2NESWriter : NESWriter
                 break;
             case ILOpCode.Br_s:
                 Write(NESInstruction.JMP_abs, checked((ushort)(byte.MaxValue - operand + 0x8540 - 1)));
+                break;
+            case ILOpCode.Newarr:
+                //TODO: operand must represent a type?
                 break;
             default:
                 throw new NotImplementedException($"OpCode {code} with Int32 operand is not implemented!");
