@@ -1,5 +1,15 @@
 <Project>
   <PropertyGroup>
+    <!-- Prevent foo.exe -->
+    <ComputeNETCoreBuildOutputFiles>false</ComputeNETCoreBuildOutputFiles>
+    <!-- Prevent foo.*.json -->
+    <GenerateDependencyFile>false</GenerateDependencyFile>
+    <GenerateRuntimeConfigurationFiles>false</GenerateRuntimeConfigurationFiles>
+    <!-- Prevent ref/foo.dll -->
+    <ProduceReferenceAssembly>false</ProduceReferenceAssembly>
+    <!-- Prevent neslib.dll -->
+    <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
+    <!-- Prevent the BCL! -->
     <NoStdLib>true</NoStdLib>
   </PropertyGroup>
   <ItemGroup>
