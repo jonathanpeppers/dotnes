@@ -4,41 +4,7 @@ namespace dotnes.tests;
 
 public class TranspilerTests
 {
-    const string DebugIL = 
-       @"ILInstruction { OpCode = Ldc_i4_0, Integer = , String =  }
-ILInstruction { OpCode = Ldc_i4_2, Integer = , String =  }
-ILInstruction { OpCode = Call, Integer = , String = pal_col }
-ILInstruction { OpCode = Nop, Integer = , String =  }
-ILInstruction { OpCode = Ldc_i4_1, Integer = , String =  }
-ILInstruction { OpCode = Ldc_i4_s, Integer = 20, String =  }
-ILInstruction { OpCode = Call, Integer = , String = pal_col }
-ILInstruction { OpCode = Nop, Integer = , String =  }
-ILInstruction { OpCode = Ldc_i4_2, Integer = , String =  }
-ILInstruction { OpCode = Ldc_i4_s, Integer = 32, String =  }
-ILInstruction { OpCode = Call, Integer = , String = pal_col }
-ILInstruction { OpCode = Nop, Integer = , String =  }
-ILInstruction { OpCode = Ldc_i4_3, Integer = , String =  }
-ILInstruction { OpCode = Ldc_i4_s, Integer = 48, String =  }
-ILInstruction { OpCode = Call, Integer = , String = pal_col }
-ILInstruction { OpCode = Nop, Integer = , String =  }
-ILInstruction { OpCode = Ldc_i4_2, Integer = , String =  }
-ILInstruction { OpCode = Ldc_i4_2, Integer = , String =  }
-ILInstruction { OpCode = Call, Integer = , String = NTADR_A }
-ILInstruction { OpCode = Call, Integer = , String = vram_adr }
-ILInstruction { OpCode = Nop, Integer = , String =  }
-ILInstruction { OpCode = Ldstr, Integer = , String = HELLO, .NET! }
-ILInstruction { OpCode = Ldc_i4_s, Integer = 13, String =  }
-ILInstruction { OpCode = Call, Integer = , String = vram_write }
-ILInstruction { OpCode = Nop, Integer = , String =  }
-ILInstruction { OpCode = Call, Integer = , String = ppu_on_all }
-ILInstruction { OpCode = Nop, Integer = , String =  }
-ILInstruction { OpCode = Br_s, Integer = 1, String =  }
-ILInstruction { OpCode = Nop, Integer = , String =  }
-ILInstruction { OpCode = Ldc_i4_1, Integer = , String =  }
-ILInstruction { OpCode = Stloc_0, Integer = , String =  }
-ILInstruction { OpCode = Br_s, Integer = 251, String =  }";
-
-    const string ReleaseIL =
+    const string HelloIL =
 @"ILInstruction { OpCode = Ldc_i4_0, Integer = , String =  }
 ILInstruction { OpCode = Ldc_i4_2, Integer = , String =  }
 ILInstruction { OpCode = Call, Integer = , String = pal_col }
@@ -77,7 +43,7 @@ ILInstruction { OpCode = Br_s, Integer = 254, String =  }";
             builder.Append(instruction.ToString());
         }
 
-        Assert.Equal(debug ? DebugIL : ReleaseIL, builder.ToString());
+        Assert.Equal(HelloIL, builder.ToString());
     }
 
     [Theory]

@@ -11,6 +11,8 @@
     <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
     <!-- Prevent the BCL! -->
     <NoStdLib>true</NoStdLib>
+    <!-- Always work with Optimized IL -->
+    <Optimize>true</Optimize>
   </PropertyGroup>
   <ItemGroup>
     <EmbeddedResource Include="*.nes" LogicalName="%(FileName)%(Extension)" />

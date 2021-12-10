@@ -38,23 +38,6 @@ class Transpiler : IDisposable
         {
             var instruction = instructions[i];
 
-            // Check for `while(true) ;`
-            // emitted as
-            // `while (true) { bool flag = true; }`
-            if (instruction.OpCode == ILOpCode.Br_s && instruction.Integer == 1 && i + 4 < instructions.Length)
-            {
-                var jump = instructions[i + 4];
-                if (instructions[i + 1].OpCode == ILOpCode.Nop &&
-                    instructions[i + 2].OpCode == ILOpCode.Ldc_i4_1 &&
-                    instructions[i + 3].OpCode == ILOpCode.Stloc_0 &&
-                    jump.OpCode == ILOpCode.Br_s && jump.Integer == 251)
-                {
-                    writer.Write(NESInstruction.JMP_abs, 0x8540);
-                    i += 4;
-                    continue;
-                }
-            }
-
             // Default cases
             if (instruction.Integer != null)
             {
