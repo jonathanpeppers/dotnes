@@ -1,0 +1,57 @@
+<Project Sdk="Microsoft.Build.NoTargets">
+  <PropertyGroup>
+    <TargetFramework>net6.0</TargetFramework>
+    <OutputPath>../../bin/$(Configuration)/</OutputPath>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <Description>Redistribution of ANESE for use with .NES</Description>
+    <Authors>Jonathan Peppers</Authors>
+    <PackageProjectUrl>https://github.com/daniel5151/ANESE</PackageProjectUrl>
+    <PackageTags>.NET C# NES Emulator</PackageTags>
+    <PackageLicenseFile>LICENSE</PackageLicenseFile>
+    <PackageVersion>0.9.1</PackageVersion>
+    <MacUrl>https://github.com/daniel5151/ANESE/releases/download/$(PackageVersion)/ANESE_$(PackageVersion)_macOS.zip</MacUrl>
+    <WindowsUrl>https://github.com/daniel5151/ANESE/releases/download/$(PackageVersion)/ANESE_$(PackageVersion)_win.zip</WindowsUrl>
+    <GithubLicenseUrl>https://raw.githubusercontent.com/daniel5151/ANESE/cbc4160fe9c32f335feda0dd6be04024aba11447/LICENSE</GithubLicenseUrl>
+    <NoWarn>NU5119;NU5128</NoWarn>
+    <BeforePack>
+      _AddPackageFiles;
+      $(BeforePack);
+    </BeforePack>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Update="@(None)" Pack="true" PackagePath="/" />
+  </ItemGroup>
+  <Target Name="_Download" BeforeTargets="Build"
+      Inputs="$(MSBuildThisFile)"
+      Outputs="$(IntermediateOutputPath)ANESE_$(PackageVersion)_win.zip;$(IntermediateOutputPath)ANESE_$(PackageVersion)_macOS.zip">
+    <DownloadFile SourceUrl="$(WindowsUrl)" DestinationFolder="$(IntermediateOutputPath)" />
+    <DownloadFile SourceUrl="$(MacUrl)"     DestinationFolder="$(IntermediateOutputPath)" />
+    <DownloadFile SourceUrl="$(GithubLicenseUrl)" DestinationFolder="$(IntermediateOutputPath)" />
+    <ItemGroup>
+      <FileWrites Include="$(IntermediateOutputPath)ANESE_$(PackageVersion)_win.zip;$(IntermediateOutputPath)ANESE_$(PackageVersion)_macOS.zip" />
+    </ItemGroup>
+  </Target>
+  <Target Name="_Unzip" AfterTargets="_Download"
+      Inputs="$(MSBuildThisFile)"
+      Outputs="$(IntermediateOutputPath)_Unzip.stamp">
+    <RemoveDir Directories="$(IntermediateOutputPath)win;$(IntermediateOutputPath)osx" />
+    <Unzip SourceFiles="$(IntermediateOutputPath)ANESE_$(PackageVersion)_win.zip"   DestinationFolder="$(IntermediateOutputPath)win" />
+    <Unzip SourceFiles="$(IntermediateOutputPath)ANESE_$(PackageVersion)_macOS.zip" DestinationFolder="$(IntermediateOutputPath)osx" />
+    <Touch AlwaysCreate="true" Files="$(IntermediateOutputPath)_Unzip.stamp" />
+    <ItemGroup>
+      <FileWrites Include="$(IntermediateOutputPath)_Unzip.stamp" />
+    </ItemGroup>
+  </Target>
+  <Target Name="_AddPackageFiles">
+    <ItemGroup>
+      <_PackageFiles Include="$(IntermediateOutputPath)LICENSE" PackagePath="" />
+      <_PackageFiles Include="$(IntermediateOutputPath)win/anese.exe" PackagePath="tools/win" />
+      <_PackageFiles Include="$(IntermediateOutputPath)win/SDL2.dll"  PackagePath="tools/win" />
+      <_PackageFiles Include="$(IntermediateOutputPath)osx/anese.app/**/*" PackagePath="tools/osx/anese.app" />
+    </ItemGroup>
+  </Target>
+  <Target Name="_ClearNuGetCache" BeforeTargets="Build">
+    <RemoveDir Directories="$(MSBuildThisFileDirectory)../../samples/packages/$(PackageId)" />
+  </Target>
+</Project>

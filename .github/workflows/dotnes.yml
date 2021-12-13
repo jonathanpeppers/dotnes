@@ -9,9 +9,6 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    #TODO: Release is broken
-    #env:
-    #  Configuration: Release
     steps:
     - uses: actions/checkout@v2
     - name: install .NET 6
@@ -38,4 +35,11 @@ jobs:
         path: |
           samples/*/bin/**/*.nes
           samples/*/bin/**/*.dll
+        if-no-files-found: error
+    - name: upload nupkgs
+      uses: actions/upload-artifact@v2
+      with:
+        name: nupkgs
+        path: |
+          bin/Release/*.nupkg
         if-no-files-found: error

@@ -26,6 +26,6 @@
     <None Include="../dotnes.tasks/bin/$(Configuration)/netstandard2.0/neslib.pdb" Pack="true" PackagePath="build;lib/net6.0" />
   </ItemGroup>
   <Target Name="_ClearNuGetCache" BeforeTargets="Build">
-    <RemoveDir Directories="$(MSBuildThisFileDirectory)../../samples/packages" />
+    <RemoveDir Directories="$(MSBuildThisFileDirectory)../../samples/packages/$(PackageId)" />
   </Target>
 </Project>
