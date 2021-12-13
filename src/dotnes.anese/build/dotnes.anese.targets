@@ -1,0 +1,13 @@
+<Project>
+  <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('windows'))">
+    <RunCommand>&quot;$(MSBuildThisFileDirectory)../tools/win/anese.exe&quot;</RunCommand>
+    <RunArguments>&quot;$(TargetName).nes&quot; --no-sav</RunArguments>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('osx'))">
+    <RunCommand>open</RunCommand>
+    <RunArguments>&quot;$(MSBuildThisFileDirectory)../tools/osx/anese.app&quot; --args &quot;$(TargetName).nes&quot; --no-sav</RunArguments>
+  </PropertyGroup>
+  <PropertyGroup>
+    <RunWorkingDirectory>$(OutputPath)</RunWorkingDirectory>
+  </PropertyGroup>
+</Project>
