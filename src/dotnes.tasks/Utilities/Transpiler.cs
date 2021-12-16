@@ -147,21 +147,31 @@ class Transpiler : IDisposable
 
                             switch (member.Kind)
                             {
-                                case HandleKind.TypeDefinition:
-                                    stringValue = reader.GetString(reader.GetTypeDefinition((TypeDefinitionHandle)member).Name);
-                                    break;
-                                case HandleKind.TypeReference:
-                                    stringValue = reader.GetString(reader.GetTypeReference((TypeReferenceHandle)member).Name);
-                                    break;
                                 case HandleKind.MethodDefinition:
-                                    stringValue = reader.GetString(reader.GetMethodDefinition((MethodDefinitionHandle)member).Name);
-                                    break;
+                                    {
+                                        var methodDefinition = reader.GetMethodDefinition((MethodDefinitionHandle)member);
+                                        var declaringType = reader.GetTypeDefinition(methodDefinition.GetDeclaringType());
+                                        stringValue = declaringType.GetFullName(reader) + "::" + reader.GetString(methodDefinition.Name);
+                                        break;
+                                    }
                                 case HandleKind.MemberReference:
-                                    stringValue = reader.GetString(reader.GetMemberReference((MemberReferenceHandle)member).Name);
-                                    break;
-                                case HandleKind.FieldDefinition:
-                                    stringValue = reader.GetString(reader.GetFieldDefinition((FieldDefinitionHandle)member).Name);
-                                    break;
+                                    {
+                                        var memberReference = reader.GetMemberReference((MemberReferenceHandle)member);
+                                        var declaringType = reader.GetTypeReference((TypeReferenceHandle)memberReference.Parent);
+                                        stringValue = declaringType.GetFullName(reader) + "::" + reader.GetString(memberReference.Name);
+                                        break;
+                                    }
+                                //case HandleKind.TypeDefinition:
+                                //    stringValue = reader.GetString(reader.GetTypeDefinition((TypeDefinitionHandle)member).Name);
+                                //    break;
+                                //case HandleKind.TypeReference:
+                                //    stringValue = reader.GetString(reader.GetTypeReference((TypeReferenceHandle)member).Name);
+                                //    break;
+                                //case HandleKind.FieldDefinition:
+                                //    stringValue = reader.GetString(reader.GetFieldDefinition((FieldDefinitionHandle)member).Name);
+                                //    break;
+                                default:
+                                    throw new NotImplementedException($"HandleKind {member.Kind} not implemented!");
                             }
                             break;
                         // 64-bit

@@ -54,4 +54,20 @@ static class Extensions
 			return new UnmanagedMemoryStream(resourceStart, resourceLength);
 		}
 	}
+
+	public static string GetFullName(this TypeReference type, MetadataReader reader)
+	{
+		var ns = reader.GetString(type.Namespace);
+		if (string.IsNullOrEmpty(ns))
+			return reader.GetString(type.Name);
+		return ns + "." + reader.GetString(type.Name);
+	}
+
+	public static string GetFullName(this TypeDefinition type, MetadataReader reader)
+	{
+		var ns = reader.GetString(type.Namespace);
+		if (string.IsNullOrEmpty(ns))
+			return reader.GetString(type.Name);
+		return ns + "." + reader.GetString(type.Name);
+	}
 }

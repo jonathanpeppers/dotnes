@@ -36,36 +36,36 @@ public class IL2NESWriterTests
         // pal_col(0, 0x02);
         writer.Write(ILOpCode.Ldc_i4_0);
         writer.Write(ILOpCode.Ldc_i4_2);
-        writer.Write(ILOpCode.Call, nameof(pal_col));
+        writer.Write(ILOpCode.Call, "NES.NESLib::pal_col");
 
         // pal_col(1, 0x14);
         writer.Write(ILOpCode.Ldc_i4_1);
         writer.Write(ILOpCode.Ldc_i4, 0x14);
-        writer.Write(ILOpCode.Call, nameof(pal_col));
+        writer.Write(ILOpCode.Call, "NES.NESLib::pal_col");
 
         // pal_col(2, 0x20);
         writer.Write(ILOpCode.Ldc_i4_2);
         writer.Write(ILOpCode.Ldc_i4, 0x20);
-        writer.Write(ILOpCode.Call, nameof(pal_col));
+        writer.Write(ILOpCode.Call, "NES.NESLib::pal_col");
 
         // pal_col(3, 0x30);
         writer.Write(ILOpCode.Ldc_i4_3);
         writer.Write(ILOpCode.Ldc_i4, 0x30);
-        writer.Write(ILOpCode.Call, nameof(pal_col));
+        writer.Write(ILOpCode.Call, "NES.NESLib::pal_col");
 
         // vram_adr(NTADR_A(2, 2));
         writer.Write(ILOpCode.Ldc_i4_2);
         writer.Write(ILOpCode.Ldc_i4_2);
-        writer.Write(ILOpCode.Call, nameof(NTADR_A));
-        writer.Write(ILOpCode.Call, nameof(vram_adr));
+        writer.Write(ILOpCode.Call, "NES.NESLib::NTADR_A");
+        writer.Write(ILOpCode.Call, "NES.NESLib::vram_adr");
 
         // vram_write("HELLO, WORLD!", 13);
         writer.Write(ILOpCode.Ldstr, "HELLO, .NET!");
         writer.Write(ILOpCode.Ldc_i4_s, 13);
-        writer.Write(ILOpCode.Call, nameof(vram_write));
+        writer.Write(ILOpCode.Call, "NES.NESLib::vram_write");
 
         // ppu_on_all();
-        writer.Write(ILOpCode.Call, nameof(ppu_on_all));
+        writer.Write(ILOpCode.Call, "NES.NESLib::ppu_on_all");
 
         // while (true) ;
         // TODO: for some reason the IL is:

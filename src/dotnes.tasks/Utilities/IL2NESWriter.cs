@@ -83,7 +83,7 @@ class IL2NESWriter : NESWriter
             case ILOpCode.Call:
                 switch (operand)
                 {
-                    case nameof(NTADR_A):
+                    case "NES.NESLib::NTADR_A":
                         if (A.Count < 2)
                         {
                             throw new InvalidOperationException($"{operand} was called with less than 2 on the stack.");
@@ -110,13 +110,13 @@ class IL2NESWriter : NESWriter
     {
         switch (name)
         {
-            case nameof(pal_col):
+            case "NES.NESLib::pal_col":
                 return 0x823E;
-            case nameof(vram_adr):
+            case "NES.NESLib::vram_adr":
                 return 0x83D4;
-            case nameof(vram_write):
+            case "NES.NESLib::vram_write":
                 return 0x834F;
-            case nameof(ppu_on_all):
+            case "NES.NESLib::ppu_on_all":
                 return 0x8289;
             default:
                 throw new NotImplementedException($"Address for {name} is not implemented!");

@@ -4,37 +4,41 @@ namespace dotnes.tests;
 
 public class TranspilerTests
 {
-    const string HelloIL =
+    static readonly Dictionary<string, string> iltext = new()
+    {
+        { "hello",
 @"ILInstruction { OpCode = Ldc_i4_0, Integer = , String =  }
 ILInstruction { OpCode = Ldc_i4_2, Integer = , String =  }
-ILInstruction { OpCode = Call, Integer = , String = pal_col }
+ILInstruction { OpCode = Call, Integer = , String = NES.NESLib::pal_col }
 ILInstruction { OpCode = Ldc_i4_1, Integer = , String =  }
 ILInstruction { OpCode = Ldc_i4_s, Integer = 20, String =  }
-ILInstruction { OpCode = Call, Integer = , String = pal_col }
+ILInstruction { OpCode = Call, Integer = , String = NES.NESLib::pal_col }
 ILInstruction { OpCode = Ldc_i4_2, Integer = , String =  }
 ILInstruction { OpCode = Ldc_i4_s, Integer = 32, String =  }
-ILInstruction { OpCode = Call, Integer = , String = pal_col }
+ILInstruction { OpCode = Call, Integer = , String = NES.NESLib::pal_col }
 ILInstruction { OpCode = Ldc_i4_3, Integer = , String =  }
 ILInstruction { OpCode = Ldc_i4_s, Integer = 48, String =  }
-ILInstruction { OpCode = Call, Integer = , String = pal_col }
+ILInstruction { OpCode = Call, Integer = , String = NES.NESLib::pal_col }
 ILInstruction { OpCode = Ldc_i4_2, Integer = , String =  }
 ILInstruction { OpCode = Ldc_i4_2, Integer = , String =  }
-ILInstruction { OpCode = Call, Integer = , String = NTADR_A }
-ILInstruction { OpCode = Call, Integer = , String = vram_adr }
+ILInstruction { OpCode = Call, Integer = , String = NES.NESLib::NTADR_A }
+ILInstruction { OpCode = Call, Integer = , String = NES.NESLib::vram_adr }
 ILInstruction { OpCode = Ldstr, Integer = , String = HELLO, .NET! }
 ILInstruction { OpCode = Ldc_i4_s, Integer = 13, String =  }
-ILInstruction { OpCode = Call, Integer = , String = vram_write }
-ILInstruction { OpCode = Call, Integer = , String = ppu_on_all }
-ILInstruction { OpCode = Br_s, Integer = 254, String =  }";
+ILInstruction { OpCode = Call, Integer = , String = NES.NESLib::vram_write }
+ILInstruction { OpCode = Call, Integer = , String = NES.NESLib::ppu_on_all }
+ILInstruction { OpCode = Br_s, Integer = 254, String =  }"
+        },
+    };
 
     [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public void ReadStaticVoidMain(bool debug)
+    [InlineData("hello.debug.dll", "hello")]
+    [InlineData("hello.release.dll", "hello")]
+    [InlineData("hello.sub.dll", "hello")]
+    public void ReadStaticVoidMain(string dll, string key)
     {
-        var name = debug ? "debug" : "release";
-        using var hello_dll = Utilities.GetResource($"hello.{name}.dll");
-        using var il = new Transpiler(hello_dll);
+        using var dll_stream = Utilities.GetResource(dll);
+        using var il = new Transpiler(dll_stream);
         var builder = new StringBuilder();
         foreach (var instruction in il.ReadStaticVoidMain())
         {
@@ -43,24 +47,25 @@ ILInstruction { OpCode = Br_s, Integer = 254, String =  }";
             builder.Append(instruction.ToString());
         }
 
-        Assert.Equal(HelloIL, builder.ToString());
+        Assert.Equal(iltext[key], builder.ToString());
     }
 
     [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public void Write(bool debug)
+    [InlineData("hello.debug.dll", "hello.nes")]
+    [InlineData("hello.release.dll", "hello.nes")]
+    [InlineData("hello.debug.dll", "hello.sub.nes")]
+    [InlineData("hello.sub.dll", "hello.sub.nes")]
+    public void Write(string dll, string rom)
     {
-        var name = debug ? "debug" : "release";
-        using var hello_nes = Utilities.GetResource("hello.nes");
-        using var hello_dll = Utilities.GetResource($"hello.{name}.dll");
-        var expected = new byte[hello_nes.Length];
-        hello_nes.Read(expected, 0, expected.Length);
+        using var rom_stream = Utilities.GetResource(rom);
+        using var dll_stream = Utilities.GetResource(dll);
+        var expected = new byte[rom_stream.Length];
+        rom_stream.Read(expected, 0, expected.Length);
 
         using var ms = new MemoryStream();
-        using var il = new Transpiler(hello_dll);
+        using var il = new Transpiler(dll_stream);
         il.Write(ms);
-        
+
         AssertEx.Equal(expected, ms.ToArray());
     }
 }
