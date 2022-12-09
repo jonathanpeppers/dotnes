@@ -31,6 +31,7 @@ class Transpiler : IDisposable
         using var writer = new IL2NESWriter(stream);
         writer.WriteHeader(PRG_ROM_SIZE: 2, CHR_ROM_SIZE: 1);
         writer.WriteSegment(0);
+        writer.WriteBuiltIns();
 
         // Read it all into an array, so we can "read ahead"
         var instructions = ReadStaticVoidMain().ToArray();
@@ -62,7 +63,7 @@ class Transpiler : IDisposable
         writer.Write(NESInstruction.RTS_impl);
         writer.Write(NESInstruction.LDA, 0xFE);
 
-        writer.WriteSegment(1);
+        writer.WriteSegment(2);
 
         // Write C# string table
         int stringHeapSize = reader.GetHeapSize(HeapIndex.UserString);
@@ -81,7 +82,7 @@ class Transpiler : IDisposable
             while (!handle.IsNil);
         }
 
-        writer.WriteSegment(2);
+        writer.WriteSegment(3);
 
         // Pad 0s
         int PRG_ROM_SIZE = (int)writer.Length - 16;
@@ -91,8 +92,7 @@ class Transpiler : IDisposable
         //TODO: no idea what these are???
         writer.Write(new byte[] { 0xBC, 0x80, 0x00, 0x80, 0x02, 0x82 });
 
-        if (chr_rom != null)
-            chr_rom.CopyTo(writer.BaseStream);
+        chr_rom?.CopyTo(writer.BaseStream);
         writer.Flush();
     }
 

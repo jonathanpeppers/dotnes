@@ -100,6 +100,10 @@ enum NESInstruction : byte
     /// Branch on Result Minus
     /// </summary>
     BMI       = 0x30,
+    /// <summary>
+    /// Set Carry Flag
+    /// </summary>
+    SEC_impl  = 0x38,
     //TODO: rest of 3
 
     /// <summary>
@@ -193,6 +197,10 @@ enum NESInstruction : byte
     //TODO: 9
 
     /// <summary>
+    /// Branch on Carry Clear
+    /// </summary>
+    BCC       = 0x90,
+    /// <summary>
     /// 91: Store Accumulator in Memory
     /// </summary>
     STA_ind_Y = 0x91,
@@ -256,9 +264,17 @@ enum NESInstruction : byte
     //TODO: B
 
     /// <summary>
+    /// Branch on Carry Set
+    /// </summary>
+    BCS = 0xB0,
+    /// <summary>
     /// Load Accumulator with Memory
     /// </summary>
     LDA_ind_Y = 0xB1,
+    /// <summary>
+    /// Load Accumulator with Memory
+    /// </summary>
+    LDA_abs_X = 0xBD,
 
     //TODO:C
     /// <summary>
@@ -269,6 +285,19 @@ enum NESInstruction : byte
     /// Decrement Memory by One
     /// </summary>
     DEC_zpg   = 0xC6,
+    // 0xC7 is empty
+    /// <summary>
+    /// Increment Index Y by One
+    /// </summary>
+    INY_impl  = 0xC8,
+    /// <summary>
+    /// Compare Memory with Accumulator
+    /// </summary>
+    CMP       = 0xC9,
+    /// <summary>
+    /// Decrement Index X by One
+    /// </summary>
+    DEX_impl  = 0xCA,
 
     /// <summary>
     /// Branch on Result not Zero
@@ -293,7 +322,7 @@ enum NESInstruction : byte
     /// <summary>
     /// Compare Memory with Accumulator
     /// </summary>
-    CMP_abs_Y = 0XD9,
+    CMP_abs_Y = 0xD9,
     /// <summary>
     /// Compare Memory with Accumulator
     /// </summary>
@@ -304,9 +333,22 @@ enum NESInstruction : byte
     DEC_abs_X = 0xDE,
 
     /// <summary>
+    /// Compare Memory and Index X
+    /// </summary>
+    CPX = 0xE0,
+    /// <summary>
     /// Increment Memory by One
     /// </summary>
     INC_zpg   = 0xE6,
+    // 0xE7 is empty
+    /// <summary>
+    /// Increment Index X by One
+    /// </summary>
+    INX_impl  = 0xE8,
+    /// <summary>
+    /// Subtract Memory from Accumulator with Borrow
+    /// </summary>
+    SBC       = 0xE9,
     //TODO: rest of E
 
     //TODO: F
