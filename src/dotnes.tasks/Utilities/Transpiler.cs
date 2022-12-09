@@ -34,9 +34,26 @@ class Transpiler : IDisposable
 
         // Read it all into an array, so we can "read ahead"
         var instructions = ReadStaticVoidMain().ToArray();
+        ILInstruction instruction;
+
+        // Read all "sub-routines"
         for (int i = 0; i < instructions.Length; i++)
         {
-            var instruction = instructions[i];
+            instruction = instructions[i];
+            if (instruction.OpCode == ILOpCode.Call)
+            {
+                if (instruction.String == null)
+                    throw new InvalidOperationException($"No method name found on instruction: {instruction}");
+
+                //TODO: put a real address
+                writer.AddAddress(instruction.String, 0x0000);
+            }
+        }
+
+        // Read everything now
+        for (int i = 0; i < instructions.Length; i++)
+        {
+            instruction = instructions[i];
 
             // Default cases
             if (instruction.Integer != null)

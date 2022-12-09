@@ -9,7 +9,14 @@ class IL2NESWriter : NESWriter
     {
     }
 
-    readonly Stack<int> A = new Stack<int> ();
+    readonly Stack<int> A = new();
+    readonly Dictionary<string, ushort> addresses = new()
+    {
+        { "NES.NESLib::pal_col",    0x823E },
+        { "NES.NESLib::vram_adr",   0x83D4 },
+        { "NES.NESLib::vram_write", 0x834F },
+        { "NES.NESLib::ppu_on_all", 0x8289 },
+    };
 
     public void Write(ILOpCode code)
     {
@@ -106,20 +113,19 @@ class IL2NESWriter : NESWriter
         }
     }
 
-    static ushort GetAddress(string name)
+    ushort GetAddress(string name)
     {
-        switch (name)
+        if (addresses.TryGetValue(name, out var address))
+            return address;
+        throw new NotImplementedException($"Address for {name} is not implemented!");
+    }
+
+    public void AddAddress(string name, ushort address)
+    {
+        // NOTE: needs to skip built-in subs
+        if (!addresses.ContainsKey(name))
         {
-            case "NES.NESLib::pal_col":
-                return 0x823E;
-            case "NES.NESLib::vram_adr":
-                return 0x83D4;
-            case "NES.NESLib::vram_write":
-                return 0x834F;
-            case "NES.NESLib::ppu_on_all":
-                return 0x8289;
-            default:
-                throw new NotImplementedException($"Address for {name} is not implemented!");
+            addresses.Add(name, address);
         }
     }
 

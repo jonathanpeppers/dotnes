@@ -65,7 +65,6 @@ ILInstruction { OpCode = Br_s, Integer = 254, String =  }"
     [Theory]
     [InlineData("hello.debug.dll", "hello.nes")]
     [InlineData("hello.release.dll", "hello.nes")]
-    [InlineData("hello.debug.dll", "hello.sub.nes")]
     [InlineData("hello.sub.dll", "hello.sub.nes")]
     public void Write(string dll, string rom)
     {
