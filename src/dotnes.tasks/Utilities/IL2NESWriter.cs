@@ -79,6 +79,7 @@ class IL2NESWriter : NESWriter
                 Write(NESInstruction.LDX, 0x85);
                 Write(NESInstruction.JSR, pushax);
                 Write(NESInstruction.LDX, 0x00);
+                A.Push(operand.Length); //HACK: to use operand for vram_write?
                 break;
             case ILOpCode.Call:
                 switch (operand)
@@ -95,6 +96,9 @@ class IL2NESWriter : NESWriter
                         Write(NESInstruction.LDA, 0x42);
                         A.Push(address);
                         break;
+                    case nameof(NESLib.vram_write):
+                        Write(ILOpCode.Ldc_i4_s, A.Pop());
+                        goto default;
                     default:
                         Write(NESInstruction.JSR, GetAddress(operand));
                         break;

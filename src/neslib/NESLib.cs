@@ -122,7 +122,7 @@ public static class NESLib
     /// <summary>
     /// write a block to current address of vram, works only when rendering is turned off
     /// </summary>
-    public static void vram_write(string src, ushort size) { }
+    public static void vram_write(string src) { }
 
     /// <summary>
     /// write a block to current address of vram, works only when rendering is turned off

@@ -286,12 +286,12 @@ public class NESWriterTests
         writer.Write(NESInstruction.LDA, 0x42);
         writer.Write(NESInstruction.JSR, vram_adr);
 
-        // vram_write("HELLO, WORLD!", 13);
+        // vram_write("HELLO, .NET!", 12);
         writer.Write(NESInstruction.LDA, 0xF1);
         writer.Write(NESInstruction.LDX, 0x85);
         writer.Write(NESInstruction.JSR, pushax);
         writer.Write(NESInstruction.LDX, 0x00);
-        writer.Write(NESInstruction.LDA, 0x0D);
+        writer.Write(NESInstruction.LDA, 0x0C);
         writer.Write(NESInstruction.JSR, vram_write);
 
         // ppu_on_all();

@@ -15,7 +15,7 @@ pal_col(3, 0x30);   // white
 
 // write text to name table
 vram_adr(NTADR_A(2, 2));            // set address
-vram_write("HELLO, .NET!", 13);    // write bytes to video RAM
+vram_write("HELLO, .NET!");         // write bytes to video RAM
 
 // enable PPU rendering (turn on screen)
 ppu_on_all();

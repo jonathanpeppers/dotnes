@@ -22,7 +22,6 @@ ILInstruction { OpCode = Ldc_i4_2, Integer = , String =  }
 ILInstruction { OpCode = Call, Integer = , String = NTADR_A }
 ILInstruction { OpCode = Call, Integer = , String = vram_adr }
 ILInstruction { OpCode = Ldstr, Integer = , String = HELLO, .NET! }
-ILInstruction { OpCode = Ldc_i4_s, Integer = 13, String =  }
 ILInstruction { OpCode = Call, Integer = , String = vram_write }
 ILInstruction { OpCode = Call, Integer = , String = ppu_on_all }
 ILInstruction { OpCode = Br_s, Integer = 254, String =  }";
