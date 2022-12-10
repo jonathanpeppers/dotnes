@@ -59,9 +59,9 @@ public class IL2NESWriterTests
         writer.Write(ILOpCode.Call, nameof(NTADR_A));
         writer.Write(ILOpCode.Call, nameof(vram_adr));
 
-        // vram_write("HELLO, WORLD!", 13);
-        writer.Write(ILOpCode.Ldstr, "HELLO, .NET!");
-        writer.Write(ILOpCode.Ldc_i4_s, 13);
+        // vram_write("HELLO, .NET!");
+        var text = "HELLO, .NET!";
+        writer.Write(ILOpCode.Ldstr, text);
         writer.Write(ILOpCode.Call, nameof(vram_write));
 
         // ppu_on_all();
