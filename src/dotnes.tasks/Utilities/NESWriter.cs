@@ -31,6 +31,7 @@ class NESWriter : IDisposable
     protected const int sp = 0x22;
     protected const int PRG_FILEOFFS = 0x10;
     protected const int PPU_MASK_VAR = 0x12;
+    protected const ushort condes = 0x0300;
     protected const ushort pusha = 0x85A2;
     protected const ushort pushax = 0x85B8;
     protected const ushort popa = 0x8592;
@@ -1038,7 +1039,23 @@ class NESWriter : IDisposable
                 Write(NESInstruction.BEQ_rel, 0x07);
                 Write(NESInstruction.LDA, 0x00);
                 Write(NESInstruction.LDX, 0x85);
-                Write(NESInstruction.JMP_abs, 0x0300); // TODO: condes?
+                Write(NESInstruction.JMP_abs, condes);
+                Write(NESInstruction.RTS_impl);
+                break;
+            case "donelib":
+                /*
+                 * 8546	A000          	LDY #$00                      ; donelib
+                 * 8548	F007          	BEQ $8551                     
+                 * 854A	A902          	LDA #$02                      
+                 * 854C	A286          	LDX #$86                      
+                 * 854E	4C0003        	JMP condes                    
+                 * 8551	60            	RTS
+                 */
+                Write(NESInstruction.LDY, 0x00);
+                Write(NESInstruction.BEQ_rel, 0x07);
+                Write(NESInstruction.LDA, 0xFE);
+                Write(NESInstruction.LDX, 0x85);
+                Write(NESInstruction.JMP_abs, condes);
                 Write(NESInstruction.RTS_impl);
                 break;
             default:
