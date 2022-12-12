@@ -1,6 +1,7 @@
 ﻿using System.Buffers;
 using System.Text;
 using System.Xml;
+using System.Xml.Linq;
 
 namespace dotnes;
 
@@ -206,7 +207,17 @@ class NESWriter : IDisposable
         WriteBuiltIn(nameof(NESLib.vram_inc));
         WriteBuiltIn(nameof(NESLib.nesclock));
         WriteBuiltIn(nameof(NESLib.delay));
-        WriteSegment(1);
+        WriteBrightTable('L');
+        WriteBrightTable('0');
+        WriteBrightTable('1');
+        WriteBrightTable('2');
+        WriteBrightTable('3');
+        WriteBrightTable('4');
+        WriteBrightTable('5');
+        WriteBrightTable('6');
+        WriteBrightTable('7');
+        WriteBrightTable('8');
+        WriteBuiltIn("initlib");
     }
 
     /// <summary>
@@ -978,8 +989,66 @@ class NESWriter : IDisposable
                 Write(NESInstruction.BNE_rel, 0xFA);
                 Write(NESInstruction.RTS_impl);
                 break;
+            case "initlib": // I think this is some internal thing
+                /*
+                 * 84F4	A000          	LDY #$00                      ; initlib
+                 * 84F6	F007          	BEQ $84FF                     
+                 * 84F8	A900          	LDA #$00                      
+                 * 84FA	A285          	LDX #$85                      
+                 * 84FC	4C0003        	JMP condes                    
+                 * 84FF	60            	RTS
+                 */
+                Write(NESInstruction.LDY, 0x00);
+                Write(NESInstruction.BEQ_rel, 0x07);
+                Write(NESInstruction.LDA, 0x00);
+                Write(NESInstruction.LDX, 0x85);
+                Write(NESInstruction.JMP_abs, 0x0003); // TODO: condes?
+                Write(NESInstruction.RTS_impl);
+                break;
             default:
                 throw new NotImplementedException($"{name} is not implemented!");
+        }
+    }
+
+    /// <summary>
+    /// Writes
+    /// </summary>
+    public void WriteBrightTable(char id)
+    {
+        switch (id)
+        {
+            case 'L':
+                Write(NESLib.palBrightTableL);
+                break;
+            case '0':
+                Write(NESLib.palBrightTable0);
+                break;
+            case '1':
+                Write(NESLib.palBrightTable1);
+                break;
+            case '2':
+                Write(NESLib.palBrightTable2);
+                break;
+            case '3':
+                Write(NESLib.palBrightTable3);
+                break;
+            case '4':
+                Write(NESLib.palBrightTable4);
+                break;
+            case '5':
+                Write(NESLib.palBrightTable5);
+                break;
+            case '6':
+                Write(NESLib.palBrightTable6);
+                break;
+            case '7':
+                Write(NESLib.palBrightTable7);
+                break;
+            case '8':
+                Write(NESLib.palBrightTable8);
+                break;
+            default:
+                throw new NotImplementedException($"palBrightTable{id} is not implemented!");
         }
     }
 
