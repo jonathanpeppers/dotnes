@@ -1002,7 +1002,7 @@ class NESWriter : IDisposable
                 Write(NESInstruction.BEQ_rel, 0x07);
                 Write(NESInstruction.LDA, 0x00);
                 Write(NESInstruction.LDX, 0x85);
-                Write(NESInstruction.JMP_abs, 0x0003); // TODO: condes?
+                Write(NESInstruction.JMP_abs, 0x0300); // TODO: condes?
                 Write(NESInstruction.RTS_impl);
                 break;
             default:
