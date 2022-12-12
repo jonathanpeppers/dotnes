@@ -274,6 +274,10 @@ enum NESInstruction : byte
     /// <summary>
     /// Load Accumulator with Memory
     /// </summary>
+    LDA_abs_y =0xB9,
+    /// <summary>
+    /// Load Accumulator with Memory
+    /// </summary>
     LDA_abs_X = 0xBD,
 
     //TODO:C

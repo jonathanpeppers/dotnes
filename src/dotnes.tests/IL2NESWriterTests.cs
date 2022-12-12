@@ -84,7 +84,7 @@ public class IL2NESWriterTests
 
         writer.WriteSegment(1);
         writer.WriteString("HELLO, .NET!");
-        writer.WriteSegment(2);
+        writer.WriteDestructorTable();
 
         // Pad 0s
         int PRG_ROM_SIZE = (int)writer.Length - 16;

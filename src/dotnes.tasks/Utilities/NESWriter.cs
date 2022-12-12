@@ -220,6 +220,42 @@ class NESWriter : IDisposable
         WriteBuiltIn("initlib");
     }
 
+    public void WriteDestructorTable()
+    {
+        /*
+         * 8602	8D0E03        	STA $030E                     ; __DESTRUCTOR_TABLE__
+         * 8605	8E0F03        	STX $030F                     
+         * 8608	8D1503        	STA $0315                     
+         * 860B	8E1603        	STX $0316                     
+         * 860E	88            	DEY                           
+         * 860F	B9FFFF        	LDA $FFFF,y                   
+         * 8612	8D1F03        	STA $031F                     
+         * 8615	88            	DEY                           
+         * 8616	B9FFFF        	LDA $FFFF,y                   
+         * 8619	8D1E03        	STA $031E                     
+         * 861C	8C2103        	STY $0321                     
+         * 861F	20FFFF        	JSR $FFFF                     
+         * 8622	A0FF          	LDY #$FF                      
+         * 8624	D0E8          	BNE $860E                     
+         * 8626	60            	RTS
+         */
+        Write(NESInstruction.STA_abs, 0x030E);
+        Write(NESInstruction.STX_abs, 0x030F);
+        Write(NESInstruction.STA_abs, 0x0315);
+        Write(NESInstruction.STX_abs, 0x0316);
+        Write(NESInstruction.DEY_impl);
+        Write(NESInstruction.LDA_abs_y, 0xFFFF);
+        Write(NESInstruction.STA_abs, 0x031F);
+        Write(NESInstruction.DEY_impl);
+        Write(NESInstruction.LDA_abs_y, 0xFFFF);
+        Write(NESInstruction.STA_abs, 0x031E);
+        Write(NESInstruction.STY_abs, 0x0321);
+        Write(NESInstruction.JSR, 0xFFFF);
+        Write(NESInstruction.LDY, 0xFF);
+        Write(NESInstruction.BNE_rel, 0xE8);
+        Write(NESInstruction.RTS_impl);
+    }
+
     /// <summary>
     /// Writes a built-in method from NESLib
     /// </summary>
