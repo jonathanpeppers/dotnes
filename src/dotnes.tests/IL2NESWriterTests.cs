@@ -32,6 +32,7 @@ public class IL2NESWriterTests
         using var writer = GetWriter();
         writer.WriteHeader(PRG_ROM_SIZE: 2, CHR_ROM_SIZE: 1);
         writer.WriteSegment(0);
+        writer.WriteBuiltIns();
 
         // pal_col(0, 0x02);
         writer.Write(ILOpCode.Ldc_i4_0);
@@ -81,9 +82,9 @@ public class IL2NESWriterTests
         writer.Write(NESInstruction.RTS_impl);
         writer.Write(NESInstruction.LDA, 0xFE);
 
-        writer.WriteSegment(1);
-        writer.WriteString("HELLO, .NET!");
         writer.WriteSegment(2);
+        writer.WriteString("HELLO, .NET!");
+        writer.WriteSegment(3);
 
         // Pad 0s
         int PRG_ROM_SIZE = (int)writer.Length - 16;

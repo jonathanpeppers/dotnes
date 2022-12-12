@@ -127,9 +127,9 @@ public class NESWriterTests
     public void Write_pal_copy()
     {
         using var writer = GetWriter();
-        writer.WriteBuiltIn("pal_copy");
+        writer.WriteBuiltIn(nameof(NESLib.pal_copy));
         writer.Flush();
-        AssertInstructions("8519 A000");
+        AssertInstructions("8519 A000 B117 9DC001 E8 C8 C619 D0F5 E607 60");
     }
 
     [Fact]
@@ -156,7 +156,16 @@ public class NESWriterTests
         using var writer = GetWriter();
         writer.WriteBuiltIn(nameof(NESLib.pal_col));
         writer.Flush();
-        AssertInstructions("8517 205085 291F AA A517 9DC001 E607 60");
+        AssertInstructions("8517 209285 291F AA A517 9DC001 E607 60");
+    }
+
+    [Fact]
+    public void Write_pal_clear()
+    {
+        using var writer = GetWriter();
+        writer.WriteBuiltIn(nameof(NESLib.pal_clear));
+        writer.Flush();
+        AssertInstructions("A90F A200 9DC001 E8 E020 D0F8 8607 60");
     }
 
     [Fact]
@@ -174,7 +183,7 @@ public class NESWriterTests
         using var writer = GetWriter();
         writer.WriteBuiltIn(nameof(NESLib.vram_write));
         writer.Flush();
-        AssertInstructions("8517 8618 203A85 8519 861A A000 B119 8D0720 E619 D002 E61A A517 D002 C618 C617 A517 0518 D0E7 60");
+        AssertInstructions("8517 8618 207C85 8519 861A A000 B119 8D0720 E619 D002 E61A A517 D002 C618 C617 A517 0518 D0E7 60");
     }
 
     [Fact]
@@ -183,7 +192,25 @@ public class NESWriterTests
         using var writer = GetWriter();
         writer.WriteBuiltIn(nameof(NESLib.ppu_on_all));
         writer.Flush();
-        AssertInstructions("A512 0918 8512 4CF082");
+        AssertInstructions("A512 0918");
+    }
+
+    [Fact]
+    public void Write_ppu_onoff()
+    {
+        using var writer = GetWriter();
+        writer.WriteBuiltIn(nameof(NESLib.ppu_onoff));
+        writer.Flush();
+        AssertInstructions("8512 4CF082");
+    }
+
+    [Fact]
+    public void Write_ppu_on_bg()
+    {
+        using var writer = GetWriter();
+        writer.WriteBuiltIn(nameof(NESLib.ppu_on_bg));
+        writer.Flush();
+        AssertInstructions("A512 0908 D0F5");
     }
 
     [Fact]
@@ -219,6 +246,7 @@ public class NESWriterTests
         using var writer = GetWriter();
         writer.WriteHeader(PRG_ROM_SIZE: 2, CHR_ROM_SIZE: 1);
         writer.WriteSegment(0);
+        writer.WriteBuiltIns();
 
         /*
         * 8500	A900          	LDA #$00                      ; _main
@@ -309,9 +337,9 @@ public class NESWriterTests
         writer.Write(NESInstruction.RTS_impl);
         writer.Write(NESInstruction.LDA, 0xFE);
 
-        writer.WriteSegment(1);
-        writer.WriteString("HELLO, .NET!");
         writer.WriteSegment(2);
+        writer.WriteString("HELLO, .NET!");
+        writer.WriteSegment(3);
 
         // Pad 0s
         int PRG_ROM_SIZE = (int)writer.Length - 16;
