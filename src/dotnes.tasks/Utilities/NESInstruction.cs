@@ -286,6 +286,10 @@ enum NESInstruction : byte
 
     //TODO:C
     /// <summary>
+    /// Compare Memory and Index Y
+    /// </summary>
+    CPY       = 0xC0,
+    /// <summary>
     /// Compare Memory with Accumulator
     /// </summary>
     CMP_zpg   = 0xC5,

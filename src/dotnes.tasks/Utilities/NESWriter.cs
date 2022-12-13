@@ -29,6 +29,9 @@ class NESWriter : IDisposable
     protected const int SCROLL_Y = 0x0D;
     protected const int TEMP = 0x17;
     protected const int sp = 0x22;
+    protected const int ptr1 = 0x2A;
+    protected const int ptr2 = 0x2C;
+    protected const int tmp1 = 0x32;
     protected const int PRG_FILEOFFS = 0x10;
     protected const int PPU_MASK_VAR = 0x12;
     protected const ushort condes = 0x0300;
@@ -269,7 +272,7 @@ class NESWriter : IDisposable
         WriteBuiltIn(nameof(popa));
         WriteBuiltIn(nameof(pusha));
         WriteBuiltIn(nameof(pushax));
-        WriteSegment(1);
+        WriteBuiltIn("zerobss");
     }
 
     /// <summary>
@@ -1114,9 +1117,6 @@ class NESWriter : IDisposable
                  * 857C	D0EF          	BNE $856D                     
                  * 857E	60            	RTS
                  */
-                const int ptr1 = 0x2A;
-                const int ptr2 = 0x2C;
-                const int tmp1 = 0x32;
                 Write(NESInstruction.LDA, 0xFE);
                 Write(NESInstruction.STA_zpg, ptr1);
                 Write(NESInstruction.LDA, 0x85);
@@ -1210,6 +1210,50 @@ class NESWriter : IDisposable
                 Write(NESInstruction.RTS_impl);
                 Write(NESInstruction.INC_zpg, sp);
                 Write(NESInstruction.INC_zpg, sp + 1);
+                Write(NESInstruction.RTS_impl);
+                break;
+            case "zerobss":
+                /*
+                 * 85D1	A925          	LDA #$25                      ; zerobss
+                 * 85D3	852A          	STA ptr1                      
+                 * 85D5	A903          	LDA #$03                      
+                 * 85D7	852B          	STA ptr1+1                    
+                 * 85D9	A900          	LDA #$00                      
+                 * 85DB	A8            	TAY                           
+                 * 85DC	A200          	LDX #$00                      
+                 * 85DE	F00A          	BEQ $85EA                     
+                 * 85E0	912A          	STA (ptr1),y                  
+                 * 85E2	C8            	INY                           
+                 * 85E3	D0FB          	BNE $85E0                     
+                 * 85E5	E62B          	INC ptr1+1                    
+                 * 85E7	CA            	DEX                           
+                 * 85E8	D0F6          	BNE $85E0                     
+                 * 85EA	C000          	CPY #$00                      
+                 * 85EC	F005          	BEQ $85F3                     
+                 * 85EE	912A          	STA (ptr1),y                  
+                 * 85F0	C8            	INY                           
+                 * 85F1	D0F7          	BNE $85EA                     
+                 * 85F3	60            	RTS
+                 */
+                Write(NESInstruction.LDA, 0x25);
+                Write(NESInstruction.STA_zpg, ptr1);
+                Write(NESInstruction.LDA, 0x03);
+                Write(NESInstruction.STA_zpg, ptr1 + 1);
+                Write(NESInstruction.LDA, 0x00);
+                Write(NESInstruction.TAY_impl);
+                Write(NESInstruction.LDX, 0x00);
+                Write(NESInstruction.BEQ_rel, 0x0A);
+                Write(NESInstruction.STA_ind_Y, ptr1);
+                Write(NESInstruction.INY_impl);
+                Write(NESInstruction.BNE_rel, 0xFB);
+                Write(NESInstruction.INC_zpg, ptr1 + 1);
+                Write(NESInstruction.DEX_impl);
+                Write(NESInstruction.BNE_rel, 0xF6);
+                Write(NESInstruction.CPY, 0x00);
+                Write(NESInstruction.BEQ_rel, 0x05);
+                Write(NESInstruction.STA_ind_Y, ptr1);
+                Write(NESInstruction.INY_impl);
+                Write(NESInstruction.BNE_rel, 0xF7);
                 Write(NESInstruction.RTS_impl);
                 break;
             default:
