@@ -266,6 +266,7 @@ class NESWriter : IDisposable
         WriteBuiltIn("copydata");
         WriteBuiltIn("popax");
         WriteBuiltIn("incsp2");
+        WriteBuiltIn("popa");
         WriteSegment(1);
     }
 
@@ -484,18 +485,21 @@ class NESWriter : IDisposable
                 Write(NESInstruction.RTS_impl);
                 break;
             case "popa":
-                //NOTE: seems to be an internal subroutine
                 /*
-                 * 8592	A000          	LDY #$00                      ; popa
-                 * 8594	B122          	LDA (sp),y                    
-                 * 8596	E622          	INC sp                        
-                 * 8598	F001          	BEQ $859B                     
-                 * 859A	60            	RTS  
+                 * 8595	A000          	LDY #$00                      ; popa
+                 * 8597	B122          	LDA (sp),y                    
+                 * 8599	E622          	INC sp                        
+                 * 859B	F001          	BEQ $859E                     
+                 * 859D	60            	RTS                           
+                 * 859E	E623          	INC sp+1                      
+                 * 85A0	60            	RTS   
                  */
                 Write(NESInstruction.LDY, 0x00);
                 Write(NESInstruction.LDA_ind_Y, sp);
                 Write(NESInstruction.INC_zpg, sp);
                 Write(NESInstruction.BEQ_rel, 0x01);
+                Write(NESInstruction.RTS_impl);
+                Write(NESInstruction.INC_zpg, sp + 1);
                 Write(NESInstruction.RTS_impl);
                 break;
             case nameof(NESLib.pal_spr_bright):

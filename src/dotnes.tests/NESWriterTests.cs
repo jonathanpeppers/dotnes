@@ -228,7 +228,7 @@ public class NESWriterTests
         using var writer = GetWriter();
         writer.WriteBuiltIn("popa");
         writer.Flush();
-        AssertInstructions("A000 B122 E622 F001 60");
+        AssertInstructions("A000 B122 E622 F001 60 E623 60");
     }
 
     [Fact]
