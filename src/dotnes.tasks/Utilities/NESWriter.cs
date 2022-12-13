@@ -1058,6 +1058,61 @@ class NESWriter : IDisposable
                 Write(NESInstruction.JMP_abs, condes);
                 Write(NESInstruction.RTS_impl);
                 break;
+            case "copydata":
+                /*
+                 * 8552	A902          	LDA #$02                      ; copydata
+                 * 8554	852A          	STA ptr1                      
+                 * 8556	A986          	LDA #$86                      
+                 * 8558	852B          	STA ptr1+1                    
+                 * 855A	A900          	LDA #$00                      
+                 * 855C	852C          	STA ptr2                      
+                 * 855E	A903          	LDA #$03                      
+                 * 8560	852D          	STA ptr2+1                    
+                 * 8562	A2DA          	LDX #$DA                      
+                 * 8564	A9FF          	LDA #$FF                      
+                 * 8566	8532          	STA tmp1                      
+                 * 8568	A000          	LDY #$00                      
+                 * 856A	E8            	INX                           
+                 * 856B	F00D          	BEQ $857A                     
+                 * 856D	B12A          	LDA (ptr1),y                  
+                 * 856F	912C          	STA (ptr2),y                  
+                 * 8571	C8            	INY                           
+                 * 8572	D0F6          	BNE $856A                     
+                 * 8574	E62B          	INC ptr1+1                    
+                 * 8576	E62D          	INC ptr2+1                    
+                 * 8578	D0F0          	BNE $856A                     
+                 * 857A	E632          	INC tmp1                      
+                 * 857C	D0EF          	BNE $856D                     
+                 * 857E	60            	RTS
+                 */
+                const int ptr1 = 0x2A;
+                const int ptr2 = 0x2C;
+                const int tmp1 = 0x32;
+                Write(NESInstruction.LDA, 0xFE);
+                Write(NESInstruction.STA_zpg, ptr1);
+                Write(NESInstruction.LDA, 0x85);
+                Write(NESInstruction.STA_zpg, ptr1 + 1);
+                Write(NESInstruction.LDA, 0x00);
+                Write(NESInstruction.STA_zpg, ptr2);
+                Write(NESInstruction.LDA, 0x03);
+                Write(NESInstruction.STA_zpg, ptr2 + 1);
+                Write(NESInstruction.LDX, 0xDA);
+                Write(NESInstruction.LDA, 0xFF);
+                Write(NESInstruction.STA_zpg, tmp1);
+                Write(NESInstruction.LDY, 0x00);
+                Write(NESInstruction.INX_impl);
+                Write(NESInstruction.BEQ_rel, 0x0D);
+                Write(NESInstruction.LDA_ind_Y, ptr1);
+                Write(NESInstruction.STA_ind_Y, ptr2);
+                Write(NESInstruction.INY_impl);
+                Write(NESInstruction.BNE_rel, 0xF6);
+                Write(NESInstruction.INC_zpg, ptr1 + 1);
+                Write(NESInstruction.INC_zpg, ptr2 + 1);
+                Write(NESInstruction.BNE_rel, 0xF0);
+                Write(NESInstruction.INC_zpg, tmp1);
+                Write(NESInstruction.BNE_rel, 0xEF);
+                Write(NESInstruction.RTS_impl);
+                break;
             default:
                 throw new NotImplementedException($"{name} is not implemented!");
         }

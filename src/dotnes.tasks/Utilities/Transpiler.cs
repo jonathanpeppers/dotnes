@@ -55,7 +55,7 @@ class Transpiler : IDisposable
         }
 
         writer.WriteBuiltIn("donelib");
-        writer.Write(NESInstruction.LDA, 0xFE);
+        writer.WriteBuiltIn("copydata");
 
         writer.WriteSegment(1);
 
