@@ -258,6 +258,18 @@ class NESWriter : IDisposable
     }
 
     /// <summary>
+    /// These are any subroutines after our `static void main()` method
+    /// </summary>
+    public void WriteFinalBuiltIns()
+    {
+        WriteBuiltIn("donelib");
+        WriteBuiltIn("copydata");
+        WriteBuiltIn("popax");
+        WriteBuiltIn("incsp2");
+        WriteSegment(1);
+    }
+
+    /// <summary>
     /// Writes a built-in method from NESLib
     /// </summary>
     public void WriteBuiltIn(string name)
@@ -1122,10 +1134,30 @@ class NESWriter : IDisposable
                  * 8585	B122          	LDA (sp),y
                  */
                 Write(NESInstruction.LDY, 0x01);
-                Write(NESInstruction.LDA_ind_Y, 0x22);
+                Write(NESInstruction.LDA_ind_Y, sp);
                 Write(NESInstruction.TAX_impl);
                 Write(NESInstruction.DEY_impl);
-                Write(NESInstruction.LDA_ind_Y, 0x22);
+                Write(NESInstruction.LDA_ind_Y, sp);
+                break;
+            case "incsp2":
+                /*
+                 * 8587	E622          	INC sp                        ; incsp2
+                 * 8589	F005          	BEQ $8590                     
+                 * 858B	E622          	INC sp                        
+                 * 858D	F003          	BEQ $8592                     
+                 * 858F	60            	RTS                           
+                 * 8590	E622          	INC sp                        
+                 * 8592	E623          	INC sp+1                      
+                 * 8594	60            	RTS
+                 */
+                Write(NESInstruction.INC_zpg, sp);
+                Write(NESInstruction.BEQ_rel, 0x05);
+                Write(NESInstruction.INC_zpg, sp);
+                Write(NESInstruction.BEQ_rel, 0x03);
+                Write(NESInstruction.RTS_impl);
+                Write(NESInstruction.INC_zpg, sp);
+                Write(NESInstruction.INC_zpg, sp + 1);
+                Write(NESInstruction.RTS_impl);
                 break;
             default:
                 throw new NotImplementedException($"{name} is not implemented!");

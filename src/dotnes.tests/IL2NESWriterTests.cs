@@ -69,15 +69,9 @@ public class IL2NESWriterTests
         writer.Write(ILOpCode.Call, nameof(ppu_on_all));
 
         // while (true) ;
-        // TODO: for some reason the IL is:
-        // while (true) { bool flag = true; }
         writer.Write(NESInstruction.JMP_abs, 0x8540); // Jump to self
 
-        writer.WriteBuiltIn("donelib");
-        writer.WriteBuiltIn("copydata");
-        writer.WriteBuiltIn("popax");
-
-        writer.WriteSegment(1);
+        writer.WriteFinalBuiltIns();
         writer.WriteString("HELLO, .NET!");
         writer.WriteDestructorTable();
 

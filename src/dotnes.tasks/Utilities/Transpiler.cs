@@ -54,11 +54,7 @@ class Transpiler : IDisposable
             }
         }
 
-        writer.WriteBuiltIn("donelib");
-        writer.WriteBuiltIn("copydata");
-        writer.WriteBuiltIn("popax");
-
-        writer.WriteSegment(1);
+        writer.WriteFinalBuiltIns();
 
         // Write C# string table
         int stringHeapSize = reader.GetHeapSize(HeapIndex.UserString);
