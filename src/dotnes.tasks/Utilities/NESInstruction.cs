@@ -208,6 +208,10 @@ enum NESInstruction : byte
     /// 91: Store Accumulator in Memory
     /// </summary>
     STA_ind_Y = 0x91,
+    /// <summary>
+    /// Transfer Index Y to Accumulator
+    /// </summary>
+    TYA_impl  = 0x98,
     //TODO: rest of 9
     /// <summary>
     /// 9D: Store Accumulator in Memory
