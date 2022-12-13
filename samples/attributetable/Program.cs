@@ -1,5 +1,5 @@
 ﻿/*
-Based on: https://8bitworkshop.com/v3.8.0/?platform=nes&file=attributes.c
+Based on: https://8bitworkshop.com/v3.10.0/?platform=nes&file=attributes.c
 
 Setting the attribute table, which controls palette selection
 for the nametable. We copy it from an array in ROM to video RAM.

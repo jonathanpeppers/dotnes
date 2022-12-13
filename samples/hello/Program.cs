@@ -1,5 +1,5 @@
 ﻿/*
-Based on: https://8bitworkshop.com/v3.8.0/?platform=nes&file=hello.c
+Based on: https://8bitworkshop.com/v3.10.0/?platform=nes&file=hello.c
 
 A simple "hello world" example.
 Set the screen background color and palette colors.
