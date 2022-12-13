@@ -107,6 +107,10 @@ enum NESInstruction : byte
     //TODO: rest of 3
 
     /// <summary>
+    /// Return from Interrupt
+    /// </summary>
+    RTI_impl  = 0x40,
+    /// <summary>
     /// Jump to New Location
     /// </summary>
     JMP_abs   = 0x4C,

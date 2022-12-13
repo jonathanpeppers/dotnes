@@ -175,6 +175,7 @@ class NESWriter : IDisposable
     /// </summary>
     public void WriteBuiltIns()
     {
+        WriteBuiltIn("skipNtsc");
         WriteBuiltIn("irq");
         WriteBuiltIn(nameof(NESLib.nmi_set_callback));
         WriteBuiltIn(nameof(NESLib.pal_all));
@@ -283,6 +284,24 @@ class NESWriter : IDisposable
     {
         switch (name)
         {
+            case "skipNtsc":
+                /*
+                 * 81F9	201400        	JSR NMICallback               ; skipNtsc
+                 * 81FC	68            	PLA                           
+                 * 81FD	A8            	TAY                           
+                 * 81FE	68            	PLA                           
+                 * 81FF	AA            	TAX                           
+                 * 8200	68            	PLA                           
+                 * 8201	40            	RTI
+                 */
+                Write(NESInstruction.JSR, (ushort)0x0014);
+                Write(NESInstruction.PLA_impl);
+                Write(NESInstruction.TAY_impl);
+                Write(NESInstruction.PLA_impl);
+                Write(NESInstruction.TAX_impl);
+                Write(NESInstruction.PLA_impl);
+                Write(NESInstruction.RTI_impl);
+                break;
             case "irq":
                 /*
                  * 8202	48            	PHA                           ; irq
