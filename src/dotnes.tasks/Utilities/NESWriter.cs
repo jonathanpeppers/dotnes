@@ -23,6 +23,7 @@ class NESWriter : IDisposable
     /// </summary>
     public const int CHR_ROM_BLOCK_SIZE = 8192;
 
+    protected const int NES_PRG_BANKS = 0x02;
     protected const int VRAM_UPDATE = 0x03;
     protected const int NAME_UPD_ADR = 0x04;
     protected const int SCROLL_X = 0x0C;
@@ -175,6 +176,7 @@ class NESWriter : IDisposable
     /// </summary>
     public void WriteBuiltIns()
     {
+        WriteBuiltIn("skipAll");
         WriteBuiltIn("skipNtsc");
         WriteBuiltIn("irq");
         WriteBuiltIn(nameof(NESLib.nmi_set_callback));
@@ -284,6 +286,28 @@ class NESWriter : IDisposable
     {
         switch (name)
         {
+            case "skipAll":
+                /*
+                 * 81E6	A512          	LDA PPU_MASK_VAR              ; @skipAll
+                 * 81E8	8D0120        	STA $2001                     
+                 * 81EB	E601          	INC __STARTUP__               
+                 * 81ED	E602          	INC NES_PRG_BANKS             
+                 * 81EF	A502          	LDA NES_PRG_BANKS             
+                 * 81F1	C906          	CMP #$06                      
+                 * 81F3	D004          	BNE skipNtsc                  
+                 * 81F5	A900          	LDA #$00                      
+                 * 81F7	8502          	STA NES_PRG_BANKS 
+                 */
+                Write(NESInstruction.LDA_zpg, PPU_MASK_VAR);
+                Write(NESInstruction.STA_abs, NESLib.NTADR_A(1, 0));
+                Write(NESInstruction.INC_zpg, 0x01);
+                Write(NESInstruction.INC_zpg, NES_PRG_BANKS);
+                Write(NESInstruction.LDA_zpg, NES_PRG_BANKS);
+                Write(NESInstruction.CMP, 0x06);
+                Write(NESInstruction.BNE_rel, 0x04);
+                Write(NESInstruction.LDA, 0x00);
+                Write(NESInstruction.STA_zpg, NES_PRG_BANKS);
+                break;
             case "skipNtsc":
                 /*
                  * 81F9	201400        	JSR NMICallback               ; skipNtsc
