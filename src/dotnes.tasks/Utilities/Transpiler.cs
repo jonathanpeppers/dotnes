@@ -33,13 +33,8 @@ class Transpiler : IDisposable
         writer.WriteSegment(0);
         writer.WriteBuiltIns();
 
-        // Read it all into an array, so we can "read ahead"
-        var instructions = ReadStaticVoidMain().ToArray();
-        for (int i = 0; i < instructions.Length; i++)
+        foreach (var instruction in ReadStaticVoidMain())
         {
-            var instruction = instructions[i];
-
-            // Default cases
             if (instruction.Integer != null)
             {
                 writer.Write(instruction.OpCode, instruction.Integer.Value);
