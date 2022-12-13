@@ -26,6 +26,7 @@ class NESWriter : IDisposable
     protected const int NES_PRG_BANKS = 0x02;
     protected const int VRAM_UPDATE = 0x03;
     protected const int NAME_UPD_ADR = 0x04;
+    protected const int NAME_UPD_ENABLE = 0x06;
     protected const int SCROLL_X = 0x0C;
     protected const int SCROLL_Y = 0x0D;
     protected const int TEMP = 0x17;
@@ -176,6 +177,7 @@ class NESWriter : IDisposable
     /// </summary>
     public void WriteBuiltIns()
     {
+        WriteBuiltIn("updVRAM");
         WriteBuiltIn("skipUpd");
         WriteBuiltIn("skipAll");
         WriteBuiltIn("skipNtsc");
@@ -287,6 +289,24 @@ class NESWriter : IDisposable
     {
         switch (name)
         {
+            case "updVRAM":
+                /*
+                 * 81C0	A503          	LDA VRAM_UPDATE               ; @updVRAM
+                 * 81C2	F00B          	BEQ @skipUpd                  
+                 * 81C4	A900          	LDA #$00                      
+                 * 81C6	8503          	STA VRAM_UPDATE               
+                 * 81C8	A506          	LDA NAME_UPD_ENABLE           
+                 * 81CA	F003          	BEQ @skipUpd                  
+                 * 81CC	208383        	JSR _flush_vram_update_nmi
+                 */
+                Write(NESInstruction.LDA_zpg, VRAM_UPDATE);
+                Write(NESInstruction.BEQ_rel, 0x0B);
+                Write(NESInstruction.LDA, 0x00);
+                Write(NESInstruction.STA_zpg, VRAM_UPDATE);
+                Write(NESInstruction.LDA_zpg, NAME_UPD_ENABLE);
+                Write(NESInstruction.BEQ_rel, 0x03);
+                Write(NESInstruction.JSR, 0x8383);
+                break;
             case "skipUpd":
                 /*
                  * 81CF	A900          	LDA #$00                      ; @skipUpd
