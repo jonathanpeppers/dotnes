@@ -9,6 +9,7 @@
     <PackageProjectUrl>https://github.com/daniel5151/ANESE</PackageProjectUrl>
     <PackageTags>.NET C# NES Emulator</PackageTags>
     <PackageLicenseFile>LICENSE</PackageLicenseFile>
+    <PackageIcon>logo.png</PackageIcon>
     <PackageVersion>0.9.1</PackageVersion>
     <MacUrl>https://github.com/daniel5151/ANESE/releases/download/$(PackageVersion)/ANESE_$(PackageVersion)_macOS.zip</MacUrl>
     <WindowsUrl>https://github.com/daniel5151/ANESE/releases/download/$(PackageVersion)/ANESE_$(PackageVersion)_win.zip</WindowsUrl>
@@ -20,7 +21,8 @@
     </BeforePack>
   </PropertyGroup>
   <ItemGroup>
-    <None Update="@(None)" Pack="true" PackagePath="/" />
+    <None Update="@(None)" Pack="true" PackagePath="" />
+    <None Include="../../assets/logo.png" Pack="true" PackagePath="" />
   </ItemGroup>
   <Target Name="_Download" BeforeTargets="Build"
       Inputs="$(MSBuildThisFile)"
