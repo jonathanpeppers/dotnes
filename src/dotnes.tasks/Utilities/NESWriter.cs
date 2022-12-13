@@ -1113,6 +1113,20 @@ class NESWriter : IDisposable
                 Write(NESInstruction.BNE_rel, 0xEF);
                 Write(NESInstruction.RTS_impl);
                 break;
+            case "popax":
+                /*
+                 * 857F	A001          	LDY #$01                      ; popax
+                 * 8581	B122          	LDA (sp),y                    
+                 * 8583	AA            	TAX                           
+                 * 8584	88            	DEY                           
+                 * 8585	B122          	LDA (sp),y
+                 */
+                Write(NESInstruction.LDY, 0x01);
+                Write(NESInstruction.LDA_ind_Y, 0x22);
+                Write(NESInstruction.TAX_impl);
+                Write(NESInstruction.DEY_impl);
+                Write(NESInstruction.LDA_ind_Y, 0x22);
+                break;
             default:
                 throw new NotImplementedException($"{name} is not implemented!");
         }

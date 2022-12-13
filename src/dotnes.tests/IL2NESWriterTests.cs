@@ -75,6 +75,7 @@ public class IL2NESWriterTests
 
         writer.WriteBuiltIn("donelib");
         writer.WriteBuiltIn("copydata");
+        writer.WriteBuiltIn("popax");
 
         writer.WriteSegment(1);
         writer.WriteString("HELLO, .NET!");

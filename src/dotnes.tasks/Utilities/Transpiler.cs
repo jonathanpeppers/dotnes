@@ -56,6 +56,7 @@ class Transpiler : IDisposable
 
         writer.WriteBuiltIn("donelib");
         writer.WriteBuiltIn("copydata");
+        writer.WriteBuiltIn("popax");
 
         writer.WriteSegment(1);
 
