@@ -1,5 +1,7 @@
 # .NES ("dot" NES)
 
+![dot NES logo](assets/logo_big.png)
+
 .NET for the NES game console
 
 ## Links
