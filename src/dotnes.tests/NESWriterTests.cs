@@ -219,7 +219,7 @@ public class NESWriterTests
         using var writer = GetWriter();
         writer.WriteBuiltIn("pusha");
         writer.Flush();
-        AssertInstructions("A422 F007 C622 A000 9122 60");
+        AssertInstructions("A000 B122 A422 F007 C622 A000 9122 60 C623 C622 9122 60");
     }
 
     [Fact]

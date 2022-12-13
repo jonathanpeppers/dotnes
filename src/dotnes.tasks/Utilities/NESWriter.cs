@@ -264,9 +264,10 @@ class NESWriter : IDisposable
     {
         WriteBuiltIn("donelib");
         WriteBuiltIn("copydata");
-        WriteBuiltIn("popax");
+        WriteBuiltIn(nameof(popax));
         WriteBuiltIn("incsp2");
-        WriteBuiltIn("popa");
+        WriteBuiltIn(nameof(popa));
+        WriteBuiltIn(nameof(pusha));
         WriteSegment(1);
     }
 
@@ -467,24 +468,35 @@ class NESWriter : IDisposable
                 Write(NESInstruction.BEQ_rel, 0xFC);
                 Write(NESInstruction.RTS_impl);
                 break;
-            case "pusha":
-                //NOTE: seems to be an internal subroutine
+            case nameof(pusha):
                 /*
-                * 85A2	A422          	LDY sp                        ; pusha
-                * 85A4	F007          	BEQ $85AD                     
-                * 85A6	C622          	DEC sp                        
-                * 85A8	A000          	LDY #$00                      
-                * 85AA	9122          	STA (sp),y                    
-                * 85AC	60            	RTS                           
+                 * 85A1	A000          	LDY #$00                      ; pusha0sp
+                 * 85A3	B122          	LDA (sp),y                    ; pushaysp
+                 * 85A5	A422          	LDY sp                        ; pusha
+                 * 85A7	F007          	BEQ $85B0                     
+                 * 85A9	C622          	DEC sp                        
+                 * 85AB	A000          	LDY #$00                      
+                 * 85AD	9122          	STA (sp),y                    
+                 * 85AF	60            	RTS                           
+                 * 85B0	C623          	DEC sp+1                      
+                 * 85B2	C622          	DEC sp                        
+                 * 85B4	9122          	STA (sp),y                    
+                 * 85B6	60            	RTS
                 */
+                Write(NESInstruction.LDY, 0x00);
+                Write(NESInstruction.LDA_ind_Y, sp);
                 Write(NESInstruction.LDY_zpg, sp);
                 Write(NESInstruction.BEQ_rel, 0x07);
                 Write(NESInstruction.DEC_zpg, sp);
                 Write(NESInstruction.LDY, 0x00);
                 Write(NESInstruction.STA_ind_Y, sp);
                 Write(NESInstruction.RTS_impl);
+                Write(NESInstruction.DEC_zpg, sp + 1);
+                Write(NESInstruction.DEC_zpg, sp);
+                Write(NESInstruction.STA_ind_Y, sp);
+                Write(NESInstruction.RTS_impl);
                 break;
-            case "popa":
+            case nameof(popa):
                 /*
                  * 8595	A000          	LDY #$00                      ; popa
                  * 8597	B122          	LDA (sp),y                    
@@ -1129,7 +1141,7 @@ class NESWriter : IDisposable
                 Write(NESInstruction.BNE_rel, 0xEF);
                 Write(NESInstruction.RTS_impl);
                 break;
-            case "popax":
+            case nameof(popax):
                 /*
                  * 857F	A001          	LDY #$01                      ; popax
                  * 8581	B122          	LDA (sp),y                    
