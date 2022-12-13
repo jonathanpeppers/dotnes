@@ -176,6 +176,7 @@ class NESWriter : IDisposable
     /// </summary>
     public void WriteBuiltIns()
     {
+        WriteBuiltIn("skipUpd");
         WriteBuiltIn("skipAll");
         WriteBuiltIn("skipNtsc");
         WriteBuiltIn("irq");
@@ -286,6 +287,28 @@ class NESWriter : IDisposable
     {
         switch (name)
         {
+            case "skipUpd":
+                /*
+                 * 81CF	A900          	LDA #$00                      ; @skipUpd
+                 * 81D1	8D0620        	STA $2006                     
+                 * 81D4	8D0620        	STA $2006                     
+                 * 81D7	A50C          	LDA SCROLL_X                  
+                 * 81D9	8D0520        	STA $2005                     
+                 * 81DC	A50D          	LDA SCROLL_Y                  
+                 * 81DE	8D0520        	STA $2005                     
+                 * 81E1	A510          	LDA __PRG_FILEOFFS__          
+                 * 81E3	8D0020        	STA $2000 
+                 */
+                Write(NESInstruction.LDA, 0x00);
+                Write(NESInstruction.STA_abs, NESLib.NTADR_A(6, 0));
+                Write(NESInstruction.STA_abs, NESLib.NTADR_A(6, 0));
+                Write(NESInstruction.LDA_zpg, SCROLL_X);
+                Write(NESInstruction.STA_abs, NESLib.NTADR_A(5, 0));
+                Write(NESInstruction.LDA_zpg, SCROLL_Y);
+                Write(NESInstruction.STA_abs, NESLib.NTADR_A(5, 0));
+                Write(NESInstruction.LDA_zpg, PRG_FILEOFFS);
+                Write(NESInstruction.STA_abs, NESLib.NAMETABLE_A);
+                break;
             case "skipAll":
                 /*
                  * 81E6	A512          	LDA PPU_MASK_VAR              ; @skipAll
