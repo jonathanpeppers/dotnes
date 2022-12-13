@@ -268,6 +268,7 @@ class NESWriter : IDisposable
         WriteBuiltIn("incsp2");
         WriteBuiltIn(nameof(popa));
         WriteBuiltIn(nameof(pusha));
+        WriteBuiltIn(nameof(pushax));
         WriteSegment(1);
     }
 
@@ -1154,6 +1155,42 @@ class NESWriter : IDisposable
                 Write(NESInstruction.TAX_impl);
                 Write(NESInstruction.DEY_impl);
                 Write(NESInstruction.LDA_ind_Y, sp);
+                break;
+            case nameof(pushax):
+                /*
+                 * 85B7	A900          	LDA #$00                      ; push0
+                 * 85B9	A200          	LDX #$00                      ; pusha0
+                 * 85BB	48            	PHA                           ; pushax
+                 * 85BC	A522          	LDA sp                        
+                 * 85BE	38            	SEC                           
+                 * 85BF	E902          	SBC #$02                      
+                 * 85C1	8522          	STA sp                        
+                 * 85C3	B002          	BCS $85C7                     
+                 * 85C5	C623          	DEC sp+1                      
+                 * 85C7	A001          	LDY #$01                      
+                 * 85C9	8A            	TXA                           
+                 * 85CA	9122          	STA (sp),y                    
+                 * 85CC	68            	PLA                           
+                 * 85CD	88            	DEY                           
+                 * 85CE	9122          	STA (sp),y                    
+                 * 85D0	60            	RTS
+                 */
+                Write(NESInstruction.LDA, 0x00);
+                Write(NESInstruction.LDX, 0x00);
+                Write(NESInstruction.PHA_impl);
+                Write(NESInstruction.LDA_zpg, sp);
+                Write(NESInstruction.SEC_impl);
+                Write(NESInstruction.SBC, 0x02);
+                Write(NESInstruction.STA_zpg, sp);
+                Write(NESInstruction.BCS, 0x02);
+                Write(NESInstruction.DEC_zpg, sp + 1);
+                Write(NESInstruction.LDY, 0x01);
+                Write(NESInstruction.TXA_impl);
+                Write(NESInstruction.STA_ind_Y, sp);
+                Write(NESInstruction.PLA_impl);
+                Write(NESInstruction.DEY_impl);
+                Write(NESInstruction.STA_ind_Y, sp);
+                Write(NESInstruction.RTS_impl);
                 break;
             case "incsp2":
                 /*

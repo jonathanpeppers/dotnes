@@ -110,6 +110,10 @@ enum NESInstruction : byte
     /// Jump to New Location
     /// </summary>
     JMP_abs   = 0x4C,
+    /// <summary>
+    /// Push Accumulator on Stack
+    /// </summary>
+    PHA_impl  = 0x48,
     //TODO: 4-5
 
     // 6
