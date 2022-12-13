@@ -22,8 +22,9 @@
     <None Include="../dotnes.tasks/bin/$(Configuration)/netstandard2.0/dotnes.targets" Pack="true" PackagePath="build" />
     <None Include="../dotnes.tasks/bin/$(Configuration)/netstandard2.0/System.Reflection.Metadata.dll" Pack="true" PackagePath="build" />
     <None Include="../dotnes.tasks/bin/$(Configuration)/netstandard2.0/System.Collections.Immutable.dll" Pack="true" PackagePath="build" />
-    <None Include="../dotnes.tasks/bin/$(Configuration)/netstandard2.0/neslib.dll" Pack="true" PackagePath="build;lib/net7.0" />
-    <None Include="../dotnes.tasks/bin/$(Configuration)/netstandard2.0/neslib.pdb" Pack="true" PackagePath="build;lib/net7.0" />
+    <None Include="../dotnes.tasks/bin/$(Configuration)/netstandard2.0/neslib.dll" Pack="true" PackagePath="build" />
+    <None Include="../dotnes.tasks/bin/$(Configuration)/netstandard2.0/neslib.pdb" Pack="true" PackagePath="build" />
+    <None Include="../neslib/bin/$(Configuration)/netstandard2.0/ref/neslib.dll" Pack="true" PackagePath="ref/net7.0" />
   </ItemGroup>
   <Target Name="_ClearNuGetCache" BeforeTargets="Build">
     <RemoveDir Directories="$(MSBuildThisFileDirectory)../../samples/packages/$(PackageId)" />
