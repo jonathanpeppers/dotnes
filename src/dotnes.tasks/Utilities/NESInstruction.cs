@@ -47,6 +47,10 @@ enum NESInstruction : byte
     ASL_abs   = 0x0E,
 
     //TODO: 1
+    /// <summary>
+    /// Branch on Result Plus
+    /// </summary>
+    BPL       = 0x10,
 
     // 2
     /// <summary>
@@ -164,6 +168,10 @@ enum NESInstruction : byte
     ROR_abs   = 0x6E,
 
     //TODO: 7
+    /// <summary>
+    /// Set Interrupt Disable Status
+    /// </summary>
+    SEI_impl  = 0x78,
 
     /// <summary>
     /// Store Accumulator in Memory
@@ -212,6 +220,10 @@ enum NESInstruction : byte
     /// 91: Store Accumulator in Memory
     /// </summary>
     STA_ind_Y = 0x91,
+    /// <summary>
+    /// Store Accumulator in Memory
+    /// </summary>
+    STA_zpg_X = 0x95,
     /// <summary>
     /// Transfer Index Y to Accumulator
     /// </summary>
