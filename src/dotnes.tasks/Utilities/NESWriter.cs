@@ -182,10 +182,124 @@ class NESWriter : IDisposable
     }
 
     /// <summary>
+    /// This is a block of stuff at the top of "Disassembly" section of 8bitworkshop.com
+    /// It may be the contents of:
+    /// https://github.com/clbr/neslib/blob/d061b0f7f1a449941111c31eee0fc2e85b1826d7/neslib.sinc#L49
+    /// </summary>
+    public void WriteBuiltInAssembly()
+    {
+        /*
+         * 8143	20ACCE        	JSR $CEAC                     
+         * 8146	01B1          	ORA ($B1,x)                   
+         * 8148	08            	PHP                           
+         * 8149	8D0720        	STA $2007                     
+         * 814C	ACCF01        	LDY $01CF                     
+         * 814F	B108          	LDA (PAL_BG_PTR),y            
+         * 8151	8D0720        	STA $2007                     
+         * 8154	8E0720        	STX $2007                     
+         * 8157	ACD101        	LDY $01D1                     
+         * 815A	B10A          	LDA (PAL_SPR_PTR),y           
+         * 815C	8D0720        	STA $2007                     
+         * 815F	ACD201        	LDY $01D2                     
+         * 8162	B10A          	LDA (PAL_SPR_PTR),y           
+         * 8164	8D0720        	STA $2007                     
+         * 8167	ACD301        	LDY $01D3                     
+         * 816A	B10A          	LDA (PAL_SPR_PTR),y           
+         */
+
+        Write(NESInstruction.JSR, 0xCEAC);
+        Write(NESInstruction.ORA_X_ind, 0xB1);
+        Write(NESInstruction.PHP_impl);
+        Write(NESInstruction.STA_abs, NESLib.NTADR_A(7, 0));
+        Write(NESInstruction.LDY_abs, 0x01CF);
+        Write(NESInstruction.LDA_ind_Y, PAL_BG_PTR);
+        Write(NESInstruction.STA_abs, NESLib.NTADR_A(7, 0));
+        Write(NESInstruction.STX_abs, NESLib.NTADR_A(7, 0));
+        Write(NESInstruction.LDY_abs, 0x01D1);
+        Write(NESInstruction.LDA_ind_Y, PAL_SPR_PTR);
+        Write(NESInstruction.STA_abs, NESLib.NTADR_A(7, 0));
+        Write(NESInstruction.LDY_abs, 0x01D2);
+        Write(NESInstruction.LDA_ind_Y, PAL_SPR_PTR);
+        Write(NESInstruction.STA_abs, NESLib.NTADR_A(7, 0));
+        Write(NESInstruction.LDY_abs, 0x01D3);
+        Write(NESInstruction.LDA_ind_Y, PAL_SPR_PTR);
+
+        /*
+         * 816C	8D0720        	STA $2007                     
+         * 816F	8E0720        	STX $2007                     
+         * 8172	ACD501        	LDY $01D5                     
+         * 8175	B10A          	LDA (PAL_SPR_PTR),y           
+         * 8177	8D0720        	STA $2007                     
+         * 817A	ACD601        	LDY $01D6                     
+         * 817D	B10A          	LDA (PAL_SPR_PTR),y           
+         * 817F	8D0720        	STA $2007                     
+         * 8182	ACD701        	LDY $01D7                     
+         * 8185	B10A          	LDA (PAL_SPR_PTR),y           
+         * 8187	8D0720        	STA $2007                     
+         * 818A	8E0720        	STX $2007                     
+         * 818D	ACD901        	LDY $01D9                     
+         * 8190	B10A          	LDA (PAL_SPR_PTR),y           
+         * 8192	8D0720        	STA $2007                     
+         * 8195	ACDA01        	LDY $01DA                     
+         */
+
+        Write(NESInstruction.STA_abs, NESLib.NTADR_A(7, 0));
+        Write(NESInstruction.STX_abs, NESLib.NTADR_A(7, 0));
+        Write(NESInstruction.LDY_abs, 0x01D5);
+        Write(NESInstruction.LDA_ind_Y, PAL_SPR_PTR);
+        Write(NESInstruction.STA_abs, NESLib.NTADR_A(7, 0));
+        Write(NESInstruction.LDY_abs, 0x01D6);
+        Write(NESInstruction.LDA_ind_Y, PAL_SPR_PTR);
+        Write(NESInstruction.STA_abs, NESLib.NTADR_A(7, 0));
+        Write(NESInstruction.LDY_abs, 0x01D7);
+        Write(NESInstruction.LDA_ind_Y, PAL_SPR_PTR);
+        Write(NESInstruction.STA_abs, NESLib.NTADR_A(7, 0));
+        Write(NESInstruction.STX_abs, NESLib.NTADR_A(7, 0));
+        Write(NESInstruction.LDY_abs, 0x01D9);
+        Write(NESInstruction.LDA_ind_Y, PAL_SPR_PTR);
+        Write(NESInstruction.STA_abs, NESLib.NTADR_A(7, 0));
+        Write(NESInstruction.LDY_abs, 0x01DA);
+
+        /*
+         * 8198	B10A          	LDA (PAL_SPR_PTR),y           
+         * 819A	8D0720        	STA $2007                     
+         * 819D	ACDB01        	LDY $01DB                     
+         * 81A0	B10A          	LDA (PAL_SPR_PTR),y           
+         * 81A2	8D0720        	STA $2007                     
+         * 81A5	8E0720        	STX $2007                     
+         * 81A8	ACDD01        	LDY $01DD                     
+         * 81AB	B10A          	LDA (PAL_SPR_PTR),y           
+         * 81AD	8D0720        	STA $2007                     
+         * 81B0	ACDE01        	LDY $01DE                     
+         * 81B3	B10A          	LDA (PAL_SPR_PTR),y           
+         * 81B5	8D0720        	STA $2007                     
+         * 81B8	ACDF01        	LDY $01DF                     
+         * 81BB	B10A          	LDA (PAL_SPR_PTR),y           
+         * 81BD	8D0720        	STA $2007 
+         */
+        Write(NESInstruction.LDA_ind_Y, PAL_SPR_PTR);
+        Write(NESInstruction.STA_abs, NESLib.NTADR_A(7, 0));
+        Write(NESInstruction.LDY_abs, 0x01DB);
+        Write(NESInstruction.LDA_ind_Y, PAL_SPR_PTR);
+        Write(NESInstruction.STA_abs, NESLib.NTADR_A(7, 0));
+        Write(NESInstruction.STX_abs, NESLib.NTADR_A(7, 0));
+        Write(NESInstruction.LDY_abs, 0x01DD);
+        Write(NESInstruction.LDA_ind_Y, PAL_SPR_PTR);
+        Write(NESInstruction.STA_abs, NESLib.NTADR_A(7, 0));
+        Write(NESInstruction.LDY_abs, 0x01DE);
+        Write(NESInstruction.LDA_ind_Y, PAL_SPR_PTR);
+        Write(NESInstruction.STA_abs, NESLib.NTADR_A(7, 0));
+        Write(NESInstruction.LDY_abs, 0x01DF);
+        Write(NESInstruction.LDA_ind_Y, PAL_SPR_PTR);
+        Write(NESInstruction.STA_abs, NESLib.NTADR_A(7, 0));
+    }
+
+    /// <summary>
     /// Writes all the built-in methods from NESLib
     /// </summary>
     public void WriteBuiltIns()
     {
+        WriteBuiltInAssembly();
         WriteBuiltIn("@updVRAM");
         WriteBuiltIn("@skipUpd");
         WriteBuiltIn("@skipAll");
