@@ -42,6 +42,14 @@ class NESWriter : IDisposable
     protected const int PRG_FILEOFFS = 0x10;
     protected const int PPU_MASK_VAR = 0x12;
     protected const ushort condes = 0x0300;
+    protected const ushort PPU_CTRL = 0x2000;
+    protected const ushort PPU_MASK = 0x2001;
+    protected const ushort PPU_STATUS = 0x2002;
+    protected const ushort PPU_OAM_ADDR = 0x2003;
+    protected const ushort PPU_OAM_DATA = 0x2004;
+    protected const ushort PPU_SCROLL = 0x2005;
+    protected const ushort PPU_ADDR = 0x2006;
+    protected const ushort PPU_DATA = 0x2007;
     protected const ushort skipNtsc = 0x81F9;
     protected const ushort pal_col = 0x823E;
     protected const ushort vram_adr = 0x83D4;
@@ -210,17 +218,17 @@ class NESWriter : IDisposable
         Write(NESInstruction.JSR, 0xCEAC);
         Write(NESInstruction.ORA_X_ind, 0xB1);
         Write(NESInstruction.PHP_impl);
-        Write(NESInstruction.STA_abs, NESLib.NTADR_A(7, 0));
+        Write(NESInstruction.STA_abs, PPU_DATA);
         Write(NESInstruction.LDY_abs, 0x01CF);
         Write(NESInstruction.LDA_ind_Y, PAL_BG_PTR);
-        Write(NESInstruction.STA_abs, NESLib.NTADR_A(7, 0));
-        Write(NESInstruction.STX_abs, NESLib.NTADR_A(7, 0));
+        Write(NESInstruction.STA_abs, PPU_DATA);
+        Write(NESInstruction.STX_abs, PPU_DATA);
         Write(NESInstruction.LDY_abs, 0x01D1);
         Write(NESInstruction.LDA_ind_Y, PAL_SPR_PTR);
-        Write(NESInstruction.STA_abs, NESLib.NTADR_A(7, 0));
+        Write(NESInstruction.STA_abs, PPU_DATA);
         Write(NESInstruction.LDY_abs, 0x01D2);
         Write(NESInstruction.LDA_ind_Y, PAL_SPR_PTR);
-        Write(NESInstruction.STA_abs, NESLib.NTADR_A(7, 0));
+        Write(NESInstruction.STA_abs, PPU_DATA);
         Write(NESInstruction.LDY_abs, 0x01D3);
         Write(NESInstruction.LDA_ind_Y, PAL_SPR_PTR);
 
@@ -243,21 +251,21 @@ class NESWriter : IDisposable
          * 8195	ACDA01        	LDY $01DA                     
          */
 
-        Write(NESInstruction.STA_abs, NESLib.NTADR_A(7, 0));
-        Write(NESInstruction.STX_abs, NESLib.NTADR_A(7, 0));
+        Write(NESInstruction.STA_abs, PPU_DATA);
+        Write(NESInstruction.STX_abs, PPU_DATA);
         Write(NESInstruction.LDY_abs, 0x01D5);
         Write(NESInstruction.LDA_ind_Y, PAL_SPR_PTR);
-        Write(NESInstruction.STA_abs, NESLib.NTADR_A(7, 0));
+        Write(NESInstruction.STA_abs, PPU_DATA);
         Write(NESInstruction.LDY_abs, 0x01D6);
         Write(NESInstruction.LDA_ind_Y, PAL_SPR_PTR);
-        Write(NESInstruction.STA_abs, NESLib.NTADR_A(7, 0));
+        Write(NESInstruction.STA_abs, PPU_DATA);
         Write(NESInstruction.LDY_abs, 0x01D7);
         Write(NESInstruction.LDA_ind_Y, PAL_SPR_PTR);
-        Write(NESInstruction.STA_abs, NESLib.NTADR_A(7, 0));
-        Write(NESInstruction.STX_abs, NESLib.NTADR_A(7, 0));
+        Write(NESInstruction.STA_abs, PPU_DATA);
+        Write(NESInstruction.STX_abs, PPU_DATA);
         Write(NESInstruction.LDY_abs, 0x01D9);
         Write(NESInstruction.LDA_ind_Y, PAL_SPR_PTR);
-        Write(NESInstruction.STA_abs, NESLib.NTADR_A(7, 0));
+        Write(NESInstruction.STA_abs, PPU_DATA);
         Write(NESInstruction.LDY_abs, 0x01DA);
 
         /*
@@ -278,20 +286,20 @@ class NESWriter : IDisposable
          * 81BD	8D0720        	STA $2007 
          */
         Write(NESInstruction.LDA_ind_Y, PAL_SPR_PTR);
-        Write(NESInstruction.STA_abs, NESLib.NTADR_A(7, 0));
+        Write(NESInstruction.STA_abs, PPU_DATA);
         Write(NESInstruction.LDY_abs, 0x01DB);
         Write(NESInstruction.LDA_ind_Y, PAL_SPR_PTR);
-        Write(NESInstruction.STA_abs, NESLib.NTADR_A(7, 0));
-        Write(NESInstruction.STX_abs, NESLib.NTADR_A(7, 0));
+        Write(NESInstruction.STA_abs, PPU_DATA);
+        Write(NESInstruction.STX_abs, PPU_DATA);
         Write(NESInstruction.LDY_abs, 0x01DD);
         Write(NESInstruction.LDA_ind_Y, PAL_SPR_PTR);
-        Write(NESInstruction.STA_abs, NESLib.NTADR_A(7, 0));
+        Write(NESInstruction.STA_abs, PPU_DATA);
         Write(NESInstruction.LDY_abs, 0x01DE);
         Write(NESInstruction.LDA_ind_Y, PAL_SPR_PTR);
-        Write(NESInstruction.STA_abs, NESLib.NTADR_A(7, 0));
+        Write(NESInstruction.STA_abs, PPU_DATA);
         Write(NESInstruction.LDY_abs, 0x01DF);
         Write(NESInstruction.LDA_ind_Y, PAL_SPR_PTR);
-        Write(NESInstruction.STA_abs, NESLib.NTADR_A(7, 0));
+        Write(NESInstruction.STA_abs, PPU_DATA);
     }
 
     /// <summary>
@@ -443,14 +451,14 @@ class NESWriter : IDisposable
                  * 81E3	8D0020        	STA $2000 
                  */
                 Write(NESInstruction.LDA, 0x00);
-                Write(NESInstruction.STA_abs, NESLib.NTADR_A(6, 0));
-                Write(NESInstruction.STA_abs, NESLib.NTADR_A(6, 0));
+                Write(NESInstruction.STA_abs, PPU_ADDR);
+                Write(NESInstruction.STA_abs, PPU_ADDR);
                 Write(NESInstruction.LDA_zpg, SCROLL_X);
-                Write(NESInstruction.STA_abs, NESLib.NTADR_A(5, 0));
+                Write(NESInstruction.STA_abs, PPU_SCROLL);
                 Write(NESInstruction.LDA_zpg, SCROLL_Y);
-                Write(NESInstruction.STA_abs, NESLib.NTADR_A(5, 0));
+                Write(NESInstruction.STA_abs, PPU_SCROLL);
                 Write(NESInstruction.LDA_zpg, PRG_FILEOFFS);
-                Write(NESInstruction.STA_abs, NESLib.NAMETABLE_A);
+                Write(NESInstruction.STA_abs, PPU_CTRL);
                 break;
             case "@skipAll":
                 /*
@@ -465,7 +473,7 @@ class NESWriter : IDisposable
                  * 81F7	8502          	STA NES_PRG_BANKS 
                  */
                 Write(NESInstruction.LDA_zpg, PPU_MASK_VAR);
-                Write(NESInstruction.STA_abs, NESLib.NTADR_A(1, 0));
+                Write(NESInstruction.STA_abs, PPU_MASK);
                 Write(NESInstruction.INC_zpg, STARTUP);
                 Write(NESInstruction.INC_zpg, NES_PRG_BANKS);
                 Write(NESInstruction.LDA_zpg, NES_PRG_BANKS);
@@ -1006,7 +1014,7 @@ class NESWriter : IDisposable
                 Write(NESInstruction.STX_zpg, 0x1A);
                 Write(NESInstruction.LDY, 0x00);
                 Write(NESInstruction.LDA_ind_Y, 0x19);
-                Write(NESInstruction.STA_abs, NESLib.NTADR_A(7, 0));
+                Write(NESInstruction.STA_abs, PPU_DATA);
                 Write(NESInstruction.INC_zpg, 0x19);
                 Write(NESInstruction.BNE_rel, 0x02);
                 Write(NESInstruction.INC_zpg, 0x1A);
@@ -1061,13 +1069,13 @@ class NESWriter : IDisposable
                 Write(NESInstruction.INY_impl);
                 Write(NESInstruction.CMP, 0x40);
                 Write(NESInstruction.BCS, 0x12);
-                Write(NESInstruction.STA_abs, NESLib.NTADR_A(6, 0));
+                Write(NESInstruction.STA_abs, PPU_ADDR);
                 Write(NESInstruction.LDA_ind_Y, NAME_UPD_ADR);
                 Write(NESInstruction.INY_impl);
-                Write(NESInstruction.STA_abs, NESLib.NTADR_A(6, 0));
+                Write(NESInstruction.STA_abs, PPU_ADDR);
                 Write(NESInstruction.LDA_ind_Y, NAME_UPD_ADR);
                 Write(NESInstruction.INY_impl);
-                Write(NESInstruction.STA_abs, NESLib.NTADR_A(7, 0));
+                Write(NESInstruction.STA_abs, PPU_DATA);
                 Write(NESInstruction.JMP_abs, updName);
 
                 /*
@@ -1103,13 +1111,13 @@ class NESWriter : IDisposable
                 Write(NESInstruction.ORA, 0x04);
                 Write(NESInstruction.BNE_rel, 0x02);
                 Write(NESInstruction.AND, 0xFB);
-                Write(NESInstruction.STA_abs, NESLib.NAMETABLE_A);
+                Write(NESInstruction.STA_abs, PPU_CTRL);
                 Write(NESInstruction.TXA_impl);
                 Write(NESInstruction.AND, 0x3F);
-                Write(NESInstruction.STA_abs, NESLib.NTADR_A(6, 0));
+                Write(NESInstruction.STA_abs, PPU_ADDR);
                 Write(NESInstruction.LDA_ind_Y, NAME_UPD_ADR);
                 Write(NESInstruction.INY_impl);
-                Write(NESInstruction.STA_abs, NESLib.NTADR_A(6, 0));
+                Write(NESInstruction.STA_abs, PPU_ADDR);
                 Write(NESInstruction.LDA_ind_Y, NAME_UPD_ADR);
                 Write(NESInstruction.INY_impl);
                 Write(NESInstruction.TAX_impl);
@@ -1127,11 +1135,11 @@ class NESWriter : IDisposable
                  */
                 Write(NESInstruction.LDA_ind_Y, NAME_UPD_ADR);
                 Write(NESInstruction.INY_impl);
-                Write(NESInstruction.STA_abs, NESLib.NTADR_A(7, 0));
+                Write(NESInstruction.STA_abs, PPU_DATA);
                 Write(NESInstruction.DEX_impl);
                 Write(NESInstruction.BNE_rel, 0xF7);
                 Write(NESInstruction.LDA_zpg, PRG_FILEOFFS);
-                Write(NESInstruction.STA_abs, NESLib.NAMETABLE_A);
+                Write(NESInstruction.STA_abs, PPU_CTRL);
                 Write(NESInstruction.JMP_abs, updName);
                 Write(NESInstruction.RTS_impl);
                 break;
@@ -1141,8 +1149,8 @@ class NESWriter : IDisposable
                  * 83D7	8D0620        	STA $2006                     
                  * 83DA	60            	RTS
                  */
-                Write(NESInstruction.STX_abs, NESLib.NTADR_A(6, 0));
-                Write(NESInstruction.STA_abs, NESLib.NTADR_A(6, 0));
+                Write(NESInstruction.STX_abs, PPU_ADDR);
+                Write(NESInstruction.STA_abs, PPU_ADDR);
                 Write(NESInstruction.RTS_impl);
                 break;
             case nameof(NESLib.vram_put):
@@ -1150,7 +1158,7 @@ class NESWriter : IDisposable
                  * 83DB	8D0720        	STA $2007                     ; _vram_put
                  * 83DE	60            	RTS  
                  */
-                Write(NESInstruction.STA_abs, NESLib.NTADR_A(7, 0));
+                Write(NESInstruction.STA_abs, PPU_DATA);
                 Write(NESInstruction.RTS_impl);
                 break;
             case nameof(NESLib.vram_fill):
@@ -1179,14 +1187,14 @@ class NESWriter : IDisposable
                 Write(NESInstruction.LDX_zpg, 0x1A);
                 Write(NESInstruction.BEQ_rel, 0x0C);
                 Write(NESInstruction.LDX, 0x00);
-                Write(NESInstruction.STA_abs, NESLib.NTADR_A(7, 0));
+                Write(NESInstruction.STA_abs, PPU_DATA);
                 Write(NESInstruction.DEX_impl);
                 Write(NESInstruction.BNE_rel, 0xFA);
                 Write(NESInstruction.DEC_zpg, 0x1A);
                 Write(NESInstruction.BNE_rel, 0xF6);
                 Write(NESInstruction.LDX_zpg, 0x19);
                 Write(NESInstruction.BEQ_rel, 0x06);
-                Write(NESInstruction.STA_abs, NESLib.NTADR_A(7, 0));
+                Write(NESInstruction.STA_abs, PPU_DATA);
                 Write(NESInstruction.DEX_impl);
                 Write(NESInstruction.BNE_rel, 0xFA);
                 Write(NESInstruction.RTS_impl);
@@ -1212,7 +1220,7 @@ class NESWriter : IDisposable
                 Write(NESInstruction.AND, 0xFB);
                 Write(NESInstruction.ORA_zpg, TEMP);
                 Write(NESInstruction.STA_zpg, PRG_FILEOFFS);
-                Write(NESInstruction.STA_abs, NESLib.NAMETABLE_A);
+                Write(NESInstruction.STA_abs, PPU_CTRL);
                 Write(NESInstruction.RTS_impl);
                 break;
             case nameof(NESLib.nesclock):
