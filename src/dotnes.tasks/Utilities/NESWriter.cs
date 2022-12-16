@@ -337,28 +337,6 @@ class NESWriter : IDisposable
          * 8D 05 20
          * 8D 03 20
          * 4C 00 85
-         * 48
-         * 8A
-         * 48
-         * 98
-         * 48
-         * A5 12
-         * 29 18
-         * D0 03
-         * 4C E6 81
-         * A9 02
-         * 8D 14 40
-         * A5 07
-         * D0 03
-         * 4C C0 81
-         * A2 00
-         * 86 07
-         * A9 3F
-         * 8D 06 20
-         * 8E 06 20
-         * AC C0 01
-         * B1 08
-         * 8D 07 20
          */
         Write(NESInstruction.LDX, 0x34);
         Write(NESInstruction.LDY, 0x18);
@@ -375,15 +353,6 @@ class NESWriter : IDisposable
         Write(NESInstruction.STA_abs, PPU_SCROLL);
         Write(NESInstruction.STA_abs, PPU_OAM_ADDR);
         Write(NESInstruction.JMP_abs, 0x8500);
-        Write(NESInstruction.PHA_impl);
-        Write(NESInstruction.TXA_impl);
-        Write(NESInstruction.PHA_impl);
-        Write(NESInstruction.TYA_impl);
-        Write(NESInstruction.PHA_impl);
-        Write(NESInstruction.LDA_zpg, 0x12);
-        Write(NESInstruction.AND, 0x18);
-        Write(NESInstruction.BNE_rel, 0x03);
-        Write(NESInstruction.JMP_abs, 0x81E6);
     }
 
     /// <summary>
@@ -392,6 +361,7 @@ class NESWriter : IDisposable
     public void WriteBuiltIns()
     {
         WriteUnknownAssembly();
+        WriteBuiltIn("nmi");
         WriteBuiltIn("@doUpdate");
         WriteBuiltIn("@updPal");
         WriteBuiltIn("@updVRAM");
@@ -506,6 +476,30 @@ class NESWriter : IDisposable
     {
         switch (name)
         {
+            case "nmi":
+                /*
+                 * https://github.com/clbr/neslib/blob/d061b0f7f1a449941111c31eee0fc2e85b1826d7/neslib.sinc#L28
+                 * pha
+                 * txa
+                 * pha
+                 * tya
+                 * pha
+                 * 
+                 * lda <PPU_MASK_VAR	;if rendering is disabled, do not access the VRAM at all
+                 * and #%00011000
+                 * bne @doUpdate
+                 * jmp	@skipAll
+                 */
+                Write(NESInstruction.PHA_impl);
+                Write(NESInstruction.TXA_impl);
+                Write(NESInstruction.PHA_impl);
+                Write(NESInstruction.TYA_impl);
+                Write(NESInstruction.PHA_impl);
+                Write(NESInstruction.LDA_zpg, 0x12);
+                Write(NESInstruction.AND, 0x18);
+                Write(NESInstruction.BNE_rel, 0x03);
+                Write(NESInstruction.JMP_abs, 0x81E6);
+                break;
             case "@doUpdate":
                 /*
                  * https://github.com/clbr/neslib/blob/d061b0f7f1a449941111c31eee0fc2e85b1826d7/neslib.sinc#L40
