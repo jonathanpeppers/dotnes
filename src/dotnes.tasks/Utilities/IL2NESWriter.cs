@@ -48,6 +48,13 @@ class IL2NESWriter : NESWriter
             case ILOpCode.Ldc_i4_8:
                 WriteLdc(8, sizeOfMain);
                 break;
+            case ILOpCode.Stloc_0:
+                //TODO: do nothing
+                break;
+            case ILOpCode.Ldloc_0:
+                //TODO: not right?
+                A.Push(0);
+                break;
             default:
                 throw new NotImplementedException($"OpCode {code} with no operands is not implemented!");
         }
@@ -61,7 +68,14 @@ class IL2NESWriter : NESWriter
                 break;
             case ILOpCode.Ldc_i4:
             case ILOpCode.Ldc_i4_s:
-                WriteLdc(checked((byte)operand), sizeOfMain);
+                if (operand > byte.MaxValue)
+                {
+                    //TODO: do nothing?
+                }
+                else
+                {
+                    WriteLdc((byte)operand, sizeOfMain);
+                }
                 break;
             case ILOpCode.Br_s:
                 Write(NESInstruction.JMP_abs, checked((ushort)(byte.MaxValue - operand + 0x8540 - 1)));
@@ -142,6 +156,10 @@ class IL2NESWriter : NESWriter
                 return 0x834F;
             case nameof(ppu_on_all):
                 return 0x8289;
+            case nameof(pal_bg):
+                return 0x822B;
+            case nameof(vram_fill):
+                return 0x83DF;
             default:
                 throw new NotImplementedException($"Address for {name} is not implemented!");
         }

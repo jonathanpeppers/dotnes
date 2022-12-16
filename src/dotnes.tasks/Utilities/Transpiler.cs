@@ -134,14 +134,14 @@ class Transpiler : IDisposable
 
         foreach (var h in reader.MethodDefinitions)
         {
-            var method = reader.GetMethodDefinition(h);
-            if ((method.Attributes & MethodAttributes.Static) == 0)
+            var mainMethod = reader.GetMethodDefinition(h);
+            if ((mainMethod.Attributes & MethodAttributes.Static) == 0)
                 continue;
 
-            var methodName = reader.GetString(method.Name);
-            if (methodName == "Main" || methodName == "<Main>$")
+            var mainMethodName = reader.GetString(mainMethod.Name);
+            if (mainMethodName == "Main" || mainMethodName == "<Main>$")
             {
-                var body = pe.GetMethodBody(method.RelativeVirtualAddress);
+                var body = pe.GetMethodBody(mainMethod.RelativeVirtualAddress);
                 var blob = body.GetILReader();
 
                 while (blob.RemainingBytes > 0)
@@ -159,26 +159,33 @@ class Transpiler : IDisposable
                         case OperandType.Method:
                         case OperandType.Sig:
                         case OperandType.Tok:
-                            var member = MetadataTokens.EntityHandle(blob.ReadInt32());
-                            if (member.IsNil)
+                            var entity = MetadataTokens.EntityHandle(blob.ReadInt32());
+                            if (entity.IsNil)
                                 continue;
 
-                            switch (member.Kind)
+                            switch (entity.Kind)
                             {
                                 case HandleKind.TypeDefinition:
-                                    stringValue = reader.GetString(reader.GetTypeDefinition((TypeDefinitionHandle)member).Name);
+                                    stringValue = reader.GetString(reader.GetTypeDefinition((TypeDefinitionHandle)entity).Name);
                                     break;
                                 case HandleKind.TypeReference:
-                                    stringValue = reader.GetString(reader.GetTypeReference((TypeReferenceHandle)member).Name);
+                                    stringValue = reader.GetString(reader.GetTypeReference((TypeReferenceHandle)entity).Name);
                                     break;
                                 case HandleKind.MethodDefinition:
-                                    stringValue = reader.GetString(reader.GetMethodDefinition((MethodDefinitionHandle)member).Name);
+                                    var method = reader.GetMethodDefinition((MethodDefinitionHandle)entity);
+                                    stringValue = reader.GetString(method.Name);
                                     break;
                                 case HandleKind.MemberReference:
-                                    stringValue = reader.GetString(reader.GetMemberReference((MemberReferenceHandle)member).Name);
+                                    var member = reader.GetMemberReference((MemberReferenceHandle)entity);
+                                    stringValue = reader.GetString(member.Name);
+                                    if (stringValue == "InitializeArray")
+                                    {
+                                        // HACK: skip for now
+                                        continue;
+                                    }
                                     break;
                                 case HandleKind.FieldDefinition:
-                                    var field = reader.GetFieldDefinition((FieldDefinitionHandle)member);
+                                    var field = reader.GetFieldDefinition((FieldDefinitionHandle)entity);
                                     var fieldName = reader.GetString(field.Name);
                                     if ((field.Attributes & FieldAttributes.HasFieldRVA) != 0)
                                     {
