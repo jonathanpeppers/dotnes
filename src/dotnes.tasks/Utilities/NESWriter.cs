@@ -236,16 +236,16 @@ class NESWriter : IDisposable
         WriteBuiltIn(nameof(NESLib.vram_inc));
         WriteBuiltIn(nameof(NESLib.nesclock));
         WriteBuiltIn(nameof(NESLib.delay));
-        WriteBrightTable('L');
-        WriteBrightTable('0');
-        WriteBrightTable('1');
-        WriteBrightTable('2');
-        WriteBrightTable('3');
-        WriteBrightTable('4');
-        WriteBrightTable('5');
-        WriteBrightTable('6');
-        WriteBrightTable('7');
-        WriteBrightTable('8');
+        Write(NESLib.palBrightTableL);
+        Write(NESLib.palBrightTable0);
+        Write(NESLib.palBrightTable1);
+        Write(NESLib.palBrightTable2);
+        Write(NESLib.palBrightTable3);
+        Write(NESLib.palBrightTable4);
+        Write(NESLib.palBrightTable5);
+        Write(NESLib.palBrightTable6);
+        Write(NESLib.palBrightTable7);
+        Write(NESLib.palBrightTable8);
         WriteBuiltIn("initlib");
     }
 
@@ -1734,48 +1734,6 @@ class NESWriter : IDisposable
         Write(NESInstruction.PHA_impl);
         Write(NESInstruction.LDA, 0xFF);
         Write(NESInstruction.JMP_abs, skipNtsc);
-    }
-
-    /// <summary>
-    /// Writes
-    /// </summary>
-    public void WriteBrightTable(char id)
-    {
-        switch (id)
-        {
-            case 'L':
-                Write(NESLib.palBrightTableL);
-                break;
-            case '0':
-                Write(NESLib.palBrightTable0);
-                break;
-            case '1':
-                Write(NESLib.palBrightTable1);
-                break;
-            case '2':
-                Write(NESLib.palBrightTable2);
-                break;
-            case '3':
-                Write(NESLib.palBrightTable3);
-                break;
-            case '4':
-                Write(NESLib.palBrightTable4);
-                break;
-            case '5':
-                Write(NESLib.palBrightTable5);
-                break;
-            case '6':
-                Write(NESLib.palBrightTable6);
-                break;
-            case '7':
-                Write(NESLib.palBrightTable7);
-                break;
-            case '8':
-                Write(NESLib.palBrightTable8);
-                break;
-            default:
-                throw new NotImplementedException($"palBrightTable{id} is not implemented!");
-        }
     }
 
     /// <summary>
