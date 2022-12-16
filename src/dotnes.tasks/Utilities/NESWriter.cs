@@ -181,81 +181,6 @@ class NESWriter : IDisposable
     }
 
     /// <summary>
-    /// This is a segment of assembly and/or bytes that I don't really know what it is
-    /// </summary>
-    public void WriteUnknownAssembly()
-    {
-        /*
-         * 8A
-         * 95 00
-         */
-        Write(NESInstruction.TXA_impl);
-        Write(NESInstruction.STA_zpg_X, 0x00);
-
-        /*
-         * 9D 00 01
-         * 9D 00 02
-         * 9D 00 03
-         * 9D 00 04
-         * 9D 00 05
-         * 9D 00 06
-         * 9D 00 07
-         * E8
-         * D0 E6
-         * A9 04
-         * 20 79 82
-         * 20 4E 82
-         * 20 AE 82
-         * 20 CE 85
-         * 20 4F 85
-         * A9 00
-         * 85 22
-         * A9 08
-         * 85 23
-         * 20 F4 84
-         * A9 4C
-         * 85 14
-         * A9 10
-         * 85 15
-         * A9 82
-         * 85 16
-         * A9 80
-         * 85 10
-         * 8D 00 20
-         * A9 06
-         * 85 12
-         */
-        for (int i = 1; i <= 7; i++)
-        {
-            Write(NESInstruction.STA_abs_X, (ushort)(0x0100 * i));
-        }
-        Write(NESInstruction.INX_impl);
-        Write(NESInstruction.BNE_rel, 0xE6);
-        Write(NESInstruction.LDA, 0x04);
-        Write(NESInstruction.JSR, 0x8279);
-        Write(NESInstruction.JSR, 0x824E);
-        Write(NESInstruction.JSR, 0x82AE);
-        Write(NESInstruction.JSR, 0x85CE);
-        Write(NESInstruction.JSR, 0x854F);
-        Write(NESInstruction.LDA, 0x00);
-        Write(NESInstruction.STA_zpg, 0x22);
-        Write(NESInstruction.LDA, PAL_BG_PTR);
-        Write(NESInstruction.STA_zpg, 0x23);
-        Write(NESInstruction.JSR, 0x84F4);
-        Write(NESInstruction.LDA, 0x4C);
-        Write(NESInstruction.STA_zpg, 0x14);
-        Write(NESInstruction.LDA, 0x10);
-        Write(NESInstruction.STA_zpg, 0x15);
-        Write(NESInstruction.LDA, 0x82);
-        Write(NESInstruction.STA_zpg, 0x16);
-        Write(NESInstruction.LDA, 0x80);
-        Write(NESInstruction.STA_zpg, 0x10);
-        Write(NESInstruction.STA_abs, PPU_CTRL);
-        Write(NESInstruction.LDA, 0x06);
-        Write(NESInstruction.STA_zpg, 0x12);
-    }
-
-    /// <summary>
     /// Writes all the built-in methods from NESLib
     /// </summary>
     public void WriteBuiltIns()
@@ -264,7 +189,7 @@ class NESWriter : IDisposable
         WriteBuiltIn("initPPU");
         WriteBuiltIn("clearPalette");
         WriteBuiltIn("clearVRAM");
-        WriteUnknownAssembly();
+        WriteBuiltIn("clearRAM");
         WriteBuiltIn("waitSync3");
         WriteBuiltIn("detectNTSC");
         WriteBuiltIn("nmi");
@@ -471,6 +396,75 @@ class NESWriter : IDisposable
                 Write(NESInstruction.BNE_rel, 0xFA);
                 Write(NESInstruction.DEY_impl);
                 Write(NESInstruction.BNE_rel, 0xF7);
+                break;
+            case "clearRAM":
+                /*
+                 * https://github.com/clbr/neslib/blob/d061b0f7f1a449941111c31eee0fc2e85b1826d7/crt0.s#L161
+                 * clearRAM:
+                 *     txa
+                 * @1:
+                 *     sta $000,x
+                 *     sta $100,x
+                 *     sta $200,x
+                 *     sta $300,x
+                 *     sta $400,x
+                 *     sta $500,x
+                 *     sta $600,x
+                 *     sta $700,x
+                 *     inx
+                 *     bne @1
+                 * 
+                 *     lda #4
+                 *     jsr _pal_bright
+                 *     jsr _pal_clear
+                 *     jsr _oam_clear
+                 * 
+                 *     jsr	zerobss
+                 *     jsr	copydata
+                 * 
+                 *     lda #<(__RAM_START__+__RAM_SIZE__)
+                 *     sta	sp
+                 *     lda	#>(__RAM_START__+__RAM_SIZE__)
+                 *     sta	sp+1            ; Set argument stack ptr
+                 * 
+                 *     jsr	initlib
+                 * 
+                 *     lda #%10000000
+                 *     sta <PPU_CTRL_VAR
+                 *     sta PPU_CTRL		;enable NMI
+                 *     lda #%00000110
+                 *     sta <PPU_MASK_VAR
+                 */
+                Write(NESInstruction.TXA_impl);
+                Write(NESInstruction.STA_zpg_X, 0x00);
+                for (int i = 1; i <= 7; i++)
+                {
+                    Write(NESInstruction.STA_abs_X, (ushort)(0x0100 * i));
+                }
+                Write(NESInstruction.INX_impl);
+                Write(NESInstruction.BNE_rel, 0xE6);
+                Write(NESInstruction.LDA, 0x04);
+                Write(NESInstruction.JSR, 0x8279);
+                Write(NESInstruction.JSR, 0x824E);
+                Write(NESInstruction.JSR, 0x82AE);
+                Write(NESInstruction.JSR, 0x85CE);
+                Write(NESInstruction.JSR, 0x854F);
+                Write(NESInstruction.LDA, 0x00);
+                Write(NESInstruction.STA_zpg, sp);
+                Write(NESInstruction.LDA, PAL_BG_PTR);
+                Write(NESInstruction.STA_zpg, sp + 1);
+                Write(NESInstruction.JSR, 0x84F4);
+                Write(NESInstruction.LDA, 0x4C);
+                Write(NESInstruction.STA_zpg, 0x14);
+                Write(NESInstruction.LDA, 0x10);
+                Write(NESInstruction.STA_zpg, 0x15);
+                Write(NESInstruction.LDA, 0x82);
+                Write(NESInstruction.STA_zpg, 0x16);
+                Write(NESInstruction.LDA, 0x80);
+                Write(NESInstruction.STA_zpg, 0x10);
+                Write(NESInstruction.STA_abs, PPU_CTRL);
+                Write(NESInstruction.LDA, 0x06);
+                Write(NESInstruction.STA_zpg, 0x12);
                 break;
             case "waitSync3":
                 // https://github.com/clbr/neslib/blob/d061b0f7f1a449941111c31eee0fc2e85b1826d7/crt0.s#L197
