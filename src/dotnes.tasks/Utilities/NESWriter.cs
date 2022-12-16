@@ -320,39 +320,6 @@ class NESWriter : IDisposable
         Write(NESInstruction.LDA_zpg, STARTUP);
         Write(NESInstruction.CMP_zpg, STARTUP);
         Write(NESInstruction.BEQ_rel, 0xFC);
-
-        /*
-         * A2 34
-         * A0 18
-         * CA
-         * D0 FD
-         * 88
-         * D0 FA
-         * AD 02 20
-         * 29 80
-         * 85 00
-         * 20 80 82
-         * A9 00
-         * 8D 05 20
-         * 8D 05 20
-         * 8D 03 20
-         * 4C 00 85
-         */
-        Write(NESInstruction.LDX, 0x34);
-        Write(NESInstruction.LDY, 0x18);
-        Write(NESInstruction.DEX_impl);
-        Write(NESInstruction.BNE_rel, 0xFD);
-        Write(NESInstruction.DEY_impl);
-        Write(NESInstruction.BNE_rel, 0xFA);
-        Write(NESInstruction.LDA_abs, PPU_STATUS);
-        Write(NESInstruction.AND, 0x80);
-        Write(NESInstruction.STA_zpg, 0x00);
-        Write(NESInstruction.JSR, 0x8280);
-        Write(NESInstruction.LDA, 0x00);
-        Write(NESInstruction.STA_abs, PPU_SCROLL);
-        Write(NESInstruction.STA_abs, PPU_SCROLL);
-        Write(NESInstruction.STA_abs, PPU_OAM_ADDR);
-        Write(NESInstruction.JMP_abs, 0x8500);
     }
 
     /// <summary>
@@ -361,6 +328,7 @@ class NESWriter : IDisposable
     public void WriteBuiltIns()
     {
         WriteUnknownAssembly();
+        WriteBuiltIn("detectNTSC");
         WriteBuiltIn("nmi");
         WriteBuiltIn("@doUpdate");
         WriteBuiltIn("@updPal");
@@ -476,6 +444,41 @@ class NESWriter : IDisposable
     {
         switch (name)
         {
+            case "detectNTSC":
+                // https://github.com/clbr/neslib/blob/d061b0f7f1a449941111c31eee0fc2e85b1826d7/crt0.s#L203
+                /*
+                 * A2 34
+                 * A0 18
+                 * CA
+                 * D0 FD
+                 * 88
+                 * D0 FA
+                 * AD 02 20
+                 * 29 80
+                 * 85 00
+                 * 20 80 82
+                 * A9 00
+                 * 8D 05 20
+                 * 8D 05 20
+                 * 8D 03 20
+                 * 4C 00 85
+                 */
+                Write(NESInstruction.LDX, 0x34);
+                Write(NESInstruction.LDY, 0x18);
+                Write(NESInstruction.DEX_impl);
+                Write(NESInstruction.BNE_rel, 0xFD);
+                Write(NESInstruction.DEY_impl);
+                Write(NESInstruction.BNE_rel, 0xFA);
+                Write(NESInstruction.LDA_abs, PPU_STATUS);
+                Write(NESInstruction.AND, 0x80);
+                Write(NESInstruction.STA_zpg, 0x00);
+                Write(NESInstruction.JSR, 0x8280);
+                Write(NESInstruction.LDA, 0x00);
+                Write(NESInstruction.STA_abs, PPU_SCROLL);
+                Write(NESInstruction.STA_abs, PPU_SCROLL);
+                Write(NESInstruction.STA_abs, PPU_OAM_ADDR);
+                Write(NESInstruction.JMP_abs, 0x8500);
+                break;
             case "nmi":
                 /*
                  * https://github.com/clbr/neslib/blob/d061b0f7f1a449941111c31eee0fc2e85b1826d7/neslib.sinc#L28
