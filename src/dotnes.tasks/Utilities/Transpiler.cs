@@ -68,6 +68,10 @@ class Transpiler : IDisposable
             {
                 writer.Write(instruction.OpCode, instruction.String, sizeOfMain);
             }
+            else if (instruction.Bytes != null)
+            {
+                writer.Write(instruction.OpCode, instruction.Bytes);
+            }
             else
             {
                 writer.Write(instruction.OpCode, sizeOfMain);
@@ -126,6 +130,8 @@ class Transpiler : IDisposable
     /// </summary>
     public IEnumerable<ILInstruction> ReadStaticVoidMain()
     {
+        var arrayValues = GetArrayValues(reader);
+
         foreach (var h in reader.MethodDefinitions)
         {
             var method = reader.GetMethodDefinition(h);
@@ -145,6 +151,7 @@ class Transpiler : IDisposable
                     OperandType operandType = GetOperandType(opCode);
                     string? stringValue = null;
                     int? intValue = null;
+                    ImmutableArray<byte>? byteValue = null;
 
                     switch (operandType)
                     {
@@ -171,8 +178,17 @@ class Transpiler : IDisposable
                                     stringValue = reader.GetString(reader.GetMemberReference((MemberReferenceHandle)member).Name);
                                     break;
                                 case HandleKind.FieldDefinition:
-                                    stringValue = reader.GetString(reader.GetFieldDefinition((FieldDefinitionHandle)member).Name);
-                                    break;
+                                    var field = reader.GetFieldDefinition((FieldDefinitionHandle)member);
+                                    var fieldName = reader.GetString(field.Name);
+                                    if ((field.Attributes & FieldAttributes.HasFieldRVA) != 0)
+                                    {
+                                        if (arrayValues.TryGetValue (fieldName, out var value))
+                                        {
+                                            byteValue = value.Value;
+                                            break;
+                                        }
+                                    }
+                                    throw new NotImplementedException($"Reading fields like {fieldName} is not implemented!");
                             }
                             break;
                         // 64-bit
@@ -210,10 +226,43 @@ class Transpiler : IDisposable
                             throw new NotSupportedException($"{opCode}, OperandType={operandType} is not supported.");
                     }
 
-                    yield return new ILInstruction(opCode, intValue, stringValue);
+                    yield return new ILInstruction(opCode, intValue, stringValue, byteValue);
                 }
             }
         }
+    }
+
+    Dictionary<string, ArrayValue> GetArrayValues(MetadataReader reader)
+    {
+        var dictionary = new Dictionary<string, ArrayValue>(StringComparer.Ordinal);
+
+        foreach (var t in reader.TypeDefinitions)
+        {
+            var type = reader.GetTypeDefinition(t);
+            var ns = reader.GetString(type.Namespace);
+            if (!string.IsNullOrEmpty(ns))
+                continue;
+
+            var typeName = reader.GetString(type.Name);
+            if (typeName == "<PrivateImplementationDetails>")
+            {
+                foreach (var f in type.GetFields())
+                {
+                    var field = reader.GetFieldDefinition(f);
+                    var fieldName = reader.GetString(field.Name);
+                    if ((field.Attributes & FieldAttributes.HasFieldRVA) != 0)
+                    {
+                        int rva = field.GetRelativeVirtualAddress();
+                        int size = field.DecodeSignature(new FieldSizeDecoder(), default);
+                        var sectionData = pe.GetSectionData(rva);
+                        dictionary.Add(fieldName, new ArrayValue(fieldName, sectionData, size));
+                    }
+                }
+                break;
+            }
+        }
+
+        return dictionary;
     }
 
     static ILOpCode DecodeOpCode(ref BlobReader blob)

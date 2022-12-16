@@ -1,5 +1,5 @@
-﻿using System.Reflection.Metadata;
-using System.Reflection.Metadata.Ecma335;
+﻿using System.Collections.Immutable;
+using System.Reflection.Metadata;
 using static NES.NESLib;
 
 namespace dotnes;
@@ -114,6 +114,19 @@ class IL2NESWriter : NESWriter
                 break;
             default:
                 throw new NotImplementedException($"OpCode {code} with String operand is not implemented!");
+        }
+    }
+
+    public void Write(ILOpCode code, ImmutableArray<byte>? operand)
+    {
+        if (operand == null)
+            throw new ArgumentNullException(nameof(operand));
+        switch (code)
+        {
+            case ILOpCode.Ldtoken:
+                break;
+            default:
+                throw new NotImplementedException($"OpCode {code} with byte[] operand is not implemented!");
         }
     }
 
