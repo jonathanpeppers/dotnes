@@ -233,6 +233,10 @@ enum NESInstruction : byte
     /// 9D: Store Accumulator in Memory
     /// </summary>
     STA_abs_X = 0x9D,
+    /// <summary>
+    /// Transfer Index X to Stack Register
+    /// </summary>
+    TXS_impl = 0x9A,
 
     // A
 
