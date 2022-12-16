@@ -186,14 +186,6 @@ class NESWriter : IDisposable
     public void WriteUnknownAssembly()
     {
         /*
-         * A9 3F
-         * 8D 06 20
-         * 8E 06 20
-         * A9 0F
-         * A2 20
-         * 8D 07 20
-         * CA
-         * D0 FA
          * 8A
          * A0 20
          * 8C 06 20
@@ -207,16 +199,6 @@ class NESWriter : IDisposable
          * 8A
          * 95 00
          */
-        WriteBuiltIn("_exit");
-        WriteBuiltIn("initPPU");
-        Write(NESInstruction.LDA, 0x3F);
-        Write(NESInstruction.STA_abs, PPU_ADDR);
-        Write(NESInstruction.STX_abs, PPU_ADDR);
-        Write(NESInstruction.LDA, 0x0F);
-        Write(NESInstruction.LDX, 0x20);
-        Write(NESInstruction.STA_abs, PPU_DATA);
-        Write(NESInstruction.DEX_impl);
-        Write(NESInstruction.BNE_rel, 0xFA);
         Write(NESInstruction.TXA_impl);
         Write(NESInstruction.LDY, 0x20);
         Write(NESInstruction.STY_abs, PPU_ADDR);
@@ -298,6 +280,9 @@ class NESWriter : IDisposable
     /// </summary>
     public void WriteBuiltIns()
     {
+        WriteBuiltIn("_exit");
+        WriteBuiltIn("initPPU");
+        WriteBuiltIn("clearPalette");
         WriteUnknownAssembly();
         WriteBuiltIn("waitSync3");
         WriteBuiltIn("detectNTSC");
@@ -457,6 +442,28 @@ class NESWriter : IDisposable
                 Write(NESInstruction.BPL, 0xFB);
                 Write(NESInstruction.LDA, 0x40);
                 Write(NESInstruction.STA_abs, PPU_FRAMECNT);
+                break;
+            case "clearPalette":
+                /*
+                 * https://github.com/clbr/neslib/blob/d061b0f7f1a449941111c31eee0fc2e85b1826d7/crt0.s#L135
+                 *     lda #$3f
+                 *     sta PPU_ADDR
+                 *     stx PPU_ADDR
+                 *     lda #$0f
+                 *     ldx #$20
+                 * @1:
+                 *     sta PPU_DATA
+                 *     dex
+                 *     bne @1
+                 */
+                Write(NESInstruction.LDA, 0x3F);
+                Write(NESInstruction.STA_abs, PPU_ADDR);
+                Write(NESInstruction.STX_abs, PPU_ADDR);
+                Write(NESInstruction.LDA, 0x0F);
+                Write(NESInstruction.LDX, 0x20);
+                Write(NESInstruction.STA_abs, PPU_DATA);
+                Write(NESInstruction.DEX_impl);
+                Write(NESInstruction.BNE_rel, 0xFA);
                 break;
             case "waitSync3":
                 // https://github.com/clbr/neslib/blob/d061b0f7f1a449941111c31eee0fc2e85b1826d7/crt0.s#L197
