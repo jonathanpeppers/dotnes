@@ -302,7 +302,7 @@ class NESWriter : IDisposable
         Write(NESInstruction.JSR, 0x854F);
         Write(NESInstruction.LDA, 0x00);
         Write(NESInstruction.STA_zpg, 0x22);
-        Write(NESInstruction.LDA, 0x08);
+        Write(NESInstruction.LDA, PAL_BG_PTR);
         Write(NESInstruction.STA_zpg, 0x23);
         Write(NESInstruction.JSR, 0x84F4);
         Write(NESInstruction.LDA, 0x4C);
@@ -394,7 +394,7 @@ class NESWriter : IDisposable
         Write(NESInstruction.STA_abs, PPU_ADDR);
         Write(NESInstruction.STX_abs, PPU_ADDR);
         Write(NESInstruction.LDY_abs, PAL_BUF);
-        Write(NESInstruction.LDA_ind_Y, 0x08);
+        Write(NESInstruction.LDA_ind_Y, PAL_BG_PTR);
         Write(NESInstruction.STA_abs, PPU_DATA);
 
         /*
@@ -435,37 +435,37 @@ class NESWriter : IDisposable
          */
         Write(NESInstruction.TAX_impl);
         Write(NESInstruction.LDY_abs, PAL_BUF + 1);
-        Write(NESInstruction.LDA_ind_Y, 0x08);
+        Write(NESInstruction.LDA_ind_Y, PAL_BG_PTR);
         Write(NESInstruction.STA_abs, PPU_DATA);
         Write(NESInstruction.LDY_abs, PAL_BUF + 2);
-        Write(NESInstruction.LDA_ind_Y, 0x08);
+        Write(NESInstruction.LDA_ind_Y, PAL_BG_PTR);
         Write(NESInstruction.STA_abs, PPU_DATA);
         Write(NESInstruction.LDY_abs, PAL_BUF + 3);
-        Write(NESInstruction.LDA_ind_Y, 0x08);
+        Write(NESInstruction.LDA_ind_Y, PAL_BG_PTR);
         Write(NESInstruction.STA_abs, PPU_DATA);
         Write(NESInstruction.STX_abs, PPU_DATA);
         Write(NESInstruction.LDY_abs, PAL_BUF + 5);
-        Write(NESInstruction.LDA_ind_Y, 0x08);
+        Write(NESInstruction.LDA_ind_Y, PAL_BG_PTR);
         Write(NESInstruction.STA_abs, PPU_DATA);
         Write(NESInstruction.LDY_abs, PAL_BUF + 6);
-        Write(NESInstruction.LDA_ind_Y, 0x08);
+        Write(NESInstruction.LDA_ind_Y, PAL_BG_PTR);
         Write(NESInstruction.STA_abs, PPU_DATA);
         Write(NESInstruction.LDY_abs, PAL_BUF + 7);
-        Write(NESInstruction.LDA_ind_Y, 0x08);
+        Write(NESInstruction.LDA_ind_Y, PAL_BG_PTR);
         Write(NESInstruction.STA_abs, PPU_DATA);
         Write(NESInstruction.STX_abs, PPU_DATA);
         Write(NESInstruction.LDY_abs, PAL_BUF + 9);
-        Write(NESInstruction.LDA_ind_Y, 0x08);
+        Write(NESInstruction.LDA_ind_Y, PAL_BG_PTR);
         Write(NESInstruction.STA_abs, PPU_DATA);
         Write(NESInstruction.LDY_abs, PAL_BUF + 10);
-        Write(NESInstruction.LDA_ind_Y, 0x08);
+        Write(NESInstruction.LDA_ind_Y, PAL_BG_PTR);
         Write(NESInstruction.STA_abs, PPU_DATA);
         Write(NESInstruction.LDY_abs, PAL_BUF + 11);
-        Write(NESInstruction.LDA_ind_Y, 0x08);
+        Write(NESInstruction.LDA_ind_Y, PAL_BG_PTR);
         Write(NESInstruction.STA_abs, PPU_DATA);
         Write(NESInstruction.STX_abs, PPU_DATA);
         Write(NESInstruction.LDY_abs, PAL_BUF + 13);
-        Write(NESInstruction.LDA_ind_Y, 0x08);
+        Write(NESInstruction.LDA_ind_Y, PAL_BG_PTR);
         Write(NESInstruction.STA_abs, PPU_DATA);
     }
 
@@ -495,7 +495,7 @@ class NESWriter : IDisposable
          */
 
         Write(NESInstruction.LDY_abs, PAL_BUF + 14);
-        Write(NESInstruction.LDA_ind_Y, 0x08);
+        Write(NESInstruction.LDA_ind_Y, PAL_BG_PTR);
         Write(NESInstruction.STA_abs, PPU_DATA);
         Write(NESInstruction.LDY_abs, 0x01CF);
         Write(NESInstruction.LDA_ind_Y, PAL_BG_PTR);
@@ -993,7 +993,7 @@ class NESWriter : IDisposable
                  * 8296	D0F5          	BNE ppu_onoff 
                  */
                 Write(NESInstruction.LDA_zpg, PPU_MASK_VAR);
-                Write(NESInstruction.ORA, 0x08);
+                Write(NESInstruction.ORA, PAL_BG_PTR);
                 Write(NESInstruction.BNE_rel, 0xF5);
                 break;
             case nameof(NESLib.ppu_on_spr):
@@ -1191,7 +1191,7 @@ class NESWriter : IDisposable
                 Write(NESInstruction.BNE_rel, 0x0E);
                 Write(NESInstruction.LDA_zpg, TEMP);
                 Write(NESInstruction.CMP, 0xF0);
-                Write(NESInstruction.BCS, 0x08);
+                Write(NESInstruction.BCS, PAL_BG_PTR);
                 Write(NESInstruction.STA_zpg, SCROLL_Y);
                 Write(NESInstruction.LDA, 0x00);
                 Write(NESInstruction.STA_zpg, TEMP);
@@ -1368,7 +1368,7 @@ class NESWriter : IDisposable
                 Write(NESInstruction.TAX_impl);
                 Write(NESInstruction.LDA_zpg, PRG_FILEOFFS);
                 Write(NESInstruction.CPX, 0x80);
-                Write(NESInstruction.BCC, 0x08);
+                Write(NESInstruction.BCC, PAL_BG_PTR);
                 Write(NESInstruction.CPX, 0xFF);
                 Write(NESInstruction.BEQ_rel, 0x2A);
 
