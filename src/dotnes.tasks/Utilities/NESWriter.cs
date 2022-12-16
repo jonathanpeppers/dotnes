@@ -285,9 +285,6 @@ class NESWriter : IDisposable
          * 8D 00 20
          * A9 06
          * 85 12
-         * A5 01
-         * C5 01
-         * F0 FC
          */
         for (int i = 1; i <= 7; i++)
         {
@@ -317,9 +314,6 @@ class NESWriter : IDisposable
         Write(NESInstruction.STA_abs, PPU_CTRL);
         Write(NESInstruction.LDA, 0x06);
         Write(NESInstruction.STA_zpg, 0x12);
-        Write(NESInstruction.LDA_zpg, STARTUP);
-        Write(NESInstruction.CMP_zpg, STARTUP);
-        Write(NESInstruction.BEQ_rel, 0xFC);
     }
 
     /// <summary>
@@ -328,6 +322,7 @@ class NESWriter : IDisposable
     public void WriteBuiltIns()
     {
         WriteUnknownAssembly();
+        WriteBuiltIn("waitSync3");
         WriteBuiltIn("detectNTSC");
         WriteBuiltIn("nmi");
         WriteBuiltIn("@doUpdate");
@@ -444,6 +439,12 @@ class NESWriter : IDisposable
     {
         switch (name)
         {
+            case "waitSync3":
+                // https://github.com/clbr/neslib/blob/d061b0f7f1a449941111c31eee0fc2e85b1826d7/crt0.s#L197
+                Write(NESInstruction.LDA_zpg, STARTUP);
+                Write(NESInstruction.CMP_zpg, STARTUP);
+                Write(NESInstruction.BEQ_rel, 0xFC);
+                break;
             case "detectNTSC":
                 // https://github.com/clbr/neslib/blob/d061b0f7f1a449941111c31eee0fc2e85b1826d7/crt0.s#L203
                 /*
