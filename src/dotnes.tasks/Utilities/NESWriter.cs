@@ -50,6 +50,7 @@ class NESWriter : IDisposable
     protected const ushort PPU_SCROLL = 0x2005;
     protected const ushort PPU_ADDR = 0x2006;
     protected const ushort PPU_DATA = 0x2007;
+    protected const ushort PPU_OAM_DMA = 0x4014;
     protected const ushort skipNtsc = 0x81F9;
     protected const ushort pal_col = 0x823E;
     protected const ushort vram_adr = 0x83D4;
@@ -383,11 +384,6 @@ class NESWriter : IDisposable
         Write(NESInstruction.AND, 0x18);
         Write(NESInstruction.BNE_rel, 0x03);
         Write(NESInstruction.JMP_abs, 0x81E6);
-        Write(NESInstruction.LDA, 0x02);
-        Write(NESInstruction.STA_abs, 0x4014);
-        Write(NESInstruction.LDA_zpg, PAL_UPDATE);
-        Write(NESInstruction.BNE_rel, 0x03);
-        Write(NESInstruction.JMP_abs, 0x81C0);
     }
 
     /// <summary>
@@ -396,6 +392,7 @@ class NESWriter : IDisposable
     public void WriteBuiltIns()
     {
         WriteUnknownAssembly();
+        WriteBuiltIn("@doUpdate");
         WriteBuiltIn("@updPal");
         WriteBuiltIn("@updVRAM");
         WriteBuiltIn("@skipUpd");
@@ -509,9 +506,25 @@ class NESWriter : IDisposable
     {
         switch (name)
         {
-            case "@updPal":
-                // https://github.com/clbr/neslib/blob/d061b0f7f1a449941111c31eee0fc2e85b1826d7/neslib.sinc#L49
+            case "@doUpdate":
                 /*
+                 * https://github.com/clbr/neslib/blob/d061b0f7f1a449941111c31eee0fc2e85b1826d7/neslib.sinc#L40
+                 * lda #>OAM_BUF		;update OAM
+                 * sta PPU_OAM_DMA
+                 * 
+                 * lda <PAL_UPDATE		;update palette if needed
+                 * bne @updPal
+                 * jmp @updVRAM
+                 */
+                Write(NESInstruction.LDA, 0x02);
+                Write(NESInstruction.STA_abs, PPU_OAM_DMA);
+                Write(NESInstruction.LDA_zpg, PAL_UPDATE);
+                Write(NESInstruction.BNE_rel, 0x03);
+                Write(NESInstruction.JMP_abs, 0x81C0);
+                break;
+            case "@updPal":
+                /*
+                 * https://github.com/clbr/neslib/blob/d061b0f7f1a449941111c31eee0fc2e85b1826d7/neslib.sinc#L49
                  * ldx #0
                  * stx <PAL_UPDATE
                  * 
