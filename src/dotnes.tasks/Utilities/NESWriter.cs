@@ -246,7 +246,7 @@ class NESWriter : IDisposable
         Write(NESLib.palBrightTable6);
         Write(NESLib.palBrightTable7);
         Write(NESLib.palBrightTable8);
-        WriteBuiltIn("initlib");
+        Write_initlib();
     }
 
     public void WriteDestructorTable()
@@ -290,14 +290,14 @@ class NESWriter : IDisposable
     /// </summary>
     public void WriteFinalBuiltIns()
     {
-        WriteBuiltIn("donelib");
-        WriteBuiltIn("copydata");
-        WriteBuiltIn(nameof(popax));
-        WriteBuiltIn("incsp2");
-        WriteBuiltIn(nameof(popa));
-        WriteBuiltIn(nameof(pusha));
-        WriteBuiltIn(nameof(pushax));
-        WriteBuiltIn("zerobss");
+        Write_donelib();
+        Write_copydata();
+        Write_popax();
+        Write_incsp2();
+        Write_popa();
+        Write_pusha();
+        Write_pushax();
+        Write_zerobss();
     }
 
     /// <summary>
@@ -1026,250 +1026,6 @@ class NESWriter : IDisposable
                 Write(NESInstruction.BNE_rel, 0xFA);
                 Write(NESInstruction.RTS_impl);
                 break;
-            case "initlib": // I think this is some internal thing
-                /*
-                 * 84F4	A000          	LDY #$00                      ; initlib
-                 * 84F6	F007          	BEQ $84FF                     
-                 * 84F8	A900          	LDA #$00                      
-                 * 84FA	A285          	LDX #$85                      
-                 * 84FC	4C0003        	JMP condes                    
-                 * 84FF	60            	RTS
-                 */
-                Write(NESInstruction.LDY, 0x00);
-                Write(NESInstruction.BEQ_rel, PAL_UPDATE);
-                Write(NESInstruction.LDA, 0x00);
-                Write(NESInstruction.LDX, 0x85);
-                Write(NESInstruction.JMP_abs, condes);
-                Write(NESInstruction.RTS_impl);
-                break;
-            case "donelib":
-                /*
-                 * 8546	A000          	LDY #$00                      ; donelib
-                 * 8548	F007          	BEQ $8551                     
-                 * 854A	A902          	LDA #$02                      
-                 * 854C	A286          	LDX #$86                      
-                 * 854E	4C0003        	JMP condes                    
-                 * 8551	60            	RTS
-                 */
-                Write(NESInstruction.LDY, 0x00);
-                Write(NESInstruction.BEQ_rel, PAL_UPDATE);
-                Write(NESInstruction.LDA, 0xFE);
-                Write(NESInstruction.LDX, 0x85);
-                Write(NESInstruction.JMP_abs, condes);
-                Write(NESInstruction.RTS_impl);
-                break;
-            case "copydata":
-                /*
-                 * 8552	A902          	LDA #$02                      ; copydata
-                 * 8554	852A          	STA ptr1                      
-                 * 8556	A986          	LDA #$86                      
-                 * 8558	852B          	STA ptr1+1                    
-                 * 855A	A900          	LDA #$00                      
-                 * 855C	852C          	STA ptr2                      
-                 * 855E	A903          	LDA #$03                      
-                 * 8560	852D          	STA ptr2+1                    
-                 * 8562	A2DA          	LDX #$DA                      
-                 * 8564	A9FF          	LDA #$FF                      
-                 * 8566	8532          	STA tmp1                      
-                 * 8568	A000          	LDY #$00                      
-                 * 856A	E8            	INX                           
-                 * 856B	F00D          	BEQ $857A                     
-                 * 856D	B12A          	LDA (ptr1),y                  
-                 * 856F	912C          	STA (ptr2),y                  
-                 * 8571	C8            	INY                           
-                 * 8572	D0F6          	BNE $856A                     
-                 * 8574	E62B          	INC ptr1+1                    
-                 * 8576	E62D          	INC ptr2+1                    
-                 * 8578	D0F0          	BNE $856A                     
-                 * 857A	E632          	INC tmp1                      
-                 * 857C	D0EF          	BNE $856D                     
-                 * 857E	60            	RTS
-                 */
-                Write(NESInstruction.LDA, 0xFE);
-                Write(NESInstruction.STA_zpg, ptr1);
-                Write(NESInstruction.LDA, 0x85);
-                Write(NESInstruction.STA_zpg, ptr1 + 1);
-                Write(NESInstruction.LDA, 0x00);
-                Write(NESInstruction.STA_zpg, ptr2);
-                Write(NESInstruction.LDA, 0x03);
-                Write(NESInstruction.STA_zpg, ptr2 + 1);
-                Write(NESInstruction.LDX, 0xDA);
-                Write(NESInstruction.LDA, 0xFF);
-                Write(NESInstruction.STA_zpg, tmp1);
-                Write(NESInstruction.LDY, 0x00);
-                Write(NESInstruction.INX_impl);
-                Write(NESInstruction.BEQ_rel, 0x0D);
-                Write(NESInstruction.LDA_ind_Y, ptr1);
-                Write(NESInstruction.STA_ind_Y, ptr2);
-                Write(NESInstruction.INY_impl);
-                Write(NESInstruction.BNE_rel, 0xF6);
-                Write(NESInstruction.INC_zpg, ptr1 + 1);
-                Write(NESInstruction.INC_zpg, ptr2 + 1);
-                Write(NESInstruction.BNE_rel, 0xF0);
-                Write(NESInstruction.INC_zpg, tmp1);
-                Write(NESInstruction.BNE_rel, 0xEF);
-                Write(NESInstruction.RTS_impl);
-                break;
-            case nameof(popax):
-                /*
-                 * 857F	A001          	LDY #$01                      ; popax
-                 * 8581	B122          	LDA (sp),y                    
-                 * 8583	AA            	TAX                           
-                 * 8584	88            	DEY                           
-                 * 8585	B122          	LDA (sp),y
-                 */
-                Write(NESInstruction.LDY, 0x01);
-                Write(NESInstruction.LDA_ind_Y, sp);
-                Write(NESInstruction.TAX_impl);
-                Write(NESInstruction.DEY_impl);
-                Write(NESInstruction.LDA_ind_Y, sp);
-                break;
-            case "incsp2":
-                /*
-                 * 8587	E622          	INC sp                        ; incsp2
-                 * 8589	F005          	BEQ $8590                     
-                 * 858B	E622          	INC sp                        
-                 * 858D	F003          	BEQ $8592                     
-                 * 858F	60            	RTS                           
-                 * 8590	E622          	INC sp                        
-                 * 8592	E623          	INC sp+1                      
-                 * 8594	60            	RTS
-                 */
-                Write(NESInstruction.INC_zpg, sp);
-                Write(NESInstruction.BEQ_rel, 0x05);
-                Write(NESInstruction.INC_zpg, sp);
-                Write(NESInstruction.BEQ_rel, 0x03);
-                Write(NESInstruction.RTS_impl);
-                Write(NESInstruction.INC_zpg, sp);
-                Write(NESInstruction.INC_zpg, sp + 1);
-                Write(NESInstruction.RTS_impl);
-                break;
-            case nameof(popa):
-                /*
-                 * 8595	A000          	LDY #$00                      ; popa
-                 * 8597	B122          	LDA (sp),y                    
-                 * 8599	E622          	INC sp                        
-                 * 859B	F001          	BEQ $859E                     
-                 * 859D	60            	RTS                           
-                 * 859E	E623          	INC sp+1                      
-                 * 85A0	60            	RTS   
-                 */
-                Write(NESInstruction.LDY, 0x00);
-                Write(NESInstruction.LDA_ind_Y, sp);
-                Write(NESInstruction.INC_zpg, sp);
-                Write(NESInstruction.BEQ_rel, 0x01);
-                Write(NESInstruction.RTS_impl);
-                Write(NESInstruction.INC_zpg, sp + 1);
-                Write(NESInstruction.RTS_impl);
-                break;
-            case nameof(pusha):
-                /*
-                 * 85A1	A000          	LDY #$00                      ; pusha0sp
-                 * 85A3	B122          	LDA (sp),y                    ; pushaysp
-                 * 85A5	A422          	LDY sp                        ; pusha
-                 * 85A7	F007          	BEQ $85B0                     
-                 * 85A9	C622          	DEC sp                        
-                 * 85AB	A000          	LDY #$00                      
-                 * 85AD	9122          	STA (sp),y                    
-                 * 85AF	60            	RTS                           
-                 * 85B0	C623          	DEC sp+1                      
-                 * 85B2	C622          	DEC sp                        
-                 * 85B4	9122          	STA (sp),y                    
-                 * 85B6	60            	RTS
-                */
-                Write(NESInstruction.LDY, 0x00);
-                Write(NESInstruction.LDA_ind_Y, sp);
-                Write(NESInstruction.LDY_zpg, sp);
-                Write(NESInstruction.BEQ_rel, PAL_UPDATE);
-                Write(NESInstruction.DEC_zpg, sp);
-                Write(NESInstruction.LDY, 0x00);
-                Write(NESInstruction.STA_ind_Y, sp);
-                Write(NESInstruction.RTS_impl);
-                Write(NESInstruction.DEC_zpg, sp + 1);
-                Write(NESInstruction.DEC_zpg, sp);
-                Write(NESInstruction.STA_ind_Y, sp);
-                Write(NESInstruction.RTS_impl);
-                break;
-            case nameof(pushax):
-                /*
-                 * 85B7	A900          	LDA #$00                      ; push0
-                 * 85B9	A200          	LDX #$00                      ; pusha0
-                 * 85BB	48            	PHA                           ; pushax
-                 * 85BC	A522          	LDA sp                        
-                 * 85BE	38            	SEC                           
-                 * 85BF	E902          	SBC #$02                      
-                 * 85C1	8522          	STA sp                        
-                 * 85C3	B002          	BCS $85C7                     
-                 * 85C5	C623          	DEC sp+1                      
-                 * 85C7	A001          	LDY #$01                      
-                 * 85C9	8A            	TXA                           
-                 * 85CA	9122          	STA (sp),y                    
-                 * 85CC	68            	PLA                           
-                 * 85CD	88            	DEY                           
-                 * 85CE	9122          	STA (sp),y                    
-                 * 85D0	60            	RTS
-                 */
-                Write(NESInstruction.LDA, 0x00);
-                Write(NESInstruction.LDX, 0x00);
-                Write(NESInstruction.PHA_impl);
-                Write(NESInstruction.LDA_zpg, sp);
-                Write(NESInstruction.SEC_impl);
-                Write(NESInstruction.SBC, 0x02);
-                Write(NESInstruction.STA_zpg, sp);
-                Write(NESInstruction.BCS, 0x02);
-                Write(NESInstruction.DEC_zpg, sp + 1);
-                Write(NESInstruction.LDY, 0x01);
-                Write(NESInstruction.TXA_impl);
-                Write(NESInstruction.STA_ind_Y, sp);
-                Write(NESInstruction.PLA_impl);
-                Write(NESInstruction.DEY_impl);
-                Write(NESInstruction.STA_ind_Y, sp);
-                Write(NESInstruction.RTS_impl);
-                break;
-            case "zerobss":
-                /*
-                 * 85D1	A925          	LDA #$25                      ; zerobss
-                 * 85D3	852A          	STA ptr1                      
-                 * 85D5	A903          	LDA #$03                      
-                 * 85D7	852B          	STA ptr1+1                    
-                 * 85D9	A900          	LDA #$00                      
-                 * 85DB	A8            	TAY                           
-                 * 85DC	A200          	LDX #$00                      
-                 * 85DE	F00A          	BEQ $85EA                     
-                 * 85E0	912A          	STA (ptr1),y                  
-                 * 85E2	C8            	INY                           
-                 * 85E3	D0FB          	BNE $85E0                     
-                 * 85E5	E62B          	INC ptr1+1                    
-                 * 85E7	CA            	DEX                           
-                 * 85E8	D0F6          	BNE $85E0                     
-                 * 85EA	C000          	CPY #$00                      
-                 * 85EC	F005          	BEQ $85F3                     
-                 * 85EE	912A          	STA (ptr1),y                  
-                 * 85F0	C8            	INY                           
-                 * 85F1	D0F7          	BNE $85EA                     
-                 * 85F3	60            	RTS
-                 */
-                Write(NESInstruction.LDA, 0x25);
-                Write(NESInstruction.STA_zpg, ptr1);
-                Write(NESInstruction.LDA, 0x03);
-                Write(NESInstruction.STA_zpg, ptr1 + 1);
-                Write(NESInstruction.LDA, 0x00);
-                Write(NESInstruction.TAY_impl);
-                Write(NESInstruction.LDX, 0x00);
-                Write(NESInstruction.BEQ_rel, PAL_SPR_PTR);
-                Write(NESInstruction.STA_ind_Y, ptr1);
-                Write(NESInstruction.INY_impl);
-                Write(NESInstruction.BNE_rel, 0xFB);
-                Write(NESInstruction.INC_zpg, ptr1 + 1);
-                Write(NESInstruction.DEX_impl);
-                Write(NESInstruction.BNE_rel, 0xF6);
-                Write(NESInstruction.CPY, 0x00);
-                Write(NESInstruction.BEQ_rel, 0x05);
-                Write(NESInstruction.STA_ind_Y, ptr1);
-                Write(NESInstruction.INY_impl);
-                Write(NESInstruction.BNE_rel, 0xF7);
-                Write(NESInstruction.RTS_impl);
-                break;
             default:
                 throw new NotImplementedException($"{name} is not implemented!");
         }
@@ -1735,6 +1491,268 @@ class NESWriter : IDisposable
          */
         Write(NESInstruction.STA_zpg, 0x15);
         Write(NESInstruction.STX_zpg, 0x16);
+        Write(NESInstruction.RTS_impl);
+    }
+
+    void Write_initlib()
+    {
+        /*
+         * 84F4	A000          	LDY #$00                      ; initlib
+         * 84F6	F007          	BEQ $84FF                     
+         * 84F8	A900          	LDA #$00                      
+         * 84FA	A285          	LDX #$85                      
+         * 84FC	4C0003        	JMP condes                    
+         * 84FF	60            	RTS
+         */
+        Write(NESInstruction.LDY, 0x00);
+        Write(NESInstruction.BEQ_rel, PAL_UPDATE);
+        Write(NESInstruction.LDA, 0x00);
+        Write(NESInstruction.LDX, 0x85);
+        Write(NESInstruction.JMP_abs, condes);
+        Write(NESInstruction.RTS_impl);
+    }
+
+    void Write_donelib()
+    {
+        /*
+         * 8546	A000          	LDY #$00                      ; donelib
+         * 8548	F007          	BEQ $8551                     
+         * 854A	A902          	LDA #$02                      
+         * 854C	A286          	LDX #$86                      
+         * 854E	4C0003        	JMP condes                    
+         * 8551	60            	RTS
+         */
+        Write(NESInstruction.LDY, 0x00);
+        Write(NESInstruction.BEQ_rel, PAL_UPDATE);
+        Write(NESInstruction.LDA, 0xFE);
+        Write(NESInstruction.LDX, 0x85);
+        Write(NESInstruction.JMP_abs, condes);
+        Write(NESInstruction.RTS_impl);
+    }
+
+    void Write_copydata()
+    {
+        /*
+        * 8552	A902          	LDA #$02                      ; copydata
+        * 8554	852A          	STA ptr1                      
+        * 8556	A986          	LDA #$86                      
+        * 8558	852B          	STA ptr1+1                    
+        * 855A	A900          	LDA #$00                      
+        * 855C	852C          	STA ptr2                      
+        * 855E	A903          	LDA #$03                      
+        * 8560	852D          	STA ptr2+1                    
+        * 8562	A2DA          	LDX #$DA                      
+        * 8564	A9FF          	LDA #$FF                      
+        * 8566	8532          	STA tmp1                      
+        * 8568	A000          	LDY #$00                      
+        * 856A	E8            	INX                           
+        * 856B	F00D          	BEQ $857A                     
+        * 856D	B12A          	LDA (ptr1),y                  
+        * 856F	912C          	STA (ptr2),y                  
+        * 8571	C8            	INY                           
+        * 8572	D0F6          	BNE $856A                     
+        * 8574	E62B          	INC ptr1+1                    
+        * 8576	E62D          	INC ptr2+1                    
+        * 8578	D0F0          	BNE $856A                     
+        * 857A	E632          	INC tmp1                      
+        * 857C	D0EF          	BNE $856D                     
+        * 857E	60            	RTS
+        */
+        Write(NESInstruction.LDA, 0xFE);
+        Write(NESInstruction.STA_zpg, ptr1);
+        Write(NESInstruction.LDA, 0x85);
+        Write(NESInstruction.STA_zpg, ptr1 + 1);
+        Write(NESInstruction.LDA, 0x00);
+        Write(NESInstruction.STA_zpg, ptr2);
+        Write(NESInstruction.LDA, 0x03);
+        Write(NESInstruction.STA_zpg, ptr2 + 1);
+        Write(NESInstruction.LDX, 0xDA);
+        Write(NESInstruction.LDA, 0xFF);
+        Write(NESInstruction.STA_zpg, tmp1);
+        Write(NESInstruction.LDY, 0x00);
+        Write(NESInstruction.INX_impl);
+        Write(NESInstruction.BEQ_rel, 0x0D);
+        Write(NESInstruction.LDA_ind_Y, ptr1);
+        Write(NESInstruction.STA_ind_Y, ptr2);
+        Write(NESInstruction.INY_impl);
+        Write(NESInstruction.BNE_rel, 0xF6);
+        Write(NESInstruction.INC_zpg, ptr1 + 1);
+        Write(NESInstruction.INC_zpg, ptr2 + 1);
+        Write(NESInstruction.BNE_rel, 0xF0);
+        Write(NESInstruction.INC_zpg, tmp1);
+        Write(NESInstruction.BNE_rel, 0xEF);
+        Write(NESInstruction.RTS_impl);
+    }
+
+    void Write_popax()
+    {
+        /*
+         * 857F	A001          	LDY #$01                      ; popax
+         * 8581	B122          	LDA (sp),y                    
+         * 8583	AA            	TAX                           
+         * 8584	88            	DEY                           
+         * 8585	B122          	LDA (sp),y
+         */
+        Write(NESInstruction.LDY, 0x01);
+        Write(NESInstruction.LDA_ind_Y, sp);
+        Write(NESInstruction.TAX_impl);
+        Write(NESInstruction.DEY_impl);
+        Write(NESInstruction.LDA_ind_Y, sp);
+    }
+
+    void Write_incsp2()
+    {
+        /*
+        * 8587	E622          	INC sp                        ; incsp2
+        * 8589	F005          	BEQ $8590                     
+        * 858B	E622          	INC sp                        
+        * 858D	F003          	BEQ $8592                     
+        * 858F	60            	RTS                           
+        * 8590	E622          	INC sp                        
+        * 8592	E623          	INC sp+1                      
+        * 8594	60            	RTS
+        */
+        Write(NESInstruction.INC_zpg, sp);
+        Write(NESInstruction.BEQ_rel, 0x05);
+        Write(NESInstruction.INC_zpg, sp);
+        Write(NESInstruction.BEQ_rel, 0x03);
+        Write(NESInstruction.RTS_impl);
+        Write(NESInstruction.INC_zpg, sp);
+        Write(NESInstruction.INC_zpg, sp + 1);
+        Write(NESInstruction.RTS_impl);
+    }
+
+    void Write_popa()
+    {
+        /*
+         * 8595	A000          	LDY #$00                      ; popa
+         * 8597	B122          	LDA (sp),y                    
+         * 8599	E622          	INC sp                        
+         * 859B	F001          	BEQ $859E                     
+         * 859D	60            	RTS                           
+         * 859E	E623          	INC sp+1                      
+         * 85A0	60            	RTS   
+         */
+        Write(NESInstruction.LDY, 0x00);
+        Write(NESInstruction.LDA_ind_Y, sp);
+        Write(NESInstruction.INC_zpg, sp);
+        Write(NESInstruction.BEQ_rel, 0x01);
+        Write(NESInstruction.RTS_impl);
+        Write(NESInstruction.INC_zpg, sp + 1);
+        Write(NESInstruction.RTS_impl);
+    }
+
+    void Write_pusha()
+    {
+        /*
+         * 85A1	A000          	LDY #$00                      ; pusha0sp
+         * 85A3	B122          	LDA (sp),y                    ; pushaysp
+         * 85A5	A422          	LDY sp                        ; pusha
+         * 85A7	F007          	BEQ $85B0                     
+         * 85A9	C622          	DEC sp                        
+         * 85AB	A000          	LDY #$00                      
+         * 85AD	9122          	STA (sp),y                    
+         * 85AF	60            	RTS                           
+         * 85B0	C623          	DEC sp+1                      
+         * 85B2	C622          	DEC sp                        
+         * 85B4	9122          	STA (sp),y                    
+         * 85B6	60            	RTS
+        */
+        Write(NESInstruction.LDY, 0x00);
+        Write(NESInstruction.LDA_ind_Y, sp);
+        Write(NESInstruction.LDY_zpg, sp);
+        Write(NESInstruction.BEQ_rel, PAL_UPDATE);
+        Write(NESInstruction.DEC_zpg, sp);
+        Write(NESInstruction.LDY, 0x00);
+        Write(NESInstruction.STA_ind_Y, sp);
+        Write(NESInstruction.RTS_impl);
+        Write(NESInstruction.DEC_zpg, sp + 1);
+        Write(NESInstruction.DEC_zpg, sp);
+        Write(NESInstruction.STA_ind_Y, sp);
+        Write(NESInstruction.RTS_impl);
+    }
+
+    void Write_pushax()
+    {
+        /*
+        * 85B7	A900          	LDA #$00                      ; push0
+        * 85B9	A200          	LDX #$00                      ; pusha0
+        * 85BB	48            	PHA                           ; pushax
+        * 85BC	A522          	LDA sp                        
+        * 85BE	38            	SEC                           
+        * 85BF	E902          	SBC #$02                      
+        * 85C1	8522          	STA sp                        
+        * 85C3	B002          	BCS $85C7                     
+        * 85C5	C623          	DEC sp+1                      
+        * 85C7	A001          	LDY #$01                      
+        * 85C9	8A            	TXA                           
+        * 85CA	9122          	STA (sp),y                    
+        * 85CC	68            	PLA                           
+        * 85CD	88            	DEY                           
+        * 85CE	9122          	STA (sp),y                    
+        * 85D0	60            	RTS
+        */
+        Write(NESInstruction.LDA, 0x00);
+        Write(NESInstruction.LDX, 0x00);
+        Write(NESInstruction.PHA_impl);
+        Write(NESInstruction.LDA_zpg, sp);
+        Write(NESInstruction.SEC_impl);
+        Write(NESInstruction.SBC, 0x02);
+        Write(NESInstruction.STA_zpg, sp);
+        Write(NESInstruction.BCS, 0x02);
+        Write(NESInstruction.DEC_zpg, sp + 1);
+        Write(NESInstruction.LDY, 0x01);
+        Write(NESInstruction.TXA_impl);
+        Write(NESInstruction.STA_ind_Y, sp);
+        Write(NESInstruction.PLA_impl);
+        Write(NESInstruction.DEY_impl);
+        Write(NESInstruction.STA_ind_Y, sp);
+        Write(NESInstruction.RTS_impl);
+    }
+
+    void Write_zerobss()
+    {
+        /*
+         * 85D1	A925          	LDA #$25                      ; zerobss
+         * 85D3	852A          	STA ptr1                      
+         * 85D5	A903          	LDA #$03                      
+         * 85D7	852B          	STA ptr1+1                    
+         * 85D9	A900          	LDA #$00                      
+         * 85DB	A8            	TAY                           
+         * 85DC	A200          	LDX #$00                      
+         * 85DE	F00A          	BEQ $85EA                     
+         * 85E0	912A          	STA (ptr1),y                  
+         * 85E2	C8            	INY                           
+         * 85E3	D0FB          	BNE $85E0                     
+         * 85E5	E62B          	INC ptr1+1                    
+         * 85E7	CA            	DEX                           
+         * 85E8	D0F6          	BNE $85E0                     
+         * 85EA	C000          	CPY #$00                      
+         * 85EC	F005          	BEQ $85F3                     
+         * 85EE	912A          	STA (ptr1),y                  
+         * 85F0	C8            	INY                           
+         * 85F1	D0F7          	BNE $85EA                     
+         * 85F3	60            	RTS
+         */
+        Write(NESInstruction.LDA, 0x25);
+        Write(NESInstruction.STA_zpg, ptr1);
+        Write(NESInstruction.LDA, 0x03);
+        Write(NESInstruction.STA_zpg, ptr1 + 1);
+        Write(NESInstruction.LDA, 0x00);
+        Write(NESInstruction.TAY_impl);
+        Write(NESInstruction.LDX, 0x00);
+        Write(NESInstruction.BEQ_rel, PAL_SPR_PTR);
+        Write(NESInstruction.STA_ind_Y, ptr1);
+        Write(NESInstruction.INY_impl);
+        Write(NESInstruction.BNE_rel, 0xFB);
+        Write(NESInstruction.INC_zpg, ptr1 + 1);
+        Write(NESInstruction.DEX_impl);
+        Write(NESInstruction.BNE_rel, 0xF6);
+        Write(NESInstruction.CPY, 0x00);
+        Write(NESInstruction.BEQ_rel, 0x05);
+        Write(NESInstruction.STA_ind_Y, ptr1);
+        Write(NESInstruction.INY_impl);
+        Write(NESInstruction.BNE_rel, 0xF7);
         Write(NESInstruction.RTS_impl);
     }
 

@@ -214,24 +214,6 @@ public class NESWriterTests
     }
 
     [Fact]
-    public void Write_pusha()
-    {
-        using var writer = GetWriter();
-        writer.WriteBuiltIn("pusha");
-        writer.Flush();
-        AssertInstructions("A000 B122 A422 F007 C622 A000 9122 60 C623 C622 9122 60");
-    }
-
-    [Fact]
-    public void Write_popa()
-    {
-        using var writer = GetWriter();
-        writer.WriteBuiltIn("popa");
-        writer.Flush();
-        AssertInstructions("A000 B122 E622 F001 60 E623 60");
-    }
-
-    [Fact]
     public void Write_ppu_wait_nmi()
     {
         using var writer = GetWriter();
