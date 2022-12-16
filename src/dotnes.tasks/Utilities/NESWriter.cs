@@ -185,14 +185,14 @@ class NESWriter : IDisposable
     /// </summary>
     public void WriteBuiltIns()
     {
-        WriteBuiltIn("_exit");
-        WriteBuiltIn("initPPU");
-        WriteBuiltIn("clearPalette");
-        WriteBuiltIn("clearVRAM");
-        WriteBuiltIn("clearRAM");
-        WriteBuiltIn("waitSync3");
-        WriteBuiltIn("detectNTSC");
-        WriteBuiltIn("nmi");
+        Write_exit();
+        Write_initPPU();
+        Write_clearPalette();
+        Write_clearVRAM();
+        Write_clearRAM();
+        Write_waitSync3();
+        Write_detectNTSC();
+        Write_nmi();
         WriteBuiltIn("@doUpdate");
         WriteBuiltIn("@updPal");
         WriteBuiltIn("@updVRAM");
@@ -307,230 +307,6 @@ class NESWriter : IDisposable
     {
         switch (name)
         {
-            case "_exit":
-                /*
-                 * https://github.com/clbr/neslib/blob/d061b0f7f1a449941111c31eee0fc2e85b1826d7/crt0.s#L111
-                 * sei
-                 * ldx #$ff
-                 * txs
-                 * inx
-                 * stx PPU_MASK
-                 * stx DMC_FREQ
-                 * stx PPU_CTRL		;no NMI
-                 */
-                Write(NESInstruction.SEI_impl);
-                Write(NESInstruction.LDX, 0xFF);
-                Write(NESInstruction.TXS_impl);
-                Write(NESInstruction.INX_impl);
-                Write(NESInstruction.STX_abs, PPU_MASK);
-                Write(NESInstruction.STX_abs, DMC_FREQ);
-                Write(NESInstruction.STX_abs, PPU_CTRL);
-                break;
-            case "initPPU":
-                /*
-                 * https://github.com/clbr/neslib/blob/d061b0f7f1a449941111c31eee0fc2e85b1826d7/crt0.s#L121
-                 *     bit PPU_STATUS
-                 * @1:
-                 *     bit PPU_STATUS
-                 *     bpl @1
-                 * @2:
-                 *     bit PPU_STATUS
-                 *     bpl @2
-                 * 
-                 * ; no APU frame counter IRQs
-                 *     lda #$40
-                 *     sta PPU_FRAMECNT
-                 */
-                Write(NESInstruction.BIT_abs, PPU_STATUS);
-                Write(NESInstruction.BIT_abs, PPU_STATUS);
-                Write(NESInstruction.BPL, 0xFB);
-                Write(NESInstruction.BIT_abs, PPU_STATUS);
-                Write(NESInstruction.BPL, 0xFB);
-                Write(NESInstruction.LDA, 0x40);
-                Write(NESInstruction.STA_abs, PPU_FRAMECNT);
-                break;
-            case "clearPalette":
-                /*
-                 * https://github.com/clbr/neslib/blob/d061b0f7f1a449941111c31eee0fc2e85b1826d7/crt0.s#L135
-                 *     lda #$3f
-                 *     sta PPU_ADDR
-                 *     stx PPU_ADDR
-                 *     lda #$0f
-                 *     ldx #$20
-                 * @1:
-                 *     sta PPU_DATA
-                 *     dex
-                 *     bne @1
-                 */
-                Write(NESInstruction.LDA, 0x3F);
-                Write(NESInstruction.STA_abs, PPU_ADDR);
-                Write(NESInstruction.STX_abs, PPU_ADDR);
-                Write(NESInstruction.LDA, 0x0F);
-                Write(NESInstruction.LDX, 0x20);
-                Write(NESInstruction.STA_abs, PPU_DATA);
-                Write(NESInstruction.DEX_impl);
-                Write(NESInstruction.BNE_rel, 0xFA);
-                break;
-            case "clearVRAM":
-                /*
-                 * https://github.com/clbr/neslib/blob/d061b0f7f1a449941111c31eee0fc2e85b1826d7/crt0.s#L147
-                 *     txa
-                 *     ldy #$20
-                 *     sty PPU_ADDR
-                 *     sta PPU_ADDR
-                 *     ldy #$10
-                 * @1:
-                 *     sta PPU_DATA
-                 *     inx
-                 *     bne @1
-                 *     dey
-                 *     bne @1
-                 */
-                Write(NESInstruction.TXA_impl);
-                Write(NESInstruction.LDY, 0x20);
-                Write(NESInstruction.STY_abs, PPU_ADDR);
-                Write(NESInstruction.STA_abs, PPU_ADDR);
-                Write(NESInstruction.LDY, 0x10);
-                Write(NESInstruction.STA_abs, PPU_DATA);
-                Write(NESInstruction.INX_impl);
-                Write(NESInstruction.BNE_rel, 0xFA);
-                Write(NESInstruction.DEY_impl);
-                Write(NESInstruction.BNE_rel, 0xF7);
-                break;
-            case "clearRAM":
-                /*
-                 * https://github.com/clbr/neslib/blob/d061b0f7f1a449941111c31eee0fc2e85b1826d7/crt0.s#L161
-                 * clearRAM:
-                 *     txa
-                 * @1:
-                 *     sta $000,x
-                 *     sta $100,x
-                 *     sta $200,x
-                 *     sta $300,x
-                 *     sta $400,x
-                 *     sta $500,x
-                 *     sta $600,x
-                 *     sta $700,x
-                 *     inx
-                 *     bne @1
-                 * 
-                 *     lda #4
-                 *     jsr _pal_bright
-                 *     jsr _pal_clear
-                 *     jsr _oam_clear
-                 * 
-                 *     jsr	zerobss
-                 *     jsr	copydata
-                 * 
-                 *     lda #<(__RAM_START__+__RAM_SIZE__)
-                 *     sta	sp
-                 *     lda	#>(__RAM_START__+__RAM_SIZE__)
-                 *     sta	sp+1            ; Set argument stack ptr
-                 * 
-                 *     jsr	initlib
-                 * 
-                 *     lda #%10000000
-                 *     sta <PPU_CTRL_VAR
-                 *     sta PPU_CTRL		;enable NMI
-                 *     lda #%00000110
-                 *     sta <PPU_MASK_VAR
-                 */
-                Write(NESInstruction.TXA_impl);
-                Write(NESInstruction.STA_zpg_X, 0x00);
-                for (int i = 1; i <= 7; i++)
-                {
-                    Write(NESInstruction.STA_abs_X, (ushort)(0x0100 * i));
-                }
-                Write(NESInstruction.INX_impl);
-                Write(NESInstruction.BNE_rel, 0xE6);
-                Write(NESInstruction.LDA, 0x04);
-                Write(NESInstruction.JSR, 0x8279);
-                Write(NESInstruction.JSR, 0x824E);
-                Write(NESInstruction.JSR, 0x82AE);
-                Write(NESInstruction.JSR, 0x85CE);
-                Write(NESInstruction.JSR, 0x854F);
-                Write(NESInstruction.LDA, 0x00);
-                Write(NESInstruction.STA_zpg, sp);
-                Write(NESInstruction.LDA, PAL_BG_PTR);
-                Write(NESInstruction.STA_zpg, sp + 1);
-                Write(NESInstruction.JSR, 0x84F4);
-                Write(NESInstruction.LDA, 0x4C);
-                Write(NESInstruction.STA_zpg, 0x14);
-                Write(NESInstruction.LDA, 0x10);
-                Write(NESInstruction.STA_zpg, 0x15);
-                Write(NESInstruction.LDA, 0x82);
-                Write(NESInstruction.STA_zpg, 0x16);
-                Write(NESInstruction.LDA, 0x80);
-                Write(NESInstruction.STA_zpg, 0x10);
-                Write(NESInstruction.STA_abs, PPU_CTRL);
-                Write(NESInstruction.LDA, 0x06);
-                Write(NESInstruction.STA_zpg, 0x12);
-                break;
-            case "waitSync3":
-                // https://github.com/clbr/neslib/blob/d061b0f7f1a449941111c31eee0fc2e85b1826d7/crt0.s#L197
-                Write(NESInstruction.LDA_zpg, STARTUP);
-                Write(NESInstruction.CMP_zpg, STARTUP);
-                Write(NESInstruction.BEQ_rel, 0xFC);
-                break;
-            case "detectNTSC":
-                // https://github.com/clbr/neslib/blob/d061b0f7f1a449941111c31eee0fc2e85b1826d7/crt0.s#L203
-                /*
-                 * A2 34
-                 * A0 18
-                 * CA
-                 * D0 FD
-                 * 88
-                 * D0 FA
-                 * AD 02 20
-                 * 29 80
-                 * 85 00
-                 * 20 80 82
-                 * A9 00
-                 * 8D 05 20
-                 * 8D 05 20
-                 * 8D 03 20
-                 * 4C 00 85
-                 */
-                Write(NESInstruction.LDX, 0x34);
-                Write(NESInstruction.LDY, 0x18);
-                Write(NESInstruction.DEX_impl);
-                Write(NESInstruction.BNE_rel, 0xFD);
-                Write(NESInstruction.DEY_impl);
-                Write(NESInstruction.BNE_rel, 0xFA);
-                Write(NESInstruction.LDA_abs, PPU_STATUS);
-                Write(NESInstruction.AND, 0x80);
-                Write(NESInstruction.STA_zpg, 0x00);
-                Write(NESInstruction.JSR, 0x8280);
-                Write(NESInstruction.LDA, 0x00);
-                Write(NESInstruction.STA_abs, PPU_SCROLL);
-                Write(NESInstruction.STA_abs, PPU_SCROLL);
-                Write(NESInstruction.STA_abs, PPU_OAM_ADDR);
-                Write(NESInstruction.JMP_abs, 0x8500);
-                break;
-            case "nmi":
-                /*
-                 * https://github.com/clbr/neslib/blob/d061b0f7f1a449941111c31eee0fc2e85b1826d7/neslib.sinc#L28
-                 * pha
-                 * txa
-                 * pha
-                 * tya
-                 * pha
-                 * 
-                 * lda <PPU_MASK_VAR	;if rendering is disabled, do not access the VRAM at all
-                 * and #%00011000
-                 * bne @doUpdate
-                 * jmp	@skipAll
-                 */
-                Write(NESInstruction.PHA_impl);
-                Write(NESInstruction.TXA_impl);
-                Write(NESInstruction.PHA_impl);
-                Write(NESInstruction.TYA_impl);
-                Write(NESInstruction.PHA_impl);
-                Write(NESInstruction.LDA_zpg, 0x12);
-                Write(NESInstruction.AND, 0x18);
-                Write(NESInstruction.BNE_rel, 0x03);
-                Write(NESInstruction.JMP_abs, 0x81E6);
-                break;
             case "@doUpdate":
                 /*
                  * https://github.com/clbr/neslib/blob/d061b0f7f1a449941111c31eee0fc2e85b1826d7/neslib.sinc#L40
@@ -1704,6 +1480,246 @@ class NESWriter : IDisposable
             default:
                 throw new NotImplementedException($"{name} is not implemented!");
         }
+    }
+
+    void Write_exit()
+    {
+        /*
+        * https://github.com/clbr/neslib/blob/d061b0f7f1a449941111c31eee0fc2e85b1826d7/crt0.s#L111
+        * sei
+        * ldx #$ff
+        * txs
+        * inx
+        * stx PPU_MASK
+        * stx DMC_FREQ
+        * stx PPU_CTRL		;no NMI
+        */
+        Write(NESInstruction.SEI_impl);
+        Write(NESInstruction.LDX, 0xFF);
+        Write(NESInstruction.TXS_impl);
+        Write(NESInstruction.INX_impl);
+        Write(NESInstruction.STX_abs, PPU_MASK);
+        Write(NESInstruction.STX_abs, DMC_FREQ);
+        Write(NESInstruction.STX_abs, PPU_CTRL);
+    }
+
+    void Write_initPPU()
+    {
+        /*
+         * https://github.com/clbr/neslib/blob/d061b0f7f1a449941111c31eee0fc2e85b1826d7/crt0.s#L121
+         *     bit PPU_STATUS
+         * @1:
+         *     bit PPU_STATUS
+         *     bpl @1
+         * @2:
+         *     bit PPU_STATUS
+         *     bpl @2
+         * 
+         * ; no APU frame counter IRQs
+         *     lda #$40
+         *     sta PPU_FRAMECNT
+         */
+        Write(NESInstruction.BIT_abs, PPU_STATUS);
+        Write(NESInstruction.BIT_abs, PPU_STATUS);
+        Write(NESInstruction.BPL, 0xFB);
+        Write(NESInstruction.BIT_abs, PPU_STATUS);
+        Write(NESInstruction.BPL, 0xFB);
+        Write(NESInstruction.LDA, 0x40);
+        Write(NESInstruction.STA_abs, PPU_FRAMECNT);
+    }
+
+    void Write_clearPalette()
+    {
+        /*
+         * https://github.com/clbr/neslib/blob/d061b0f7f1a449941111c31eee0fc2e85b1826d7/crt0.s#L135
+         *     lda #$3f
+         *     sta PPU_ADDR
+         *     stx PPU_ADDR
+         *     lda #$0f
+         *     ldx #$20
+         * @1:
+         *     sta PPU_DATA
+         *     dex
+         *     bne @1
+         */
+        Write(NESInstruction.LDA, 0x3F);
+        Write(NESInstruction.STA_abs, PPU_ADDR);
+        Write(NESInstruction.STX_abs, PPU_ADDR);
+        Write(NESInstruction.LDA, 0x0F);
+        Write(NESInstruction.LDX, 0x20);
+        Write(NESInstruction.STA_abs, PPU_DATA);
+        Write(NESInstruction.DEX_impl);
+        Write(NESInstruction.BNE_rel, 0xFA);
+    }
+
+    void Write_clearVRAM()
+    {
+        /*
+         * https://github.com/clbr/neslib/blob/d061b0f7f1a449941111c31eee0fc2e85b1826d7/crt0.s#L147
+         *     txa
+         *     ldy #$20
+         *     sty PPU_ADDR
+         *     sta PPU_ADDR
+         *     ldy #$10
+         * @1:
+         *     sta PPU_DATA
+         *     inx
+         *     bne @1
+         *     dey
+         *     bne @1
+         */
+        Write(NESInstruction.TXA_impl);
+        Write(NESInstruction.LDY, 0x20);
+        Write(NESInstruction.STY_abs, PPU_ADDR);
+        Write(NESInstruction.STA_abs, PPU_ADDR);
+        Write(NESInstruction.LDY, 0x10);
+        Write(NESInstruction.STA_abs, PPU_DATA);
+        Write(NESInstruction.INX_impl);
+        Write(NESInstruction.BNE_rel, 0xFA);
+        Write(NESInstruction.DEY_impl);
+        Write(NESInstruction.BNE_rel, 0xF7);
+    }
+
+    void Write_clearRAM()
+    {
+        /*
+        * https://github.com/clbr/neslib/blob/d061b0f7f1a449941111c31eee0fc2e85b1826d7/crt0.s#L161
+        * clearRAM:
+        *     txa
+        * @1:
+        *     sta $000,x
+        *     sta $100,x
+        *     sta $200,x
+        *     sta $300,x
+        *     sta $400,x
+        *     sta $500,x
+        *     sta $600,x
+        *     sta $700,x
+        *     inx
+        *     bne @1
+        * 
+        *     lda #4
+        *     jsr _pal_bright
+        *     jsr _pal_clear
+        *     jsr _oam_clear
+        * 
+        *     jsr	zerobss
+        *     jsr	copydata
+        * 
+        *     lda #<(__RAM_START__+__RAM_SIZE__)
+        *     sta	sp
+        *     lda	#>(__RAM_START__+__RAM_SIZE__)
+        *     sta	sp+1            ; Set argument stack ptr
+        * 
+        *     jsr	initlib
+        * 
+        *     lda #%10000000
+        *     sta <PPU_CTRL_VAR
+        *     sta PPU_CTRL		;enable NMI
+        *     lda #%00000110
+        *     sta <PPU_MASK_VAR
+        */
+        Write(NESInstruction.TXA_impl);
+        Write(NESInstruction.STA_zpg_X, 0x00);
+        for (int i = 1; i <= 7; i++)
+        {
+            Write(NESInstruction.STA_abs_X, (ushort)(0x0100 * i));
+        }
+        Write(NESInstruction.INX_impl);
+        Write(NESInstruction.BNE_rel, 0xE6);
+        Write(NESInstruction.LDA, 0x04);
+        Write(NESInstruction.JSR, 0x8279);
+        Write(NESInstruction.JSR, 0x824E);
+        Write(NESInstruction.JSR, 0x82AE);
+        Write(NESInstruction.JSR, 0x85CE);
+        Write(NESInstruction.JSR, 0x854F);
+        Write(NESInstruction.LDA, 0x00);
+        Write(NESInstruction.STA_zpg, sp);
+        Write(NESInstruction.LDA, PAL_BG_PTR);
+        Write(NESInstruction.STA_zpg, sp + 1);
+        Write(NESInstruction.JSR, 0x84F4);
+        Write(NESInstruction.LDA, 0x4C);
+        Write(NESInstruction.STA_zpg, 0x14);
+        Write(NESInstruction.LDA, 0x10);
+        Write(NESInstruction.STA_zpg, 0x15);
+        Write(NESInstruction.LDA, 0x82);
+        Write(NESInstruction.STA_zpg, 0x16);
+        Write(NESInstruction.LDA, 0x80);
+        Write(NESInstruction.STA_zpg, 0x10);
+        Write(NESInstruction.STA_abs, PPU_CTRL);
+        Write(NESInstruction.LDA, 0x06);
+        Write(NESInstruction.STA_zpg, 0x12);
+    }
+
+    void Write_waitSync3()
+    {
+        // https://github.com/clbr/neslib/blob/d061b0f7f1a449941111c31eee0fc2e85b1826d7/crt0.s#L197
+        Write(NESInstruction.LDA_zpg, STARTUP);
+        Write(NESInstruction.CMP_zpg, STARTUP);
+        Write(NESInstruction.BEQ_rel, 0xFC);
+    }
+
+    void Write_detectNTSC()
+    {
+        // https://github.com/clbr/neslib/blob/d061b0f7f1a449941111c31eee0fc2e85b1826d7/crt0.s#L203
+        /*
+         * A2 34
+         * A0 18
+         * CA
+         * D0 FD
+         * 88
+         * D0 FA
+         * AD 02 20
+         * 29 80
+         * 85 00
+         * 20 80 82
+         * A9 00
+         * 8D 05 20
+         * 8D 05 20
+         * 8D 03 20
+         * 4C 00 85
+         */
+        Write(NESInstruction.LDX, 0x34);
+        Write(NESInstruction.LDY, 0x18);
+        Write(NESInstruction.DEX_impl);
+        Write(NESInstruction.BNE_rel, 0xFD);
+        Write(NESInstruction.DEY_impl);
+        Write(NESInstruction.BNE_rel, 0xFA);
+        Write(NESInstruction.LDA_abs, PPU_STATUS);
+        Write(NESInstruction.AND, 0x80);
+        Write(NESInstruction.STA_zpg, 0x00);
+        Write(NESInstruction.JSR, 0x8280);
+        Write(NESInstruction.LDA, 0x00);
+        Write(NESInstruction.STA_abs, PPU_SCROLL);
+        Write(NESInstruction.STA_abs, PPU_SCROLL);
+        Write(NESInstruction.STA_abs, PPU_OAM_ADDR);
+        Write(NESInstruction.JMP_abs, 0x8500);
+    }
+
+    void Write_nmi()
+    {
+        /*
+         * https://github.com/clbr/neslib/blob/d061b0f7f1a449941111c31eee0fc2e85b1826d7/neslib.sinc#L28
+         * pha
+         * txa
+         * pha
+         * tya
+         * pha
+         * 
+         * lda <PPU_MASK_VAR	;if rendering is disabled, do not access the VRAM at all
+         * and #%00011000
+         * bne @doUpdate
+         * jmp	@skipAll
+         */
+        Write(NESInstruction.PHA_impl);
+        Write(NESInstruction.TXA_impl);
+        Write(NESInstruction.PHA_impl);
+        Write(NESInstruction.TYA_impl);
+        Write(NESInstruction.PHA_impl);
+        Write(NESInstruction.LDA_zpg, 0x12);
+        Write(NESInstruction.AND, 0x18);
+        Write(NESInstruction.BNE_rel, 0x03);
+        Write(NESInstruction.JMP_abs, 0x81E6);
     }
 
     /// <summary>
