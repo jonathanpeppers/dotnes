@@ -52,6 +52,7 @@ class NESWriter : IDisposable
     protected const ushort PPU_DATA = 0x2007;
     protected const ushort DMC_FREQ = 0x4010;
     protected const ushort PPU_OAM_DMA = 0x4014;
+    protected const ushort PPU_FRAMECNT = 0x4017;
     protected const ushort skipNtsc = 0x81F9;
     protected const ushort pal_col = 0x823E;
     protected const ushort vram_adr = 0x83D4;
@@ -185,13 +186,6 @@ class NESWriter : IDisposable
     public void WriteUnknownAssembly()
     {
         /*
-         * 2C 02 20
-         * 2C 02 20
-         * 10 FB
-         * 2C 02 20
-         * 10 FB
-         * A9 40
-         * 8D 17 40
          * A9 3F
          * 8D 06 20
          * 8E 06 20
@@ -214,13 +208,7 @@ class NESWriter : IDisposable
          * 95 00
          */
         WriteBuiltIn("_exit");
-        Write(NESInstruction.BIT_abs, PPU_STATUS);
-        Write(NESInstruction.BIT_abs, PPU_STATUS);
-        Write(NESInstruction.BPL, 0xFB);
-        Write(NESInstruction.BIT_abs, PPU_STATUS);
-        Write(NESInstruction.BPL, 0xFB);
-        Write(NESInstruction.LDA, 0x40);
-        Write(NESInstruction.STA_abs, 0x4017);
+        WriteBuiltIn("initPPU");
         Write(NESInstruction.LDA, 0x3F);
         Write(NESInstruction.STA_abs, PPU_ADDR);
         Write(NESInstruction.STX_abs, PPU_ADDR);
@@ -429,8 +417,8 @@ class NESWriter : IDisposable
         switch (name)
         {
             case "_exit":
-                // https://github.com/clbr/neslib/blob/d061b0f7f1a449941111c31eee0fc2e85b1826d7/crt0.s#L111
                 /*
+                 * https://github.com/clbr/neslib/blob/d061b0f7f1a449941111c31eee0fc2e85b1826d7/crt0.s#L111
                  * sei
                  * ldx #$ff
                  * txs
@@ -446,6 +434,29 @@ class NESWriter : IDisposable
                 Write(NESInstruction.STX_abs, PPU_MASK);
                 Write(NESInstruction.STX_abs, DMC_FREQ);
                 Write(NESInstruction.STX_abs, PPU_CTRL);
+                break;
+            case "initPPU":
+                /*
+                 * https://github.com/clbr/neslib/blob/d061b0f7f1a449941111c31eee0fc2e85b1826d7/crt0.s#L121
+                 *     bit PPU_STATUS
+                 * @1:
+                 *     bit PPU_STATUS
+                 *     bpl @1
+                 * @2:
+                 *     bit PPU_STATUS
+                 *     bpl @2
+                 * 
+                 * ; no APU frame counter IRQs
+                 *     lda #$40
+                 *     sta PPU_FRAMECNT
+                 */
+                Write(NESInstruction.BIT_abs, PPU_STATUS);
+                Write(NESInstruction.BIT_abs, PPU_STATUS);
+                Write(NESInstruction.BPL, 0xFB);
+                Write(NESInstruction.BIT_abs, PPU_STATUS);
+                Write(NESInstruction.BPL, 0xFB);
+                Write(NESInstruction.LDA, 0x40);
+                Write(NESInstruction.STA_abs, PPU_FRAMECNT);
                 break;
             case "waitSync3":
                 // https://github.com/clbr/neslib/blob/d061b0f7f1a449941111c31eee0fc2e85b1826d7/crt0.s#L197
