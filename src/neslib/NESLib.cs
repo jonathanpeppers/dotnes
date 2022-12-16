@@ -232,12 +232,6 @@ public static class NESLib
 
     // These are from: https://github.com/mhughson/attributes/blob/master/neslib.h
 
-    /// <summary>
-    /// set NMI/IRQ callback
-    /// TODO: not sure if should be public?
-    /// </summary>
-    internal static void nmi_set_callback(Action callback) { }
-
     public const ushort NAMETABLE_A = 0x2000;
     public const ushort NAMETABLE_B = 0x2400;
     public const ushort NAMETABLE_C = 0x2800;

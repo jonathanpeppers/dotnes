@@ -200,7 +200,7 @@ class NESWriter : IDisposable
         Write_skipAll();
         Write_skipNtsc();
         Write_irq();
-        WriteBuiltIn(nameof(NESLib.nmi_set_callback));
+        Write_nmi_set_callback();
         WriteBuiltIn(nameof(NESLib.pal_all));
         WriteBuiltIn(nameof(NESLib.pal_copy));
         WriteBuiltIn(nameof(NESLib.pal_bg));
@@ -307,16 +307,6 @@ class NESWriter : IDisposable
     {
         switch (name)
         {
-            case nameof(NESLib.nmi_set_callback):
-                /*
-                 * 820C	8515          	STA NMICallback+1             ; _nmi_set_callback
-                 * 820E	8616          	STX $16                       
-                 * 8210	60            	RTS                           ; HandyRTS
-                 */
-                Write(NESInstruction.STA_zpg, 0x15);
-                Write(NESInstruction.STX_zpg, 0x16);
-                Write(NESInstruction.RTS_impl);
-                break;
             case nameof(NESLib.pal_all):
                 /*
                  * 8211	8517          	STA TEMP                      ; _pal_all
@@ -1734,6 +1724,18 @@ class NESWriter : IDisposable
         Write(NESInstruction.PHA_impl);
         Write(NESInstruction.LDA, 0xFF);
         Write(NESInstruction.JMP_abs, skipNtsc);
+    }
+
+    void Write_nmi_set_callback()
+    {
+        /*
+         * 820C	8515          	STA NMICallback+1             ; _nmi_set_callback
+         * 820E	8616          	STX $16                       
+         * 8210	60            	RTS                           ; HandyRTS
+         */
+        Write(NESInstruction.STA_zpg, 0x15);
+        Write(NESInstruction.STX_zpg, 0x16);
+        Write(NESInstruction.RTS_impl);
     }
 
     /// <summary>
