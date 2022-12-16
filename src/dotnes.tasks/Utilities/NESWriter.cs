@@ -388,196 +388,6 @@ class NESWriter : IDisposable
         Write(NESInstruction.LDA_zpg, PAL_UPDATE);
         Write(NESInstruction.BNE_rel, 0x03);
         Write(NESInstruction.JMP_abs, 0x81C0);
-        Write(NESInstruction.LDX, 0x00);
-        Write(NESInstruction.STX_zpg, PAL_UPDATE);
-        Write(NESInstruction.LDA, 0x3F);
-        Write(NESInstruction.STA_abs, PPU_ADDR);
-        Write(NESInstruction.STX_abs, PPU_ADDR);
-        Write(NESInstruction.LDY_abs, PAL_BUF);
-        Write(NESInstruction.LDA_ind_Y, PAL_BG_PTR);
-        Write(NESInstruction.STA_abs, PPU_DATA);
-
-        /*
-         * AA
-         * AC C1 01
-         * B1 08
-         * 8D 07 20
-         * AC C2 01
-         * B1 08
-         * 8D 07 20
-         * AC C3 01
-         * B1 08
-         * 8D 07 20
-         * 8E 07 20
-         * AC C5 01
-         * B1 08
-         * 8D 07 20
-         * AC C6 01
-         * B1 08
-         * 8D 07 20
-         * AC C7 01
-         * B1 08
-         * 8D 07 20
-         * 8E 07 20
-         * AC C9 01
-         * B1 08
-         * 8D 07 20
-         * AC CA 01
-         * B1 08
-         * 8D 07 20
-         * AC CB 01 
-         * B1 08
-         * 8D 07 20
-         * 8E 07 20
-         * AC CD 01
-         * B1 08
-         * 8D 07 20
-         */
-        Write(NESInstruction.TAX_impl);
-        Write(NESInstruction.LDY_abs, PAL_BUF + 1);
-        Write(NESInstruction.LDA_ind_Y, PAL_BG_PTR);
-        Write(NESInstruction.STA_abs, PPU_DATA);
-        Write(NESInstruction.LDY_abs, PAL_BUF + 2);
-        Write(NESInstruction.LDA_ind_Y, PAL_BG_PTR);
-        Write(NESInstruction.STA_abs, PPU_DATA);
-        Write(NESInstruction.LDY_abs, PAL_BUF + 3);
-        Write(NESInstruction.LDA_ind_Y, PAL_BG_PTR);
-        Write(NESInstruction.STA_abs, PPU_DATA);
-        Write(NESInstruction.STX_abs, PPU_DATA);
-        Write(NESInstruction.LDY_abs, PAL_BUF + 5);
-        Write(NESInstruction.LDA_ind_Y, PAL_BG_PTR);
-        Write(NESInstruction.STA_abs, PPU_DATA);
-        Write(NESInstruction.LDY_abs, PAL_BUF + 6);
-        Write(NESInstruction.LDA_ind_Y, PAL_BG_PTR);
-        Write(NESInstruction.STA_abs, PPU_DATA);
-        Write(NESInstruction.LDY_abs, PAL_BUF + 7);
-        Write(NESInstruction.LDA_ind_Y, PAL_BG_PTR);
-        Write(NESInstruction.STA_abs, PPU_DATA);
-        Write(NESInstruction.STX_abs, PPU_DATA);
-        Write(NESInstruction.LDY_abs, PAL_BUF + 9);
-        Write(NESInstruction.LDA_ind_Y, PAL_BG_PTR);
-        Write(NESInstruction.STA_abs, PPU_DATA);
-        Write(NESInstruction.LDY_abs, PAL_BUF + 10);
-        Write(NESInstruction.LDA_ind_Y, PAL_BG_PTR);
-        Write(NESInstruction.STA_abs, PPU_DATA);
-        Write(NESInstruction.LDY_abs, PAL_BUF + 11);
-        Write(NESInstruction.LDA_ind_Y, PAL_BG_PTR);
-        Write(NESInstruction.STA_abs, PPU_DATA);
-        Write(NESInstruction.STX_abs, PPU_DATA);
-        Write(NESInstruction.LDY_abs, PAL_BUF + 13);
-        Write(NESInstruction.LDA_ind_Y, PAL_BG_PTR);
-        Write(NESInstruction.STA_abs, PPU_DATA);
-    }
-
-    /// <summary>
-    /// This is a block of stuff at the top of "Disassembly" section of 8bitworkshop.com
-    /// It may be the contents of:
-    /// https://github.com/clbr/neslib/blob/d061b0f7f1a449941111c31eee0fc2e85b1826d7/neslib.sinc#L49
-    /// </summary>
-    public void WriteBuiltInAssembly()
-    {
-        /*
-         * 8143	ACCE01        
-         * 8146	B108          
-         * 8149	8D0720        	STA $2007                     
-         * 814C	ACCF01        	LDY $01CF                     
-         * 814F	B108          	LDA (PAL_BG_PTR),y            
-         * 8151	8D0720        	STA $2007                     
-         * 8154	8E0720        	STX $2007                     
-         * 8157	ACD101        	LDY $01D1                     
-         * 815A	B10A          	LDA (PAL_SPR_PTR),y           
-         * 815C	8D0720        	STA $2007                     
-         * 815F	ACD201        	LDY $01D2                     
-         * 8162	B10A          	LDA (PAL_SPR_PTR),y           
-         * 8164	8D0720        	STA $2007                     
-         * 8167	ACD301        	LDY $01D3                     
-         * 816A	B10A          	LDA (PAL_SPR_PTR),y           
-         */
-
-        Write(NESInstruction.LDY_abs, PAL_BUF + 14);
-        Write(NESInstruction.LDA_ind_Y, PAL_BG_PTR);
-        Write(NESInstruction.STA_abs, PPU_DATA);
-        Write(NESInstruction.LDY_abs, 0x01CF);
-        Write(NESInstruction.LDA_ind_Y, PAL_BG_PTR);
-        Write(NESInstruction.STA_abs, PPU_DATA);
-        Write(NESInstruction.STX_abs, PPU_DATA);
-        Write(NESInstruction.LDY_abs, 0x01D1);
-        Write(NESInstruction.LDA_ind_Y, PAL_SPR_PTR);
-        Write(NESInstruction.STA_abs, PPU_DATA);
-        Write(NESInstruction.LDY_abs, 0x01D2);
-        Write(NESInstruction.LDA_ind_Y, PAL_SPR_PTR);
-        Write(NESInstruction.STA_abs, PPU_DATA);
-        Write(NESInstruction.LDY_abs, 0x01D3);
-        Write(NESInstruction.LDA_ind_Y, PAL_SPR_PTR);
-
-        /*
-         * 816C	8D0720        	STA $2007                     
-         * 816F	8E0720        	STX $2007                     
-         * 8172	ACD501        	LDY $01D5                     
-         * 8175	B10A          	LDA (PAL_SPR_PTR),y           
-         * 8177	8D0720        	STA $2007                     
-         * 817A	ACD601        	LDY $01D6                     
-         * 817D	B10A          	LDA (PAL_SPR_PTR),y           
-         * 817F	8D0720        	STA $2007                     
-         * 8182	ACD701        	LDY $01D7                     
-         * 8185	B10A          	LDA (PAL_SPR_PTR),y           
-         * 8187	8D0720        	STA $2007                     
-         * 818A	8E0720        	STX $2007                     
-         * 818D	ACD901        	LDY $01D9                     
-         * 8190	B10A          	LDA (PAL_SPR_PTR),y           
-         * 8192	8D0720        	STA $2007                     
-         * 8195	ACDA01        	LDY $01DA                     
-         */
-
-        Write(NESInstruction.STA_abs, PPU_DATA);
-        Write(NESInstruction.STX_abs, PPU_DATA);
-        Write(NESInstruction.LDY_abs, 0x01D5);
-        Write(NESInstruction.LDA_ind_Y, PAL_SPR_PTR);
-        Write(NESInstruction.STA_abs, PPU_DATA);
-        Write(NESInstruction.LDY_abs, 0x01D6);
-        Write(NESInstruction.LDA_ind_Y, PAL_SPR_PTR);
-        Write(NESInstruction.STA_abs, PPU_DATA);
-        Write(NESInstruction.LDY_abs, 0x01D7);
-        Write(NESInstruction.LDA_ind_Y, PAL_SPR_PTR);
-        Write(NESInstruction.STA_abs, PPU_DATA);
-        Write(NESInstruction.STX_abs, PPU_DATA);
-        Write(NESInstruction.LDY_abs, 0x01D9);
-        Write(NESInstruction.LDA_ind_Y, PAL_SPR_PTR);
-        Write(NESInstruction.STA_abs, PPU_DATA);
-        Write(NESInstruction.LDY_abs, 0x01DA);
-
-        /*
-         * 8198	B10A          	LDA (PAL_SPR_PTR),y           
-         * 819A	8D0720        	STA $2007                     
-         * 819D	ACDB01        	LDY $01DB                     
-         * 81A0	B10A          	LDA (PAL_SPR_PTR),y           
-         * 81A2	8D0720        	STA $2007                     
-         * 81A5	8E0720        	STX $2007                     
-         * 81A8	ACDD01        	LDY $01DD                     
-         * 81AB	B10A          	LDA (PAL_SPR_PTR),y           
-         * 81AD	8D0720        	STA $2007                     
-         * 81B0	ACDE01        	LDY $01DE                     
-         * 81B3	B10A          	LDA (PAL_SPR_PTR),y           
-         * 81B5	8D0720        	STA $2007                     
-         * 81B8	ACDF01        	LDY $01DF                     
-         * 81BB	B10A          	LDA (PAL_SPR_PTR),y           
-         * 81BD	8D0720        	STA $2007 
-         */
-        Write(NESInstruction.LDA_ind_Y, PAL_SPR_PTR);
-        Write(NESInstruction.STA_abs, PPU_DATA);
-        Write(NESInstruction.LDY_abs, 0x01DB);
-        Write(NESInstruction.LDA_ind_Y, PAL_SPR_PTR);
-        Write(NESInstruction.STA_abs, PPU_DATA);
-        Write(NESInstruction.STX_abs, PPU_DATA);
-        Write(NESInstruction.LDY_abs, 0x01DD);
-        Write(NESInstruction.LDA_ind_Y, PAL_SPR_PTR);
-        Write(NESInstruction.STA_abs, PPU_DATA);
-        Write(NESInstruction.LDY_abs, 0x01DE);
-        Write(NESInstruction.LDA_ind_Y, PAL_SPR_PTR);
-        Write(NESInstruction.STA_abs, PPU_DATA);
-        Write(NESInstruction.LDY_abs, 0x01DF);
-        Write(NESInstruction.LDA_ind_Y, PAL_SPR_PTR);
-        Write(NESInstruction.STA_abs, PPU_DATA);
     }
 
     /// <summary>
@@ -586,7 +396,7 @@ class NESWriter : IDisposable
     public void WriteBuiltIns()
     {
         WriteUnknownAssembly();
-        WriteBuiltInAssembly();
+        WriteBuiltIn("@updPal");
         WriteBuiltIn("@updVRAM");
         WriteBuiltIn("@skipUpd");
         WriteBuiltIn("@skipAll");
@@ -699,6 +509,89 @@ class NESWriter : IDisposable
     {
         switch (name)
         {
+            case "@updPal":
+                // https://github.com/clbr/neslib/blob/d061b0f7f1a449941111c31eee0fc2e85b1826d7/neslib.sinc#L49
+                /*
+                 * ldx #0
+                 * stx <PAL_UPDATE
+                 * 
+                 * lda #$3f
+                 * sta PPU_ADDR
+                 * stx PPU_ADDR
+                 */
+                Write(NESInstruction.LDX, 0x00);
+                Write(NESInstruction.STX_zpg, PAL_UPDATE);
+                Write(NESInstruction.LDA, 0x3F);
+                Write(NESInstruction.STA_abs, PPU_ADDR);
+                Write(NESInstruction.STX_abs, PPU_ADDR);
+
+                /*
+                 * ldy PAL_BUF				;background color, remember it in X
+                 * lda (PAL_BG_PTR),y
+                 * sta PPU_DATA
+                 * tax
+                 */
+                Write(NESInstruction.LDY_abs, PAL_BUF);
+                Write(NESInstruction.LDA_ind_Y, PAL_BG_PTR);
+                Write(NESInstruction.STA_abs, PPU_DATA);
+                Write(NESInstruction.TAX_impl);
+
+                /*
+                 * .repeat 3,I
+                 * ldy PAL_BUF+1+I
+                 * da (PAL_BG_PTR),y
+                 * sta PPU_DATA
+                 * .endrepeat
+                 */
+                for (int i = 1; i <= 3; i++)
+                {
+                    Write(NESInstruction.LDY_abs, (ushort)(PAL_BUF + i));
+                    Write(NESInstruction.LDA_ind_Y, PAL_BG_PTR);
+                    Write(NESInstruction.STA_abs, PPU_DATA);
+                }
+
+                /*
+                / * .repeat 3,J
+                / * stx PPU_DATA			;background color
+                / * .repeat 3,I
+                / * ldy PAL_BUF+5+(J*4)+I
+                / * lda (PAL_BG_PTR),y
+                / * sta PPU_DATA
+                / * .endrepeat
+                / * .endrepeat
+                 */
+                for (int j = 1; j <= 3; j++)
+                {
+                    Write(NESInstruction.STX_abs, PPU_DATA);
+                    for (int i = 1; i <= 3; i++)
+                    {
+                        Write(NESInstruction.LDY_abs, (ushort)(PAL_BUF + (j * 4) + i));
+                        Write(NESInstruction.LDA_ind_Y, PAL_BG_PTR);
+                        Write(NESInstruction.STA_abs, PPU_DATA);
+                    }
+                }
+
+                /*
+                 * .repeat 4,J
+                 * stx PPU_DATA			;background color
+                 * .repeat 3,I
+                 * ldy PAL_BUF+17+(J*4)+I
+                 * lda (PAL_SPR_PTR),y
+                 * sta PPU_DATA
+                 * .endrepeat
+                 * .endrepeat
+                 */
+                for (int j = 1; j <= 4; j++)
+                {
+                    Write(NESInstruction.STX_abs, PPU_DATA);
+                    for (int i = 1; i <= 3; i++)
+                    {
+                        Write(NESInstruction.LDY_abs, (ushort)(PAL_BUF + 12 + (j * 4) + i));
+                        Write(NESInstruction.LDA_ind_Y, PAL_SPR_PTR);
+                        Write(NESInstruction.STA_abs, PPU_DATA);
+                    }
+                }
+                break;
             case "@updVRAM":
                 /*
                  * 81C0	A503          	LDA VRAM_UPDATE               ; @updVRAM
