@@ -185,12 +185,6 @@ class NESWriter : IDisposable
     public void WriteUnknownAssembly()
     {
         /*
-         * 78
-         * A2 FF
-         * 9A E8
-         * 8E 01 20
-         * 8E 10 40
-         * 8E 00 20
          * 2C 02 20
          * 2C 02 20
          * 10 FB
@@ -219,13 +213,7 @@ class NESWriter : IDisposable
          * 8A
          * 95 00
          */
-        Write(NESInstruction.SEI_impl);
-        Write(NESInstruction.LDX, 0xFF);
-        Write(NESInstruction.TXS_impl);
-        Write(NESInstruction.INX_impl);
-        Write(NESInstruction.STX_abs, PPU_MASK);
-        Write(NESInstruction.STX_abs, DMC_FREQ);
-        Write(NESInstruction.STX_abs, PPU_CTRL);
+        WriteBuiltIn("_exit");
         Write(NESInstruction.BIT_abs, PPU_STATUS);
         Write(NESInstruction.BIT_abs, PPU_STATUS);
         Write(NESInstruction.BPL, 0xFB);
@@ -440,6 +428,25 @@ class NESWriter : IDisposable
     {
         switch (name)
         {
+            case "_exit":
+                // https://github.com/clbr/neslib/blob/d061b0f7f1a449941111c31eee0fc2e85b1826d7/crt0.s#L111
+                /*
+                 * sei
+                 * ldx #$ff
+                 * txs
+                 * inx
+                 * stx PPU_MASK
+                 * stx DMC_FREQ
+                 * stx PPU_CTRL		;no NMI
+                 */
+                Write(NESInstruction.SEI_impl);
+                Write(NESInstruction.LDX, 0xFF);
+                Write(NESInstruction.TXS_impl);
+                Write(NESInstruction.INX_impl);
+                Write(NESInstruction.STX_abs, PPU_MASK);
+                Write(NESInstruction.STX_abs, DMC_FREQ);
+                Write(NESInstruction.STX_abs, PPU_CTRL);
+                break;
             case "waitSync3":
                 // https://github.com/clbr/neslib/blob/d061b0f7f1a449941111c31eee0fc2e85b1826d7/crt0.s#L197
                 Write(NESInstruction.LDA_zpg, STARTUP);
