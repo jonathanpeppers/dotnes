@@ -431,7 +431,7 @@ class NESWriter : IDisposable
          * 8E 07 20
          * AC CD 01
          * B1 08
-         * 8D 07
+         * 8D 07 20
          */
         Write(NESInstruction.TAX_impl);
         Write(NESInstruction.LDY_abs, PAL_BUF + 1);
@@ -466,7 +466,7 @@ class NESWriter : IDisposable
         Write(NESInstruction.STX_abs, PPU_DATA);
         Write(NESInstruction.LDY_abs, PAL_BUF + 13);
         Write(NESInstruction.LDA_ind_Y, 0x08);
-        Write(NESInstruction.STA_abs, 0x07); //TODO: this is cutoff (PPU_DATA)
+        Write(NESInstruction.STA_abs, PPU_DATA);
     }
 
     /// <summary>
@@ -477,9 +477,8 @@ class NESWriter : IDisposable
     public void WriteBuiltInAssembly()
     {
         /*
-         * 8143	20ACCE        	JSR $CEAC                     
-         * 8146	01B1          	ORA ($B1,x)                   
-         * 8148	08            	PHP                           
+         * 8143	ACCE01        
+         * 8146	B108          
          * 8149	8D0720        	STA $2007                     
          * 814C	ACCF01        	LDY $01CF                     
          * 814F	B108          	LDA (PAL_BG_PTR),y            
@@ -495,9 +494,8 @@ class NESWriter : IDisposable
          * 816A	B10A          	LDA (PAL_SPR_PTR),y           
          */
 
-        Write(NESInstruction.JSR, 0xCEAC);
-        Write(NESInstruction.ORA_X_ind, 0xB1);
-        Write(NESInstruction.PHP_impl);
+        Write(NESInstruction.LDY_abs, PAL_BUF + 14);
+        Write(NESInstruction.LDA_ind_Y, 0x08);
         Write(NESInstruction.STA_abs, PPU_DATA);
         Write(NESInstruction.LDY_abs, 0x01CF);
         Write(NESInstruction.LDA_ind_Y, PAL_BG_PTR);
