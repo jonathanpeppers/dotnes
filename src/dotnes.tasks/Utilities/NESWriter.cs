@@ -50,6 +50,7 @@ class NESWriter : IDisposable
     protected const ushort PPU_SCROLL = 0x2005;
     protected const ushort PPU_ADDR = 0x2006;
     protected const ushort PPU_DATA = 0x2007;
+    protected const ushort DMC_FREQ = 0x4010;
     protected const ushort PPU_OAM_DMA = 0x4014;
     protected const ushort skipNtsc = 0x81F9;
     protected const ushort pal_col = 0x823E;
@@ -223,7 +224,7 @@ class NESWriter : IDisposable
         Write(NESInstruction.TXS_impl);
         Write(NESInstruction.INX_impl);
         Write(NESInstruction.STX_abs, PPU_MASK);
-        Write(NESInstruction.STX_abs, 0x4010);
+        Write(NESInstruction.STX_abs, DMC_FREQ);
         Write(NESInstruction.STX_abs, PPU_CTRL);
         Write(NESInstruction.BIT_abs, PPU_STATUS);
         Write(NESInstruction.BIT_abs, PPU_STATUS);
