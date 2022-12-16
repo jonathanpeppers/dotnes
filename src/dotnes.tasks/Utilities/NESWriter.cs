@@ -1756,7 +1756,7 @@ class NESWriter : IDisposable
                 Write(NESInstruction.LDA, 0x00);
                 Write(NESInstruction.TAY_impl);
                 Write(NESInstruction.LDX, 0x00);
-                Write(NESInstruction.BEQ_rel, 0x0A);
+                Write(NESInstruction.BEQ_rel, PAL_SPR_PTR);
                 Write(NESInstruction.STA_ind_Y, ptr1);
                 Write(NESInstruction.INY_impl);
                 Write(NESInstruction.BNE_rel, 0xFB);
