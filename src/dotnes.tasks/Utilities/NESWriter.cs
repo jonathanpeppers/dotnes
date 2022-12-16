@@ -187,28 +187,8 @@ class NESWriter : IDisposable
     {
         /*
          * 8A
-         * A0 20
-         * 8C 06 20
-         * 8D 06 20
-         * A0 10
-         * 8D 07 20
-         * E8
-         * D0 FA
-         * 88
-         * D0 F7
-         * 8A
          * 95 00
          */
-        Write(NESInstruction.TXA_impl);
-        Write(NESInstruction.LDY, 0x20);
-        Write(NESInstruction.STY_abs, PPU_ADDR);
-        Write(NESInstruction.STA_abs, PPU_ADDR);
-        Write(NESInstruction.LDY, 0x10);
-        Write(NESInstruction.STA_abs, PPU_DATA);
-        Write(NESInstruction.INX_impl);
-        Write(NESInstruction.BNE_rel, 0xFA);
-        Write(NESInstruction.DEY_impl);
-        Write(NESInstruction.BNE_rel, 0xF7);
         Write(NESInstruction.TXA_impl);
         Write(NESInstruction.STA_zpg_X, 0x00);
 
@@ -283,6 +263,7 @@ class NESWriter : IDisposable
         WriteBuiltIn("_exit");
         WriteBuiltIn("initPPU");
         WriteBuiltIn("clearPalette");
+        WriteBuiltIn("clearVRAM");
         WriteUnknownAssembly();
         WriteBuiltIn("waitSync3");
         WriteBuiltIn("detectNTSC");
@@ -464,6 +445,32 @@ class NESWriter : IDisposable
                 Write(NESInstruction.STA_abs, PPU_DATA);
                 Write(NESInstruction.DEX_impl);
                 Write(NESInstruction.BNE_rel, 0xFA);
+                break;
+            case "clearVRAM":
+                /*
+                 * https://github.com/clbr/neslib/blob/d061b0f7f1a449941111c31eee0fc2e85b1826d7/crt0.s#L147
+                 *     txa
+                 *     ldy #$20
+                 *     sty PPU_ADDR
+                 *     sta PPU_ADDR
+                 *     ldy #$10
+                 * @1:
+                 *     sta PPU_DATA
+                 *     inx
+                 *     bne @1
+                 *     dey
+                 *     bne @1
+                 */
+                Write(NESInstruction.TXA_impl);
+                Write(NESInstruction.LDY, 0x20);
+                Write(NESInstruction.STY_abs, PPU_ADDR);
+                Write(NESInstruction.STA_abs, PPU_ADDR);
+                Write(NESInstruction.LDY, 0x10);
+                Write(NESInstruction.STA_abs, PPU_DATA);
+                Write(NESInstruction.INX_impl);
+                Write(NESInstruction.BNE_rel, 0xFA);
+                Write(NESInstruction.DEY_impl);
+                Write(NESInstruction.BNE_rel, 0xF7);
                 break;
             case "waitSync3":
                 // https://github.com/clbr/neslib/blob/d061b0f7f1a449941111c31eee0fc2e85b1826d7/crt0.s#L197
