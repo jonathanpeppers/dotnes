@@ -28,34 +28,50 @@ class Transpiler : IDisposable
             CHR_ROM_SIZE = (int)(chr_rom.Length / NESWriter.CHR_ROM_BLOCK_SIZE);
         }
 
-        // Generate static void main, so we know the size of the program
-        using var mainStream = new MemoryStream();
-        using var mainWriter = new IL2NESWriter(mainStream);
-        foreach (var instruction in ReadStaticVoidMain())
+        // Generate static void main in a first pass, so we know the size of the program
+        ushort sizeOfMain;
+        using (var mainWriter = new IL2NESWriter(new MemoryStream()))
         {
-            if (instruction.Integer != null)
+            foreach (var instruction in ReadStaticVoidMain())
             {
-                mainWriter.Write(instruction.OpCode, instruction.Integer.Value);
+                if (instruction.Integer != null)
+                {
+                    mainWriter.Write(instruction.OpCode, instruction.Integer.Value, 0);
+                }
+                else if (instruction.String != null)
+                {
+                    mainWriter.Write(instruction.OpCode, instruction.String, 0);
+                }
+                else
+                {
+                    mainWriter.Write(instruction.OpCode, 0);
+                }
             }
-            else if (instruction.String != null)
-            {
-                mainWriter.Write(instruction.OpCode, instruction.String);
-            }
-            else
-            {
-                mainWriter.Write(instruction.OpCode);
-            }
+            mainWriter.Flush();
+            sizeOfMain = checked((ushort)mainWriter.BaseStream.Length);
         }
-        mainWriter.Flush();
 
-        ushort sizeOfMain = checked((ushort)mainStream.Length);
         using var writer = new IL2NESWriter(stream);
         writer.WriteHeader(PRG_ROM_SIZE: 2, CHR_ROM_SIZE: 1);
         writer.WriteBuiltIns(sizeOfMain);
 
-        // Write static void main
-        mainStream.Position = 0;
-        mainStream.CopyTo(stream);
+        // Write static void main *again*, second pass
+        // With a known value for sizeOfMain
+        foreach (var instruction in ReadStaticVoidMain())
+        {
+            if (instruction.Integer != null)
+            {
+                writer.Write(instruction.OpCode, instruction.Integer.Value, sizeOfMain);
+            }
+            else if (instruction.String != null)
+            {
+                writer.Write(instruction.OpCode, instruction.String, sizeOfMain);
+            }
+            else
+            {
+                writer.Write(instruction.OpCode, sizeOfMain);
+            }
+        }
 
         writer.WriteFinalBuiltIns();
 

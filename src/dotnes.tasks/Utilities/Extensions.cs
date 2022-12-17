@@ -54,4 +54,6 @@ static class Extensions
 			return new UnmanagedMemoryStream(resourceStart, resourceLength);
 		}
 	}
+
+	public static ushort GetAddressAfterMain(this ushort address, ushort sizeOfMain) => (ushort)(address + sizeOfMain);
 }

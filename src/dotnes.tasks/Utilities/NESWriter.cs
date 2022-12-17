@@ -64,10 +64,10 @@ class NESWriter : IDisposable
     protected const ushort palBrightTableH = 0x842B;
     protected const ushort copydata = 0x850C;
     protected const ushort zerobss = 0x858B;
-    protected const ushort pusha = 0x85A2;
-    protected const ushort pushax = 0x85B8;
-    protected const ushort popa = 0x8592;
+    protected const ushort popa = 0x854F;
     protected const ushort popax = 0x8539;
+    protected const ushort pusha = 0x855F;
+    protected const ushort pushax = 0x8575;
 
     protected readonly BinaryWriter _writer;
 
@@ -305,7 +305,7 @@ class NESWriter : IDisposable
     /// <summary>
     /// Writes a built-in method from NESLib
     /// </summary>
-    public void WriteBuiltIn(string name, ushort sizeOfMain = 0)
+    public void WriteBuiltIn(string name, ushort sizeOfMain)
     {
         switch (name)
         {
@@ -385,7 +385,7 @@ class NESWriter : IDisposable
                  * 824D	60            	RTS
                  */
                 Write(NESInstruction.STA_zpg, TEMP);
-                Write(NESInstruction.JSR, popa);
+                Write(NESInstruction.JSR, popa.GetAddressAfterMain(sizeOfMain));
                 Write(NESInstruction.AND, 0x1F);
                 Write(NESInstruction.TAX_impl);
                 Write(NESInstruction.LDA_zpg, TEMP);
@@ -704,7 +704,7 @@ class NESWriter : IDisposable
                 Write(NESInstruction.STA_zpg, SCROLL_Y); // 8313
                 Write(NESInstruction.LDA, 0x02);
                 Write(NESInstruction.STA_zpg, TEMP);
-                Write(NESInstruction.JSR, GetAddressAfterMain(popax, sizeOfMain));
+                Write(NESInstruction.JSR, popax.GetAddressAfterMain(sizeOfMain));
                 Write(NESInstruction.STA_zpg, SCROLL_X); // 831C
                 Write(NESInstruction.TXA_impl);
                 Write(NESInstruction.AND, 0x01);
@@ -790,7 +790,7 @@ class NESWriter : IDisposable
                  */
                 Write(NESInstruction.STA_zpg, TEMP);
                 Write(NESInstruction.STX_zpg, TEMP + 1);
-                Write(NESInstruction.JSR, GetAddressAfterMain(popax, sizeOfMain));
+                Write(NESInstruction.JSR, popax.GetAddressAfterMain(sizeOfMain));
                 Write(NESInstruction.STA_zpg, 0x19);
                 Write(NESInstruction.STX_zpg, 0x1A);
                 Write(NESInstruction.LDY, 0x00);
@@ -964,7 +964,7 @@ class NESWriter : IDisposable
                  */
                 Write(NESInstruction.STA_zpg, 0x19);
                 Write(NESInstruction.STX_zpg, 0x1A);
-                Write(NESInstruction.JSR, popa);
+                Write(NESInstruction.JSR, popa.GetAddressAfterMain(sizeOfMain));
                 Write(NESInstruction.LDX_zpg, 0x1A);
                 Write(NESInstruction.BEQ_rel, 0x0C);
                 Write(NESInstruction.LDX, 0x00);
@@ -1182,8 +1182,8 @@ class NESWriter : IDisposable
         Write(NESInstruction.JSR, 0x8279);
         Write(NESInstruction.JSR, 0x824E);
         Write(NESInstruction.JSR, 0x82AE);
-        Write(NESInstruction.JSR, GetAddressAfterMain(zerobss, sizeOfMain));
-        Write(NESInstruction.JSR, GetAddressAfterMain(copydata, sizeOfMain));
+        Write(NESInstruction.JSR, zerobss.GetAddressAfterMain(sizeOfMain));
+        Write(NESInstruction.JSR, copydata.GetAddressAfterMain(sizeOfMain));
         Write(NESInstruction.LDA, 0x00);
         Write(NESInstruction.STA_zpg, sp);
         Write(NESInstruction.LDA, PAL_BG_PTR);
@@ -1797,6 +1797,4 @@ class NESWriter : IDisposable
     public void Flush() => _writer.Flush();
 
     public void Dispose() => _writer.Dispose();
-
-    static ushort GetAddressAfterMain(ushort address, ushort sizeOfMain) => (ushort)(address + sizeOfMain);
 }

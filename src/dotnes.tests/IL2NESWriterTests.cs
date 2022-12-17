@@ -5,6 +5,7 @@ namespace dotnes.tests;
 
 public class IL2NESWriterTests
 {
+    const ushort sizeOfMain = 67;
     readonly byte[] data;
     readonly MemoryStream stream = new MemoryStream();
 
@@ -31,47 +32,47 @@ public class IL2NESWriterTests
     {
         using var writer = GetWriter();
         writer.WriteHeader(PRG_ROM_SIZE: 2, CHR_ROM_SIZE: 1);
-        writer.WriteBuiltIns(sizeOfMain: 67);
+        writer.WriteBuiltIns(sizeOfMain);
 
         // pal_col(0, 0x02);
-        writer.Write(ILOpCode.Ldc_i4_0);
-        writer.Write(ILOpCode.Ldc_i4_2);
-        writer.Write(ILOpCode.Call, nameof(pal_col));
+        writer.Write(ILOpCode.Ldc_i4_0, sizeOfMain);
+        writer.Write(ILOpCode.Ldc_i4_2, sizeOfMain);
+        writer.Write(ILOpCode.Call, nameof(pal_col), sizeOfMain);
 
         // pal_col(1, 0x14);
-        writer.Write(ILOpCode.Ldc_i4_1);
-        writer.Write(ILOpCode.Ldc_i4, 0x14);
-        writer.Write(ILOpCode.Call, nameof(pal_col));
+        writer.Write(ILOpCode.Ldc_i4_1, sizeOfMain);
+        writer.Write(ILOpCode.Ldc_i4, 0x14, sizeOfMain);
+        writer.Write(ILOpCode.Call, nameof(pal_col), sizeOfMain);
 
         // pal_col(2, 0x20);
-        writer.Write(ILOpCode.Ldc_i4_2);
-        writer.Write(ILOpCode.Ldc_i4, 0x20);
-        writer.Write(ILOpCode.Call, nameof(pal_col));
+        writer.Write(ILOpCode.Ldc_i4_2, sizeOfMain);
+        writer.Write(ILOpCode.Ldc_i4, 0x20, sizeOfMain);
+        writer.Write(ILOpCode.Call, nameof(pal_col), sizeOfMain);
 
         // pal_col(3, 0x30);
-        writer.Write(ILOpCode.Ldc_i4_3);
-        writer.Write(ILOpCode.Ldc_i4, 0x30);
-        writer.Write(ILOpCode.Call, nameof(pal_col));
+        writer.Write(ILOpCode.Ldc_i4_3, sizeOfMain);
+        writer.Write(ILOpCode.Ldc_i4, 0x30, sizeOfMain);
+        writer.Write(ILOpCode.Call, nameof(pal_col), sizeOfMain);
 
         // vram_adr(NTADR_A(2, 2));
-        writer.Write(ILOpCode.Ldc_i4_2);
-        writer.Write(ILOpCode.Ldc_i4_2);
-        writer.Write(ILOpCode.Call, nameof(NTADR_A));
-        writer.Write(ILOpCode.Call, nameof(vram_adr));
+        writer.Write(ILOpCode.Ldc_i4_2, sizeOfMain);
+        writer.Write(ILOpCode.Ldc_i4_2, sizeOfMain);
+        writer.Write(ILOpCode.Call, nameof(NTADR_A), sizeOfMain);
+        writer.Write(ILOpCode.Call, nameof(vram_adr), sizeOfMain);
 
         // vram_write("HELLO, .NET!");
         var text = "HELLO, .NET!";
-        writer.Write(ILOpCode.Ldstr, text);
-        writer.Write(ILOpCode.Call, nameof(vram_write));
+        writer.Write(ILOpCode.Ldstr, text, sizeOfMain);
+        writer.Write(ILOpCode.Call, nameof(vram_write), sizeOfMain);
 
         // ppu_on_all();
-        writer.Write(ILOpCode.Call, nameof(ppu_on_all));
+        writer.Write(ILOpCode.Call, nameof(ppu_on_all), sizeOfMain);
 
         // while (true) ;
         writer.Write(NESInstruction.JMP_abs, 0x8540); // Jump to self
 
         writer.WriteFinalBuiltIns();
-        writer.WriteString("HELLO, .NET!");
+        writer.WriteString(text);
         writer.WriteDestructorTable();
 
         // Pad 0s

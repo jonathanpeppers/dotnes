@@ -11,45 +11,45 @@ class IL2NESWriter : NESWriter
 
     readonly Stack<int> A = new Stack<int> ();
 
-    public void Write(ILOpCode code)
+    public void Write(ILOpCode code, ushort sizeOfMain)
     {
         switch (code)
         {
             case ILOpCode.Nop:
                 break;
             case ILOpCode.Ldc_i4_0:
-                WriteLdc(0);
+                WriteLdc(0, sizeOfMain);
                 break;
             case ILOpCode.Ldc_i4_1:
-                WriteLdc(1);
+                WriteLdc(1, sizeOfMain);
                 break;
             case ILOpCode.Ldc_i4_2:
-                WriteLdc(2);
+                WriteLdc(2, sizeOfMain);
                 break;
             case ILOpCode.Ldc_i4_3:
-                WriteLdc(3);
+                WriteLdc(3, sizeOfMain);
                 break;
             case ILOpCode.Ldc_i4_4:
-                WriteLdc(4);
+                WriteLdc(4, sizeOfMain);
                 break;
             case ILOpCode.Ldc_i4_5:
-                WriteLdc(5);
+                WriteLdc(5, sizeOfMain);
                 break;
             case ILOpCode.Ldc_i4_6:
-                WriteLdc(6);
+                WriteLdc(6, sizeOfMain);
                 break;
             case ILOpCode.Ldc_i4_7:
-                WriteLdc(7);
+                WriteLdc(7, sizeOfMain);
                 break;
             case ILOpCode.Ldc_i4_8:
-                WriteLdc(8);
+                WriteLdc(8, sizeOfMain);
                 break;
             default:
                 throw new NotImplementedException($"OpCode {code} with no operands is not implemented!");
         }
     }
 
-    public void Write(ILOpCode code, int operand)
+    public void Write(ILOpCode code, int operand, ushort sizeOfMain)
     {
         switch (code)
         {
@@ -57,7 +57,7 @@ class IL2NESWriter : NESWriter
                 break;
             case ILOpCode.Ldc_i4:
             case ILOpCode.Ldc_i4_s:
-                WriteLdc(checked((byte)operand));
+                WriteLdc(checked((byte)operand), sizeOfMain);
                 break;
             case ILOpCode.Br_s:
                 Write(NESInstruction.JMP_abs, checked((ushort)(byte.MaxValue - operand + 0x8540 - 1)));
@@ -67,7 +67,7 @@ class IL2NESWriter : NESWriter
         }
     }
 
-    public void Write(ILOpCode code, string operand)
+    public void Write(ILOpCode code, string operand, ushort sizeOfMain)
     {
         switch (code)
         {
@@ -77,7 +77,7 @@ class IL2NESWriter : NESWriter
                 //TODO: hardcoded until string table figured out
                 Write(NESInstruction.LDA, 0xF1);
                 Write(NESInstruction.LDX, 0x85);
-                Write(NESInstruction.JSR, pushax);
+                Write(NESInstruction.JSR, pushax.GetAddressAfterMain(sizeOfMain));
                 Write(NESInstruction.LDX, 0x00);
                 A.Push(operand.Length); //HACK: to use operand for vram_write?
                 break;
@@ -97,7 +97,7 @@ class IL2NESWriter : NESWriter
                         A.Push(address);
                         break;
                     case nameof(NESLib.vram_write):
-                        Write(ILOpCode.Ldc_i4_s, A.Pop());
+                        Write(ILOpCode.Ldc_i4_s, A.Pop(), sizeOfMain);
                         goto default;
                     default:
                         Write(NESInstruction.JSR, GetAddress(operand));
@@ -127,11 +127,11 @@ class IL2NESWriter : NESWriter
         }
     }
 
-    void WriteLdc(byte operand)
+    void WriteLdc(byte operand, ushort sizeOfMain)
     {
         if (A.Count > 0)
         {
-            Write(NESInstruction.JSR, pusha);
+            Write(NESInstruction.JSR, pusha.GetAddressAfterMain(sizeOfMain));
         }
         Write(NESInstruction.LDA, checked((byte)operand));
         A.Push(operand);
