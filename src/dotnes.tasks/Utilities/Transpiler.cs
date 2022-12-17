@@ -37,15 +37,19 @@ class Transpiler : IDisposable
             {
                 if (instruction.Integer != null)
                 {
-                    mainWriter.Write(instruction.OpCode, instruction.Integer.Value, 0);
+                    mainWriter.Write(instruction.OpCode, instruction.Integer.Value, sizeOfMain: 0);
                 }
                 else if (instruction.String != null)
                 {
-                    mainWriter.Write(instruction.OpCode, instruction.String, 0);
+                    mainWriter.Write(instruction.OpCode, instruction.String, sizeOfMain: 0);
+                }
+                else if (instruction.Bytes != null)
+                {
+                    mainWriter.Write(instruction.OpCode, instruction.Bytes, sizeOfMain: 0);
                 }
                 else
                 {
-                    mainWriter.Write(instruction.OpCode, 0);
+                    mainWriter.Write(instruction.OpCode, sizeOfMain: 0);
                 }
             }
             mainWriter.Flush();
@@ -70,7 +74,7 @@ class Transpiler : IDisposable
             }
             else if (instruction.Bytes != null)
             {
-                writer.Write(instruction.OpCode, instruction.Bytes);
+                writer.Write(instruction.OpCode, instruction.Bytes, sizeOfMain);
             }
             else
             {
