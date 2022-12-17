@@ -181,7 +181,7 @@ public class NESWriterTests
     public void Write_vram_write()
     {
         using var writer = GetWriter();
-        writer.WriteBuiltIn(nameof(NESLib.vram_write));
+        writer.WriteBuiltIn(nameof(NESLib.vram_write), sizeOfMain: 67);
         writer.Flush();
         AssertInstructions("8517 8618 207C85 8519 861A A000 B119 8D0720 E619 D002 E61A A517 D002 C618 C617 A517 0518 D0E7 60");
     }
@@ -227,7 +227,7 @@ public class NESWriterTests
     {
         using var writer = GetWriter();
         writer.WriteHeader(PRG_ROM_SIZE: 2, CHR_ROM_SIZE: 1);
-        writer.WriteBuiltIns();
+        writer.WriteBuiltIns(sizeOfMain: 67);
 
         /*
         * 8500	A900          	LDA #$00                      ; _main

@@ -31,7 +31,7 @@ public class IL2NESWriterTests
     {
         using var writer = GetWriter();
         writer.WriteHeader(PRG_ROM_SIZE: 2, CHR_ROM_SIZE: 1);
-        writer.WriteBuiltIns();
+        writer.WriteBuiltIns(sizeOfMain: 67);
 
         // pal_col(0, 0x02);
         writer.Write(ILOpCode.Ldc_i4_0);

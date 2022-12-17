@@ -62,10 +62,12 @@ class NESWriter : IDisposable
     protected const ushort updName = 0x8385;
     protected const ushort palBrightTableL = 0x8422;
     protected const ushort palBrightTableH = 0x842B;
+    protected const ushort copydata = 0x850C;
+    protected const ushort zerobss = 0x858B;
     protected const ushort pusha = 0x85A2;
     protected const ushort pushax = 0x85B8;
     protected const ushort popa = 0x8592;
-    protected const ushort popax = 0x857C; //TODO: might should be 0x857F?
+    protected const ushort popax = 0x8539;
 
     protected readonly BinaryWriter _writer;
 
@@ -183,13 +185,13 @@ class NESWriter : IDisposable
     /// <summary>
     /// Writes all the built-in methods from NESLib
     /// </summary>
-    public void WriteBuiltIns()
+    public void WriteBuiltIns(ushort sizeOfMain)
     {
         Write_exit();
         Write_initPPU();
         Write_clearPalette();
         Write_clearVRAM();
-        Write_clearRAM();
+        Write_clearRAM(sizeOfMain);
         Write_waitSync3();
         Write_detectNTSC();
         Write_nmi();
@@ -201,41 +203,41 @@ class NESWriter : IDisposable
         Write_skipNtsc();
         Write_irq();
         Write_nmi_set_callback();
-        WriteBuiltIn(nameof(NESLib.pal_all));
-        WriteBuiltIn(nameof(NESLib.pal_copy));
-        WriteBuiltIn(nameof(NESLib.pal_bg));
-        WriteBuiltIn(nameof(NESLib.pal_spr));
-        WriteBuiltIn(nameof(NESLib.pal_col));
-        WriteBuiltIn(nameof(NESLib.pal_clear));
-        WriteBuiltIn(nameof(NESLib.pal_spr_bright));
-        WriteBuiltIn(nameof(NESLib.pal_bg_bright));
-        WriteBuiltIn(nameof(NESLib.pal_bright));
-        WriteBuiltIn(nameof(NESLib.ppu_off));
-        WriteBuiltIn(nameof(NESLib.ppu_on_all));
-        WriteBuiltIn(nameof(NESLib.ppu_onoff));
-        WriteBuiltIn(nameof(NESLib.ppu_on_bg));
-        WriteBuiltIn(nameof(NESLib.ppu_on_spr));
-        WriteBuiltIn(nameof(NESLib.ppu_mask));
-        WriteBuiltIn(nameof(NESLib.ppu_system));
-        WriteBuiltIn(nameof(NESLib.get_ppu_ctrl_var));
-        WriteBuiltIn(nameof(NESLib.set_ppu_ctrl_var));
-        WriteBuiltIn(nameof(NESLib.oam_clear));
-        WriteBuiltIn(nameof(NESLib.oam_size));
-        WriteBuiltIn(nameof(NESLib.oam_hide_rest));
-        WriteBuiltIn(nameof(NESLib.ppu_wait_frame));
-        WriteBuiltIn(nameof(NESLib.ppu_wait_nmi));
-        WriteBuiltIn(nameof(NESLib.scroll));
-        WriteBuiltIn(nameof(NESLib.bank_spr));
-        WriteBuiltIn(nameof(NESLib.bank_bg));
-        WriteBuiltIn(nameof(NESLib.vram_write));
-        WriteBuiltIn(nameof(NESLib.set_vram_update));
-        WriteBuiltIn(nameof(NESLib.flush_vram_update));
-        WriteBuiltIn(nameof(NESLib.vram_adr));
-        WriteBuiltIn(nameof(NESLib.vram_put));
-        WriteBuiltIn(nameof(NESLib.vram_fill));
-        WriteBuiltIn(nameof(NESLib.vram_inc));
-        WriteBuiltIn(nameof(NESLib.nesclock));
-        WriteBuiltIn(nameof(NESLib.delay));
+        WriteBuiltIn(nameof(NESLib.pal_all), sizeOfMain);
+        WriteBuiltIn(nameof(NESLib.pal_copy), sizeOfMain);
+        WriteBuiltIn(nameof(NESLib.pal_bg), sizeOfMain);
+        WriteBuiltIn(nameof(NESLib.pal_spr), sizeOfMain);
+        WriteBuiltIn(nameof(NESLib.pal_col), sizeOfMain);
+        WriteBuiltIn(nameof(NESLib.pal_clear), sizeOfMain);
+        WriteBuiltIn(nameof(NESLib.pal_spr_bright), sizeOfMain);
+        WriteBuiltIn(nameof(NESLib.pal_bg_bright), sizeOfMain);
+        WriteBuiltIn(nameof(NESLib.pal_bright), sizeOfMain);
+        WriteBuiltIn(nameof(NESLib.ppu_off), sizeOfMain);
+        WriteBuiltIn(nameof(NESLib.ppu_on_all), sizeOfMain);
+        WriteBuiltIn(nameof(NESLib.ppu_onoff), sizeOfMain);
+        WriteBuiltIn(nameof(NESLib.ppu_on_bg), sizeOfMain);
+        WriteBuiltIn(nameof(NESLib.ppu_on_spr), sizeOfMain);
+        WriteBuiltIn(nameof(NESLib.ppu_mask), sizeOfMain);
+        WriteBuiltIn(nameof(NESLib.ppu_system), sizeOfMain);
+        WriteBuiltIn(nameof(NESLib.get_ppu_ctrl_var), sizeOfMain);
+        WriteBuiltIn(nameof(NESLib.set_ppu_ctrl_var), sizeOfMain);
+        WriteBuiltIn(nameof(NESLib.oam_clear), sizeOfMain);
+        WriteBuiltIn(nameof(NESLib.oam_size), sizeOfMain);
+        WriteBuiltIn(nameof(NESLib.oam_hide_rest), sizeOfMain);
+        WriteBuiltIn(nameof(NESLib.ppu_wait_frame), sizeOfMain);
+        WriteBuiltIn(nameof(NESLib.ppu_wait_nmi), sizeOfMain);
+        WriteBuiltIn(nameof(NESLib.scroll), sizeOfMain);
+        WriteBuiltIn(nameof(NESLib.bank_spr), sizeOfMain);
+        WriteBuiltIn(nameof(NESLib.bank_bg), sizeOfMain);
+        WriteBuiltIn(nameof(NESLib.vram_write), sizeOfMain);
+        WriteBuiltIn(nameof(NESLib.set_vram_update), sizeOfMain);
+        WriteBuiltIn(nameof(NESLib.flush_vram_update), sizeOfMain);
+        WriteBuiltIn(nameof(NESLib.vram_adr), sizeOfMain);
+        WriteBuiltIn(nameof(NESLib.vram_put), sizeOfMain);
+        WriteBuiltIn(nameof(NESLib.vram_fill), sizeOfMain);
+        WriteBuiltIn(nameof(NESLib.vram_inc), sizeOfMain);
+        WriteBuiltIn(nameof(NESLib.nesclock), sizeOfMain);
+        WriteBuiltIn(nameof(NESLib.delay), sizeOfMain);
         Write(NESLib.palBrightTableL);
         Write(NESLib.palBrightTable0);
         Write(NESLib.palBrightTable1);
@@ -303,7 +305,7 @@ class NESWriter : IDisposable
     /// <summary>
     /// Writes a built-in method from NESLib
     /// </summary>
-    public void WriteBuiltIn(string name)
+    public void WriteBuiltIn(string name, ushort sizeOfMain = 0)
     {
         switch (name)
         {
@@ -702,7 +704,7 @@ class NESWriter : IDisposable
                 Write(NESInstruction.STA_zpg, SCROLL_Y); // 8313
                 Write(NESInstruction.LDA, 0x02);
                 Write(NESInstruction.STA_zpg, TEMP);
-                Write(NESInstruction.JSR, popax);
+                Write(NESInstruction.JSR, GetAddressAfterMain(popax, sizeOfMain));
                 Write(NESInstruction.STA_zpg, SCROLL_X); // 831C
                 Write(NESInstruction.TXA_impl);
                 Write(NESInstruction.AND, 0x01);
@@ -788,7 +790,7 @@ class NESWriter : IDisposable
                  */
                 Write(NESInstruction.STA_zpg, TEMP);
                 Write(NESInstruction.STX_zpg, TEMP + 1);
-                Write(NESInstruction.JSR, popax);
+                Write(NESInstruction.JSR, GetAddressAfterMain(popax, sizeOfMain));
                 Write(NESInstruction.STA_zpg, 0x19);
                 Write(NESInstruction.STX_zpg, 0x1A);
                 Write(NESInstruction.LDY, 0x00);
@@ -1129,7 +1131,7 @@ class NESWriter : IDisposable
         Write(NESInstruction.BNE_rel, 0xF7);
     }
 
-    void Write_clearRAM()
+    void Write_clearRAM(ushort sizeOfMain)
     {
         /*
         * https://github.com/clbr/neslib/blob/d061b0f7f1a449941111c31eee0fc2e85b1826d7/crt0.s#L161
@@ -1180,8 +1182,8 @@ class NESWriter : IDisposable
         Write(NESInstruction.JSR, 0x8279);
         Write(NESInstruction.JSR, 0x824E);
         Write(NESInstruction.JSR, 0x82AE);
-        Write(NESInstruction.JSR, 0x85CE);
-        Write(NESInstruction.JSR, 0x854F);
+        Write(NESInstruction.JSR, GetAddressAfterMain(zerobss, sizeOfMain));
+        Write(NESInstruction.JSR, GetAddressAfterMain(copydata, sizeOfMain));
         Write(NESInstruction.LDA, 0x00);
         Write(NESInstruction.STA_zpg, sp);
         Write(NESInstruction.LDA, PAL_BG_PTR);
@@ -1795,4 +1797,6 @@ class NESWriter : IDisposable
     public void Flush() => _writer.Flush();
 
     public void Dispose() => _writer.Dispose();
+
+    static ushort GetAddressAfterMain(ushort address, ushort sizeOfMain) => (ushort)(address + sizeOfMain);
 }

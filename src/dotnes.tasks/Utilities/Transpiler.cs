@@ -28,25 +28,34 @@ class Transpiler : IDisposable
             CHR_ROM_SIZE = (int)(chr_rom.Length / NESWriter.CHR_ROM_BLOCK_SIZE);
         }
 
-        using var writer = new IL2NESWriter(stream);
-        writer.WriteHeader(PRG_ROM_SIZE: 2, CHR_ROM_SIZE: 1);
-        writer.WriteBuiltIns();
-
+        // Generate static void main, so we know the size of the program
+        using var mainStream = new MemoryStream();
+        using var mainWriter = new IL2NESWriter(mainStream);
         foreach (var instruction in ReadStaticVoidMain())
         {
             if (instruction.Integer != null)
             {
-                writer.Write(instruction.OpCode, instruction.Integer.Value);
+                mainWriter.Write(instruction.OpCode, instruction.Integer.Value);
             }
             else if (instruction.String != null)
             {
-                writer.Write(instruction.OpCode, instruction.String);
+                mainWriter.Write(instruction.OpCode, instruction.String);
             }
             else
             {
-                writer.Write(instruction.OpCode);
+                mainWriter.Write(instruction.OpCode);
             }
         }
+        mainWriter.Flush();
+
+        ushort sizeOfMain = checked((ushort)mainStream.Length);
+        using var writer = new IL2NESWriter(stream);
+        writer.WriteHeader(PRG_ROM_SIZE: 2, CHR_ROM_SIZE: 1);
+        writer.WriteBuiltIns(sizeOfMain);
+
+        // Write static void main
+        mainStream.Position = 0;
+        mainStream.CopyTo(stream);
 
         writer.WriteFinalBuiltIns();
 
