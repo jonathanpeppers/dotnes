@@ -72,11 +72,13 @@ class IL2NESWriter : NESWriter
                 break;
             case ILOpCode.Ldc_i4:
             case ILOpCode.Ldc_i4_s:
-                if (operand > byte.MaxValue)
+                if (operand > ushort.MaxValue)
                 {
-                    ushort value = checked((ushort)operand); //TODO: and if larger than ushort?
-                    Write(NESInstruction.LDX, (byte)(value >> 8));
-                    Write(NESInstruction.LDA, (byte)(value & 0xff));
+                    //TODO: and if larger than ushort?
+                }
+                else if (operand > byte.MaxValue)
+                {
+                    WriteLdc(checked((ushort)operand), sizeOfMain);
                 }
                 else
                 {
@@ -174,6 +176,17 @@ class IL2NESWriter : NESWriter
             default:
                 throw new NotImplementedException($"Address for {name} is not implemented!");
         }
+    }
+
+    void WriteLdc(ushort operand, ushort sizeOfMain)
+    {
+        if (A.Count > 0)
+        {
+            Write(NESInstruction.JSR, pusha.GetAddressAfterMain(sizeOfMain));
+        }
+        Write(NESInstruction.LDX, checked((byte)(operand >> 8)));
+        Write(NESInstruction.LDA, checked((byte)(operand & 0xff)));
+        A.Push(operand);
     }
 
     void WriteLdc(byte operand, ushort sizeOfMain)
