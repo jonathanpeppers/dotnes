@@ -95,7 +95,7 @@ public class IL2NESWriterTests
     {
         using var writer = GetWriter();
         writer.Write(ILOpCode.Ldc_i4_s, 64, sizeOfMain);
-        writer.Write(ILOpCode.Newarr, 16777232, sizeOfMain);
+        writer.Write(ILOpCode.Newarr, 16777235, sizeOfMain);
         writer.Write(ILOpCode.Dup, sizeOfMain);
         writer.Write(ILOpCode.Ldtoken, ImmutableArray.Create(new byte[] {
           0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // rows 0-3
@@ -109,7 +109,7 @@ public class IL2NESWriterTests
         }), sizeOfMain);
         writer.Write(ILOpCode.Stloc_0, sizeOfMain);
         writer.Write(ILOpCode.Ldc_i4_s, 16, sizeOfMain);
-        writer.Write(ILOpCode.Newarr, 16777232, sizeOfMain);
+        writer.Write(ILOpCode.Newarr, 16777235, sizeOfMain);
         writer.Write(ILOpCode.Dup, sizeOfMain);
         writer.Write(ILOpCode.Ldtoken, ImmutableArray.Create(new byte[] {
           0x03,			// screen color
