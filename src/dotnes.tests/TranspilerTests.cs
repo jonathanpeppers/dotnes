@@ -29,9 +29,38 @@ ILInstruction { OpCode = Br_s, Integer = 254, String = , Bytes =  }";
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public void ReadStaticVoidMain(bool debug)
+    public void ReadStaticVoidMain_hello(bool debug)
     {
         AssertIL(debug, "hello", HelloIL);
+    }
+
+    const string AttributeTableIL =
+@"ILInstruction { OpCode = Ldc_i4_s, Integer = 64, String = , Bytes =  }
+ILInstruction { OpCode = Newarr, Integer = 16777235, String = , Bytes =  }
+ILInstruction { OpCode = Dup, Integer = , String = , Bytes =  }
+ILInstruction { OpCode = Ldtoken, Integer = , String = , Bytes = System.Collections.Immutable.ImmutableArray`1[System.Byte] }
+ILInstruction { OpCode = Stloc_0, Integer = , String = , Bytes =  }
+ILInstruction { OpCode = Ldc_i4_s, Integer = 16, String = , Bytes =  }
+ILInstruction { OpCode = Newarr, Integer = 16777235, String = , Bytes =  }
+ILInstruction { OpCode = Dup, Integer = , String = , Bytes =  }
+ILInstruction { OpCode = Ldtoken, Integer = , String = , Bytes = System.Collections.Immutable.ImmutableArray`1[System.Byte] }
+ILInstruction { OpCode = Call, Integer = , String = pal_bg, Bytes =  }
+ILInstruction { OpCode = Ldc_i4, Integer = 8192, String = , Bytes =  }
+ILInstruction { OpCode = Call, Integer = , String = vram_adr, Bytes =  }
+ILInstruction { OpCode = Ldc_i4_s, Integer = 22, String = , Bytes =  }
+ILInstruction { OpCode = Ldc_i4, Integer = 960, String = , Bytes =  }
+ILInstruction { OpCode = Call, Integer = , String = vram_fill, Bytes =  }
+ILInstruction { OpCode = Ldloc_0, Integer = , String = , Bytes =  }
+ILInstruction { OpCode = Call, Integer = , String = vram_write, Bytes =  }
+ILInstruction { OpCode = Call, Integer = , String = ppu_on_all, Bytes =  }
+ILInstruction { OpCode = Br_s, Integer = 254, String = , Bytes =  }";
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void ReadStaticVoidMain_attributetable(bool debug)
+    {
+        AssertIL(debug, "attributetable", AttributeTableIL);
     }
 
     static void AssertIL(bool debug, string name, string expected)
