@@ -74,7 +74,9 @@ class IL2NESWriter : NESWriter
             case ILOpCode.Ldc_i4_s:
                 if (operand > byte.MaxValue)
                 {
-                    //TODO: do nothing?
+                    ushort value = checked((ushort)operand); //TODO: and if larger than ushort?
+                    Write(NESInstruction.LDX, (byte)(value >> 8));
+                    Write(NESInstruction.LDA, (byte)(value & 0xff));
                 }
                 else
                 {
