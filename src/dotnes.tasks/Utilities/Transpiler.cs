@@ -45,7 +45,7 @@ class Transpiler : IDisposable
                 }
                 else if (instruction.Bytes != null)
                 {
-                    mainWriter.Write(instruction.OpCode, instruction.Bytes, sizeOfMain: 0);
+                    mainWriter.Write(instruction.OpCode, instruction.Bytes.Value, sizeOfMain: 0);
                 }
                 else
                 {
@@ -74,7 +74,7 @@ class Transpiler : IDisposable
             }
             else if (instruction.Bytes != null)
             {
-                writer.Write(instruction.OpCode, instruction.Bytes, sizeOfMain);
+                writer.Write(instruction.OpCode, instruction.Bytes.Value, sizeOfMain);
             }
             else
             {
@@ -143,14 +143,27 @@ class Transpiler : IDisposable
              * ILInstruction { OpCode = Newarr, Integer = 16777235, String = , Bytes =  }
              * ILInstruction { OpCode = Dup, Integer = , String = , Bytes =  }
              */
-            if (instruction.OpCode == ILOpCode.Ldtoken && i >= 3)
+            if (instruction.OpCode == ILOpCode.Ldtoken)
             {
-                instructions.RemoveAt(i - 1);
-                instructions.RemoveAt(i - 2);
-                instructions.RemoveAt(i - 3);
+                RemoveIf(ref i, ILOpCode.Dup);
+                RemoveIf(ref i, ILOpCode.Newarr);
+                RemoveIf(ref i, ILOpCode.Ldc_i4_s);
             }
         }
         return instructions;
+
+        void RemoveIf (ref int i, ILOpCode code)
+        {
+            if (i > 0)
+            {
+                var instruction = instructions[i - 1];
+                if (instruction.OpCode == code)
+                {
+                    instructions.RemoveAt(i - 1);
+                    i--;
+                }
+            }
+        }
     }
 
     /// <summary>

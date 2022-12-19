@@ -6,7 +6,6 @@ namespace dotnes.tests;
 
 public class IL2NESWriterTests
 {
-    const ushort sizeOfMain = 67;
     readonly byte[] data;
     readonly MemoryStream stream = new MemoryStream();
 
@@ -31,6 +30,7 @@ public class IL2NESWriterTests
     [Fact]
     public void Write_static_void_Main()
     {
+        const ushort sizeOfMain = 0x43;
         using var writer = GetWriter();
         writer.WriteHeader(PRG_ROM_SIZE: 2, CHR_ROM_SIZE: 1);
         writer.WriteBuiltIns(sizeOfMain);
@@ -93,6 +93,7 @@ public class IL2NESWriterTests
     [Fact]
     public void Write_Main_attributetable()
     {
+        const ushort sizeOfMain = 0x30;
         using var writer = GetWriter();
         writer.Write(ILOpCode.Ldtoken, ImmutableArray.Create(new byte[] {
           0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // rows 0-3

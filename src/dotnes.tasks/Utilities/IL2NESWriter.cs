@@ -11,6 +11,8 @@ class IL2NESWriter : NESWriter
     }
 
     readonly Stack<int> A = new Stack<int> ();
+    readonly List<ImmutableArray<byte>> ByteArrays = new List<ImmutableArray<byte>>();
+    ushort ByteArrayOffset = 0;
 
     public void Write(ILOpCode code, ushort sizeOfMain)
     {
@@ -49,7 +51,9 @@ class IL2NESWriter : NESWriter
                 WriteLdc(8, sizeOfMain);
                 break;
             case ILOpCode.Stloc_0:
-                //TODO: do nothing
+                var offset = A.Pop();
+                Write(NESInstruction.LDA, (byte)(offset & 0xff));
+                Write(NESInstruction.LDX, (byte)(offset >> 8));
                 break;
             case ILOpCode.Ldloc_0:
                 //TODO: not right?
@@ -131,13 +135,18 @@ class IL2NESWriter : NESWriter
         }
     }
 
-    public void Write(ILOpCode code, ImmutableArray<byte>? operand, ushort sizeOfMain)
+    public void Write(ILOpCode code, ImmutableArray<byte> operand, ushort sizeOfMain)
     {
         if (operand == null)
             throw new ArgumentNullException(nameof(operand));
         switch (code)
         {
             case ILOpCode.Ldtoken:
+                if (ByteArrayOffset == 0)
+                    ByteArrayOffset = rodata.GetAddressAfterMain(sizeOfMain);
+                A.Push(ByteArrayOffset);
+                ByteArrayOffset = (ushort)(ByteArrayOffset + operand.Length);
+                ByteArrays.Add(operand);
                 break;
             default:
                 throw new NotImplementedException($"OpCode {code} with byte[] operand is not implemented!");

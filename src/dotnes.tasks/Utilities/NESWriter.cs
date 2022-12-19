@@ -63,11 +63,12 @@ class NESWriter : IDisposable
     protected const ushort palBrightTableL = 0x8422;
     protected const ushort palBrightTableH = 0x842B;
     protected const ushort copydata = 0x850C;
-    protected const ushort zerobss = 0x858B;
     protected const ushort popa = 0x854F;
     protected const ushort popax = 0x8539;
     protected const ushort pusha = 0x855F;
     protected const ushort pushax = 0x8575;
+    protected const ushort zerobss = 0x858B;
+    protected const ushort rodata = 0x85EC;
 
     protected readonly BinaryWriter _writer;
 
