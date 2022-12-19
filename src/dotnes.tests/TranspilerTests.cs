@@ -35,14 +35,8 @@ ILInstruction { OpCode = Br_s, Integer = 254, String = , Bytes =  }";
     }
 
     const string AttributeTableIL =
-@"ILInstruction { OpCode = Ldc_i4_s, Integer = 64, String = , Bytes =  }
-ILInstruction { OpCode = Newarr, Integer = 16777235, String = , Bytes =  }
-ILInstruction { OpCode = Dup, Integer = , String = , Bytes =  }
-ILInstruction { OpCode = Ldtoken, Integer = , String = , Bytes = System.Collections.Immutable.ImmutableArray`1[System.Byte] }
+@"ILInstruction { OpCode = Ldtoken, Integer = , String = , Bytes = System.Collections.Immutable.ImmutableArray`1[System.Byte] }
 ILInstruction { OpCode = Stloc_0, Integer = , String = , Bytes =  }
-ILInstruction { OpCode = Ldc_i4_s, Integer = 16, String = , Bytes =  }
-ILInstruction { OpCode = Newarr, Integer = 16777235, String = , Bytes =  }
-ILInstruction { OpCode = Dup, Integer = , String = , Bytes =  }
 ILInstruction { OpCode = Ldtoken, Integer = , String = , Bytes = System.Collections.Immutable.ImmutableArray`1[System.Byte] }
 ILInstruction { OpCode = Call, Integer = , String = pal_bg, Bytes =  }
 ILInstruction { OpCode = Ldc_i4, Integer = 8192, String = , Bytes =  }
