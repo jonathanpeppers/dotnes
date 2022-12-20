@@ -59,7 +59,7 @@ class IL2NESWriter : NESWriter
                     var offset = A.Peek();
                     Write(NESInstruction.LDA, (byte)(offset & 0xff));
                     Write(NESInstruction.LDX, (byte)(offset >> 8));
-                    Write(NESInstruction.JSR, popax.GetAddressAfterMain(sizeOfMain));
+                    Write(NESInstruction.JSR, pushax.GetAddressAfterMain(sizeOfMain));
                     Write(NESInstruction.LDX, 0x00);
                     Write(NESInstruction.LDA, 0x40);
                 }
@@ -115,7 +115,7 @@ class IL2NESWriter : NESWriter
                 Write(NESInstruction.LDX, 0x85);
                 Write(NESInstruction.JSR, pushax.GetAddressAfterMain(sizeOfMain));
                 Write(NESInstruction.LDX, 0x00);
-                A.Push(operand.Length); //HACK: to use operand for vram_write?
+                Write(ILOpCode.Ldc_i4_s, operand.Length, sizeOfMain);
                 break;
             case ILOpCode.Call:
                 switch (operand)
@@ -132,9 +132,6 @@ class IL2NESWriter : NESWriter
                         Write(NESInstruction.LDA, 0x42);
                         A.Push(address);
                         break;
-                    case nameof(NESLib.vram_write):
-                        Write(ILOpCode.Ldc_i4_s, A.Pop(), sizeOfMain);
-                        goto default;
                     default:
                         Write(NESInstruction.JSR, GetAddress(operand));
                         break;
