@@ -169,6 +169,20 @@ class IL2NESWriter : NESWriter
         }
     }
 
+    /// <summary>
+    /// Write all the byte[] values
+    /// </summary>
+    public void WriteByteArrays(IL2NESWriter parent)
+    {
+        foreach (var bytes in parent.ByteArrays)
+        {
+            foreach (var b in bytes)
+            {
+                _writer.Write(b);
+            }
+        }
+    }
+
     static ushort GetAddress(string name)
     {
         switch (name)

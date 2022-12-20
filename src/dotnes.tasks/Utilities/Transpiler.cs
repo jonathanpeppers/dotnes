@@ -82,23 +82,36 @@ class Transpiler : IDisposable
             }
         }
 
-        writer.WriteFinalBuiltIns();
-
-        // Write C# string table
-        int stringHeapSize = reader.GetHeapSize(HeapIndex.UserString);
-        if (stringHeapSize > 0)
+        // NOTE: not sure if string or byte[] is first
+        using (var memoryStream = new MemoryStream())
         {
-            var handle = MetadataTokens.UserStringHandle(0);
-            do
+            using (var tableWriter = new IL2NESWriter(memoryStream, leaveOpen: true))
             {
-                string value = reader.GetUserString(handle);
-                if (!string.IsNullOrEmpty(value))
+                // Write byte[] table
+                tableWriter.WriteByteArrays(writer);
+
+                // Write C# string table
+                int stringHeapSize = reader.GetHeapSize(HeapIndex.UserString);
+                if (stringHeapSize > 0)
                 {
-                    writer.WriteString(value);
+                    var handle = MetadataTokens.UserStringHandle(0);
+                    do
+                    {
+                        string value = reader.GetUserString(handle);
+                        if (!string.IsNullOrEmpty(value))
+                        {
+                            tableWriter.WriteString(value);
+                        }
+                        handle = reader.GetNextHandle(handle);
+                    }
+                    while (!handle.IsNil);
                 }
-                handle = reader.GetNextHandle(handle);
             }
-            while (!handle.IsNil);
+
+            const ushort PRG_LAST = 0x85AE;
+            writer.WriteFinalBuiltIns((ushort)(PRG_LAST.GetAddressAfterMain(sizeOfMain) + memoryStream.Length));
+            memoryStream.Position = 0;
+            memoryStream.CopyTo(writer.BaseStream);
         }
 
         writer.WriteDestructorTable();

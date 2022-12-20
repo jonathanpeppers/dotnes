@@ -303,10 +303,10 @@ class NESWriter : IDisposable
     /// <summary>
     /// These are any subroutines after our `static void main()` method
     /// </summary>
-    public void WriteFinalBuiltIns()
+    public void WriteFinalBuiltIns(ushort totalSize)
     {
-        Write_donelib();
-        Write_copydata();
+        Write_donelib(totalSize);
+        Write_copydata(totalSize);
         Write_popax();
         Write_incsp2();
         Write_popa();
@@ -1527,30 +1527,30 @@ class NESWriter : IDisposable
         Write(NESInstruction.RTS_impl);
     }
 
-    void Write_donelib()
+    void Write_donelib(ushort totalSize)
     {
         /*
          * 8546	A000          	LDY #$00                      ; donelib
          * 8548	F007          	BEQ $8551                     
-         * 854A	A902          	LDA #$02                      
-         * 854C	A286          	LDX #$86                      
+         * 8547	A9FE          	LDA #$FE                      
+         * 8549	A285          	LDX #$85 
          * 854E	4C0003        	JMP condes                    
          * 8551	60            	RTS
          */
         Write(NESInstruction.LDY, 0x00);
         Write(NESInstruction.BEQ_rel, PAL_UPDATE);
-        Write(NESInstruction.LDA, 0xFE);
-        Write(NESInstruction.LDX, 0x85);
+        Write(NESInstruction.LDA, (byte)(totalSize & 0xff));
+        Write(NESInstruction.LDX, (byte)(totalSize >> 8));
         Write(NESInstruction.JMP_abs, condes);
         Write(NESInstruction.RTS_impl);
     }
 
-    void Write_copydata()
+    void Write_copydata(ushort totalSize)
     {
         /*
-        * 8552	A902          	LDA #$02                      ; copydata
-        * 8554	852A          	STA ptr1                      
-        * 8556	A986          	LDA #$86                      
+        * 854F	A9FE          	LDA #$FE                      ; copydata
+        * 8551	852A          	STA ptr1                      
+        * 8553	A985          	LDA #$85 
         * 8558	852B          	STA ptr1+1                    
         * 855A	A900          	LDA #$00                      
         * 855C	852C          	STA ptr2                      
@@ -1573,9 +1573,9 @@ class NESWriter : IDisposable
         * 857C	D0EF          	BNE $856D                     
         * 857E	60            	RTS
         */
-        Write(NESInstruction.LDA, 0xFE);
+        Write(NESInstruction.LDA, (byte)(totalSize & 0xff));
         Write(NESInstruction.STA_zpg, ptr1);
-        Write(NESInstruction.LDA, 0x85);
+        Write(NESInstruction.LDA, (byte)(totalSize >> 8));
         Write(NESInstruction.STA_zpg, ptr1 + 1);
         Write(NESInstruction.LDA, 0x00);
         Write(NESInstruction.STA_zpg, ptr2);

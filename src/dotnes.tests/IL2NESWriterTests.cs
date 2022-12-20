@@ -72,7 +72,7 @@ public class IL2NESWriterTests
         // while (true) ;
         writer.Write(ILOpCode.Br_s, 254, sizeOfMain);
 
-        writer.WriteFinalBuiltIns();
+        writer.WriteFinalBuiltIns(0x85FE);
         writer.WriteString(text);
         writer.WriteDestructorTable();
 
