@@ -26,26 +26,9 @@ public class NESWriterTests
 
     void AssertInstructions(string assembly)
     {
-        var expected = toByteArray(assembly.Replace(" ", ""));
+        var expected = Utilities.ToByteArray(assembly);
         var actual = stream.ToArray();
         Assert.Equal(expected, actual);
-
-        static byte[] toByteArray(string text)
-        {
-            int length = text.Length >> 1;
-            var bytes = new byte[length];
-            for (int i = 0; i < length; i++)
-            {
-                bytes[i] = (byte)((toHex(text[i << 1]) << 4) + (toHex(text[(i << 1) + 1])));
-            }
-            return bytes;
-        }
-
-        static int toHex(char ch)
-        {
-            int value = (int)ch;
-            return value - (value < 58 ? 48 : (value < 97 ? 55 : 87));
-        }
     }
 
     /// <summary>
@@ -310,7 +293,7 @@ public class NESWriterTests
         // while (true) ;
         writer.Write(NESInstruction.JMP_abs, 0x8540); // Jump to self
 
-        writer.WriteFinalBuiltIns();
+        writer.WriteFinalBuiltIns(0x85FE);
         writer.WriteString("HELLO, .NET!");
         writer.WriteDestructorTable();
 

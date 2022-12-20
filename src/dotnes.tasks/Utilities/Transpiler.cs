@@ -1,4 +1,5 @@
-﻿using System.Reflection;
+﻿using System.Collections.Immutable;
+using System.Reflection;
 using System.Reflection.Metadata;
 using System.Reflection.Metadata.Ecma335;
 using System.Reflection.PortableExecutable;
@@ -36,15 +37,19 @@ class Transpiler : IDisposable
             {
                 if (instruction.Integer != null)
                 {
-                    mainWriter.Write(instruction.OpCode, instruction.Integer.Value, 0);
+                    mainWriter.Write(instruction.OpCode, instruction.Integer.Value, sizeOfMain: 0);
                 }
                 else if (instruction.String != null)
                 {
-                    mainWriter.Write(instruction.OpCode, instruction.String, 0);
+                    mainWriter.Write(instruction.OpCode, instruction.String, sizeOfMain: 0);
+                }
+                else if (instruction.Bytes != null)
+                {
+                    mainWriter.Write(instruction.OpCode, instruction.Bytes.Value, sizeOfMain: 0);
                 }
                 else
                 {
-                    mainWriter.Write(instruction.OpCode, 0);
+                    mainWriter.Write(instruction.OpCode, sizeOfMain: 0);
                 }
             }
             mainWriter.Flush();
@@ -67,29 +72,46 @@ class Transpiler : IDisposable
             {
                 writer.Write(instruction.OpCode, instruction.String, sizeOfMain);
             }
+            else if (instruction.Bytes != null)
+            {
+                writer.Write(instruction.OpCode, instruction.Bytes.Value, sizeOfMain);
+            }
             else
             {
                 writer.Write(instruction.OpCode, sizeOfMain);
             }
         }
 
-        writer.WriteFinalBuiltIns();
-
-        // Write C# string table
-        int stringHeapSize = reader.GetHeapSize(HeapIndex.UserString);
-        if (stringHeapSize > 0)
+        // NOTE: not sure if string or byte[] is first
+        using (var memoryStream = new MemoryStream())
         {
-            var handle = MetadataTokens.UserStringHandle(0);
-            do
+            using (var tableWriter = new IL2NESWriter(memoryStream, leaveOpen: true))
             {
-                string value = reader.GetUserString(handle);
-                if (!string.IsNullOrEmpty(value))
+                // Write byte[] table
+                tableWriter.WriteByteArrays(writer);
+
+                // Write C# string table
+                int stringHeapSize = reader.GetHeapSize(HeapIndex.UserString);
+                if (stringHeapSize > 0)
                 {
-                    writer.WriteString(value);
+                    var handle = MetadataTokens.UserStringHandle(0);
+                    do
+                    {
+                        string value = reader.GetUserString(handle);
+                        if (!string.IsNullOrEmpty(value))
+                        {
+                            tableWriter.WriteString(value);
+                        }
+                        handle = reader.GetNextHandle(handle);
+                    }
+                    while (!handle.IsNil);
                 }
-                handle = reader.GetNextHandle(handle);
             }
-            while (!handle.IsNil);
+
+            const ushort PRG_LAST = 0x85AE;
+            writer.WriteFinalBuiltIns((ushort)(PRG_LAST.GetAddressAfterMain(sizeOfMain) + memoryStream.Length));
+            memoryStream.Position = 0;
+            memoryStream.CopyTo(writer.BaseStream);
         }
 
         writer.WriteDestructorTable();
@@ -125,16 +147,18 @@ class Transpiler : IDisposable
     /// </summary>
     public IEnumerable<ILInstruction> ReadStaticVoidMain()
     {
+        var arrayValues = GetArrayValues(reader);
+
         foreach (var h in reader.MethodDefinitions)
         {
-            var method = reader.GetMethodDefinition(h);
-            if ((method.Attributes & MethodAttributes.Static) == 0)
+            var mainMethod = reader.GetMethodDefinition(h);
+            if ((mainMethod.Attributes & MethodAttributes.Static) == 0)
                 continue;
 
-            var methodName = reader.GetString(method.Name);
-            if (methodName == "Main" || methodName == "<Main>$")
+            var mainMethodName = reader.GetString(mainMethod.Name);
+            if (mainMethodName == "Main" || mainMethodName == "<Main>$")
             {
-                var body = pe.GetMethodBody(method.RelativeVirtualAddress);
+                var body = pe.GetMethodBody(mainMethod.RelativeVirtualAddress);
                 var blob = body.GetILReader();
 
                 while (blob.RemainingBytes > 0)
@@ -144,6 +168,7 @@ class Transpiler : IDisposable
                     OperandType operandType = GetOperandType(opCode);
                     string? stringValue = null;
                     int? intValue = null;
+                    ImmutableArray<byte>? byteValue = null;
 
                     switch (operandType)
                     {
@@ -151,27 +176,43 @@ class Transpiler : IDisposable
                         case OperandType.Method:
                         case OperandType.Sig:
                         case OperandType.Tok:
-                            var member = MetadataTokens.EntityHandle(blob.ReadInt32());
-                            if (member.IsNil)
+                            var entity = MetadataTokens.EntityHandle(blob.ReadInt32());
+                            if (entity.IsNil)
                                 continue;
 
-                            switch (member.Kind)
+                            switch (entity.Kind)
                             {
                                 case HandleKind.TypeDefinition:
-                                    stringValue = reader.GetString(reader.GetTypeDefinition((TypeDefinitionHandle)member).Name);
+                                    stringValue = reader.GetString(reader.GetTypeDefinition((TypeDefinitionHandle)entity).Name);
                                     break;
                                 case HandleKind.TypeReference:
-                                    stringValue = reader.GetString(reader.GetTypeReference((TypeReferenceHandle)member).Name);
+                                    stringValue = reader.GetString(reader.GetTypeReference((TypeReferenceHandle)entity).Name);
                                     break;
                                 case HandleKind.MethodDefinition:
-                                    stringValue = reader.GetString(reader.GetMethodDefinition((MethodDefinitionHandle)member).Name);
+                                    var method = reader.GetMethodDefinition((MethodDefinitionHandle)entity);
+                                    stringValue = reader.GetString(method.Name);
                                     break;
                                 case HandleKind.MemberReference:
-                                    stringValue = reader.GetString(reader.GetMemberReference((MemberReferenceHandle)member).Name);
+                                    var member = reader.GetMemberReference((MemberReferenceHandle)entity);
+                                    stringValue = reader.GetString(member.Name);
+                                    if (stringValue == "InitializeArray")
+                                    {
+                                        // HACK: skip for now
+                                        continue;
+                                    }
                                     break;
                                 case HandleKind.FieldDefinition:
-                                    stringValue = reader.GetString(reader.GetFieldDefinition((FieldDefinitionHandle)member).Name);
-                                    break;
+                                    var field = reader.GetFieldDefinition((FieldDefinitionHandle)entity);
+                                    var fieldName = reader.GetString(field.Name);
+                                    if ((field.Attributes & FieldAttributes.HasFieldRVA) != 0)
+                                    {
+                                        if (arrayValues.TryGetValue (fieldName, out var value))
+                                        {
+                                            byteValue = value.Value;
+                                            break;
+                                        }
+                                    }
+                                    throw new NotImplementedException($"Reading fields like {fieldName} is not implemented!");
                             }
                             break;
                         // 64-bit
@@ -209,10 +250,43 @@ class Transpiler : IDisposable
                             throw new NotSupportedException($"{opCode}, OperandType={operandType} is not supported.");
                     }
 
-                    yield return new ILInstruction(opCode, intValue, stringValue);
+                    yield return new ILInstruction(opCode, intValue, stringValue, byteValue);
                 }
             }
         }
+    }
+
+    Dictionary<string, ArrayValue> GetArrayValues(MetadataReader reader)
+    {
+        var dictionary = new Dictionary<string, ArrayValue>(StringComparer.Ordinal);
+
+        foreach (var t in reader.TypeDefinitions)
+        {
+            var type = reader.GetTypeDefinition(t);
+            var ns = reader.GetString(type.Namespace);
+            if (!string.IsNullOrEmpty(ns))
+                continue;
+
+            var typeName = reader.GetString(type.Name);
+            if (typeName == "<PrivateImplementationDetails>")
+            {
+                foreach (var f in type.GetFields())
+                {
+                    var field = reader.GetFieldDefinition(f);
+                    var fieldName = reader.GetString(field.Name);
+                    if ((field.Attributes & FieldAttributes.HasFieldRVA) != 0)
+                    {
+                        int rva = field.GetRelativeVirtualAddress();
+                        int size = field.DecodeSignature(new FieldSizeDecoder(), default);
+                        var sectionData = pe.GetSectionData(rva);
+                        dictionary.Add(fieldName, new ArrayValue(fieldName, sectionData, size));
+                    }
+                }
+                break;
+            }
+        }
+
+        return dictionary;
     }
 
     static ILOpCode DecodeOpCode(ref BlobReader blob)

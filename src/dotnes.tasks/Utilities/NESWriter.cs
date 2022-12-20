@@ -63,15 +63,19 @@ class NESWriter : IDisposable
     protected const ushort palBrightTableL = 0x8422;
     protected const ushort palBrightTableH = 0x842B;
     protected const ushort copydata = 0x850C;
-    protected const ushort zerobss = 0x858B;
     protected const ushort popa = 0x854F;
     protected const ushort popax = 0x8539;
     protected const ushort pusha = 0x855F;
     protected const ushort pushax = 0x8575;
+    protected const ushort zerobss = 0x858B;
+    protected const ushort rodata = 0x85AE;
+    protected const ushort donelib = 0x84FD;
 
     protected readonly BinaryWriter _writer;
 
     public NESWriter(Stream stream, bool leaveOpen = false) => _writer = new BinaryWriter(stream, Encoding, leaveOpen);
+
+    public bool LastLDA { get; private set; }
 
     public Stream BaseStream => _writer.BaseStream;
 
@@ -158,15 +162,24 @@ class NESWriter : IDisposable
         }
     }
 
-    public void Write(byte[] buffer) => _writer.Write(buffer);
+    public void Write(byte[] buffer)
+    {
+        LastLDA = false;
+        _writer.Write(buffer);
+    }
 
-    public void Write(byte[] buffer, int index, int count) => _writer.Write(buffer, index, count);
+    public void Write(byte[] buffer, int index, int count)
+    {
+        LastLDA = false;
+        _writer.Write(buffer, index, count);
+    }
 
     /// <summary>
     /// Writes a string in ASCI form, including a trailing \0
     /// </summary>
     public void WriteString(string text)
     {
+        LastLDA = false;
         int length = Encoding.GetByteCount(text);
         var bytes = ArrayPool<byte>.Shared.Rent(length);
         try
@@ -290,10 +303,10 @@ class NESWriter : IDisposable
     /// <summary>
     /// These are any subroutines after our `static void main()` method
     /// </summary>
-    public void WriteFinalBuiltIns()
+    public void WriteFinalBuiltIns(ushort totalSize)
     {
-        Write_donelib();
-        Write_copydata();
+        Write_donelib(totalSize);
+        Write_copydata(totalSize);
         Write_popax();
         Write_incsp2();
         Write_popa();
@@ -1514,30 +1527,30 @@ class NESWriter : IDisposable
         Write(NESInstruction.RTS_impl);
     }
 
-    void Write_donelib()
+    void Write_donelib(ushort totalSize)
     {
         /*
          * 8546	A000          	LDY #$00                      ; donelib
          * 8548	F007          	BEQ $8551                     
-         * 854A	A902          	LDA #$02                      
-         * 854C	A286          	LDX #$86                      
+         * 8547	A9FE          	LDA #$FE                      
+         * 8549	A285          	LDX #$85 
          * 854E	4C0003        	JMP condes                    
          * 8551	60            	RTS
          */
         Write(NESInstruction.LDY, 0x00);
         Write(NESInstruction.BEQ_rel, PAL_UPDATE);
-        Write(NESInstruction.LDA, 0xFE);
-        Write(NESInstruction.LDX, 0x85);
+        Write(NESInstruction.LDA, (byte)(totalSize & 0xff));
+        Write(NESInstruction.LDX, (byte)(totalSize >> 8));
         Write(NESInstruction.JMP_abs, condes);
         Write(NESInstruction.RTS_impl);
     }
 
-    void Write_copydata()
+    void Write_copydata(ushort totalSize)
     {
         /*
-        * 8552	A902          	LDA #$02                      ; copydata
-        * 8554	852A          	STA ptr1                      
-        * 8556	A986          	LDA #$86                      
+        * 854F	A9FE          	LDA #$FE                      ; copydata
+        * 8551	852A          	STA ptr1                      
+        * 8553	A985          	LDA #$85 
         * 8558	852B          	STA ptr1+1                    
         * 855A	A900          	LDA #$00                      
         * 855C	852C          	STA ptr2                      
@@ -1560,9 +1573,9 @@ class NESWriter : IDisposable
         * 857C	D0EF          	BNE $856D                     
         * 857E	60            	RTS
         */
-        Write(NESInstruction.LDA, 0xFE);
+        Write(NESInstruction.LDA, (byte)(totalSize & 0xff));
         Write(NESInstruction.STA_zpg, ptr1);
-        Write(NESInstruction.LDA, 0x85);
+        Write(NESInstruction.LDA, (byte)(totalSize >> 8));
         Write(NESInstruction.STA_zpg, ptr1 + 1);
         Write(NESInstruction.LDA, 0x00);
         Write(NESInstruction.STA_zpg, ptr2);
@@ -1761,13 +1774,18 @@ class NESWriter : IDisposable
     /// <summary>
     /// Writes an "implied" instruction that has no argument
     /// </summary>
-    public void Write(NESInstruction i) => _writer.Write((byte)i);
+    public void Write(NESInstruction i)
+    {
+        LastLDA = i == NESInstruction.LDA;
+        _writer.Write((byte)i);
+    }
 
     /// <summary>
     /// Writes an instruction with a single byte argument
     /// </summary>
     public void Write (NESInstruction i, byte @byte)
     {
+        LastLDA = i == NESInstruction.LDA;
         _writer.Write((byte)i);
         _writer.Write(@byte);
     }
@@ -1777,6 +1795,7 @@ class NESWriter : IDisposable
     /// </summary>
     public void Write(NESInstruction i, ushort address)
     {
+        LastLDA = i == NESInstruction.LDA;
         _writer.Write((byte)i);
         _writer.Write(address);
     }

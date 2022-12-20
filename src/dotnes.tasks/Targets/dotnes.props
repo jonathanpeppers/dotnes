@@ -13,6 +13,8 @@
     <NoStdLib>true</NoStdLib>
     <!-- Always work with Optimized IL -->
     <Optimize>true</Optimize>
+    <!-- Also removes extra IL -->
+    <DebugSymbols>false</DebugSymbols>
   </PropertyGroup>
   <ItemGroup>
     <EmbeddedResource Include="*.nes" LogicalName="%(FileName)%(Extension)" />
