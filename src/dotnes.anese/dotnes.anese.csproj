@@ -14,7 +14,8 @@
     <MacUrl>https://github.com/daniel5151/ANESE/releases/download/$(PackageVersion)/ANESE_$(PackageVersion)_macOS.zip</MacUrl>
     <WindowsUrl>https://github.com/daniel5151/ANESE/releases/download/$(PackageVersion)/ANESE_$(PackageVersion)_win.zip</WindowsUrl>
     <GithubLicenseUrl>https://raw.githubusercontent.com/daniel5151/ANESE/cbc4160fe9c32f335feda0dd6be04024aba11447/LICENSE</GithubLicenseUrl>
-    <NoWarn>NU5119;NU5128</NoWarn>
+    <NoWarn>$(NoWarn);NU5119;NU5128</NoWarn>
+    <GenerateDependencyFile>false</GenerateDependencyFile>
     <BeforePack>
       _AddPackageFiles;
       $(BeforePack);

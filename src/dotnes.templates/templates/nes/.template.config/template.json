@@ -1,0 +1,26 @@
+{
+    "$schema": "http://json.schemastore.org/template",
+    "author": "Jonathan Peppers",
+    "classifications": [ "NES" ],
+    "identity": "dotnes.templates.nes",
+    "name": "6502 NES application",
+    "description": "A project for creating 6502 NES applications in C#",
+    "shortName": "nes",
+    "tags": {
+      "language": "C#",
+      "type": "project"
+    },
+    "sourceName": "hello",
+    "sources": [
+        {
+          "source": "./",
+          "target": "./",
+          "copyOnly": "*.nes"
+        }
+    ],
+    "preferNameDirectory": true,
+    "primaryOutputs": [
+      { "path": "hello.csproj" }
+    ],
+    "defaultName": "hello"
+}

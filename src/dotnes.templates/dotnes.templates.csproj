@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.Build.NoTargets">
+  <PropertyGroup>
+    <TargetFramework>net7.0</TargetFramework>
+    <OutputPath>../../bin/$(Configuration)/</OutputPath>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <Description>.NET for the NES game console: 'dotnet new nes' project templates</Description>
+    <Authors>Jonathan Peppers</Authors>
+    <PackageProjectUrl>https://github.com/jonathanpeppers/dotnes</PackageProjectUrl>
+    <PackageType>Template</PackageType>
+    <PackageTags>.NET C# NES</PackageTags>
+    <PackageLicenseFile>LICENSE</PackageLicenseFile>
+    <PackageIcon>logo.png</PackageIcon>
+    <IncludeContentInPack>true</IncludeContentInPack>
+    <IncludeBuildOutput>false</IncludeBuildOutput>
+    <ContentTargetFolders>content</ContentTargetFolders>
+    <GenerateDependencyFile>false</GenerateDependencyFile>
+    <!-- This project has no .NET assemblies, so disable the warning for that -->
+    <NoWarn>$(NoWarn);NU5128</NoWarn>
+    <!-- Remove the `<group targetFramework="..." />` entry from the .nuspec. -->
+    <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="../../LICENSE" Pack="true" PackagePath="" />
+    <None Include="../../assets/logo.png" Pack="true" PackagePath="" />
+    <Content Include="templates/**/*" />
+    <Content Include="../../samples/hello/*.nes" PackagePath="content/templates/nes" />
+    <Content Include="../../samples/hello/*.cs" PackagePath="content/templates/nes" />
+    <Compile Remove="**/*" />
+  </ItemGroup>
+</Project>
