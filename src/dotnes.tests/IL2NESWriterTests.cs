@@ -91,6 +91,53 @@ public class IL2NESWriterTests
     }
 
     [Fact]
+    public void Write_Main_hello()
+    {
+        const ushort sizeOfMain = 0x43;
+        using var writer = GetWriter();
+
+        // pal_col(0, 0x02);
+        writer.Write(ILOpCode.Ldc_i4_0, sizeOfMain);
+        writer.Write(ILOpCode.Ldc_i4_2, sizeOfMain);
+        writer.Write(ILOpCode.Call, nameof(pal_col), sizeOfMain);
+
+        // pal_col(1, 0x14);
+        writer.Write(ILOpCode.Ldc_i4_1, sizeOfMain);
+        writer.Write(ILOpCode.Ldc_i4, 0x14, sizeOfMain);
+        writer.Write(ILOpCode.Call, nameof(pal_col), sizeOfMain);
+
+        // pal_col(2, 0x20);
+        writer.Write(ILOpCode.Ldc_i4_2, sizeOfMain);
+        writer.Write(ILOpCode.Ldc_i4, 0x20, sizeOfMain);
+        writer.Write(ILOpCode.Call, nameof(pal_col), sizeOfMain);
+
+        // pal_col(3, 0x30);
+        writer.Write(ILOpCode.Ldc_i4_3, sizeOfMain);
+        writer.Write(ILOpCode.Ldc_i4, 0x30, sizeOfMain);
+        writer.Write(ILOpCode.Call, nameof(pal_col), sizeOfMain);
+
+        // vram_adr(NTADR_A(2, 2));
+        writer.Write(ILOpCode.Ldc_i4_2, sizeOfMain);
+        writer.Write(ILOpCode.Ldc_i4_2, sizeOfMain);
+        writer.Write(ILOpCode.Call, nameof(NTADR_A), sizeOfMain);
+        writer.Write(ILOpCode.Call, nameof(vram_adr), sizeOfMain);
+
+        // vram_write("HELLO, .NET!");
+        var text = "HELLO, .NET!";
+        writer.Write(ILOpCode.Ldstr, text, sizeOfMain);
+        writer.Write(ILOpCode.Call, nameof(vram_write), sizeOfMain);
+
+        // ppu_on_all();
+        writer.Write(ILOpCode.Call, nameof(ppu_on_all), sizeOfMain);
+
+        // while (true) ;
+        writer.Write(NESInstruction.JMP_abs, 0x8540); // Jump to self
+
+        var expected = Utilities.ToByteArray("A900 20A285 A902 203E82 A901 20A285 A914 203E82 A902 20A285 A920 203E82 A903 20A285 A930 203E82 A220 A942 20D483 A9F1 A285 20B885 A200 A90C 204F83 208982 4C4085");
+        AssertEx.Equal(expected, writer);
+    }
+
+    [Fact]
     public void Write_Main_attributetable()
     {
         const ushort sizeOfMain = 0x2E;
