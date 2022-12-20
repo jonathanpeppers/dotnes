@@ -10,9 +10,9 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
     - name: install .NET
-      uses: actions/setup-dotnet@v1
+      uses: actions/setup-dotnet@v3
       with:
         dotnet-version: 7.0.x
     - name: build
@@ -20,8 +20,7 @@ jobs:
     - name: test
       run: dotnet test --no-build --verbosity normal && dotnet test --no-build --verbosity normal -c Release
     - name: samples
-      #TODO: should build samples.sln when all are working
-      run: dotnet build samples/hello/hello.csproj -bl:samples-debug.binlog && dotnet build samples/hello/hello.csproj -c Release -bl:samples-release.binlog
+      run: dotnet build samples/samples.sln -bl:samples-debug.binlog && dotnet build samples/samples.sln -c Release -bl:samples-release.binlog
     - name: templates
       run: |
         dotnet new install bin/Release/dotnes.templates.*.nupkg && \
@@ -29,13 +28,13 @@ jobs:
         dotnet build samples/foo/foo.csproj -bl:foo-debug.binlog && \
         dotnet build samples/foo/foo.csproj -c Release -bl:foo-release.binlog
     - name: upload logs
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v3
       with:
         name: logs
         path: '*.binlog'
         if-no-files-found: error
     - name: upload ROMs
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v3
       with:
         name: ROMs
         path: |
@@ -43,7 +42,7 @@ jobs:
           samples/*/bin/**/*.dll
         if-no-files-found: error
     - name: upload nupkgs
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v3
       with:
         name: nupkgs
         path: |
