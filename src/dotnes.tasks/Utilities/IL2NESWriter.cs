@@ -21,7 +21,7 @@ class IL2NESWriter : NESWriter
             case ILOpCode.Nop:
                 break;
             case ILOpCode.Dup:
-                //TODO: do something?
+                // Do nothing
                 break;
             case ILOpCode.Ldc_i4_0:
                 WriteLdc(0, sizeOfMain);
@@ -51,13 +51,18 @@ class IL2NESWriter : NESWriter
                 WriteLdc(8, sizeOfMain);
                 break;
             case ILOpCode.Stloc_0:
-                var offset = A.Pop();
-                Write(NESInstruction.LDA, (byte)(offset & 0xff));
-                Write(NESInstruction.LDX, (byte)(offset >> 8));
+                // Remove the previous Ldtoken
+                _writer.BaseStream.SetLength(_writer.BaseStream.Length - 4);
                 break;
             case ILOpCode.Ldloc_0:
-                //TODO: not right?
-                A.Push(0);
+                {
+                    var offset = A.Peek();
+                    Write(NESInstruction.LDA, (byte)(offset & 0xff));
+                    Write(NESInstruction.LDX, (byte)(offset >> 8));
+                    Write(NESInstruction.JSR, popax.GetAddressAfterMain(sizeOfMain));
+                    Write(NESInstruction.LDX, 0x00);
+                    Write(NESInstruction.LDA, 0x40);
+                }
                 break;
             default:
                 throw new NotImplementedException($"OpCode {code} with no operands is not implemented!");
@@ -89,7 +94,9 @@ class IL2NESWriter : NESWriter
                 Write(NESInstruction.JMP_abs, checked((ushort)(byte.MaxValue - operand + 0x8540 - 1)));
                 break;
             case ILOpCode.Newarr:
-                //TODO: operand must represent a type?
+                // Remove the previous Ldc_i4_s
+                _writer.BaseStream.SetLength(_writer.BaseStream.Length - 2);
+                A.Pop();
                 break;
             default:
                 throw new NotImplementedException($"OpCode {code} with Int32 operand is not implemented!");
@@ -132,7 +139,11 @@ class IL2NESWriter : NESWriter
                         Write(NESInstruction.JSR, GetAddress(operand));
                         break;
                 }
-                A.Clear();
+                // Pop twice
+                if (A.Count > 0)
+                    A.Pop();
+                if (A.Count > 0)
+                    A.Pop();
                 break;
             default:
                 throw new NotImplementedException($"OpCode {code} with String operand is not implemented!");
@@ -148,6 +159,8 @@ class IL2NESWriter : NESWriter
             case ILOpCode.Ldtoken:
                 if (ByteArrayOffset == 0)
                     ByteArrayOffset = rodata.GetAddressAfterMain(sizeOfMain);
+                Write(NESInstruction.LDA, (byte)(ByteArrayOffset & 0xff));
+                Write(NESInstruction.LDX, (byte)(ByteArrayOffset >> 8));
                 A.Push(ByteArrayOffset);
                 ByteArrayOffset = (ushort)(ByteArrayOffset + operand.Length);
                 ByteArrays.Add(operand);
@@ -180,7 +193,7 @@ class IL2NESWriter : NESWriter
 
     void WriteLdc(ushort operand, ushort sizeOfMain)
     {
-        if (A.Count > 0)
+        if (LastLDA)
         {
             Write(NESInstruction.JSR, pusha.GetAddressAfterMain(sizeOfMain));
         }
@@ -191,7 +204,7 @@ class IL2NESWriter : NESWriter
 
     void WriteLdc(byte operand, ushort sizeOfMain)
     {
-        if (A.Count > 0)
+        if (LastLDA)
         {
             Write(NESInstruction.JSR, pusha.GetAddressAfterMain(sizeOfMain));
         }

@@ -129,47 +129,10 @@ class Transpiler : IDisposable
         return null;
     }
 
-    public IEnumerable<ILInstruction> ReadStaticVoidMain()
-    {
-        var instructions = EnumerateStaticVoidMain().ToList();
-        ILInstruction instruction;
-        for (int i = 0; i < instructions.Count; i++)
-        {
-            instruction = instructions[i];
-
-            /*
-             * Remove these previous instructions:
-             * ILInstruction { OpCode = Ldc_i4_s, Integer = 64, String = , Bytes =  }
-             * ILInstruction { OpCode = Newarr, Integer = 16777235, String = , Bytes =  }
-             * ILInstruction { OpCode = Dup, Integer = , String = , Bytes =  }
-             */
-            if (instruction.OpCode == ILOpCode.Ldtoken)
-            {
-                RemoveIf(ref i, ILOpCode.Dup);
-                RemoveIf(ref i, ILOpCode.Newarr);
-                RemoveIf(ref i, ILOpCode.Ldc_i4_s);
-            }
-        }
-        return instructions;
-
-        void RemoveIf (ref int i, ILOpCode code)
-        {
-            if (i > 0)
-            {
-                var instruction = instructions[i - 1];
-                if (instruction.OpCode == code)
-                {
-                    instructions.RemoveAt(i - 1);
-                    i--;
-                }
-            }
-        }
-    }
-
     /// <summary>
     /// Based on: https://github.com/icsharpcode/ILSpy/blob/8c508d9bbbc6a21cc244e930122ff5bca19cd11c/ILSpy/Analyzers/Builtin/MethodUsesAnalyzer.cs#L51
     /// </summary>
-    IEnumerable<ILInstruction> EnumerateStaticVoidMain()
+    public IEnumerable<ILInstruction> ReadStaticVoidMain()
     {
         var arrayValues = GetArrayValues(reader);
 

@@ -68,11 +68,13 @@ class NESWriter : IDisposable
     protected const ushort pusha = 0x855F;
     protected const ushort pushax = 0x8575;
     protected const ushort zerobss = 0x858B;
-    protected const ushort rodata = 0x85EE;
+    protected const ushort rodata = 0x85AE;
 
     protected readonly BinaryWriter _writer;
 
     public NESWriter(Stream stream, bool leaveOpen = false) => _writer = new BinaryWriter(stream, Encoding, leaveOpen);
+
+    public bool LastLDA { get; private set; }
 
     public Stream BaseStream => _writer.BaseStream;
 
@@ -159,15 +161,24 @@ class NESWriter : IDisposable
         }
     }
 
-    public void Write(byte[] buffer) => _writer.Write(buffer);
+    public void Write(byte[] buffer)
+    {
+        LastLDA = false;
+        _writer.Write(buffer);
+    }
 
-    public void Write(byte[] buffer, int index, int count) => _writer.Write(buffer, index, count);
+    public void Write(byte[] buffer, int index, int count)
+    {
+        LastLDA = false;
+        _writer.Write(buffer, index, count);
+    }
 
     /// <summary>
     /// Writes a string in ASCI form, including a trailing \0
     /// </summary>
     public void WriteString(string text)
     {
+        LastLDA = false;
         int length = Encoding.GetByteCount(text);
         var bytes = ArrayPool<byte>.Shared.Rent(length);
         try
@@ -1762,13 +1773,18 @@ class NESWriter : IDisposable
     /// <summary>
     /// Writes an "implied" instruction that has no argument
     /// </summary>
-    public void Write(NESInstruction i) => _writer.Write((byte)i);
+    public void Write(NESInstruction i)
+    {
+        LastLDA = i == NESInstruction.LDA;
+        _writer.Write((byte)i);
+    }
 
     /// <summary>
     /// Writes an instruction with a single byte argument
     /// </summary>
     public void Write (NESInstruction i, byte @byte)
     {
+        LastLDA = i == NESInstruction.LDA;
         _writer.Write((byte)i);
         _writer.Write(@byte);
     }
@@ -1778,6 +1794,7 @@ class NESWriter : IDisposable
     /// </summary>
     public void Write(NESInstruction i, ushort address)
     {
+        LastLDA = i == NESInstruction.LDA;
         _writer.Write((byte)i);
         _writer.Write(address);
     }
