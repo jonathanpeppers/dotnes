@@ -70,7 +70,7 @@ public class IL2NESWriterTests
         writer.Write(ILOpCode.Call, nameof(ppu_on_all), sizeOfMain);
 
         // while (true) ;
-        writer.Write(NESInstruction.JMP_abs, 0x8540); // Jump to self
+        writer.Write(ILOpCode.Br_s, 254, sizeOfMain);
 
         writer.WriteFinalBuiltIns();
         writer.WriteString(text);
@@ -131,7 +131,7 @@ public class IL2NESWriterTests
         writer.Write(ILOpCode.Call, nameof(ppu_on_all), sizeOfMain);
 
         // while (true) ;
-        writer.Write(NESInstruction.JMP_abs, 0x8540); // Jump to self
+        writer.Write(ILOpCode.Br_s, 254, sizeOfMain);
 
         var expected = Utilities.ToByteArray("A900 20A285 A902 203E82 A901 20A285 A914 203E82 A902 20A285 A920 203E82 A903 20A285 A930 203E82 A220 A942 20D483 A9F1 A285 20B885 A200 A90C 204F83 208982 4C4085");
         AssertEx.Equal(expected, writer);

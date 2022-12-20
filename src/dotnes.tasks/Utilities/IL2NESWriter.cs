@@ -91,7 +91,7 @@ class IL2NESWriter : NESWriter
                 }
                 break;
             case ILOpCode.Br_s:
-                Write(NESInstruction.JMP_abs, checked((ushort)(byte.MaxValue - operand + 0x8540 - 1)));
+                Write(NESInstruction.JMP_abs, donelib.GetAddressAfterMain(sizeOfMain));
                 break;
             case ILOpCode.Newarr:
                 // Remove the previous Ldc_i4_s
