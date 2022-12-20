@@ -68,7 +68,7 @@ class NESWriter : IDisposable
     protected const ushort pusha = 0x855F;
     protected const ushort pushax = 0x8575;
     protected const ushort zerobss = 0x858B;
-    protected const ushort rodata = 0x85EC;
+    protected const ushort rodata = 0x85EE;
 
     protected readonly BinaryWriter _writer;
 

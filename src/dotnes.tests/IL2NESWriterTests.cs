@@ -93,7 +93,7 @@ public class IL2NESWriterTests
     [Fact]
     public void Write_Main_attributetable()
     {
-        const ushort sizeOfMain = 0x30;
+        const ushort sizeOfMain = 0x2E;
         using var writer = GetWriter();
         writer.Write(ILOpCode.Ldtoken, ImmutableArray.Create(new byte[] {
           0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // rows 0-3
