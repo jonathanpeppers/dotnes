@@ -24,15 +24,19 @@
   <ItemGroup>
     <None Update="@(None)" Pack="true" PackagePath="" />
     <None Include="../../assets/logo.png" Pack="true" PackagePath="" />
+    <_Downloads Include="$(IntermediateOutputPath)ANESE_$(PackageVersion)_win.zip" />
+    <_Downloads Include="$(IntermediateOutputPath)ANESE_$(PackageVersion)_macOS.zip" />
+    <_Downloads Include="$(IntermediateOutputPath)LICENSE" />
   </ItemGroup>
   <Target Name="_Download" BeforeTargets="Build"
       Inputs="$(MSBuildThisFile)"
-      Outputs="$(IntermediateOutputPath)ANESE_$(PackageVersion)_win.zip;$(IntermediateOutputPath)ANESE_$(PackageVersion)_macOS.zip">
+      Outputs="@(_Downloads)">
     <DownloadFile SourceUrl="$(WindowsUrl)" DestinationFolder="$(IntermediateOutputPath)" />
     <DownloadFile SourceUrl="$(MacUrl)"     DestinationFolder="$(IntermediateOutputPath)" />
     <DownloadFile SourceUrl="$(GithubLicenseUrl)" DestinationFolder="$(IntermediateOutputPath)" />
+    <Touch Files="@(_Downloads)" />
     <ItemGroup>
-      <FileWrites Include="$(IntermediateOutputPath)ANESE_$(PackageVersion)_win.zip;$(IntermediateOutputPath)ANESE_$(PackageVersion)_macOS.zip" />
+      <FileWrites Include="@(_Downloads)" />
     </ItemGroup>
   </Target>
   <Target Name="_Unzip" AfterTargets="_Download"
