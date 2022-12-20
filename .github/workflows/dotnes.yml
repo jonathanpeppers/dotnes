@@ -24,11 +24,11 @@ jobs:
       run: dotnet build samples/hello/hello.csproj -bl:samples-debug.binlog && dotnet build samples/hello/hello.csproj -c Release -bl:samples-release.binlog
     - name: templates
       run: |
-        dotnet new install bin/Release/dotnes.templates.*.nupkg &&
-        cd samples && mkdir foo && cd foo &&
-        dotnet new nes &&
-        dotnet build -bl:foo-debug.binlog &&
-        dotnet build -c Release -bl:foo-release.binlog &&
+        dotnet new install bin/Release/dotnes.templates.*.nupkg && \
+        cd samples && mkdir foo && cd foo && \
+        dotnet new nes && \
+        dotnet build -bl:foo-debug.binlog && \
+        dotnet build -c Release -bl:foo-release.binlog
     - name: upload logs
       uses: actions/upload-artifact@v2
       with:
