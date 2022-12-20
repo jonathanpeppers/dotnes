@@ -10,6 +10,8 @@
     <PackageTags>.NET C# NES</PackageTags>
     <PackageLicenseFile>LICENSE</PackageLicenseFile>
     <PackageIcon>logo.png</PackageIcon>
+    <GenerateDependencyFile>false</GenerateDependencyFile>
+    <NoWarn>$(NoWarn);NU5131</NoWarn>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\dotnes.tasks\dotnes.tasks.csproj" />
