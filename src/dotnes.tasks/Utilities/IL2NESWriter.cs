@@ -139,11 +139,13 @@ class IL2NESWriter : NESWriter
                         Write(NESInstruction.JSR, GetAddress(operand));
                         break;
                 }
-                // Pop twice
-                if (A.Count > 0)
-                    A.Pop();
-                if (A.Count > 0)
-                    A.Pop();
+                // Pop N times
+                int args = GetNumberOfArguments(operand);
+                for (int i = 0; i < args; i++)
+                {
+                    if (A.Count > 0)
+                        A.Pop();
+                }
                 break;
             default:
                 throw new NotImplementedException($"OpCode {code} with String operand is not implemented!");
@@ -174,18 +176,37 @@ class IL2NESWriter : NESWriter
     {
         switch (name)
         {
-            case nameof(pal_col):
+            case nameof(NESLib.pal_col):
                 return 0x823E;
-            case nameof(vram_adr):
+            case nameof(NESLib.vram_adr):
                 return 0x83D4;
-            case nameof(vram_write):
+            case nameof(NESLib.vram_write):
                 return 0x834F;
-            case nameof(ppu_on_all):
+            case nameof(NESLib.ppu_on_all):
                 return 0x8289;
-            case nameof(pal_bg):
+            case nameof(NESLib.pal_bg):
                 return 0x822B;
-            case nameof(vram_fill):
+            case nameof(NESLib.vram_fill):
                 return 0x83DF;
+            default:
+                throw new NotImplementedException($"Address for {name} is not implemented!");
+        }
+    }
+
+    static int GetNumberOfArguments(string name)
+    {
+        switch (name)
+        {
+            case nameof(NESLib.ppu_on_all):
+                return 0;
+            case nameof(NESLib.vram_adr):
+            case nameof(NESLib.vram_write):
+            case nameof(NESLib.pal_bg):
+                return 1;
+            case nameof(NESLib.pal_col):
+            case nameof(NESLib.vram_fill):
+            case nameof(NESLib.NTADR_A):
+                return 2;
             default:
                 throw new NotImplementedException($"Address for {name} is not implemented!");
         }
