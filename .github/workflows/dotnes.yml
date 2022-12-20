@@ -24,7 +24,6 @@ jobs:
       run: dotnet build samples/hello/hello.csproj -bl:samples-debug.binlog && dotnet build samples/hello/hello.csproj -c Release -bl:samples-release.binlog
     - name: templates
       run: |
-        (dotnet new uninstall dotnes.templates || 1) && \
         dotnet new install bin/Release/dotnes.templates.*.nupkg && \
         dotnet new nes --output samples/foo && \
         dotnet build samples/foo/foo.csproj -bl:foo-debug.binlog && \
