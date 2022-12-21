@@ -123,19 +123,20 @@ public static class NESLib
     /// </summary>
     public static void oam_size(byte size) { }
 
-    // set sprite in OAM buffer, chrnum is tile, attr is attribute, sprid is offset in OAM in bytes
-    // returns sprid+4, which is offset for a next sprite
-    //unsigned char __fastcall__ oam_spr(unsigned char x, unsigned char y,
-    //                    unsigned char chrnum, unsigned char attr,
-    //                    unsigned char sprid);
+    /// <summary>
+    /// set sprite in OAM buffer, chrnum is tile, attr is attribute, sprid is offset in OAM in bytes
+    /// </summary>
+    /// <returns>returns sprid+4, which is offset for a next sprite</returns>
+    public static byte oam_spr(byte x, byte y, byte chrnum, byte attr, byte sprid) => default;
 
-    // set metasprite in OAM buffer
-    // meta sprite is a const unsigned char array, it contains four bytes per sprite
-    // in order x offset, y offset, tile, attribute
-    // x=128 is end of a meta sprite
-    // returns sprid+4, which is offset for a next sprite
-    //unsigned char __fastcall__ oam_meta_spr(unsigned char x, unsigned char y,
-    //                    unsigned char sprid, const unsigned char* data);
+    /// <summary>
+    /// set metasprite in OAM buffer
+    /// meta sprite is a const unsigned char array, it contains four bytes per sprite
+    /// in order x offset, y offset, tile, attribute
+    /// x=128 is end of a meta sprite
+    /// </summary>
+    /// <returns>returns sprid+4, which is offset for a next sprite</returns>
+    public static byte oam_meta_spr(byte x, byte y, byte sprid, byte[] data) => default;
 
     /// <summary>
     /// hide all remaining sprites from given offset
@@ -203,6 +204,24 @@ public static class NESLib
     /// select current chr bank for background, 0..1
     /// </summary>
     public static void bank_bg(byte n) { }
+
+    /// <summary>
+    /// get random number 0..255, same as rand8()
+    /// </summary>
+    public static byte rand() => default;
+    /// <summary>
+    /// get random number 0..255
+    /// </summary>
+    public static byte rand8() => default;
+    /// <summary>
+    /// get random number 0..65535
+    /// </summary>
+    public static ushort rand16() => default;
+
+    /// <summary>
+    /// set random seed
+    /// </summary>
+    public static void set_rand(ushort seed) { }
 
     /// <summary>
     /// when display is enabled, vram access could only be done with this vram update system
