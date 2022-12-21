@@ -201,8 +201,68 @@ public class IL2NESWriterTests
             0x0d,0x2d,0x3a,0x0, // sprite palette 2
             0x0d,0x27,0x2a      // sprite palette 3
         }), sizeOfMain);
+        writer.Write(ILOpCode.Stloc_0, sizeOfMain);
 
-        var expected = Utilities.ToByteArray("A9DB A286"); //TODO: assembly here isn't right
+        // byte[] array2 = new byte[64];
+        writer.Write(ILOpCode.Ldc_i4_s, 64, sizeOfMain);
+        writer.Write(ILOpCode.Newarr, 16777235, sizeOfMain);
+        writer.Write(ILOpCode.Stloc_1, sizeOfMain);
+
+        // byte[] array3 = new byte[64];
+        writer.Write(ILOpCode.Ldc_i4_s, 64, sizeOfMain);
+        writer.Write(ILOpCode.Newarr, 16777235, sizeOfMain);
+        writer.Write(ILOpCode.Stloc_2, sizeOfMain);
+
+        // byte[] array4 = new byte[64];
+        writer.Write(ILOpCode.Ldc_i4_s, 64, sizeOfMain);
+        writer.Write(ILOpCode.Newarr, 16777235, sizeOfMain);
+        writer.Write(ILOpCode.Stloc_3, sizeOfMain);
+
+        // byte[] array5 = new byte[64];
+        writer.Write(ILOpCode.Ldc_i4_s, 64, sizeOfMain);
+        writer.Write(ILOpCode.Newarr, 16777235, sizeOfMain);
+        writer.Write(ILOpCode.Stloc_s, 4, sizeOfMain);
+
+        // for (byte b = 0; b < 64; b = (byte)(b + 1))
+        writer.Write(ILOpCode.Ldc_i4_0, sizeOfMain);
+        writer.Write(ILOpCode.Stloc_s, 5, sizeOfMain);
+        writer.Write(ILOpCode.Br_s, 54, sizeOfMain);
+
+        // array2[b] = NESLib.rand();
+        writer.Write(ILOpCode.Ldloc_1, sizeOfMain);
+        writer.Write(ILOpCode.Ldloc_s, 5, sizeOfMain);
+        writer.Write(ILOpCode.Call, nameof(rand), sizeOfMain);
+        writer.Write(ILOpCode.Stelem_i1, sizeOfMain);
+
+        // array3[b] = NESLib.rand();
+        writer.Write(ILOpCode.Ldloc_2, sizeOfMain);
+        writer.Write(ILOpCode.Ldloc_s, 5, sizeOfMain);
+        writer.Write(ILOpCode.Call, nameof(rand), sizeOfMain);
+        writer.Write(ILOpCode.Stelem_i1, sizeOfMain);
+
+        // array4[b] = (byte)((NESLib.rand() & 7) - 3);
+        writer.Write(ILOpCode.Ldloc_3, sizeOfMain);
+        writer.Write(ILOpCode.Ldloc_s, 5, sizeOfMain);
+        writer.Write(ILOpCode.Call, nameof(rand), sizeOfMain);
+        writer.Write(ILOpCode.Ldc_i4_7, sizeOfMain);
+        writer.Write(ILOpCode.And, sizeOfMain);
+        writer.Write(ILOpCode.Ldc_i4_3, sizeOfMain);
+        writer.Write(ILOpCode.Sub, sizeOfMain);
+        writer.Write(ILOpCode.Conv_u1, sizeOfMain);
+        writer.Write(ILOpCode.Stelem_i1, sizeOfMain);
+
+        // array5[b] = (byte)((NESLib.rand() & 7) - 3);
+        writer.Write(ILOpCode.Ldloc_s, 4, sizeOfMain);
+        writer.Write(ILOpCode.Ldloc_s, 5, sizeOfMain);
+        writer.Write(ILOpCode.Call, nameof(rand), sizeOfMain);
+        writer.Write(ILOpCode.Ldc_i4_7, sizeOfMain);
+        writer.Write(ILOpCode.And, sizeOfMain);
+        writer.Write(ILOpCode.Ldc_i4_3, sizeOfMain);
+        writer.Write(ILOpCode.Sub, sizeOfMain);
+        writer.Write(ILOpCode.Conv_u1, sizeOfMain);
+        writer.Write(ILOpCode.Stelem_i1, sizeOfMain);
+
+        var expected = Utilities.ToByteArray("A900 8D2904 AD2904 C940 B06C"); //TODO: assembly here isn't right
         AssertEx.Equal(expected, writer);
     }
 }
