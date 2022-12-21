@@ -10,8 +10,9 @@ class IL2NESWriter : NESWriter
     {
     }
 
-    readonly Stack<int> A = new Stack<int> ();
-    readonly List<ImmutableArray<byte>> ByteArrays = new List<ImmutableArray<byte>>();
+    readonly Stack<int> A = new();
+    readonly Dictionary<int, int> Locals = new();
+    readonly List<ImmutableArray<byte>> ByteArrays = new();
     ushort ByteArrayOffset = 0;
 
     public void Write(ILOpCode code, ushort sizeOfMain)
@@ -53,16 +54,34 @@ class IL2NESWriter : NESWriter
             case ILOpCode.Stloc_0:
                 // Remove the previous Ldtoken
                 _writer.BaseStream.SetLength(_writer.BaseStream.Length - 4);
+                Locals[0] = A.Pop();
+                break;
+            case ILOpCode.Stloc_1:
+                // Remove the previous Ldtoken
+                _writer.BaseStream.SetLength(_writer.BaseStream.Length - 4);
+                Locals[1] = A.Pop();
+                break;
+            case ILOpCode.Stloc_2:
+                // Remove the previous Ldtoken
+                _writer.BaseStream.SetLength(_writer.BaseStream.Length - 4);
+                Locals[2] = A.Pop();
+                break;
+            case ILOpCode.Stloc_3:
+                // Remove the previous Ldtoken
+                _writer.BaseStream.SetLength(_writer.BaseStream.Length - 4);
+                Locals[3] = A.Pop();
                 break;
             case ILOpCode.Ldloc_0:
-                {
-                    var offset = A.Peek();
-                    Write(NESInstruction.LDA, (byte)(offset & 0xff));
-                    Write(NESInstruction.LDX, (byte)(offset >> 8));
-                    Write(NESInstruction.JSR, pushax.GetAddressAfterMain(sizeOfMain));
-                    Write(NESInstruction.LDX, 0x00);
-                    Write(NESInstruction.LDA, 0x40);
-                }
+                WriteLdloc(Locals[0], sizeOfMain);
+                break;
+            case ILOpCode.Ldloc_1:
+                WriteLdloc(Locals[1], sizeOfMain);
+                break;
+            case ILOpCode.Ldloc_2:
+                WriteLdloc(Locals[2], sizeOfMain);
+                break;
+            case ILOpCode.Ldloc_3:
+                WriteLdloc(Locals[3], sizeOfMain);
                 break;
             default:
                 throw new NotImplementedException($"OpCode {code} with no operands is not implemented!");
@@ -97,6 +116,14 @@ class IL2NESWriter : NESWriter
                 // Remove the previous Ldc_i4_s
                 _writer.BaseStream.SetLength(_writer.BaseStream.Length - 2);
                 A.Pop();
+                break;
+            case ILOpCode.Stloc_s:
+                // Remove the previous Ldtoken
+                _writer.BaseStream.SetLength(_writer.BaseStream.Length - 4);
+                Locals[operand] = A.Pop();
+                break;
+            case ILOpCode.Ldloc_s:
+                WriteLdloc(Locals[operand], sizeOfMain);
                 break;
             default:
                 throw new NotImplementedException($"OpCode {code} with Int32 operand is not implemented!");
@@ -242,5 +269,14 @@ class IL2NESWriter : NESWriter
         }
         Write(NESInstruction.LDA, checked((byte)operand));
         A.Push(operand);
+    }
+
+    void WriteLdloc(int offset, ushort sizeOfMain)
+    {
+        Write(NESInstruction.LDA, (byte)(offset & 0xff));
+        Write(NESInstruction.LDX, (byte)(offset >> 8));
+        Write(NESInstruction.JSR, pushax.GetAddressAfterMain(sizeOfMain));
+        Write(NESInstruction.LDX, 0x00);
+        Write(NESInstruction.LDA, 0x40);
     }
 }
