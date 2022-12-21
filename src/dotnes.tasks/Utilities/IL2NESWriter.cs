@@ -14,6 +14,7 @@ class IL2NESWriter : NESWriter
     readonly Dictionary<int, int> Locals = new();
     readonly List<ImmutableArray<byte>> ByteArrays = new();
     ushort ByteArrayOffset = 0;
+    ILOpCode previous;
 
     public void Write(ILOpCode code, ushort sizeOfMain)
     {
@@ -22,7 +23,8 @@ class IL2NESWriter : NESWriter
             case ILOpCode.Nop:
                 break;
             case ILOpCode.Dup:
-                // Do nothing
+                if (A.Count > 0)
+                    A.Push(A.Peek());
                 break;
             case ILOpCode.Ldc_i4_0:
                 WriteLdc(0, sizeOfMain);
@@ -52,23 +54,31 @@ class IL2NESWriter : NESWriter
                 WriteLdc(8, sizeOfMain);
                 break;
             case ILOpCode.Stloc_0:
-                // Remove the previous Ldtoken
-                _writer.BaseStream.SetLength(_writer.BaseStream.Length - 4);
+                if (previous == ILOpCode.Ldtoken)
+                {
+                    _writer.BaseStream.SetLength(_writer.BaseStream.Length - 4);
+                }
                 Locals[0] = A.Pop();
                 break;
             case ILOpCode.Stloc_1:
-                // Remove the previous Ldtoken
-                _writer.BaseStream.SetLength(_writer.BaseStream.Length - 4);
+                if (previous == ILOpCode.Ldtoken)
+                {
+                    _writer.BaseStream.SetLength(_writer.BaseStream.Length - 4);
+                }
                 Locals[1] = A.Pop();
                 break;
             case ILOpCode.Stloc_2:
-                // Remove the previous Ldtoken
-                _writer.BaseStream.SetLength(_writer.BaseStream.Length - 4);
+                if (previous == ILOpCode.Ldtoken)
+                {
+                    _writer.BaseStream.SetLength(_writer.BaseStream.Length - 4);
+                }
                 Locals[2] = A.Pop();
                 break;
             case ILOpCode.Stloc_3:
-                // Remove the previous Ldtoken
-                _writer.BaseStream.SetLength(_writer.BaseStream.Length - 4);
+                if (previous == ILOpCode.Ldtoken)
+                {
+                    _writer.BaseStream.SetLength(_writer.BaseStream.Length - 4);
+                }
                 Locals[3] = A.Pop();
                 break;
             case ILOpCode.Ldloc_0:
@@ -86,6 +96,7 @@ class IL2NESWriter : NESWriter
             default:
                 throw new NotImplementedException($"OpCode {code} with no operands is not implemented!");
         }
+        previous = code;
     }
 
     public void Write(ILOpCode code, int operand, ushort sizeOfMain)
@@ -113,13 +124,16 @@ class IL2NESWriter : NESWriter
                 Write(NESInstruction.JMP_abs, donelib.GetAddressAfterMain(sizeOfMain));
                 break;
             case ILOpCode.Newarr:
-                // Remove the previous Ldc_i4_s
-                _writer.BaseStream.SetLength(_writer.BaseStream.Length - 2);
-                A.Pop();
+                if (previous == ILOpCode.Ldc_i4_s)
+                {
+                    _writer.BaseStream.SetLength(_writer.BaseStream.Length - 2);
+                }
                 break;
             case ILOpCode.Stloc_s:
-                // Remove the previous Ldtoken
-                _writer.BaseStream.SetLength(_writer.BaseStream.Length - 4);
+                if (previous == ILOpCode.Ldtoken)
+                {
+                    _writer.BaseStream.SetLength(_writer.BaseStream.Length - 4);
+                }
                 Locals[operand] = A.Pop();
                 break;
             case ILOpCode.Ldloc_s:
@@ -128,6 +142,7 @@ class IL2NESWriter : NESWriter
             default:
                 throw new NotImplementedException($"OpCode {code} with Int32 operand is not implemented!");
         }
+        previous = code;
     }
 
     public void Write(ILOpCode code, string operand, ushort sizeOfMain)
@@ -174,6 +189,7 @@ class IL2NESWriter : NESWriter
             default:
                 throw new NotImplementedException($"OpCode {code} with String operand is not implemented!");
         }
+        previous = code;
     }
 
     public void Write(ILOpCode code, ImmutableArray<byte> operand, ushort sizeOfMain)
@@ -194,6 +210,7 @@ class IL2NESWriter : NESWriter
             default:
                 throw new NotImplementedException($"OpCode {code} with byte[] operand is not implemented!");
         }
+        previous = code;
     }
 
     /// <summary>
