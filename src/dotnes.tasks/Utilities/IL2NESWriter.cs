@@ -93,6 +93,26 @@ class IL2NESWriter : NESWriter
             case ILOpCode.Ldloc_3:
                 WriteLdloc(Locals[3], sizeOfMain);
                 break;
+            case ILOpCode.Stelem_i1:
+                /*
+                 * 851D	A000          	LDY #$00                      
+                 * 851F	20EF86        	JSR staspidx    
+                 */
+                Write(NESInstruction.LDY, 0);
+                Write(NESInstruction.JSR, 0x86EF);
+                break;
+            case ILOpCode.And:
+                Write(NESInstruction.AND, checked((byte)A.Pop()));
+                Write(NESInstruction.SEC_impl);
+                break;
+            case ILOpCode.Sub:
+                Write(NESInstruction.SBC, checked((byte)A.Pop()));
+                Write(NESInstruction.CMP, 0x80);
+                break;
+            case ILOpCode.Conv_u1:
+                // Do nothing
+                // Converts the value on top of the evaluation stack to unsigned int8, and extends it to int32.
+                break;
             default:
                 throw new NotImplementedException($"OpCode {code} with no operands is not implemented!");
         }
@@ -175,7 +195,7 @@ class IL2NESWriter : NESWriter
                         A.Push(address);
                         break;
                     default:
-                        Write(NESInstruction.JSR, GetAddress(operand));
+                        Write(NESInstruction.JSR, GetAddress(operand, sizeOfMain));
                         break;
                 }
                 // Pop N times
@@ -227,7 +247,7 @@ class IL2NESWriter : NESWriter
         }
     }
 
-    static ushort GetAddress(string name)
+    static ushort GetAddress(string name, ushort sizeOfMain)
     {
         switch (name)
         {
@@ -243,8 +263,11 @@ class IL2NESWriter : NESWriter
                 return 0x822B;
             case nameof(NESLib.vram_fill):
                 return 0x83DF;
+            case nameof(NESLib.rand):
+            case nameof(NESLib.rand8):
+                return ((ushort)0x859A).GetAddressAfterMain(sizeOfMain);
             default:
-                throw new NotImplementedException($"Address for {name} is not implemented!");
+                throw new NotImplementedException($"{nameof(GetAddress)} for {name} is not implemented!");
         }
     }
 
@@ -253,6 +276,9 @@ class IL2NESWriter : NESWriter
         switch (name)
         {
             case nameof(NESLib.ppu_on_all):
+            case nameof(NESLib.rand):
+            case nameof(NESLib.rand8):
+            case nameof(NESLib.rand16):
                 return 0;
             case nameof(NESLib.vram_adr):
             case nameof(NESLib.vram_write):
@@ -263,7 +289,7 @@ class IL2NESWriter : NESWriter
             case nameof(NESLib.NTADR_A):
                 return 2;
             default:
-                throw new NotImplementedException($"Address for {name} is not implemented!");
+                throw new NotImplementedException($"{nameof(GetNumberOfArguments)} for {name} is not implemented!");
         }
     }
 

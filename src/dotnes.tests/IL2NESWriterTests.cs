@@ -262,7 +262,7 @@ public class IL2NESWriterTests
         writer.Write(ILOpCode.Conv_u1, sizeOfMain);
         writer.Write(ILOpCode.Stelem_i1, sizeOfMain);
 
-        var expected = Utilities.ToByteArray("A900 8D2904 AD2904 C940 B06C"); //TODO: assembly here isn't right
+        var expected = Utilities.ToByteArray("A900 8D2904 AD2904 C940 B06C A929 A203 18 6D2904 9001 E8 20A586 20C786 A000 20EF86 A969 A203 18 6D2904 9001 E8 20A586 20C786 A000 20EF86 A9A9 A203 18 6D2904 9001 E8 20A586 20C786 2907 38 E903 C980 A000 20EF86 A9E9 A203 18 6D2904 9001 E8 20A586 20C786 2907 38 E903 C980 A000 20EF86 EE2904 4C0585");
         AssertEx.Equal(expected, writer);
     }
 }
