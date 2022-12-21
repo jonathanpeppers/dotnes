@@ -7,7 +7,7 @@ namespace dotnes.tests;
 public class IL2NESWriterTests
 {
     readonly byte[] data;
-    readonly MemoryStream stream = new MemoryStream();
+    readonly MemoryStream stream = new();
 
     public IL2NESWriterTests()
     {
