@@ -99,7 +99,7 @@ vram_unrle(climbr_title_rle);
 ppu_on_all();
 
 // fade in from black
-for (int vb = 0; vb <= 4; vb++)
+for (byte vb = 0; vb <= 4; vb++)
 {
     // set virtual bright value
     pal_bright(vb);
