@@ -175,6 +175,11 @@ public static class NESLib
     public static void vram_write(byte[] src) { }
 
     /// <summary>
+    /// unpack RLE data to current address of vram, mostly used for nametables
+    /// </summary>
+    public static void vram_unrle(byte[] data) { }
+
+    /// <summary>
     /// delay for N frames
     /// </summary>
     public static void delay(byte frames) { }
