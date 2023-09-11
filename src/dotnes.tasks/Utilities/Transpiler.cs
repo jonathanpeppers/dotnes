@@ -1,4 +1,5 @@
-﻿using System.Collections.Immutable;
+﻿using dotnes.tasks;
+using System.Collections.Immutable;
 using System.Reflection;
 using System.Reflection.Metadata;
 using System.Reflection.Metadata.Ecma335;
@@ -17,17 +18,29 @@ class Transpiler : IDisposable
         reader = pe.GetMetadataReader();
     }
 
+    public IList<string> AssemblyFiles { get; set; } = Array.Empty<string>();
+
     public void Write(Stream stream)
     {
-        using var chr_rom = Get_CHR_ROM();
-        int CHR_ROM_SIZE = 0;
-        if (chr_rom != null)
-        {
-            if (chr_rom.Length % NESWriter.CHR_ROM_BLOCK_SIZE != 0)
-                throw new InvalidOperationException($"CHR_ROM must be in blocks of {NESWriter.CHR_ROM_BLOCK_SIZE}");
+        if (AssemblyFiles.Count == 0)
+            throw new InvalidOperationException("At least one 'chr_generic.s' file must be present!");
 
-            CHR_ROM_SIZE = (int)(chr_rom.Length / NESWriter.CHR_ROM_BLOCK_SIZE);
+        string chr_rom_path = AssemblyFiles.FirstOrDefault(f => Path.GetFileName(f) == "chr_generic.s");
+        if (string.IsNullOrEmpty(chr_rom_path))
+        {
+            chr_rom_path = AssemblyFiles[0];
         }
+
+        var assemblyReader = new AssemblyReader(chr_rom_path);
+        var chr_rom = assemblyReader.GetSegments().FirstOrDefault(s => s.Name == "CHARS");
+        if (chr_rom == null)
+        {
+            throw new InvalidOperationException($"At least one 'CHARS' segment must be present in: {chr_rom_path}");
+        }
+
+        if (chr_rom.Bytes.Length % NESWriter.CHR_ROM_BLOCK_SIZE != 0)
+            throw new InvalidOperationException($"CHR_ROM must be in blocks of {NESWriter.CHR_ROM_BLOCK_SIZE}");
+        int CHR_ROM_SIZE = (int)(chr_rom.Bytes.Length / NESWriter.CHR_ROM_BLOCK_SIZE);
 
         // Generate static void main in a first pass, so we know the size of the program
         ushort sizeOfMain;
@@ -124,22 +137,8 @@ class Transpiler : IDisposable
         //TODO: no idea what these are???
         writer.Write(new byte[] { 0xBC, 0x80, 0x00, 0x80, 0x02, 0x82 });
 
-        chr_rom?.CopyTo(writer.BaseStream);
+        writer.Write(chr_rom.Bytes);
         writer.Flush();
-    }
-
-    Stream? Get_CHR_ROM()
-    {
-        foreach (var h in reader.ManifestResources)
-        {
-            var resource = reader.GetManifestResource(h);
-            var name = reader.GetString(resource.Name);
-            if (name == "CHR_ROM.nes")
-            {
-                return pe.GetEmbeddedResourceStream(resource);
-            }
-        }
-        return null;
     }
 
     /// <summary>

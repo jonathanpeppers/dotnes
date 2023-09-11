@@ -1,5 +1,4 @@
 ﻿using dotnes.tasks;
-using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace dotnes.tests;
 
