@@ -11,13 +11,17 @@ public class AssemblyReader : IDisposable
 
     public AssemblyReader(TextReader reader)
     {
+        Source = reader.GetType().ToString();
         this.reader = reader;
     }
 
     public AssemblyReader(string source)
     {
+        Source = source;
         reader = new StringReader(source);
     }
+
+    public string Source { get; set; }
 
     public IEnumerable<Segment> GetSegments()
     {

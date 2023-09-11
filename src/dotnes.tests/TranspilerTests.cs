@@ -1,4 +1,5 @@
-﻿using System.Text;
+﻿using dotnes.tasks;
+using System.Text;
 
 namespace dotnes.tests;
 
@@ -91,11 +92,13 @@ ILInstruction { OpCode = Br_s, Integer = 254, String = , Bytes =  }";
         var expected = new byte[rom.Length];
         rom.Read(expected, 0, expected.Length);
 
+        var chr_generic = new StreamReader(Utilities.GetResource("chr_generic.s"));
+
         using var dll = Utilities.GetResource($"{name}.{configuration}.dll");
-        using var il = new Transpiler(dll);
+        using var il = new Transpiler(dll) { AssemblyFiles = { new AssemblyReader(chr_generic) } };
         using var ms = new MemoryStream();
         il.Write(ms);
-        
+
         AssertEx.Equal(expected, ms.ToArray());
     }
 }

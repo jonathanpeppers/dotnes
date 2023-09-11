@@ -1,4 +1,5 @@
 ﻿using dotnes.tasks;
+using System.Buffers;
 using System.Collections.Immutable;
 using System.Reflection;
 using System.Reflection.Metadata;
@@ -18,28 +19,19 @@ class Transpiler : IDisposable
         reader = pe.GetMetadataReader();
     }
 
-    public IList<string> AssemblyFiles { get; set; } = Array.Empty<string>();
+    public IList<AssemblyReader> AssemblyFiles { get; set; } = new List<AssemblyReader>();
 
     public void Write(Stream stream)
     {
         if (AssemblyFiles.Count == 0)
             throw new InvalidOperationException("At least one 'chr_generic.s' file must be present!");
 
-        string chr_rom_path = AssemblyFiles.FirstOrDefault(f => Path.GetFileName(f) == "chr_generic.s");
-        if (string.IsNullOrEmpty(chr_rom_path))
-        {
-            chr_rom_path = AssemblyFiles[0];
-        }
-
-        var assemblyReader = new AssemblyReader(chr_rom_path);
+        var assemblyReader = AssemblyFiles.FirstOrDefault(a => Path.GetFileName(a.Source) == "chr_generic.s") ?? AssemblyFiles[0];
         var chr_rom = assemblyReader.GetSegments().FirstOrDefault(s => s.Name == "CHARS");
         if (chr_rom == null)
         {
-            throw new InvalidOperationException($"At least one 'CHARS' segment must be present in: {chr_rom_path}");
+            throw new InvalidOperationException($"At least one 'CHARS' segment must be present in: {assemblyReader.Source}");
         }
-
-        if (chr_rom.Bytes.Length % NESWriter.CHR_ROM_BLOCK_SIZE != 0)
-            throw new InvalidOperationException($"CHR_ROM must be in blocks of {NESWriter.CHR_ROM_BLOCK_SIZE}");
         int CHR_ROM_SIZE = (int)(chr_rom.Bytes.Length / NESWriter.CHR_ROM_BLOCK_SIZE);
 
         // Generate static void main in a first pass, so we know the size of the program
@@ -138,6 +130,20 @@ class Transpiler : IDisposable
         writer.Write(new byte[] { 0xBC, 0x80, 0x00, 0x80, 0x02, 0x82 });
 
         writer.Write(chr_rom.Bytes);
+        // Pad remaining zeros
+        int padLength = chr_rom.Bytes.Length % NESWriter.CHR_ROM_BLOCK_SIZE;
+        if (padLength != 0)
+        {
+            var buffer = ArrayPool<byte>.Shared.Rent(padLength);
+            try
+            {
+                writer.Write(buffer, 0, padLength);
+            }
+            finally
+            {
+                ArrayPool<byte>.Shared.Return(buffer);
+            }
+        }
         writer.Flush();
     }
 
