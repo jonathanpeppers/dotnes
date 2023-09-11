@@ -1,5 +1,4 @@
-﻿using dotnes.tasks;
-using System.Buffers;
+﻿using System.Buffers;
 using System.Collections.Immutable;
 using System.Reflection;
 using System.Reflection.Metadata;
@@ -331,5 +330,12 @@ class Transpiler : IDisposable
         ShortVariable
     }
 
-    public void Dispose() => pe.Dispose();
+    public void Dispose()
+    {
+        foreach (var assembly in AssemblyFiles)
+        {
+            assembly.Dispose();
+        }
+        pe.Dispose();
+    }
 }

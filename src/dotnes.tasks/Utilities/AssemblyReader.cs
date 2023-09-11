@@ -1,4 +1,4 @@
-﻿namespace dotnes.tasks;
+﻿namespace dotnes;
 
 /// <summary>
 /// Right now this class only reads chr_generic.s files

@@ -1,28 +1,4 @@
-﻿namespace dotnes.tests;
-
-public class AssemblyReaderTests
-{
-    [Fact]
-    public void OneLine()
-    {
-        var assemblyReader = new AssemblyReader(@"
-;;Just some random comments
-.segment ""CHARS""
-.byte $38,$6C,$6C,$38,$10,$38,$10,$00
-");
-        var segments = assemblyReader.GetSegments().ToArray();
-        Assert.Single(segments);
-        var actual = segments[0];
-        Assert.Equal("CHARS", actual.Name);
-        Assert.Equal(new byte[] { 0x38, 0x6C, 0x6c, 0x38, 0x10, 0x38, 0x10, 0x00 }, actual.Bytes);
-    }
-
-    [Fact]
-    public void chr_generic_s()
-    {
-        var assemblyReader = new AssemblyReader(@"
-;;{w:8,h:8,bpp:1,count:256,brev:1,np:2,pofs:8,remap:[0,1,2,4,5,6,7,8,9,10,11,12]};;
-.segment ""CHARS""
+.segment "CHARS"
 .byte $00,$00,$00,$00,$00,$00,$00,$00
 .byte $00,$00,$00,$00,$00,$00,$00,$00
 .byte $00,$00,$00,$00,$00,$00,$00,$00
@@ -538,15 +514,3 @@ public class AssemblyReaderTests
 .byte $4E,$7E,$0E,$EE,$7E,$3C,$F8,$00
 .byte $B4,$8C,$FC,$3C,$98,$C0,$00,$00
 ;;
-");
-        var segments = assemblyReader.GetSegments().ToArray();
-        Assert.Single(segments);
-        var actual = segments[0];
-        Assert.Equal("CHARS", actual.Name);
-
-        using var s = Utilities.GetResource("CHR_ROM.nes");
-        var expected = new byte[s.Length];
-        s.Read(expected, 0, expected.Length);
-        AssertEx.Equal(expected, actual.Bytes);
-    }
-}

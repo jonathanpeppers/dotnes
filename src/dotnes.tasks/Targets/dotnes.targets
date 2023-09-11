@@ -6,7 +6,11 @@
   </PropertyGroup>
   <Target Name="Transpile" AfterTargets="Build"
       Inputs="$(TargetPath)" Outputs="$(NESTargetPath)">
-    <TranspileToNES TargetPath="$(TargetPath)" OutputPath="$(NESTargetPath)" />
+    <TranspileToNES
+        TargetPath="$(TargetPath)"
+        AssemblyFiles="@(NESAssembly)"
+        OutputPath="$(NESTargetPath)"
+    />
     <ItemGroup>
       <FileWrites Include="$(NESTargetPath)" />
     </ItemGroup>
