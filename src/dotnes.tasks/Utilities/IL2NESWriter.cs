@@ -93,6 +93,18 @@ class IL2NESWriter : NESWriter
             case ILOpCode.Ldloc_3:
                 WriteLdloc(Locals[3], sizeOfMain);
                 break;
+            case ILOpCode.Add:
+                // We can use INC
+                if (A.Peek() == 1)
+                {
+                    A.Pop();
+                    Write(NESInstruction.INC_abs, (byte)A.Pop());
+                    break;
+                }
+                goto default;
+            case ILOpCode.Conv_u1:
+                // Do nothing
+                break;
             default:
                 throw new NotImplementedException($"OpCode {code} with no operands is not implemented!");
         }
@@ -121,6 +133,10 @@ class IL2NESWriter : NESWriter
                 }
                 break;
             case ILOpCode.Br_s:
+                Write(NESInstruction.JMP_abs, donelib.GetAddressAfterMain(sizeOfMain));
+                break;
+            case ILOpCode.Ble_s:
+                //TODO: not quite right
                 Write(NESInstruction.JMP_abs, donelib.GetAddressAfterMain(sizeOfMain));
                 break;
             case ILOpCode.Newarr:
