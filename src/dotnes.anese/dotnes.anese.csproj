@@ -31,6 +31,7 @@
   <Target Name="_Download" BeforeTargets="Build"
       Inputs="$(MSBuildThisFile)"
       Outputs="@(_Downloads)">
+    <Delete Files="@(_Downloads)" />
     <DownloadFile SourceUrl="$(WindowsUrl)" DestinationFolder="$(IntermediateOutputPath)" />
     <DownloadFile SourceUrl="$(MacUrl)"     DestinationFolder="$(IntermediateOutputPath)" />
     <DownloadFile SourceUrl="$(GithubLicenseUrl)" DestinationFolder="$(IntermediateOutputPath)" />
@@ -43,8 +44,6 @@
       Inputs="$(MSBuildThisFile)"
       Outputs="$(IntermediateOutputPath)_Unzip.stamp">
     <RemoveDir Directories="$(IntermediateOutputPath)win;$(IntermediateOutputPath)osx" />
-    <!-- HACK: no idea why this fixes anything -->
-    <Exec Condition="$([MSBuild]::IsOSPlatform('linux'))" Command="sleep 5" />
     <Unzip SourceFiles="$(IntermediateOutputPath)ANESE_$(PackageVersion)_win.zip"   DestinationFolder="$(IntermediateOutputPath)win" />
     <Unzip SourceFiles="$(IntermediateOutputPath)ANESE_$(PackageVersion)_macOS.zip" DestinationFolder="$(IntermediateOutputPath)osx" />
     <Touch AlwaysCreate="true" Files="$(IntermediateOutputPath)_Unzip.stamp" />
