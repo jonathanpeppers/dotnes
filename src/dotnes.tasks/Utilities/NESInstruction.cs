@@ -334,6 +334,10 @@ enum NESInstruction : byte
     /// Decrement Index X by One
     /// </summary>
     DEX_impl  = 0xCA,
+    /// <summary>
+    /// Decrement Memory by One
+    /// </summary>
+    DEC_abs   = 0xCE,
 
     /// <summary>
     /// Branch on Result not Zero
@@ -385,6 +389,10 @@ enum NESInstruction : byte
     /// Subtract Memory from Accumulator with Borrow
     /// </summary>
     SBC       = 0xE9,
+    /// <summary>
+    /// Increment Memory by One
+    /// </summary>
+    INC_abs   = 0xEE,
     //TODO: rest of E
 
     //TODO: F
