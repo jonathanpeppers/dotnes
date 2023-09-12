@@ -231,20 +231,28 @@ class IL2NESWriter : NESWriter
     {
         switch (name)
         {
-            case nameof(NESLib.pal_col):
-                return 0x823E;
-            case nameof(NESLib.vram_adr):
-                return 0x83D4;
-            case nameof(NESLib.vram_write):
-                return 0x834F;
-            case nameof(NESLib.ppu_on_all):
-                return 0x8289;
-            case nameof(NESLib.pal_bg):
+            case nameof(pal_bg):
                 return 0x822B;
-            case nameof(NESLib.vram_fill):
+            case nameof(pal_bright):
+                return 0xBEBE;
+            case nameof(pal_col):
+                return 0x823E;
+            case nameof(ppu_off):
+                return 0xBEBE;
+            case nameof(ppu_on_all):
+                return 0x8289;
+            case nameof(ppu_wait_frame):
+                return 0xBEBE;
+            case nameof(vram_adr):
+                return 0x83D4;
+            case nameof(vram_fill):
                 return 0x83DF;
+            case nameof(vram_unrle):
+                return 0xBEBE;
+            case nameof(vram_write):
+                return 0x834F;
             default:
-                throw new NotImplementedException($"Address for {name} is not implemented!");
+                throw new NotImplementedException($"{nameof(GetAddress)} for {name} is not implemented!");
         }
     }
 
@@ -252,18 +260,22 @@ class IL2NESWriter : NESWriter
     {
         switch (name)
         {
-            case nameof(NESLib.ppu_on_all):
+            case nameof(ppu_on_all):
+            case nameof(ppu_off):
+            case nameof(ppu_wait_frame):
                 return 0;
-            case nameof(NESLib.vram_adr):
-            case nameof(NESLib.vram_write):
-            case nameof(NESLib.pal_bg):
+            case nameof(pal_bg):
+            case nameof(pal_bright):
+            case nameof(vram_adr):
+            case nameof(vram_unrle):
+            case nameof(vram_write):
                 return 1;
-            case nameof(NESLib.pal_col):
-            case nameof(NESLib.vram_fill):
-            case nameof(NESLib.NTADR_A):
+            case nameof(pal_col):
+            case nameof(vram_fill):
+            case nameof(NTADR_A):
                 return 2;
             default:
-                throw new NotImplementedException($"Address for {name} is not implemented!");
+                throw new NotImplementedException($"{nameof(GetNumberOfArguments)} for {name} is not implemented!");
         }
     }
 
