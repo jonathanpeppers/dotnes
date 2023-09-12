@@ -99,6 +99,27 @@ class IL2NESWriter : NESWriter
             case ILOpCode.Conv_u8:
                 // Do nothing
                 break;
+            case ILOpCode.Add:
+                // We can use INC
+                if (A.Peek() == 1)
+                {
+                    Write(NESInstruction.INC_abs);
+                    // TODO: hardcoded
+                    _writer.Write(0x25);
+                    _writer.Write(0x03);
+
+                    Write(NESInstruction.BNE_rel, 0x03);
+
+                    Write(NESInstruction.INC_abs);
+                    // TODO: hardcoded
+                    _writer.Write(0x26);
+                    _writer.Write(0x03);
+
+                    Write(NESInstruction.LDX, 0x20);
+                    Write(NESInstruction.LDA, 0x00);
+                    break;
+                }
+                goto default;
             default:
                 throw new NotImplementedException($"OpCode {code} with no operands is not implemented!");
         }
