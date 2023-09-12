@@ -93,6 +93,11 @@ class IL2NESWriter : NESWriter
             case ILOpCode.Ldloc_3:
                 WriteLdloc(Locals[3], sizeOfMain);
                 break;
+            case ILOpCode.Add:
+                ushort add_address = 0; // TODO: not right
+                Write(NESInstruction.ADC_abs, add_address);
+                Write(NESInstruction.STA_abs, add_address);
+                break;
             case ILOpCode.Conv_u1:
             case ILOpCode.Conv_u2:
             case ILOpCode.Conv_u4:
@@ -190,6 +195,11 @@ class IL2NESWriter : NESWriter
                 {
                     if (A.Count > 0)
                         A.Pop();
+                }
+                // Has a return value, push to stack
+                if (operand == nameof(oam_spr))
+                {
+                    A.Push(0); //TODO: not right
                 }
                 break;
             default:
