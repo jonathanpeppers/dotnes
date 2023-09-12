@@ -1,4 +1,4 @@
-﻿namespace dotnes.tasks;
+﻿namespace dotnes;
 
 /// <summary>
 /// Right now this class only reads chr_generic.s files
@@ -7,17 +7,24 @@ public class AssemblyReader : IDisposable
 {
     const string SegmentInstruction = ".segment ";
     const string ByteInstruction = ".byte ";
-    TextReader reader;
+    readonly TextReader reader;
 
     public AssemblyReader(TextReader reader)
     {
+        Path = reader.GetType().ToString();
         this.reader = reader;
     }
 
-    public AssemblyReader(string source)
+    public AssemblyReader(string path)
     {
-        reader = new StringReader(source);
+        Path = path;
+        reader = new StreamReader(File.OpenRead(path));
     }
+
+    /// <summary>
+    /// File path or TextReader type used
+    /// </summary>
+    public string Path { get; }
 
     public IEnumerable<Segment> GetSegments()
     {

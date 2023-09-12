@@ -15,7 +15,7 @@
         {
           "source": "./",
           "target": "./",
-          "copyOnly": "*.nes"
+          "copyOnly": "*.s"
         }
     ],
     "preferNameDirectory": true,

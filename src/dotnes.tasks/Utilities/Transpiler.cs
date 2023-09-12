@@ -1,4 +1,5 @@
-﻿using System.Collections.Immutable;
+﻿using System.Buffers;
+using System.Collections.Immutable;
 using System.Reflection;
 using System.Reflection.Metadata;
 using System.Reflection.Metadata.Ecma335;
@@ -10,24 +11,27 @@ class Transpiler : IDisposable
 {
     readonly PEReader pe;
     readonly MetadataReader reader;
+    readonly IList<AssemblyReader> assemblyFiles;
 
-    public Transpiler(Stream stream)
+    public Transpiler(Stream stream, IList<AssemblyReader> assemblyFiles)
     {
         pe = new PEReader(stream);
         reader = pe.GetMetadataReader();
+        this.assemblyFiles = assemblyFiles;
     }
 
     public void Write(Stream stream)
     {
-        using var chr_rom = Get_CHR_ROM();
-        int CHR_ROM_SIZE = 0;
-        if (chr_rom != null)
-        {
-            if (chr_rom.Length % NESWriter.CHR_ROM_BLOCK_SIZE != 0)
-                throw new InvalidOperationException($"CHR_ROM must be in blocks of {NESWriter.CHR_ROM_BLOCK_SIZE}");
+        if (assemblyFiles.Count == 0)
+            throw new InvalidOperationException("At least one 'chr_generic.s' file must be present!");
 
-            CHR_ROM_SIZE = (int)(chr_rom.Length / NESWriter.CHR_ROM_BLOCK_SIZE);
+        var assemblyReader = assemblyFiles.FirstOrDefault(a => Path.GetFileName(a.Path) == "chr_generic.s") ?? assemblyFiles[0];
+        var chr_rom = assemblyReader.GetSegments().FirstOrDefault(s => s.Name == "CHARS");
+        if (chr_rom == null)
+        {
+            throw new InvalidOperationException($"At least one 'CHARS' segment must be present in: {assemblyReader.Path}");
         }
+        int CHR_ROM_SIZE = (int)(chr_rom.Bytes.Length / NESWriter.CHR_ROM_BLOCK_SIZE);
 
         // Generate static void main in a first pass, so we know the size of the program
         ushort sizeOfMain;
@@ -124,22 +128,22 @@ class Transpiler : IDisposable
         //TODO: no idea what these are???
         writer.Write(new byte[] { 0xBC, 0x80, 0x00, 0x80, 0x02, 0x82 });
 
-        chr_rom?.CopyTo(writer.BaseStream);
-        writer.Flush();
-    }
-
-    Stream? Get_CHR_ROM()
-    {
-        foreach (var h in reader.ManifestResources)
+        writer.Write(chr_rom.Bytes);
+        // Pad remaining zeros
+        int padLength = chr_rom.Bytes.Length % NESWriter.CHR_ROM_BLOCK_SIZE;
+        if (padLength != 0)
         {
-            var resource = reader.GetManifestResource(h);
-            var name = reader.GetString(resource.Name);
-            if (name == "CHR_ROM.nes")
+            var buffer = ArrayPool<byte>.Shared.Rent(padLength);
+            try
             {
-                return pe.GetEmbeddedResourceStream(resource);
+                writer.Write(buffer, 0, padLength);
+            }
+            finally
+            {
+                ArrayPool<byte>.Shared.Return(buffer);
             }
         }
-        return null;
+        writer.Flush();
     }
 
     /// <summary>
@@ -326,5 +330,12 @@ class Transpiler : IDisposable
         ShortVariable
     }
 
-    public void Dispose() => pe.Dispose();
+    public void Dispose()
+    {
+        foreach (var assembly in assemblyFiles)
+        {
+            assembly.Dispose();
+        }
+        pe.Dispose();
+    }
 }

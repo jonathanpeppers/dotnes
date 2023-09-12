@@ -11,6 +11,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <None Remove="Data\chr_generic.s" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Using Include="NES" />
     <Using Include="Xunit" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.0.0" />
