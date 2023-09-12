@@ -1,5 +1,4 @@
-﻿;;{w:8,h:8,bpp:1,count:256,brev:1,np:2,pofs:8,remap:[0,1,2,4,5,6,7,8,9,10,11,12]};;
-.segment "CHARS"
+﻿.segment "CHARS"
 .byte $00,$00,$00,$00,$00,$00,$00,$00
 .byte $00,$00,$00,$00,$00,$00,$00,$00
 .byte $00,$00,$00,$00,$00,$00,$00,$00
@@ -392,8 +391,6 @@
 .byte $00,$7E,$7C,$7E,$74,$7C,$50,$00
 .byte $05,$67,$4F,$1F,$9D,$3D,$A9,$FF
 .byte $FF,$FE,$FF,$FE,$FE,$FF,$FE,$A4
-;/* use block comment to map a subset of data to sprite bitmaps */
-;/*{w:16,h:16,bpp:1,count:15,brev:1,np:2,pofs:8,remap:[5,0,1,2,4,6,7,8,9,10,11,12]}*/
 .byte $00,$0F,$3F,$3F,$7F,$00,$7F,$7F
 .byte $0F,$30,$4D,$6D,$AD,$FF,$80,$AD
 .byte $7F,$7F,$7F,$00,$7F,$7F,$7F,$00
