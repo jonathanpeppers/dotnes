@@ -31,10 +31,10 @@
   <Target Name="_Download" BeforeTargets="Build"
       Inputs="$(MSBuildThisFile)"
       Outputs="@(_Downloads)">
+    <Delete Files="@(_Downloads)" />
     <DownloadFile SourceUrl="$(WindowsUrl)" DestinationFolder="$(IntermediateOutputPath)" />
     <DownloadFile SourceUrl="$(MacUrl)"     DestinationFolder="$(IntermediateOutputPath)" />
     <DownloadFile SourceUrl="$(GithubLicenseUrl)" DestinationFolder="$(IntermediateOutputPath)" />
-    <Touch Files="@(_Downloads)" />
     <ItemGroup>
       <FileWrites Include="@(_Downloads)" />
     </ItemGroup>
