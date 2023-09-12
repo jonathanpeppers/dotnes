@@ -31,9 +31,9 @@
   <Target Name="_Download" BeforeTargets="Build"
       Inputs="$(MSBuildThisFile)"
       Outputs="@(_Downloads)">
-    <DownloadFile SourceUrl="$(WindowsUrl)" DestinationFolder="$(IntermediateOutputPath)" />
-    <DownloadFile SourceUrl="$(MacUrl)"     DestinationFolder="$(IntermediateOutputPath)" />
-    <DownloadFile SourceUrl="$(GithubLicenseUrl)" DestinationFolder="$(IntermediateOutputPath)" />
+    <DownloadFile SourceUrl="$(WindowsUrl)"       DestinationFolder="$(IntermediateOutputPath)" DestinationFileName="ANESE_$(PackageVersion)_win.zip" />
+    <DownloadFile SourceUrl="$(MacUrl)"           DestinationFolder="$(IntermediateOutputPath)" DestinationFileName="ANESE_$(PackageVersion)_macOS.zip" />
+    <DownloadFile SourceUrl="$(GithubLicenseUrl)" DestinationFolder="$(IntermediateOutputPath)" DestinationFileName="LICENSE" />
     <Touch Files="@(_Downloads)" />
     <ItemGroup>
       <FileWrites Include="@(_Downloads)" />
