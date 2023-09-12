@@ -43,7 +43,7 @@
       Inputs="$(MSBuildThisFile)"
       Outputs="$(IntermediateOutputPath)_Unzip.stamp">
     <RemoveDir Directories="$(IntermediateOutputPath)win;$(IntermediateOutputPath)osx" />
-    <Exec Command="ls -la" />
+    <Exec Command="ls -la $(IntermediateOutputPath)" />
     <Unzip SourceFiles="$(IntermediateOutputPath)ANESE_$(PackageVersion)_win.zip"   DestinationFolder="$(IntermediateOutputPath)win" />
     <Unzip SourceFiles="$(IntermediateOutputPath)ANESE_$(PackageVersion)_macOS.zip" DestinationFolder="$(IntermediateOutputPath)osx" />
     <Touch AlwaysCreate="true" Files="$(IntermediateOutputPath)_Unzip.stamp" />
