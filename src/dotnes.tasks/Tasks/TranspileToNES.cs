@@ -12,12 +12,10 @@ public class TranspileToNES : Task
 
     public override bool Execute()
     {
+        var assemblies = AssemblyFiles.Select(a => new AssemblyReader(a)).ToList();
         using var input = File.OpenRead(TargetPath);
         using var output = File.Create(OutputPath);
-        using var transpiler = new Transpiler(input)
-        {
-            AssemblyFiles = AssemblyFiles.Select(a => new AssemblyReader(a)).ToList(),
-        };
+        using var transpiler = new Transpiler(input, assemblies);
         transpiler.Write(output);
 
         return !Log.HasLoggedErrors;

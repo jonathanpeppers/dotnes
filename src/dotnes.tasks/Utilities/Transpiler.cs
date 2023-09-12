@@ -11,21 +11,21 @@ class Transpiler : IDisposable
 {
     readonly PEReader pe;
     readonly MetadataReader reader;
+    readonly IList<AssemblyReader> assemblyFiles;
 
-    public Transpiler(Stream stream)
+    public Transpiler(Stream stream, IList<AssemblyReader> assemblyFiles)
     {
         pe = new PEReader(stream);
         reader = pe.GetMetadataReader();
+        this.assemblyFiles = assemblyFiles;
     }
-
-    public IList<AssemblyReader> AssemblyFiles { get; set; } = new List<AssemblyReader>();
 
     public void Write(Stream stream)
     {
-        if (AssemblyFiles.Count == 0)
+        if (assemblyFiles.Count == 0)
             throw new InvalidOperationException("At least one 'chr_generic.s' file must be present!");
 
-        var assemblyReader = AssemblyFiles.FirstOrDefault(a => Path.GetFileName(a.Path) == "chr_generic.s") ?? AssemblyFiles[0];
+        var assemblyReader = assemblyFiles.FirstOrDefault(a => Path.GetFileName(a.Path) == "chr_generic.s") ?? assemblyFiles[0];
         var chr_rom = assemblyReader.GetSegments().FirstOrDefault(s => s.Name == "CHARS");
         if (chr_rom == null)
         {
@@ -332,7 +332,7 @@ class Transpiler : IDisposable
 
     public void Dispose()
     {
-        foreach (var assembly in AssemblyFiles)
+        foreach (var assembly in assemblyFiles)
         {
             assembly.Dispose();
         }

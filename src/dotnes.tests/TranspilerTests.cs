@@ -67,7 +67,7 @@ ILInstruction { OpCode = Br_s, Integer = 254, String = , Bytes =  }";
     {
         var suffix = debug ? "debug" : "release";
         var dll = Utilities.GetResource($"{name}.{suffix}.dll");
-        var transpiler = new Transpiler(dll);
+        var transpiler = new Transpiler(dll, Array.Empty<AssemblyReader>());
         var builder = new StringBuilder();
         foreach (var instruction in transpiler.ReadStaticVoidMain())
         {
@@ -94,7 +94,7 @@ ILInstruction { OpCode = Br_s, Integer = 254, String = , Bytes =  }";
         var chr_generic = new StreamReader(Utilities.GetResource("chr_generic.s"));
 
         using var dll = Utilities.GetResource($"{name}.{configuration}.dll");
-        using var il = new Transpiler(dll) { AssemblyFiles = { new AssemblyReader(chr_generic) } };
+        using var il = new Transpiler(dll, new[] { new AssemblyReader(chr_generic) });
         using var ms = new MemoryStream();
         il.Write(ms);
 
