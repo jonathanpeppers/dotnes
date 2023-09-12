@@ -25,7 +25,7 @@
     <None Include="../../LICENSE" Pack="true" PackagePath="" />
     <None Include="../../assets/logo.png" Pack="true" PackagePath="" />
     <Content Include="templates/**/*" />
-    <Content Include="../../samples/hello/*.nes" PackagePath="content/templates/nes" />
+    <Content Include="../../samples/hello/*.s" PackagePath="content/templates/nes" />
     <Content Include="../../samples/hello/*.cs" PackagePath="content/templates/nes" />
     <Compile Remove="**/*" />
   </ItemGroup>
