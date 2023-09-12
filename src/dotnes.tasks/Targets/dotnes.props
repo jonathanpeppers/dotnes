@@ -17,7 +17,7 @@
     <DebugSymbols>false</DebugSymbols>
   </PropertyGroup>
   <ItemGroup>
-    <EmbeddedResource Include="*.nes" LogicalName="%(FileName)%(Extension)" />
+    <NESAssembly Include="*.s" />
     <Using Include="NES.NESLib" Static="true" />
   </ItemGroup>
 </Project>
