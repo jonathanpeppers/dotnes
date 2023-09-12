@@ -25,11 +25,11 @@ class Transpiler : IDisposable
         if (AssemblyFiles.Count == 0)
             throw new InvalidOperationException("At least one 'chr_generic.s' file must be present!");
 
-        var assemblyReader = AssemblyFiles.FirstOrDefault(a => Path.GetFileName(a.Source) == "chr_generic.s") ?? AssemblyFiles[0];
+        var assemblyReader = AssemblyFiles.FirstOrDefault(a => Path.GetFileName(a.Path) == "chr_generic.s") ?? AssemblyFiles[0];
         var chr_rom = assemblyReader.GetSegments().FirstOrDefault(s => s.Name == "CHARS");
         if (chr_rom == null)
         {
-            throw new InvalidOperationException($"At least one 'CHARS' segment must be present in: {assemblyReader.Source}");
+            throw new InvalidOperationException($"At least one 'CHARS' segment must be present in: {assemblyReader.Path}");
         }
         int CHR_ROM_SIZE = (int)(chr_rom.Bytes.Length / NESWriter.CHR_ROM_BLOCK_SIZE);
 
