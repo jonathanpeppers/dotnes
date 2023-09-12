@@ -28,12 +28,14 @@ jobs:
         dotnet build samples/foo/foo.csproj -bl:foo-debug.binlog && \
         dotnet build samples/foo/foo.csproj -c Release -bl:foo-release.binlog
     - name: upload logs
+      if: always()
       uses: actions/upload-artifact@v3
       with:
         name: logs
         path: '*.binlog'
         if-no-files-found: error
     - name: upload ROMs
+      if: always()
       uses: actions/upload-artifact@v3
       with:
         name: ROMs
@@ -42,6 +44,7 @@ jobs:
           samples/*/bin/**/*.dll
         if-no-files-found: error
     - name: upload nupkgs
+      if: always()
       uses: actions/upload-artifact@v3
       with:
         name: nupkgs
