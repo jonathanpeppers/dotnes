@@ -35,7 +35,6 @@
     <DownloadFile SourceUrl="$(WindowsUrl)" DestinationFolder="$(IntermediateOutputPath)" />
     <DownloadFile SourceUrl="$(MacUrl)"     DestinationFolder="$(IntermediateOutputPath)" />
     <DownloadFile SourceUrl="$(GithubLicenseUrl)" DestinationFolder="$(IntermediateOutputPath)" />
-    <Touch Files="@(_Downloads)" />
     <ItemGroup>
       <FileWrites Include="@(_Downloads)" />
     </ItemGroup>
