@@ -30,6 +30,23 @@ vram_adr(NAMETABLE_A);  // start address ($2000)
 ++vram_fill(0x16, fill);   // fill nametable (960 bytes)
 ```
 
+## `onelocalbyte`
+
+Based on `attributetable`, but with the change:
+
+```diff
+++// For testing locals
+++byte nametable = 0x16;
+++
+// set background palette colors
+pal_bg(PALETTE);
+
+// fill nametable with diamonds
+vram_adr(NAMETABLE_A);  // start address ($2000)
+--vram_fill(0x16, 32 * 30);   // fill nametable (960 bytes)
+++vram_fill(nametable, 32 * 30);   // fill nametable (960 bytes)
+```
+
 ## `twolocals`
 
 Based on `attributetable`, but with the change:
