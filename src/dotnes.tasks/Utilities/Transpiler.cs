@@ -9,23 +9,25 @@ namespace dotnes;
 
 class Transpiler : IDisposable
 {
-    readonly PEReader pe;
-    readonly MetadataReader reader;
-    readonly IList<AssemblyReader> assemblyFiles;
+    readonly PEReader _pe;
+    readonly MetadataReader _reader;
+    readonly IList<AssemblyReader> _assemblyFiles;
+    readonly ILogger _logger;
 
-    public Transpiler(Stream stream, IList<AssemblyReader> assemblyFiles)
+    public Transpiler(Stream stream, IList<AssemblyReader> assemblyFiles, ILogger? logger = null)
     {
-        pe = new PEReader(stream);
-        reader = pe.GetMetadataReader();
-        this.assemblyFiles = assemblyFiles;
+        _pe = new PEReader(stream);
+        _reader = _pe.GetMetadataReader();
+        _assemblyFiles = assemblyFiles;
+        _logger = logger ?? new NullLogger();
     }
 
     public void Write(Stream stream)
     {
-        if (assemblyFiles.Count == 0)
+        if (_assemblyFiles.Count == 0)
             throw new InvalidOperationException("At least one 'chr_generic.s' file must be present!");
 
-        var assemblyReader = assemblyFiles.FirstOrDefault(a => Path.GetFileName(a.Path) == "chr_generic.s") ?? assemblyFiles[0];
+        var assemblyReader = _assemblyFiles.FirstOrDefault(a => Path.GetFileName(a.Path) == "chr_generic.s") ?? _assemblyFiles[0];
         var chr_rom = assemblyReader.GetSegments().FirstOrDefault(s => s.Name == "CHARS");
         if (chr_rom == null)
         {
@@ -39,6 +41,8 @@ class Transpiler : IDisposable
         {
             foreach (var instruction in ReadStaticVoidMain())
             {
+                _logger.WriteLine(instruction.ToString());
+
                 if (instruction.Integer != null)
                 {
                     mainWriter.Write(instruction.OpCode, instruction.Integer.Value, sizeOfMain: 0);
@@ -95,18 +99,18 @@ class Transpiler : IDisposable
                 tableWriter.WriteByteArrays(writer);
 
                 // Write C# string table
-                int stringHeapSize = reader.GetHeapSize(HeapIndex.UserString);
+                int stringHeapSize = _reader.GetHeapSize(HeapIndex.UserString);
                 if (stringHeapSize > 0)
                 {
                     var handle = MetadataTokens.UserStringHandle(0);
                     do
                     {
-                        string value = reader.GetUserString(handle);
+                        string value = _reader.GetUserString(handle);
                         if (!string.IsNullOrEmpty(value))
                         {
                             tableWriter.WriteString(value);
                         }
-                        handle = reader.GetNextHandle(handle);
+                        handle = _reader.GetNextHandle(handle);
                     }
                     while (!handle.IsNil);
                 }
@@ -151,18 +155,18 @@ class Transpiler : IDisposable
     /// </summary>
     public IEnumerable<ILInstruction> ReadStaticVoidMain()
     {
-        var arrayValues = GetArrayValues(reader);
+        var arrayValues = GetArrayValues(_reader);
 
-        foreach (var h in reader.MethodDefinitions)
+        foreach (var h in _reader.MethodDefinitions)
         {
-            var mainMethod = reader.GetMethodDefinition(h);
+            var mainMethod = _reader.GetMethodDefinition(h);
             if ((mainMethod.Attributes & MethodAttributes.Static) == 0)
                 continue;
 
-            var mainMethodName = reader.GetString(mainMethod.Name);
+            var mainMethodName = _reader.GetString(mainMethod.Name);
             if (mainMethodName == "Main" || mainMethodName == "<Main>$")
             {
-                var body = pe.GetMethodBody(mainMethod.RelativeVirtualAddress);
+                var body = _pe.GetMethodBody(mainMethod.RelativeVirtualAddress);
                 var blob = body.GetILReader();
 
                 while (blob.RemainingBytes > 0)
@@ -187,18 +191,18 @@ class Transpiler : IDisposable
                             switch (entity.Kind)
                             {
                                 case HandleKind.TypeDefinition:
-                                    stringValue = reader.GetString(reader.GetTypeDefinition((TypeDefinitionHandle)entity).Name);
+                                    stringValue = _reader.GetString(_reader.GetTypeDefinition((TypeDefinitionHandle)entity).Name);
                                     break;
                                 case HandleKind.TypeReference:
-                                    stringValue = reader.GetString(reader.GetTypeReference((TypeReferenceHandle)entity).Name);
+                                    stringValue = _reader.GetString(_reader.GetTypeReference((TypeReferenceHandle)entity).Name);
                                     break;
                                 case HandleKind.MethodDefinition:
-                                    var method = reader.GetMethodDefinition((MethodDefinitionHandle)entity);
-                                    stringValue = reader.GetString(method.Name);
+                                    var method = _reader.GetMethodDefinition((MethodDefinitionHandle)entity);
+                                    stringValue = _reader.GetString(method.Name);
                                     break;
                                 case HandleKind.MemberReference:
-                                    var member = reader.GetMemberReference((MemberReferenceHandle)entity);
-                                    stringValue = reader.GetString(member.Name);
+                                    var member = _reader.GetMemberReference((MemberReferenceHandle)entity);
+                                    stringValue = _reader.GetString(member.Name);
                                     if (stringValue == "InitializeArray")
                                     {
                                         // HACK: skip for now
@@ -206,8 +210,8 @@ class Transpiler : IDisposable
                                     }
                                     break;
                                 case HandleKind.FieldDefinition:
-                                    var field = reader.GetFieldDefinition((FieldDefinitionHandle)entity);
-                                    var fieldName = reader.GetString(field.Name);
+                                    var field = _reader.GetFieldDefinition((FieldDefinitionHandle)entity);
+                                    var fieldName = _reader.GetString(field.Name);
                                     if ((field.Attributes & FieldAttributes.HasFieldRVA) != 0)
                                     {
                                         if (arrayValues.TryGetValue (fieldName, out var value))
@@ -231,7 +235,7 @@ class Transpiler : IDisposable
                             intValue = blob.ReadInt32();
                             break;
                         case OperandType.String:
-                            stringValue = reader.GetUserString(MetadataTokens.UserStringHandle(blob.ReadInt32()));
+                            stringValue = _reader.GetUserString(MetadataTokens.UserStringHandle(blob.ReadInt32()));
                             break;
                         // (n + 1) * 32-bit
                         case OperandType.Switch:
@@ -282,7 +286,7 @@ class Transpiler : IDisposable
                     {
                         int rva = field.GetRelativeVirtualAddress();
                         int size = field.DecodeSignature(new FieldSizeDecoder(), default);
-                        var sectionData = pe.GetSectionData(rva);
+                        var sectionData = _pe.GetSectionData(rva);
                         dictionary.Add(fieldName, new ArrayValue(fieldName, sectionData, size));
                     }
                 }
@@ -332,10 +336,10 @@ class Transpiler : IDisposable
 
     public void Dispose()
     {
-        foreach (var assembly in assemblyFiles)
+        foreach (var assembly in _assemblyFiles)
         {
             assembly.Dispose();
         }
-        pe.Dispose();
+        _pe.Dispose();
     }
 }

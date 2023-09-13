@@ -6,7 +6,8 @@ namespace dotnes;
 
 class IL2NESWriter : NESWriter
 {
-    public IL2NESWriter(Stream stream, bool leaveOpen = false) : base(stream, leaveOpen)
+    public IL2NESWriter(Stream stream, bool leaveOpen = false, ILogger? logger = null)
+        : base(stream, leaveOpen, logger)
     {
     }
 
@@ -56,28 +57,28 @@ class IL2NESWriter : NESWriter
             case ILOpCode.Stloc_0:
                 if (previous == ILOpCode.Ldtoken)
                 {
-                    _writer.BaseStream.SetLength(_writer.BaseStream.Length - 4);
+                    SeekBack(4);
                 }
                 Locals[0] = A.Pop();
                 break;
             case ILOpCode.Stloc_1:
                 if (previous == ILOpCode.Ldtoken)
                 {
-                    _writer.BaseStream.SetLength(_writer.BaseStream.Length - 4);
+                    SeekBack(4);
                 }
                 Locals[1] = A.Pop();
                 break;
             case ILOpCode.Stloc_2:
                 if (previous == ILOpCode.Ldtoken)
                 {
-                    _writer.BaseStream.SetLength(_writer.BaseStream.Length - 4);
+                    SeekBack(4);
                 }
                 Locals[2] = A.Pop();
                 break;
             case ILOpCode.Stloc_3:
                 if (previous == ILOpCode.Ldtoken)
                 {
-                    _writer.BaseStream.SetLength(_writer.BaseStream.Length - 4);
+                    SeekBack(4);
                 }
                 Locals[3] = A.Pop();
                 break;
@@ -132,13 +133,13 @@ class IL2NESWriter : NESWriter
             case ILOpCode.Newarr:
                 if (previous == ILOpCode.Ldc_i4_s)
                 {
-                    _writer.BaseStream.SetLength(_writer.BaseStream.Length - 2);
+                    SeekBack(2);
                 }
                 break;
             case ILOpCode.Stloc_s:
                 if (previous == ILOpCode.Ldtoken)
                 {
-                    _writer.BaseStream.SetLength(_writer.BaseStream.Length - 4);
+                    SeekBack(4);
                 }
                 Locals[operand] = A.Pop();
                 break;
@@ -174,7 +175,7 @@ class IL2NESWriter : NESWriter
                             throw new InvalidOperationException($"{operand} was called with less than 2 on the stack.");
                         }
                         ushort address = NTADR_A(checked((byte)A.Pop()), checked((byte)A.Pop()));
-                        _writer.BaseStream.SetLength(_writer.BaseStream.Length - 7);
+                        SeekBack(7);
                         //TODO: these are hardcoded until I figure this out
                         Write(NESInstruction.LDX, 0x20);
                         Write(NESInstruction.LDA, 0x42);
@@ -299,5 +300,11 @@ class IL2NESWriter : NESWriter
         Write(NESInstruction.JSR, pushax.GetAddressAfterMain(sizeOfMain));
         Write(NESInstruction.LDX, 0x00);
         Write(NESInstruction.LDA, 0x40);
+    }
+
+    void SeekBack(int length)
+    {
+        _logger.WriteLine($"Seek back {length} bytes");
+        _writer.BaseStream.SetLength(_writer.BaseStream.Length - length);
     }
 }

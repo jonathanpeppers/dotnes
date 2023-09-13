@@ -1,9 +1,14 @@
 ﻿using System.Text;
+using Xunit.Abstractions;
 
 namespace dotnes.tests;
 
 public class TranspilerTests
 {
+    readonly ILogger _logger;
+
+    public TranspilerTests(ITestOutputHelper output) => _logger = new XUnitLogger(output);
+
     const string HelloIL =
 @"ILInstruction { OpCode = Ldc_i4_0, Integer = , String = , Bytes =  }
 ILInstruction { OpCode = Ldc_i4_2, Integer = , String = , Bytes =  }
@@ -94,7 +99,7 @@ ILInstruction { OpCode = Br_s, Integer = 254, String = , Bytes =  }";
         var chr_generic = new StreamReader(Utilities.GetResource("chr_generic.s"));
 
         using var dll = Utilities.GetResource($"{name}.{configuration}.dll");
-        using var il = new Transpiler(dll, new[] { new AssemblyReader(chr_generic) });
+        using var il = new Transpiler(dll, new[] { new AssemblyReader(chr_generic) }, _logger);
         using var ms = new MemoryStream();
         il.Write(ms);
 
