@@ -115,7 +115,7 @@ class IL2NESWriter : NESWriter
             case ILOpCode.Ldc_i4_s:
                 if (operand > ushort.MaxValue)
                 {
-                    //TODO: and if larger than ushort?
+                    throw new NotImplementedException($"{code} not implemented for value larger than ushort: {operand}");
                 }
                 else if (operand > byte.MaxValue)
                 {
