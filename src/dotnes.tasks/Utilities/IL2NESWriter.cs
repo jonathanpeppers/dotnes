@@ -11,8 +11,17 @@ class IL2NESWriter : NESWriter
     {
     }
 
-    readonly Stack<int> A = new();
+    /// <summary>
+    /// The local evaluation stack
+    /// </summary>
+    readonly Stack<int> Stack = new();
+    /// <summary>
+    /// Dictionary of local varaiables
+    /// </summary>
     readonly Dictionary<int, Local> Locals = new();
+    /// <summary>
+    /// List of byte[] data
+    /// </summary>
     readonly List<ImmutableArray<byte>> ByteArrays = new();
     ushort local = 0x324;
     ushort ByteArrayOffset = 0;
@@ -49,8 +58,8 @@ class IL2NESWriter : NESWriter
             case ILOpCode.Nop:
                 break;
             case ILOpCode.Dup:
-                if (A.Count > 0)
-                    A.Push(A.Peek());
+                if (Stack.Count > 0)
+                    Stack.Push(Stack.Peek());
                 break;
             case ILOpCode.Ldc_i4_0:
                 WriteLdc(0, sizeOfMain);
@@ -83,80 +92,44 @@ class IL2NESWriter : NESWriter
                 if (previous == ILOpCode.Ldtoken)
                 {
                     SeekBack(4);
-                    Locals[0] = new Local(A.Pop());
+                    Locals[0] = new Local(Stack.Pop());
                 }
                 else
                 {
-                    int address = local;
-                    Locals[0] = new Local(A.Pop(), address);
-                    LocalCount += 2;
-                    SeekBack(8);
-                    Write(NESInstruction.LDX, 0x03);
-                    Write(NESInstruction.LDA, 0xC0);
-                    Write(NESInstruction.STA_abs, (ushort)address);
-                    Write(NESInstruction.STX_abs, (ushort)(address + 1));
-                    Write(NESInstruction.LDA, 0x28);
-                    Write(NESInstruction.LDX, 0x86);
+                    WriteStloc(Locals[0] = new Local(Stack.Pop(), local));
                 }
                 break;
             case ILOpCode.Stloc_1:
                 if (previous == ILOpCode.Ldtoken)
                 {
                     SeekBack(4);
-                    Locals[1] = new Local(A.Pop());
+                    Locals[1] = new Local(Stack.Pop());
                 }
                 else
                 {
-                    int address = local + 1;
-                    Locals[1] = new Local(A.Pop(), address);
-                    LocalCount += 2;
-                    SeekBack(8);
-                    Write(NESInstruction.LDX, 0x03);
-                    Write(NESInstruction.LDA, 0xC0);
-                    Write(NESInstruction.STA_abs, (ushort)address);
-                    Write(NESInstruction.STX_abs, (ushort)(address + 1));
-                    Write(NESInstruction.LDA, 0x28);
-                    Write(NESInstruction.LDX, 0x86);
+                    WriteStloc(Locals[1] = new Local(Stack.Pop(), local + 1));
                 }
                 break;
             case ILOpCode.Stloc_2:
                 if (previous == ILOpCode.Ldtoken)
                 {
                     SeekBack(4);
-                    Locals[2] = new Local(A.Pop());
+                    Locals[2] = new Local(Stack.Pop());
                 }
                 else
                 {
-                    int address = local + 2;
-                    Locals[2] = new Local(A.Pop(), address);
-                    LocalCount += 2;
-                    SeekBack(8);
-                    Write(NESInstruction.LDX, 0x03);
-                    Write(NESInstruction.LDA, 0xC0);
-                    Write(NESInstruction.STA_abs, (ushort)address);
-                    Write(NESInstruction.STX_abs, (ushort)(address + 1));
-                    Write(NESInstruction.LDA, 0x28);
-                    Write(NESInstruction.LDX, 0x86);
+                    WriteStloc(Locals[2] = new Local(Stack.Pop(), local + 2));
                 }
                 break;
             case ILOpCode.Stloc_3:
                 if (previous == ILOpCode.Ldtoken)
                 {
                     SeekBack(4);
-                    Locals[3] = new Local(A.Pop());
+                    Locals[3] = new Local(Stack.Pop());
                 }
                 else
                 {
-                    int address = local + 3;
-                    Locals[3] = new Local(A.Pop(), address);
-                    LocalCount += 2;
-                    SeekBack(8);
-                    Write(NESInstruction.LDX, 0x03);
-                    Write(NESInstruction.LDA, 0xC0);
-                    Write(NESInstruction.STA_abs, (ushort)address);
-                    Write(NESInstruction.STX_abs, (ushort)(address + 1));
-                    Write(NESInstruction.LDA, 0x28);
-                    Write(NESInstruction.LDX, 0x86);
+                    WriteStloc(Locals[3] = new Local(Stack.Pop(), local + 3));
                 }
                 break;
             case ILOpCode.Ldloc_0:
@@ -218,7 +191,7 @@ class IL2NESWriter : NESWriter
                 {
                     SeekBack(4);
                 }
-                Locals[operand] = new Local(A.Pop());
+                Locals[operand] = new Local(Stack.Pop());
                 break;
             case ILOpCode.Ldloc_s:
                 WriteLdloc(Locals[operand], sizeOfMain);
@@ -247,16 +220,16 @@ class IL2NESWriter : NESWriter
                 switch (operand)
                 {
                     case nameof(NTADR_A):
-                        if (A.Count < 2)
+                        if (Stack.Count < 2)
                         {
                             throw new InvalidOperationException($"{operand} was called with less than 2 on the stack.");
                         }
-                        ushort address = NTADR_A(checked((byte)A.Pop()), checked((byte)A.Pop()));
+                        ushort address = NTADR_A(checked((byte)Stack.Pop()), checked((byte)Stack.Pop()));
                         SeekBack(7);
                         //TODO: these are hardcoded until I figure this out
                         Write(NESInstruction.LDX, 0x20);
                         Write(NESInstruction.LDA, 0x42);
-                        A.Push(address);
+                        Stack.Push(address);
                         break;
                     default:
                         Write(NESInstruction.JSR, GetAddress(operand));
@@ -266,8 +239,8 @@ class IL2NESWriter : NESWriter
                 int args = GetNumberOfArguments(operand);
                 for (int i = 0; i < args; i++)
                 {
-                    if (A.Count > 0)
-                        A.Pop();
+                    if (Stack.Count > 0)
+                        Stack.Pop();
                 }
                 break;
             default:
@@ -285,7 +258,7 @@ class IL2NESWriter : NESWriter
                     ByteArrayOffset = rodata.GetAddressAfterMain(sizeOfMain);
                 Write(NESInstruction.LDA, (byte)(ByteArrayOffset & 0xff));
                 Write(NESInstruction.LDX, (byte)(ByteArrayOffset >> 8));
-                A.Push(ByteArrayOffset);
+                Stack.Push(ByteArrayOffset);
                 ByteArrayOffset = (ushort)(ByteArrayOffset + operand.Length);
                 ByteArrays.Add(operand);
                 break;
@@ -349,6 +322,20 @@ class IL2NESWriter : NESWriter
         }
     }
 
+    void WriteStloc(Local local)
+    {
+        if (local.Address is null)
+            throw new ArgumentNullException(nameof(local.Address));
+        LocalCount += 2;
+        SeekBack(8);
+        Write(NESInstruction.LDX, 0x03);
+        Write(NESInstruction.LDA, 0xC0);
+        Write(NESInstruction.STA_abs, (ushort)local.Address);
+        Write(NESInstruction.STX_abs, (ushort)(local.Address + 1));
+        Write(NESInstruction.LDA, 0x28);
+        Write(NESInstruction.LDX, 0x86);
+    }
+
     void WriteLdc(ushort operand, ushort sizeOfMain)
     {
         if (LastLDA)
@@ -357,7 +344,7 @@ class IL2NESWriter : NESWriter
         }
         Write(NESInstruction.LDX, checked((byte)(operand >> 8)));
         Write(NESInstruction.LDA, checked((byte)(operand & 0xff)));
-        A.Push(operand);
+        Stack.Push(operand);
     }
 
     void WriteLdc(byte operand, ushort sizeOfMain)
@@ -367,7 +354,7 @@ class IL2NESWriter : NESWriter
             Write(NESInstruction.JSR, pusha.GetAddressAfterMain(sizeOfMain));
         }
         Write(NESInstruction.LDA, operand);
-        A.Push(operand);
+        Stack.Push(operand);
     }
 
     void WriteLdloc(Local local, ushort sizeOfMain)
