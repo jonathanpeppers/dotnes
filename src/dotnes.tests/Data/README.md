@@ -46,3 +46,21 @@ vram_adr(NAMETABLE_A);  // start address ($2000)
 --vram_fill(0x16, 32 * 30);   // fill nametable (960 bytes)
 ++vram_fill(nametable, 32 * 30);   // fill nametable (960 bytes)
 ```
+
+## `add`
+
+Based on `attributetable`, but with the change:
+
+```diff
+++// For testing locals
+++byte inc = 1;
+++byte nametable = (byte)(0x15 + inc);
+++
+// set background palette colors
+pal_bg(PALETTE);
+
+// fill nametable with diamonds
+vram_adr(NAMETABLE_A);  // start address ($2000)
+--vram_fill(0x16, 32 * 30);   // fill nametable (960 bytes)
+++vram_fill(nametable, 32 * 30);   // fill nametable (960 bytes)
+```

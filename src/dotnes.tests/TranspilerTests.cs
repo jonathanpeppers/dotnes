@@ -85,6 +85,8 @@ ILInstruction { OpCode = Br_s, Integer = 254, String = , Bytes =  }";
     }
 
     [Theory]
+    [InlineData("add", true)]
+    [InlineData("add", false)]
     [InlineData("attributetable", true)]
     [InlineData("attributetable", false)]
     [InlineData("hello", true)]

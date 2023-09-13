@@ -150,6 +150,10 @@ class IL2NESWriter : NESWriter
             case ILOpCode.Conv_u8:
                 // Do nothing
                 break;
+            case ILOpCode.Add:
+                Write(NESInstruction.CLD_impl);
+                Write(NESInstruction.ADC, 0x15); // TODO: hardcoded value
+                break;
             default:
                 throw new NotImplementedException($"OpCode {code} with no operands is not implemented!");
         }
@@ -329,8 +333,9 @@ class IL2NESWriter : NESWriter
 
         if (local.Value < byte.MaxValue)
         {
+            if (LocalCount == 0)
+                SeekBack(6);
             LocalCount += 1;
-            SeekBack(6);
             Write(NESInstruction.LDA, (byte)local.Value);
             Write(NESInstruction.STA_abs, (ushort)local.Address);
             Write(NESInstruction.LDA, 0x22);
@@ -338,8 +343,9 @@ class IL2NESWriter : NESWriter
         }
         else if (local.Value < ushort.MaxValue)
         {
+            if (LocalCount == 0)
+                SeekBack(8);
             LocalCount += 2;
-            SeekBack(8);
             Write(NESInstruction.LDX, 0x03);
             Write(NESInstruction.LDA, 0xC0);
             Write(NESInstruction.STA_abs, (ushort)local.Address);

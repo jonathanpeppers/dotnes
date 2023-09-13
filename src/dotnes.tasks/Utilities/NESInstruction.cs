@@ -51,6 +51,10 @@ enum NESInstruction : byte
     /// Branch on Result Plus
     /// </summary>
     BPL       = 0x10,
+    /// <summary>
+    /// Clear Carry Flag
+    /// </summary>
+    CLC_impl  = 0x18,
 
     // 2
     /// <summary>
