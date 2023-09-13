@@ -225,8 +225,6 @@ class IL2NESWriter : NESWriter
 
     public void Write(ILOpCode code, ImmutableArray<byte> operand, ushort sizeOfMain)
     {
-        if (operand == null)
-            throw new ArgumentNullException(nameof(operand));
         switch (code)
         {
             case ILOpCode.Ldtoken:
