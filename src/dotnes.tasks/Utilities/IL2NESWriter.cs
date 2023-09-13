@@ -13,7 +13,7 @@ class IL2NESWriter : NESWriter
     readonly Stack<int> A = new();
     readonly Dictionary<int, int> Locals = new();
     readonly List<ImmutableArray<byte>> ByteArrays = new();
-    ushort local = 0x325;
+    ushort local = 0x324;
     ushort ByteArrayOffset = 0;
     ILOpCode previous;
 
@@ -58,29 +58,53 @@ class IL2NESWriter : NESWriter
                 if (previous == ILOpCode.Ldtoken)
                 {
                     _writer.BaseStream.SetLength(_writer.BaseStream.Length - 4);
+                    Locals[0] = A.Pop();
                 }
-                Locals[0] = A.Pop();
+                else
+                {
+                    Locals[0] = local;
+                    Write(NESInstruction.STA_abs, local);
+                    Write(NESInstruction.STX_abs, (ushort)(local + 1));
+                }
                 break;
             case ILOpCode.Stloc_1:
                 if (previous == ILOpCode.Ldtoken)
                 {
                     _writer.BaseStream.SetLength(_writer.BaseStream.Length - 4);
+                    Locals[1] = A.Pop();
                 }
-                Locals[1] = A.Pop();
+                else
+                {
+                    Locals[1] = local + 1;
+                    Write(NESInstruction.STA_abs, local);
+                    Write(NESInstruction.STX_abs, (ushort)(local + 1));
+                }
                 break;
             case ILOpCode.Stloc_2:
                 if (previous == ILOpCode.Ldtoken)
                 {
                     _writer.BaseStream.SetLength(_writer.BaseStream.Length - 4);
+                    Locals[2] = A.Pop();
                 }
-                Locals[2] = A.Pop();
+                else
+                {
+                    Locals[2] = local + 2;
+                    Write(NESInstruction.STA_abs, local);
+                    Write(NESInstruction.STX_abs, (ushort)(local + 1));
+                }
                 break;
             case ILOpCode.Stloc_3:
                 if (previous == ILOpCode.Ldtoken)
                 {
                     _writer.BaseStream.SetLength(_writer.BaseStream.Length - 4);
+                    Locals[3] = A.Pop();
                 }
-                Locals[3] = A.Pop();
+                else
+                {
+                    Locals[3] = local + 3;
+                    Write(NESInstruction.STA_abs, local);
+                    Write(NESInstruction.STX_abs, (ushort)(local + 1));
+                }
                 break;
             case ILOpCode.Ldloc_0:
                 WriteLdloc(Locals[0], sizeOfMain);
@@ -89,9 +113,7 @@ class IL2NESWriter : NESWriter
                 // If previous is Stloc, this is a local variable
                 if (previous == ILOpCode.Stloc_1)
                 {
-                    A.Push(local);
-                    Write(NESInstruction.STA_abs, local++);
-                    Write(NESInstruction.STX_abs, local++);
+                    A.Push(Locals[1]);
                 }
                 else
                 {
