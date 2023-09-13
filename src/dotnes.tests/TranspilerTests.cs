@@ -91,6 +91,8 @@ ILInstruction { OpCode = Br_s, Integer = 254, String = , Bytes =  }";
     [InlineData("hello", false)]
     [InlineData("onelocal", true)]
     [InlineData("onelocal", false)]
+    [InlineData("onelocalbyte", true)]
+    [InlineData("onelocalbyte", false)]
     [InlineData("twolocals", true)]
     [InlineData("twolocals", false)]
     public void Write(string name, bool debug)
