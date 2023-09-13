@@ -13,6 +13,7 @@ class IL2NESWriter : NESWriter
     readonly Stack<int> A = new();
     readonly Dictionary<int, int> Locals = new();
     readonly List<ImmutableArray<byte>> ByteArrays = new();
+    ushort local = 0x325;
     ushort ByteArrayOffset = 0;
     ILOpCode previous;
 
@@ -85,7 +86,17 @@ class IL2NESWriter : NESWriter
                 WriteLdloc(Locals[0], sizeOfMain);
                 break;
             case ILOpCode.Ldloc_1:
-                WriteLdloc(Locals[1], sizeOfMain);
+                // If previous is Stloc, this is a local variable
+                if (previous == ILOpCode.Stloc_1)
+                {
+                    A.Push(local);
+                    Write(NESInstruction.STA_abs, local++);
+                    Write(NESInstruction.STX_abs, local++);
+                }
+                else
+                {
+                    WriteLdloc(Locals[1], sizeOfMain);
+                }
                 break;
             case ILOpCode.Ldloc_2:
                 WriteLdloc(Locals[2], sizeOfMain);
@@ -103,20 +114,13 @@ class IL2NESWriter : NESWriter
                 // We can use INC
                 if (A.Peek() == 1)
                 {
-                    Write(NESInstruction.INC_abs);
-                    // TODO: hardcoded
-                    _writer.Write(0x25);
-                    _writer.Write(0x03);
-
+                    A.Pop();
+                    var address = (ushort)A.Pop();
+                    Write(NESInstruction.INC_abs, address);
                     Write(NESInstruction.BNE_rel, 0x03);
-
-                    Write(NESInstruction.INC_abs);
-                    // TODO: hardcoded
-                    _writer.Write(0x26);
-                    _writer.Write(0x03);
-
-                    Write(NESInstruction.LDX, 0x20);
-                    Write(NESInstruction.LDA, 0x00);
+                    Write(NESInstruction.INC_abs, (ushort)(address + 1));
+                    Write(NESInstruction.LDX, 0x30);
+                    Write(NESInstruction.LDA, 0x86);
                     break;
                 }
                 goto default;
