@@ -7,11 +7,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <EmbeddedResource Include="Data\*" LogicalName="%(FileName)%(Extension)" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <None Remove="Data\chr_generic.s" />
+    <EmbeddedResource Include="Data\*" LogicalName="%(FileName)%(Extension)" Exclude="*.md" />
   </ItemGroup>
 
   <ItemGroup>
