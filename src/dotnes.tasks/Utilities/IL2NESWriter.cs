@@ -67,7 +67,8 @@ class IL2NESWriter : NESWriter
                 {
                     int address = local;
                     Locals[0] = new Local(A.Pop(), address);
-                    SeekBack(6);
+                    SeekBack(8);
+                    Write(NESInstruction.LDX, 0x03);
                     Write(NESInstruction.LDA, 0xC0);
                     Write(NESInstruction.STA_abs, (ushort)address);
                     Write(NESInstruction.STX_abs, (ushort)(address + 1));
@@ -85,7 +86,8 @@ class IL2NESWriter : NESWriter
                 {
                     int address = local + 1;
                     Locals[1] = new Local(A.Pop(), address);
-                    SeekBack(6);
+                    SeekBack(8);
+                    Write(NESInstruction.LDX, 0x03);
                     Write(NESInstruction.LDA, 0xC0);
                     Write(NESInstruction.STA_abs, (ushort)address);
                     Write(NESInstruction.STX_abs, (ushort)(address + 1));
@@ -103,7 +105,8 @@ class IL2NESWriter : NESWriter
                 {
                     int address = local + 2;
                     Locals[2] = new Local(A.Pop(), address);
-                    SeekBack(6);
+                    SeekBack(8);
+                    Write(NESInstruction.LDX, 0x03);
                     Write(NESInstruction.LDA, 0xC0);
                     Write(NESInstruction.STA_abs, (ushort)address);
                     Write(NESInstruction.STX_abs, (ushort)(address + 1));
@@ -121,7 +124,8 @@ class IL2NESWriter : NESWriter
                 {
                     int address = local + 3;
                     Locals[3] = new Local(A.Pop(), address);
-                    SeekBack(6);
+                    SeekBack(8);
+                    Write(NESInstruction.LDX, 0x03);
                     Write(NESInstruction.LDA, 0xC0);
                     Write(NESInstruction.STA_abs, (ushort)address);
                     Write(NESInstruction.STX_abs, (ushort)(address + 1));
