@@ -320,7 +320,7 @@ class IL2NESWriter : NESWriter
         {
             Write(NESInstruction.JSR, pusha.GetAddressAfterMain(sizeOfMain));
         }
-        Write(NESInstruction.LDA, checked((byte)operand));
+        Write(NESInstruction.LDA, operand);
         A.Push(operand);
     }
 
