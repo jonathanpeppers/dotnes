@@ -67,8 +67,12 @@ class IL2NESWriter : NESWriter
                 {
                     int address = local;
                     Locals[0] = new Local(A.Pop(), address);
+                    SeekBack(6);
+                    Write(NESInstruction.LDA, 0xC0);
                     Write(NESInstruction.STA_abs, (ushort)address);
                     Write(NESInstruction.STX_abs, (ushort)(address + 1));
+                    Write(NESInstruction.LDA, 0x28);
+                    Write(NESInstruction.LDX, 0x86);
                 }
                 break;
             case ILOpCode.Stloc_1:
@@ -81,8 +85,12 @@ class IL2NESWriter : NESWriter
                 {
                     int address = local + 1;
                     Locals[1] = new Local(A.Pop(), address);
+                    SeekBack(6);
+                    Write(NESInstruction.LDA, 0xC0);
                     Write(NESInstruction.STA_abs, (ushort)address);
                     Write(NESInstruction.STX_abs, (ushort)(address + 1));
+                    Write(NESInstruction.LDA, 0x28);
+                    Write(NESInstruction.LDX, 0x86);
                 }
                 break;
             case ILOpCode.Stloc_2:
@@ -95,8 +103,12 @@ class IL2NESWriter : NESWriter
                 {
                     int address = local + 2;
                     Locals[2] = new Local(A.Pop(), address);
+                    SeekBack(6);
+                    Write(NESInstruction.LDA, 0xC0);
                     Write(NESInstruction.STA_abs, (ushort)address);
                     Write(NESInstruction.STX_abs, (ushort)(address + 1));
+                    Write(NESInstruction.LDA, 0x28);
+                    Write(NESInstruction.LDX, 0x86);
                 }
                 break;
             case ILOpCode.Stloc_3:
@@ -109,8 +121,12 @@ class IL2NESWriter : NESWriter
                 {
                     int address = local + 3;
                     Locals[3] = new Local(A.Pop(), address);
+                    SeekBack(6);
+                    Write(NESInstruction.LDA, 0xC0);
                     Write(NESInstruction.STA_abs, (ushort)address);
                     Write(NESInstruction.STX_abs, (ushort)(address + 1));
+                    Write(NESInstruction.LDA, 0x28);
+                    Write(NESInstruction.LDX, 0x86);
                 }
                 break;
             case ILOpCode.Ldloc_0:
