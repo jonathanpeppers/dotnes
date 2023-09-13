@@ -297,7 +297,7 @@ public class NESWriterTests
         // while (true) ;
         writer.Write(NESInstruction.JMP_abs, 0x8540); // Jump to self
 
-        writer.WriteFinalBuiltIns(0x85FE);
+        writer.WriteFinalBuiltIns(0x85FE, locals: 0);
         writer.WriteString("HELLO, .NET!");
         writer.WriteDestructorTable();
 

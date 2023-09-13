@@ -308,7 +308,7 @@ class NESWriter : IDisposable
     /// <summary>
     /// These are any subroutines after our `static void main()` method
     /// </summary>
-    public void WriteFinalBuiltIns(ushort totalSize)
+    public void WriteFinalBuiltIns(ushort totalSize, byte locals)
     {
         Write_donelib(totalSize);
         Write_copydata(totalSize);
@@ -317,7 +317,7 @@ class NESWriter : IDisposable
         Write_popa();
         Write_pusha();
         Write_pushax();
-        Write_zerobss();
+        Write_zerobss(locals);
     }
 
     /// <summary>
@@ -1730,7 +1730,7 @@ class NESWriter : IDisposable
         Write(NESInstruction.RTS_impl);
     }
 
-    void Write_zerobss()
+    void Write_zerobss(byte locals)
     {
         /*
          * 85D1	A925          	LDA #$25                      ; zerobss
@@ -1768,7 +1768,7 @@ class NESWriter : IDisposable
         Write(NESInstruction.INC_zpg, ptr1 + 1);
         Write(NESInstruction.DEX_impl);
         Write(NESInstruction.BNE_rel, 0xF6);
-        Write(NESInstruction.CPY, 0x00);
+        Write(NESInstruction.CPY, locals);
         Write(NESInstruction.BEQ_rel, 0x05);
         Write(NESInstruction.STA_ind_Y, ptr1);
         Write(NESInstruction.INY_impl);
