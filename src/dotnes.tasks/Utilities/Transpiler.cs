@@ -35,6 +35,8 @@ class Transpiler : IDisposable
         }
         int CHR_ROM_SIZE = (int)(chr_rom.Bytes.Length / NESWriter.CHR_ROM_BLOCK_SIZE);
 
+        _logger.WriteLine("First pass...");
+
         // Generate static void main in a first pass, so we know the size of the program
         ushort sizeOfMain;
         using (var mainWriter = new IL2NESWriter(new MemoryStream(), logger: _logger))
@@ -64,14 +66,23 @@ class Transpiler : IDisposable
             sizeOfMain = checked((ushort)mainWriter.BaseStream.Length);
         }
 
+        _logger.WriteLine($"Size of main: {sizeOfMain}");
+
         using var writer = new IL2NESWriter(stream, logger: _logger);
+
+        _logger.WriteLine("Writing header...");
         writer.WriteHeader(PRG_ROM_SIZE: 2, CHR_ROM_SIZE: 1);
+        _logger.WriteLine("Writing built-ins...");
         writer.WriteBuiltIns(sizeOfMain);
+
+        _logger.WriteLine("Second pass...");
 
         // Write static void main *again*, second pass
         // With a known value for sizeOfMain
         foreach (var instruction in ReadStaticVoidMain())
         {
+            _logger.WriteLine(instruction.ToString());
+
             if (instruction.Integer != null)
             {
                 writer.Write(instruction.OpCode, instruction.Integer.Value, sizeOfMain);
@@ -91,6 +102,7 @@ class Transpiler : IDisposable
         }
 
         // NOTE: not sure if string or byte[] is first
+        _logger.WriteLine("Writing string/byte[] table...");
         using (var memoryStream = new MemoryStream())
         {
             using (var tableWriter = new IL2NESWriter(memoryStream, leaveOpen: true, logger: _logger))
@@ -122,6 +134,7 @@ class Transpiler : IDisposable
             memoryStream.CopyTo(writer.BaseStream);
         }
 
+        _logger.WriteLine("Destructor table...");
         writer.WriteDestructorTable();
 
         // Pad 0s
@@ -131,7 +144,7 @@ class Transpiler : IDisposable
 
         //TODO: no idea what these are???
         writer.Write(new byte[] { 0xBC, 0x80, 0x00, 0x80, 0x02, 0x82 });
-
+        _logger.WriteLine("Writing chr_rom...");
         writer.Write(chr_rom.Bytes);
         // Pad remaining zeros
         int padLength = chr_rom.Bytes.Length % NESWriter.CHR_ROM_BLOCK_SIZE;
