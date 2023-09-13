@@ -1782,6 +1782,7 @@ class NESWriter : IDisposable
     public void Write(NESInstruction i)
     {
         LastLDA = i == NESInstruction.LDA;
+        _logger.WriteLine($"{i}({(int)i:X})");
         _writer.Write((byte)i);
     }
 
@@ -1791,6 +1792,7 @@ class NESWriter : IDisposable
     public void Write (NESInstruction i, byte @byte)
     {
         LastLDA = i == NESInstruction.LDA;
+        _logger.WriteLine($"{i}({(int)i:X}) {@byte:X}");
         _writer.Write((byte)i);
         _writer.Write(@byte);
     }
@@ -1801,6 +1803,7 @@ class NESWriter : IDisposable
     public void Write(NESInstruction i, ushort address)
     {
         LastLDA = i == NESInstruction.LDA;
+        _logger.WriteLine($"{i}({(int)i:X}) {address:X}");
         _writer.Write((byte)i);
         _writer.Write(address);
     }
