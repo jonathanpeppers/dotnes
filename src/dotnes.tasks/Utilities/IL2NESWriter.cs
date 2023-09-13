@@ -379,9 +379,21 @@ class IL2NESWriter : NESWriter
         if (local.Address is not null)
         {
             // This is actually a local variable
-            Write(NESInstruction.JSR, pusha.GetAddressAfterMain(sizeOfMain));
-            Write(NESInstruction.LDA_abs, (ushort)local.Address);
-            Write(NESInstruction.LDX_abs, (ushort)(local.Address + 1));
+            if (local.Value < byte.MaxValue)
+            {
+                Write(NESInstruction.LDA_abs, (ushort)local.Address);
+                Write(NESInstruction.JSR, pusha.GetAddressAfterMain(sizeOfMain));
+            }
+            else if (local.Value < ushort.MaxValue)
+            {
+                Write(NESInstruction.JSR, pusha.GetAddressAfterMain(sizeOfMain));
+                Write(NESInstruction.LDA_abs, (ushort)local.Address);
+                Write(NESInstruction.LDX_abs, (ushort)(local.Address + 1));
+            }
+            else
+            {
+                throw new NotImplementedException($"{nameof(WriteLdloc)} not implemented for value larger than ushort: {local.Value}");
+            }
         }
         else
         {
