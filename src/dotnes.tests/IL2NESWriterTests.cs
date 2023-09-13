@@ -1,5 +1,6 @@
 ﻿using System.Collections.Immutable;
 using System.Reflection.Metadata;
+using Xunit.Abstractions;
 using static NES.NESLib;
 
 namespace dotnes.tests;
@@ -8,9 +9,11 @@ public class IL2NESWriterTests
 {
     readonly byte[] data;
     readonly MemoryStream stream = new();
+    readonly ILogger _logger;
 
-    public IL2NESWriterTests()
+    public IL2NESWriterTests(ITestOutputHelper output)
     {
+        _logger = new XUnitLogger(output);
         using var s = Utilities.GetResource("hello.nes");
         data = new byte[s.Length];
         s.Read(data, 0, data.Length);
@@ -20,7 +23,7 @@ public class IL2NESWriterTests
     {
         stream.SetLength(0);
 
-        return new IL2NESWriter(stream, leaveOpen: true)
+        return new IL2NESWriter(stream, leaveOpen: true, logger: _logger)
         {
             PRG_ROM = PRG_ROM,
             CHR_ROM = CHR_ROM,

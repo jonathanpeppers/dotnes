@@ -1,13 +1,17 @@
-﻿namespace dotnes.tests;
+﻿using Xunit.Abstractions;
+
+namespace dotnes.tests;
 
 public class NESWriterTests
 {
     const ushort sizeOfMain = 67;
     readonly byte[] data;
     readonly MemoryStream stream = new MemoryStream();
+    readonly ILogger _logger;
 
-    public NESWriterTests()
+    public NESWriterTests(ITestOutputHelper output)
     {
+        _logger = new XUnitLogger(output);
         using var s = Utilities.GetResource("hello.nes");
         data = new byte[s.Length];
         s.Read(data, 0, data.Length);
@@ -17,7 +21,7 @@ public class NESWriterTests
     {
         stream.SetLength(0);
 
-        return new NESWriter(stream, leaveOpen: true)
+        return new NESWriter(stream, leaveOpen: true, logger: _logger)
         {
             PRG_ROM = PRG_ROM,
             CHR_ROM = CHR_ROM,
