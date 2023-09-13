@@ -39,6 +39,7 @@ class Transpiler : IDisposable
 
         // Generate static void main in a first pass, so we know the size of the program
         ushort sizeOfMain;
+        byte locals;
         using (var mainWriter = new IL2NESWriter(new MemoryStream(), logger: _logger))
         {
             foreach (var instruction in ReadStaticVoidMain())
@@ -64,6 +65,7 @@ class Transpiler : IDisposable
             }
             mainWriter.Flush();
             sizeOfMain = checked((ushort)mainWriter.BaseStream.Length);
+            locals = checked((byte)mainWriter.LocalCount);
         }
 
         _logger.WriteLine($"Size of main: {sizeOfMain}");
@@ -129,7 +131,7 @@ class Transpiler : IDisposable
             }
 
             const ushort PRG_LAST = 0x85AE;
-            writer.WriteFinalBuiltIns((ushort)(PRG_LAST.GetAddressAfterMain(sizeOfMain) + memoryStream.Length));
+            writer.WriteFinalBuiltIns((ushort)(PRG_LAST.GetAddressAfterMain(sizeOfMain) + memoryStream.Length), locals);
             memoryStream.Position = 0;
             memoryStream.CopyTo(writer.BaseStream);
         }

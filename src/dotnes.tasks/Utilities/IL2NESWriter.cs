@@ -18,6 +18,28 @@ class IL2NESWriter : NESWriter
     ushort ByteArrayOffset = 0;
     ILOpCode previous;
 
+    /// <summary>
+    /// NOTE: may not be exactly correct, this is the instructions inside zerobss:
+    /// A925           LDA #$25                      ; zerobss
+    /// 852A STA ptr1                      
+    /// A903            LDA #$03                      
+    /// 852B STA ptr1+1                    
+    /// A900            LDA #$00                      
+    /// A8              TAY                           
+    /// A200 LDX #$00                      
+    /// F00A BEQ $85DE                     
+    /// 912A STA(ptr1),y                  
+    /// C8 INY                           
+    /// D0FB BNE $85D4                     
+    /// E62B INC ptr1+1                    
+    /// CA              DEX                           
+    /// D0F6            BNE $85D4                     
+    /// C002            CPY #$02
+    /// ...
+    /// A program with 0 locals has C000
+    /// </summary>
+    public int LocalCount { get; private set; }
+
     record Local(int Value, int? Address = null);
 
     public void Write(ILOpCode code, ushort sizeOfMain)
@@ -67,6 +89,7 @@ class IL2NESWriter : NESWriter
                 {
                     int address = local;
                     Locals[0] = new Local(A.Pop(), address);
+                    LocalCount += 2;
                     SeekBack(8);
                     Write(NESInstruction.LDX, 0x03);
                     Write(NESInstruction.LDA, 0xC0);
@@ -86,6 +109,7 @@ class IL2NESWriter : NESWriter
                 {
                     int address = local + 1;
                     Locals[1] = new Local(A.Pop(), address);
+                    LocalCount += 2;
                     SeekBack(8);
                     Write(NESInstruction.LDX, 0x03);
                     Write(NESInstruction.LDA, 0xC0);
@@ -105,6 +129,7 @@ class IL2NESWriter : NESWriter
                 {
                     int address = local + 2;
                     Locals[2] = new Local(A.Pop(), address);
+                    LocalCount += 2;
                     SeekBack(8);
                     Write(NESInstruction.LDX, 0x03);
                     Write(NESInstruction.LDA, 0xC0);
@@ -124,6 +149,7 @@ class IL2NESWriter : NESWriter
                 {
                     int address = local + 3;
                     Locals[3] = new Local(A.Pop(), address);
+                    LocalCount += 2;
                     SeekBack(8);
                     Write(NESInstruction.LDX, 0x03);
                     Write(NESInstruction.LDA, 0xC0);
