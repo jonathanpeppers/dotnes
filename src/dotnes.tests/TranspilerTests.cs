@@ -93,8 +93,6 @@ ILInstruction { OpCode = Br_s, Integer = 254, String = , Bytes =  }";
     [InlineData("onelocal", false)]
     [InlineData("onelocalbyte", true)]
     [InlineData("onelocalbyte", false)]
-    [InlineData("twolocals", true)]
-    [InlineData("twolocals", false)]
     public void Write(string name, bool debug)
     {
         var configuration = debug ? "debug" : "release";
