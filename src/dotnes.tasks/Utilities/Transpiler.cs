@@ -37,7 +37,7 @@ class Transpiler : IDisposable
 
         // Generate static void main in a first pass, so we know the size of the program
         ushort sizeOfMain;
-        using (var mainWriter = new IL2NESWriter(new MemoryStream()))
+        using (var mainWriter = new IL2NESWriter(new MemoryStream(), logger: _logger))
         {
             foreach (var instruction in ReadStaticVoidMain())
             {
@@ -64,7 +64,7 @@ class Transpiler : IDisposable
             sizeOfMain = checked((ushort)mainWriter.BaseStream.Length);
         }
 
-        using var writer = new IL2NESWriter(stream);
+        using var writer = new IL2NESWriter(stream, logger: _logger);
         writer.WriteHeader(PRG_ROM_SIZE: 2, CHR_ROM_SIZE: 1);
         writer.WriteBuiltIns(sizeOfMain);
 
@@ -93,7 +93,7 @@ class Transpiler : IDisposable
         // NOTE: not sure if string or byte[] is first
         using (var memoryStream = new MemoryStream())
         {
-            using (var tableWriter = new IL2NESWriter(memoryStream, leaveOpen: true))
+            using (var tableWriter = new IL2NESWriter(memoryStream, leaveOpen: true, logger: _logger))
             {
                 // Write byte[] table
                 tableWriter.WriteByteArrays(writer);
