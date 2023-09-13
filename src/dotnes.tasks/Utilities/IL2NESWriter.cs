@@ -326,14 +326,31 @@ class IL2NESWriter : NESWriter
     {
         if (local.Address is null)
             throw new ArgumentNullException(nameof(local.Address));
-        LocalCount += 2;
-        SeekBack(8);
-        Write(NESInstruction.LDX, 0x03);
-        Write(NESInstruction.LDA, 0xC0);
-        Write(NESInstruction.STA_abs, (ushort)local.Address);
-        Write(NESInstruction.STX_abs, (ushort)(local.Address + 1));
-        Write(NESInstruction.LDA, 0x28);
-        Write(NESInstruction.LDX, 0x86);
+
+        if (local.Value < byte.MaxValue)
+        {
+            LocalCount += 1;
+            SeekBack(6);
+            Write(NESInstruction.LDA, (byte)local.Value);
+            Write(NESInstruction.STA_abs, (ushort)local.Address);
+            Write(NESInstruction.LDA, 0x22);
+            Write(NESInstruction.LDX, 0x86);
+        }
+        else if (local.Value < ushort.MaxValue)
+        {
+            LocalCount += 2;
+            SeekBack(8);
+            Write(NESInstruction.LDX, 0x03);
+            Write(NESInstruction.LDA, 0xC0);
+            Write(NESInstruction.STA_abs, (ushort)local.Address);
+            Write(NESInstruction.STX_abs, (ushort)(local.Address + 1));
+            Write(NESInstruction.LDA, 0x28);
+            Write(NESInstruction.LDX, 0x86);
+        }
+        else
+        {
+            throw new NotImplementedException($"{nameof(WriteStloc)} not implemented for value larger than ushort: {local.Value}");
+        }
     }
 
     void WriteLdc(ushort operand, ushort sizeOfMain)
