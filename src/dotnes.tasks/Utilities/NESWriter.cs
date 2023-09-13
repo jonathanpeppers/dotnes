@@ -72,8 +72,13 @@ class NESWriter : IDisposable
     protected const ushort donelib = 0x84FD;
 
     protected readonly BinaryWriter _writer;
+    protected readonly ILogger _logger;
 
-    public NESWriter(Stream stream, bool leaveOpen = false) => _writer = new BinaryWriter(stream, Encoding, leaveOpen);
+    public NESWriter(Stream stream, bool leaveOpen = false, ILogger? logger = null)
+    {
+        _writer = new BinaryWriter(stream, Encoding, leaveOpen);
+        _logger = logger ?? new NullLogger();
+    }
 
     public bool LastLDA { get; private set; }
 
