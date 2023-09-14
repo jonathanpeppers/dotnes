@@ -15,7 +15,7 @@
         {
           "source": "./",
           "target": "./",
-          "copyOnly": "*.s"
+          "copyOnly": [ "*.s", "*.cs" ]
         }
     ],
     "preferNameDirectory": true,
