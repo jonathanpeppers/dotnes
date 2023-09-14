@@ -5,7 +5,7 @@
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <Description>Redistribution of ANESE for use with .NES</Description>
-    <Authors>Jonathan Peppers</Authors>
+    <Authors>Daniel Prilik, Jonathan Peppers</Authors>
     <PackageProjectUrl>https://github.com/daniel5151/ANESE</PackageProjectUrl>
     <PackageTags>.NET C# NES Emulator</PackageTags>
     <PackageLicenseFile>LICENSE</PackageLicenseFile>
