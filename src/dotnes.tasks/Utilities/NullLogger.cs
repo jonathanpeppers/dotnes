@@ -2,5 +2,5 @@
 
 class NullLogger : ILogger
 {
-    public void WriteLine(string message) { }
+    public void WriteLine(IFormattable message) { }
 }

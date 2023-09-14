@@ -9,9 +9,10 @@ class XUnitLogger : ILogger
 
     public XUnitLogger(ITestOutputHelper output) => _output = output;
 
-    public void WriteLine(string message)
+    public void WriteLine(IFormattable message)
     {
-        Debug.WriteLine(message);
-        _output.WriteLine(message);
+        string text = message?.ToString() ?? "";
+        Debug.WriteLine(text);
+        _output.WriteLine(text);
     }
 }

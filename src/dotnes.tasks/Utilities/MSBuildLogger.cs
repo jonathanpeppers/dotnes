@@ -6,5 +6,5 @@ class MSBuildLogger : ILogger
 
     public MSBuildLogger(TaskLoggingHelper logger) => _logger = logger;
 
-    public void WriteLine(string message) => _logger.LogMessage(message);
+    public void WriteLine(IFormattable message) => _logger.LogMessage(message.ToString());
 }

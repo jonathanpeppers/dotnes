@@ -2,5 +2,5 @@
 
 interface ILogger
 {
-    void WriteLine(string message);
+    void WriteLine(IFormattable message);
 }
