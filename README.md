@@ -95,6 +95,40 @@ Down the road, I might think about support for:
 * Multiple files
 * Some subset of useful BCL methods
 
+## How it works
+
+For lack of a better word, .NES is a "transpiler" that takes
+[MSIL](https://en.wikipedia.org/wiki/MSIL) and transforms it directly into a
+working [6502 microprocessor](http://www.6502.org/) binary that can run in your
+favorite NES emulator. If you think about .NET's Just-In-Time (JIT) compiler or
+the various an Ahead-Of-Time (AOT) compilers, .NES is doing something similiar:
+taking MSIL and turning it into runnable machine code.
+
+To understand further, let's look at the MSIL of a `pal_col` method call:
+
+```msil
+// pal_col((byte)0, (byte)2);
+IL_0000: ldc.i4.0
+IL_0001: ldc.i4.2
+IL_0002: call void [neslib]NES.NESLib::pal_col(uint8, uint8)
+```
+
+In 6502 assembly, this would look something like:
+
+```assembly
+A900          LDA #$00
+20A285        JSR pusha
+A902          LDA #$02
+203E82        JSR _pal_col
+```
+
+You can see how one might envision using [System.Reflection.Metadata][srm] to
+iterate over the contents of a .NET assembly and generate [6502
+instructions][6502-instructions] -- that's how this whole idea was born!
+
+[srm]: https://learn.microsoft.com/dotnet/api/system.reflection.metadata
+[6502-instructions]: https://www.masswerk.at/6502/6502_instruction_set.html
+
 ## Limitations
 
 This is a hobby project, so only around 5 C# programs are known to work. But to
@@ -115,7 +149,7 @@ To learn more about NES development, I found the following useful:
 * [8bitworkshop](https://8bitworkshop.com)
 * [NES 6502 Programming Tutorial](https://www.vbforums.com/showthread.php?858389-NES-6502-Programming-Tutorial-Part-1-Getting-Started)
 * [INES File Format](https://wiki.nesdev.org/w/index.php/INES)
-* [6502 Instruction Set](https://www.masswerk.at/6502/6502_instruction_set.html)
+* [6502 Instruction Set][6502-instructions]
 * [HxD Hex Editor](https://mh-nexus.de/en/hxd/)
 
 ## ANESE License
