@@ -34,6 +34,10 @@ Of course, you can also just open the project in Visual Studio and hit F5.
 
 > Note that Ctrl+F5 currently works better in C# Dev Kit in VS Code.
 
+Check out the video for a full demo:
+
+[![Check out the video](https://img.youtube.com/vi/m4TU5PJ8WtY/maxresdefault.jpg)](https://youtu.be/m4TU5PJ8WtY)
+
 ## Anatomy of an NES application
 
 "Hello World" looks something like:
