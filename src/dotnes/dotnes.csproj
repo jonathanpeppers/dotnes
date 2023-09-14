@@ -9,6 +9,7 @@
     <PackageProjectUrl>https://github.com/jonathanpeppers/dotnes</PackageProjectUrl>
     <PackageTags>.NET C# NES</PackageTags>
     <PackageLicenseFile>LICENSE</PackageLicenseFile>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageIcon>logo.png</PackageIcon>
     <GenerateDependencyFile>false</GenerateDependencyFile>
     <NoWarn>$(NoWarn);NU5131</NoWarn>
@@ -19,6 +20,7 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="../../LICENSE" Pack="true" PackagePath="" />
+    <None Include="../../README.md" Pack="true" PackagePath="" />
     <None Include="../../assets/logo.png" Pack="true" PackagePath="" />
     <None Include="../dotnes.tasks/bin/$(Configuration)/netstandard2.0/dotnes.tasks.dll" Pack="true" PackagePath="build" />
     <None Include="../dotnes.tasks/bin/$(Configuration)/netstandard2.0/dotnes.tasks.pdb" Pack="true" PackagePath="build" />

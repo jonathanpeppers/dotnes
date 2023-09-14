@@ -11,6 +11,7 @@
     <PackageType>Template</PackageType>
     <PackageTags>.NET C# NES</PackageTags>
     <PackageLicenseFile>LICENSE</PackageLicenseFile>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageIcon>logo.png</PackageIcon>
     <IncludeContentInPack>true</IncludeContentInPack>
     <IncludeBuildOutput>false</IncludeBuildOutput>
@@ -23,6 +24,7 @@
   </PropertyGroup>
   <ItemGroup>
     <None Include="../../LICENSE" Pack="true" PackagePath="" />
+    <None Include="../../README.md" Pack="true" PackagePath="" />
     <None Include="../../assets/logo.png" Pack="true" PackagePath="" />
     <Content Include="templates/**/*" />
     <Content Include="../../samples/hello/*.s" PackagePath="content/templates/nes" />
