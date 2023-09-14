@@ -126,6 +126,52 @@ You can see how one might envision using [System.Reflection.Metadata][srm] to
 iterate over the contents of a .NET assembly and generate [6502
 instructions][6502-instructions] -- that's how this whole idea was born!
 
+Note that the method `NESLib.pal_col()` has no actual C# implementation. In
+fact! there is *only* a reference assembly even shipped in .NES:
+
+```powershell
+> 7z l dotnes.0.1.0-alpha1.nupkg
+   Date      Time    Attr         Size   Compressed  Name
+------------------- ----- ------------ ------------  ------------------------
+2023-09-14 14:37:38 .....         8192         3169  ref\net7.0\neslib.dll
+```
+
+If you decompile `neslib.dll`, no code is inside:
+
+```csharp
+// Warning! This assembly is marked as a 'reference assembly', which means that it only contains metadata and no executable code.
+// neslib, Version=0.1.0.0, Culture=neutral, PublicKeyToken=null
+// NES.NESLib
+public static void pal_col(byte index, byte color) => throw null;
+```
+
+When generating `*.nes` binaries, .NES simply does a lookup for `pal_col` to
+"jump" to the appropriate subroutine to call it.
+
+.NES also emits the assembly instructions for the actual `pal_col` subroutine, a
+code snippet of the implementation:
+
+```csharp
+/*
+* 823E	8517          	STA TEMP                      ; _pal_col
+* 8240	209285        	JSR popa                      
+* 8243	291F          	AND #$1F                      
+* 8245	AA            	TAX                           
+* 8246	A517          	LDA TEMP                      
+* 8248	9DC001        	STA $01C0,x                   
+* 824B	E607          	INC PAL_UPDATE                
+* 824D	60            	RTS
+*/
+Write(NESInstruction.STA_zpg, TEMP);
+Write(NESInstruction.JSR, popa.GetAddressAfterMain(sizeOfMain));
+Write(NESInstruction.AND, 0x1F);
+Write(NESInstruction.TAX_impl);
+Write(NESInstruction.LDA_zpg, TEMP);
+Write(NESInstruction.STA_abs_X, PAL_BUF);
+Write(NESInstruction.INC_zpg, PAL_UPDATE);
+Write(NESInstruction.RTS_impl);
+```
+
 [srm]: https://learn.microsoft.com/dotnet/api/system.reflection.metadata
 [6502-instructions]: https://www.masswerk.at/6502/6502_instruction_set.html
 
