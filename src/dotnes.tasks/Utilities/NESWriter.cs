@@ -8,7 +8,7 @@ namespace dotnes;
 /// * https://wiki.nesdev.org/w/index.php/INES
 /// * https://bheisler.github.io/post/nes-rom-parser-with-nom/
 /// </summary>
-class NESWriter : IDisposable
+class NESWriter(Stream stream, bool leaveOpen = false, ILogger? logger = null) : IDisposable
 {
     public static readonly Encoding Encoding = Encoding.ASCII;
 
@@ -71,14 +71,8 @@ class NESWriter : IDisposable
     protected const ushort rodata = 0x85AE;
     protected const ushort donelib = 0x84FD;
 
-    protected readonly BinaryWriter _writer;
-    protected readonly ILogger _logger;
-
-    public NESWriter(Stream stream, bool leaveOpen = false, ILogger? logger = null)
-    {
-        _writer = new BinaryWriter(stream, Encoding, leaveOpen);
-        _logger = logger ?? new NullLogger();
-    }
+    protected readonly BinaryWriter _writer = new(stream, Encoding, leaveOpen);
+    protected readonly ILogger _logger = logger ?? new NullLogger();
 
     public bool LastLDA { get; private set; }
 
