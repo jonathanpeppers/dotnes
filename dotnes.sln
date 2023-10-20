@@ -13,7 +13,12 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "dotnes.tests", "src\dotnes.
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "dotnes.anese", "src\dotnes.anese\dotnes.anese.csproj", "{2BF1755D-7DD9-43D2-8F94-BD7496F64BD2}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "dotnes.templates", "src\dotnes.templates\dotnes.templates.csproj", "{56F0AE62-836B-4767-8267-AA2352DD539F}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "dotnes.templates", "src\dotnes.templates\dotnes.templates.csproj", "{56F0AE62-836B-4767-8267-AA2352DD539F}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{517CC69D-CD5D-4753-A23D-7B26861D044E}"
+	ProjectSection(SolutionItems) = preProject
+		.editorconfig = .editorconfig
+	EndProjectSection
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
