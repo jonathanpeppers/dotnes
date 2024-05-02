@@ -313,6 +313,8 @@ class IL2NESWriter : NESWriter
                 return 0x83DF;
             case nameof(vram_write):
                 return 0x834F;
+            case nameof(scroll):
+                return 0x82FB;
             default:
                 throw new NotImplementedException($"{nameof(GetAddress)} for {name} is not implemented!");
         }
@@ -335,6 +337,7 @@ class IL2NESWriter : NESWriter
             case nameof(NTADR_B):
             case nameof(NTADR_C):
             case nameof(NTADR_D):
+            case nameof(scroll):
                 return 2;
             default:
                 throw new NotImplementedException($"{nameof(GetNumberOfArguments)} for {name} is not implemented!");
