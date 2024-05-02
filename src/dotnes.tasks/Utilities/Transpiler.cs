@@ -152,6 +152,8 @@ class Transpiler : IDisposable
             var buffer = ArrayPool<byte>.Shared.Rent(padLength);
             try
             {
+                //NOTE: this byte[] can contain non-zero values!
+                buffer.AsSpan().Fill(0);
                 writer.Write(buffer, 0, padLength);
             }
             finally
