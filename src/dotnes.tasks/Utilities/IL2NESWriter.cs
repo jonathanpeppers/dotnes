@@ -227,24 +227,14 @@ class IL2NESWriter : NESWriter
                         {
                             throw new InvalidOperationException($"{operand} was called with less than 2 on the stack.");
                         }
-                        ushort address;
-                        switch (operand)
+                        var address = operand switch
                         {
-                            case nameof(NTADR_A):
-                                address = NTADR_A(checked((byte)Stack.Pop()), checked((byte)Stack.Pop()));
-                                break;
-                            case nameof(NTADR_B):
-                                address = NTADR_B(checked((byte)Stack.Pop()), checked((byte)Stack.Pop()));
-                                break;
-                            case nameof(NTADR_C):
-                                address = NTADR_C(checked((byte)Stack.Pop()), checked((byte)Stack.Pop()));
-                                break;
-                            case nameof(NTADR_D):
-                                address = NTADR_D(checked((byte)Stack.Pop()), checked((byte)Stack.Pop()));
-                                break;
-                            default:
-                                throw new InvalidOperationException($"Address lookup of {operand} not implemented!");
-                        }
+                            nameof(NTADR_A) => NTADR_A(checked((byte)Stack.Pop()), checked((byte)Stack.Pop())),
+                            nameof(NTADR_B) => NTADR_B(checked((byte)Stack.Pop()), checked((byte)Stack.Pop())),
+                            nameof(NTADR_C) => NTADR_C(checked((byte)Stack.Pop()), checked((byte)Stack.Pop())),
+                            nameof(NTADR_D) => NTADR_D(checked((byte)Stack.Pop()), checked((byte)Stack.Pop())),
+                            _ => throw new InvalidOperationException($"Address lookup of {operand} not implemented!"),
+                        };
                         SeekBack(7);
                         //TODO: these are hardcoded until I figure this out
                         Write(NESInstruction.LDX, 0x20);
