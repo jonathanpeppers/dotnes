@@ -13,7 +13,6 @@ the nametables wrap around.
 
 int x = 0;   // x scroll position
 int y = 0;   // y scroll position
-int dy = 1;  // y scroll direction
 string str = "LOL! LOL! LOL! LOL! LOL! LOL!";
 
 // set palette colors
@@ -45,10 +44,7 @@ while (true)
     // wait for next frame
     ppu_wait_frame();
     // update y variable
-    y += dy;
-    // change direction when hitting either edge of scroll area
-    if (y >= 479) dy = -1;
-    if (y == 0) dy = 1;
+    y += 1;
     // set scroll register
     scroll(x, y);
 }
