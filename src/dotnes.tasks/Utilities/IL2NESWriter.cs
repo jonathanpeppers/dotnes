@@ -23,7 +23,7 @@ class IL2NESWriter : NESWriter
     /// List of byte[] data
     /// </summary>
     readonly List<ImmutableArray<byte>> ByteArrays = new();
-    ushort local = 0x324;
+    readonly ushort local = 0x324;
     ushort ByteArrayOffset = 0;
     ILOpCode previous;
 
