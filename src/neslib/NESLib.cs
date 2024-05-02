@@ -188,7 +188,7 @@ public static class NESLib
     /// set scroll, including rhe top bits
     /// it is always applied at beginning of a TV frame, not at the function call
     /// </summary>
-    public static void scroll(uint x, uint y) { }
+    public static void scroll(int x, int y) { }
 
     /// <summary>
     /// set scroll after screen split invoked by the sprite 0 hit
@@ -197,7 +197,7 @@ public static class NESLib
     ///          otherwise empty frames without split will be inserted, resulting in jumpy screen
     /// warning: only X scroll could be changed in this version
     /// </summary>
-    public static void split(uint x, uint y) { }
+    public static void split(int x, int y) { }
 
 
     /// <summary>
