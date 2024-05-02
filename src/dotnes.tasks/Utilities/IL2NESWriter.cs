@@ -220,11 +220,31 @@ class IL2NESWriter : NESWriter
                 switch (operand)
                 {
                     case nameof(NTADR_A):
+                    case nameof(NTADR_B):
+                    case nameof(NTADR_C):
+                    case nameof(NTADR_D):
                         if (Stack.Count < 2)
                         {
                             throw new InvalidOperationException($"{operand} was called with less than 2 on the stack.");
                         }
-                        ushort address = NTADR_A(checked((byte)Stack.Pop()), checked((byte)Stack.Pop()));
+                        ushort address;
+                        switch (operand)
+                        {
+                            case nameof(NTADR_A):
+                                address = NTADR_A(checked((byte)Stack.Pop()), checked((byte)Stack.Pop()));
+                                break;
+                            case nameof(NTADR_B):
+                                address = NTADR_B(checked((byte)Stack.Pop()), checked((byte)Stack.Pop()));
+                                break;
+                            case nameof(NTADR_C):
+                                address = NTADR_C(checked((byte)Stack.Pop()), checked((byte)Stack.Pop()));
+                                break;
+                            case nameof(NTADR_D):
+                                address = NTADR_D(checked((byte)Stack.Pop()), checked((byte)Stack.Pop()));
+                                break;
+                            default:
+                                throw new InvalidOperationException($"Address lookup of {operand} not implemented!");
+                        }
                         SeekBack(7);
                         //TODO: these are hardcoded until I figure this out
                         Write(NESInstruction.LDX, 0x20);
@@ -316,6 +336,9 @@ class IL2NESWriter : NESWriter
             case nameof(pal_col):
             case nameof(vram_fill):
             case nameof(NTADR_A):
+            case nameof(NTADR_B):
+            case nameof(NTADR_C):
+            case nameof(NTADR_D):
                 return 2;
             default:
                 throw new NotImplementedException($"{nameof(GetNumberOfArguments)} for {name} is not implemented!");
