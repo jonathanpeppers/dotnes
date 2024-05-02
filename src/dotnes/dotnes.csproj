@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.Build.NoTargets">
   <PropertyGroup>
-    <TargetFramework>net7.0</TargetFramework>
+    <TargetFramework>net8.0</TargetFramework>
     <OutputPath>../../bin/$(Configuration)/</OutputPath>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
@@ -30,7 +30,7 @@
     <None Include="../dotnes.tasks/bin/$(Configuration)/netstandard2.0/System.Collections.Immutable.dll" Pack="true" PackagePath="build" />
     <None Include="../dotnes.tasks/bin/$(Configuration)/netstandard2.0/neslib.dll" Pack="true" PackagePath="build" />
     <None Include="../dotnes.tasks/bin/$(Configuration)/netstandard2.0/neslib.pdb" Pack="true" PackagePath="build" />
-    <None Include="../neslib/bin/$(Configuration)/netstandard2.0/ref/neslib.dll" Pack="true" PackagePath="ref/net7.0" />
+    <None Include="../neslib/bin/$(Configuration)/netstandard2.0/ref/neslib.dll" Pack="true" PackagePath="ref/net8.0" />
   </ItemGroup>
   <Target Name="_ClearNuGetCache" BeforeTargets="Build">
     <RemoveDir Directories="$(MSBuildThisFileDirectory)../../samples/packages/$(PackageId)" />
