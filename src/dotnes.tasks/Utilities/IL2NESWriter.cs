@@ -150,6 +150,9 @@ class IL2NESWriter : NESWriter
             case ILOpCode.Conv_u8:
                 // Do nothing
                 break;
+            case ILOpCode.Add:
+                Stack.Push(Stack.Pop() + Stack.Pop());
+                break;
             default:
                 throw new NotImplementedException($"OpCode {code} with no operands is not implemented!");
         }
@@ -420,6 +423,7 @@ class IL2NESWriter : NESWriter
             Write(NESInstruction.LDX, 0x00);
             Write(NESInstruction.LDA, 0x40);
         }
+        Stack.Push(local.Value);
     }
 
     void SeekBack(int length)
