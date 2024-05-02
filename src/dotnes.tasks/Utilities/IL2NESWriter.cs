@@ -304,6 +304,8 @@ class IL2NESWriter : NESWriter
                 return 0x8289;
             case nameof(vram_adr):
                 return 0x83D4;
+            case nameof(ppu_wait_frame):
+                return 0x82DB;
             case nameof(vram_fill):
                 return 0x83DF;
             case nameof(vram_write):
@@ -318,6 +320,7 @@ class IL2NESWriter : NESWriter
         switch (name)
         {
             case nameof(ppu_on_all):
+            case nameof(ppu_wait_frame):
                 return 0;
             case nameof(vram_adr):
             case nameof(vram_write):
