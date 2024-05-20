@@ -23,7 +23,7 @@ class IL2NESWriter : NESWriter
     /// List of byte[] data
     /// </summary>
     readonly List<ImmutableArray<byte>> ByteArrays = new();
-    ushort local = 0x324;
+    readonly ushort local = 0x324;
     ushort ByteArrayOffset = 0;
     ILOpCode previous;
 
@@ -150,6 +150,9 @@ class IL2NESWriter : NESWriter
             case ILOpCode.Conv_u8:
                 // Do nothing
                 break;
+            case ILOpCode.Add:
+                Stack.Push(Stack.Pop() + Stack.Pop());
+                break;
             default:
                 throw new NotImplementedException($"OpCode {code} with no operands is not implemented!");
         }
@@ -220,11 +223,21 @@ class IL2NESWriter : NESWriter
                 switch (operand)
                 {
                     case nameof(NTADR_A):
+                    case nameof(NTADR_B):
+                    case nameof(NTADR_C):
+                    case nameof(NTADR_D):
                         if (Stack.Count < 2)
                         {
                             throw new InvalidOperationException($"{operand} was called with less than 2 on the stack.");
                         }
-                        ushort address = NTADR_A(checked((byte)Stack.Pop()), checked((byte)Stack.Pop()));
+                        var address = operand switch
+                        {
+                            nameof(NTADR_A) => NTADR_A(checked((byte)Stack.Pop()), checked((byte)Stack.Pop())),
+                            nameof(NTADR_B) => NTADR_B(checked((byte)Stack.Pop()), checked((byte)Stack.Pop())),
+                            nameof(NTADR_C) => NTADR_C(checked((byte)Stack.Pop()), checked((byte)Stack.Pop())),
+                            nameof(NTADR_D) => NTADR_D(checked((byte)Stack.Pop()), checked((byte)Stack.Pop())),
+                            _ => throw new InvalidOperationException($"Address lookup of {operand} not implemented!"),
+                        };
                         SeekBack(7);
                         //TODO: these are hardcoded until I figure this out
                         Write(NESInstruction.LDX, 0x20);
@@ -294,10 +307,14 @@ class IL2NESWriter : NESWriter
                 return 0x8289;
             case nameof(vram_adr):
                 return 0x83D4;
+            case nameof(ppu_wait_frame):
+                return 0x82DB;
             case nameof(vram_fill):
                 return 0x83DF;
             case nameof(vram_write):
                 return 0x834F;
+            case nameof(scroll):
+                return 0x82FB;
             default:
                 throw new NotImplementedException($"{nameof(GetAddress)} for {name} is not implemented!");
         }
@@ -308,6 +325,7 @@ class IL2NESWriter : NESWriter
         switch (name)
         {
             case nameof(ppu_on_all):
+            case nameof(ppu_wait_frame):
                 return 0;
             case nameof(vram_adr):
             case nameof(vram_write):
@@ -316,6 +334,10 @@ class IL2NESWriter : NESWriter
             case nameof(pal_col):
             case nameof(vram_fill):
             case nameof(NTADR_A):
+            case nameof(NTADR_B):
+            case nameof(NTADR_C):
+            case nameof(NTADR_D):
+            case nameof(scroll):
                 return 2;
             default:
                 throw new NotImplementedException($"{nameof(GetNumberOfArguments)} for {name} is not implemented!");
@@ -404,11 +426,19 @@ class IL2NESWriter : NESWriter
             Write(NESInstruction.LDX, 0x00);
             Write(NESInstruction.LDA, 0x40);
         }
+        Stack.Push(local.Value);
     }
 
     void SeekBack(int length)
     {
         _logger.WriteLine($"Seek back {length} bytes");
-        _writer.BaseStream.SetLength(_writer.BaseStream.Length - length);
+        if (_writer.BaseStream.Length < length)
+        {
+            _writer.BaseStream.SetLength(0);
+        }
+        else
+        {
+            _writer.BaseStream.SetLength(_writer.BaseStream.Length - length);
+        }
     }
 }
