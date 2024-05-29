@@ -167,6 +167,15 @@ class NESWriter(Stream stream, bool leaveOpen = false, ILogger? logger = null) :
         _writer.Write(buffer);
     }
 
+    public void Write(ushort[] buffer)
+    {
+        LastLDA = false;
+        for (int i = 0; i < buffer.Length; i++)
+        {
+            _writer.Write(buffer[i]);
+        }
+    }
+
     public void Write(byte[] buffer, int index, int count)
     {
         LastLDA = false;
