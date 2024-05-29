@@ -139,10 +139,15 @@ class Transpiler : IDisposable
         // Pad 0s
         int PRG_ROM_SIZE = (int)writer.Length - 16;
         writer.WriteZeroes(NESWriter.PRG_ROM_BLOCK_SIZE - (PRG_ROM_SIZE % NESWriter.PRG_ROM_BLOCK_SIZE));
-        writer.WriteZeroes(NESWriter.PRG_ROM_BLOCK_SIZE - 6);
 
-        //TODO: no idea what these are???
-        writer.Write([0xBC, 0x80, 0x00, 0x80, 0x02, 0x82]);
+        // Write interrupt vectors
+        const int VECTOR_ADDRESSES_SIZE = 6;
+        writer.WriteZeroes(NESWriter.PRG_ROM_BLOCK_SIZE - VECTOR_ADDRESSES_SIZE);
+        ushort nmi_data = 0x80BC;
+        ushort reset_data = 0x8000;
+        ushort irq_data = 0x8202;
+        writer.Write(new ushort[] { nmi_data, reset_data, irq_data });
+
         _logger.WriteLine($"Writing chr_rom...");
         writer.Write(chr_rom.Bytes);
         // Pad remaining zeros
