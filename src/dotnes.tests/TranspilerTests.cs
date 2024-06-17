@@ -89,6 +89,8 @@ ILInstruction { OpCode = Br_s, Integer = 254, String = , Bytes =  }";
     [InlineData("attributetable", false)]
     [InlineData("hello", true)]
     [InlineData("hello", false)]
+    [InlineData("lols", true)]
+    [InlineData("lols", false)]
     [InlineData("onelocal", true)]
     [InlineData("onelocal", false)]
     [InlineData("onelocalbyte", true)]
@@ -103,7 +105,7 @@ ILInstruction { OpCode = Br_s, Integer = 254, String = , Bytes =  }";
         var chr_generic = new StreamReader(Utilities.GetResource("chr_generic.s"));
 
         using var dll = Utilities.GetResource($"{name}.{configuration}.dll");
-        using var il = new Transpiler(dll, new[] { new AssemblyReader(chr_generic) }, _logger);
+        using var il = new Transpiler(dll, [new AssemblyReader(chr_generic)], _logger);
         using var ms = new MemoryStream();
         il.Write(ms);
 
