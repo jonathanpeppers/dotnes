@@ -237,40 +237,41 @@ class IL2NESWriter : NESWriter
                 DataOffset = (ushort)(DataOffset + operand.Length);
                 break;
             case ILOpCode.Call:
+                int argumentsCount = GetNumberOfArguments(operand);
+                if (Stack.Count < argumentsCount)
+                {
+                    throw new InvalidOperationException($"{operand} was called with less than {argumentsCount} on the stack.");
+                }
+
                 switch (operand)
                 {
                     case nameof(NTADR_A):
                     case nameof(NTADR_B):
                     case nameof(NTADR_C):
                     case nameof(NTADR_D):
-                        if (Stack.Count < 2)
-                        {
-                            throw new InvalidOperationException($"{operand} was called with less than 2 on the stack.");
-                        }
+                        byte y = checked((byte)Stack.Pop());
+                        byte x = checked((byte)Stack.Pop());
                         var address = operand switch
                         {
-                            nameof(NTADR_A) => NTADR_A(checked((byte)Stack.Pop()), checked((byte)Stack.Pop())),
-                            nameof(NTADR_B) => NTADR_B(checked((byte)Stack.Pop()), checked((byte)Stack.Pop())),
-                            nameof(NTADR_C) => NTADR_C(checked((byte)Stack.Pop()), checked((byte)Stack.Pop())),
-                            nameof(NTADR_D) => NTADR_D(checked((byte)Stack.Pop()), checked((byte)Stack.Pop())),
+                            nameof(NTADR_A) => NTADR_A(x, y),
+                            nameof(NTADR_B) => NTADR_B(x, y),
+                            nameof(NTADR_C) => NTADR_C(x, y),
+                            nameof(NTADR_D) => NTADR_D(x, y),
                             _ => throw new InvalidOperationException($"Address lookup of {operand} not implemented!"),
                         };
-                        SeekBack(7);
-                        //TODO: these are hardcoded until I figure this out
-                        Write(NESInstruction.LDX, 0x20);
-                        Write(NESInstruction.LDA, 0x42);
-                        Stack.Push(address);
+
+                        SeekBack(10);
+                        WriteLdc(address, sizeOfMain);
                         break;
                     default:
                         Write(NESInstruction.JSR, GetAddress(operand));
+                        // Pop N times
+                        for (int i = 0; i < argumentsCount; i++)
+                        {
+                            if (Stack.Count > 0)
+                                Stack.Pop();
+                        }
                         break;
-                }
-                // Pop N times
-                int args = GetNumberOfArguments(operand);
-                for (int i = 0; i < args; i++)
-                {
-                    if (Stack.Count > 0)
-                        Stack.Pop();
                 }
                 break;
             default:
