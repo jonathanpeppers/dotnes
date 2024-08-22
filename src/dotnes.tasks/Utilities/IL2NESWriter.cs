@@ -1,4 +1,4 @@
-﻿using System.Collections.Immutable;
+using System.Collections.Immutable;
 using System.Reflection.Metadata;
 using static NES.NESLib;
 
@@ -23,8 +23,14 @@ class IL2NESWriter : NESWriter
     /// List of byte[] data
     /// </summary>
     readonly List<ImmutableArray<byte>> ByteArrays = new();
+
+    /// <summary>
+    /// List of strings and offsets.
+    /// </summary>
+    readonly Dictionary<string, ushort> Strings = new();
+    
     readonly ushort local = 0x324;
-    ushort ByteArrayOffset = 0;
+    ushort DataOffset = 0;
     ILOpCode previous;
 
     /// <summary>
@@ -212,12 +218,23 @@ class IL2NESWriter : NESWriter
             case ILOpCode.Nop:
                 break;
             case ILOpCode.Ldstr:
-                //TODO: hardcoded until string table figured out
-                Write(NESInstruction.LDA, 0xF1);
-                Write(NESInstruction.LDX, 0x85);
+                if (!Strings.TryGetValue(operand, out ushort stringOffset))
+                {
+                    if (DataOffset == 0)
+                    {
+                        DataOffset = rodata.GetAddressAfterMain(sizeOfMain);
+                    }
+
+                    stringOffset = DataOffset;
+                    Strings.Add(operand, stringOffset);
+                }
+
+                Write(NESInstruction.LDA, LSB(stringOffset));
+                Write(NESInstruction.LDX, MSB(stringOffset));
                 Write(NESInstruction.JSR, pushax.GetAddressAfterMain(sizeOfMain));
                 Write(NESInstruction.LDX, 0x00);
                 Write(ILOpCode.Ldc_i4_s, operand.Length, sizeOfMain);
+                DataOffset = (ushort)(DataOffset + operand.Length);
                 break;
             case ILOpCode.Call:
                 switch (operand)
@@ -267,12 +284,12 @@ class IL2NESWriter : NESWriter
         switch (code)
         {
             case ILOpCode.Ldtoken:
-                if (ByteArrayOffset == 0)
-                    ByteArrayOffset = rodata.GetAddressAfterMain(sizeOfMain);
-                Write(NESInstruction.LDA, (byte)(ByteArrayOffset & 0xff));
-                Write(NESInstruction.LDX, (byte)(ByteArrayOffset >> 8));
-                Stack.Push(ByteArrayOffset);
-                ByteArrayOffset = (ushort)(ByteArrayOffset + operand.Length);
+                if (DataOffset == 0)
+                    DataOffset = rodata.GetAddressAfterMain(sizeOfMain);
+                Write(NESInstruction.LDA, LSB(DataOffset));
+                Write(NESInstruction.LDX, MSB(DataOffset));
+                Stack.Push(DataOffset);
+                DataOffset = (ushort)(DataOffset + operand.Length);
                 ByteArrays.Add(operand);
                 break;
             default:
@@ -351,7 +368,11 @@ class IL2NESWriter : NESWriter
 
         if (local.Value < byte.MaxValue)
         {
-            LocalCount += 1;
+            if (!Locals.ContainsValue(local))
+            {
+                LocalCount += 1;
+            }
+
             SeekBack(6);
             Write(NESInstruction.LDA, (byte)local.Value);
             Write(NESInstruction.STA_abs, (ushort)local.Address);
@@ -381,8 +402,8 @@ class IL2NESWriter : NESWriter
         {
             Write(NESInstruction.JSR, pusha.GetAddressAfterMain(sizeOfMain));
         }
-        Write(NESInstruction.LDX, checked((byte)(operand >> 8)));
-        Write(NESInstruction.LDA, checked((byte)(operand & 0xff)));
+        Write(NESInstruction.LDX, MSB(operand));
+        Write(NESInstruction.LDA, LSB(operand));
         Stack.Push(operand);
     }
 
