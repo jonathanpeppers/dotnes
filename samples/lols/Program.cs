@@ -21,19 +21,19 @@ pal_col(1, 0x14);   // fuchsia
 pal_col(2, 0x20);   // grey
 pal_col(3, 0x30);   // white
 
-// write text to name table
+//write text to name table
 vram_adr(NTADR_A(1,0));
-vram_write(str);
-vram_adr(NTADR_A(2,10));
-vram_write(str);
-vram_adr(NTADR_A(1,20));
-vram_write(str);
-vram_adr(NTADR_C(2,0));
-vram_write(str);
-vram_adr(NTADR_C(1,10));
-vram_write(str);
-vram_adr(NTADR_C(2,20));
-vram_write(str);
+vram_write("LOL! LOL! LOL! LOL! LOL! LOL!");
+// vram_adr(NTADR_A(2,10));
+// vram_write("LOL! LOL! LOL! LOL! LOL! LOL!");
+//  vram_adr(NTADR_B(1,20));
+//  vram_write("LOL! LOL! LOL! LOL! LOL! LOL!");
+// vram_adr(NTADR_B(2,0));
+// vram_write("LOL! LOL! LOL! LOL! LOL! LOL!");
+// vram_adr(NTADR_C(1,10));
+// vram_write("LOL! LOL! LOL! LOL! LOL! LOL!");
+// vram_adr(NTADR_C(2,20));
+// vram_write("LOL! LOL! LOL! LOL! LOL! LOL!");
 
 // enable PPU rendering (turn on screen)
 ppu_on_all();
@@ -44,7 +44,7 @@ while (true)
     // wait for next frame
     ppu_wait_frame();
     // update y variable
-    y += 1;
+    // y += 1;
     // set scroll register
-    scroll(x, y);
+    // scroll(x, y);
 }

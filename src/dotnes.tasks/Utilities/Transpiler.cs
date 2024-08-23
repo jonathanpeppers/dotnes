@@ -37,9 +37,10 @@ class Transpiler : IDisposable
         // Generate static void main in a first pass, so we know the size of the program
         ushort sizeOfMain;
         byte locals;
+        var instructions = ReadStaticVoidMain().ToList();
         using (var mainWriter = new IL2NESWriter(new MemoryStream(), logger: _logger))
         {
-            foreach (var instruction in ReadStaticVoidMain())
+            foreach (var instruction in instructions)
             {
                 _logger.WriteLine($"{instruction}");
 
@@ -78,7 +79,7 @@ class Transpiler : IDisposable
 
         // Write static void main *again*, second pass
         // With a known value for sizeOfMain
-        foreach (var instruction in ReadStaticVoidMain())
+        foreach (var instruction in instructions)
         {
             _logger.WriteLine($"{instruction}");
 
@@ -139,10 +140,15 @@ class Transpiler : IDisposable
         // Pad 0s
         int PRG_ROM_SIZE = (int)writer.Length - 16;
         writer.WriteZeroes(NESWriter.PRG_ROM_BLOCK_SIZE - (PRG_ROM_SIZE % NESWriter.PRG_ROM_BLOCK_SIZE));
-        writer.WriteZeroes(NESWriter.PRG_ROM_BLOCK_SIZE - 6);
 
-        //TODO: no idea what these are???
-        writer.Write([0xBC, 0x80, 0x00, 0x80, 0x02, 0x82]);
+        // Write interrupt vectors
+        const int VECTOR_ADDRESSES_SIZE = 6;
+        writer.WriteZeroes(NESWriter.PRG_ROM_BLOCK_SIZE - VECTOR_ADDRESSES_SIZE);
+        ushort nmi_data = 0x80BC;
+        ushort reset_data = 0x8000;
+        ushort irq_data = 0x8202;
+        writer.Write(new ushort[] { nmi_data, reset_data, irq_data });
+
         _logger.WriteLine($"Writing chr_rom...");
         writer.Write(chr_rom.Bytes);
         // Pad remaining zeros

@@ -1,4 +1,4 @@
-﻿using System.Collections.Immutable;
+using System.Collections.Immutable;
 using System.Reflection.Metadata;
 using static NES.NESLib;
 
@@ -23,8 +23,14 @@ class IL2NESWriter : NESWriter
     /// List of byte[] data
     /// </summary>
     readonly List<ImmutableArray<byte>> ByteArrays = new();
+
+    /// <summary>
+    /// List of strings and offsets.
+    /// </summary>
+    readonly Dictionary<string, ushort> Strings = new();
+    
     readonly ushort local = 0x324;
-    ushort ByteArrayOffset = 0;
+    ushort DataOffset = 0;
     ILOpCode previous;
 
     /// <summary>
@@ -212,48 +218,60 @@ class IL2NESWriter : NESWriter
             case ILOpCode.Nop:
                 break;
             case ILOpCode.Ldstr:
-                //TODO: hardcoded until string table figured out
-                Write(NESInstruction.LDA, 0xF1);
-                Write(NESInstruction.LDX, 0x85);
+                if (!Strings.TryGetValue(operand, out ushort stringOffset))
+                {
+                    if (DataOffset == 0)
+                    {
+                        DataOffset = rodata.GetAddressAfterMain(sizeOfMain);
+                    }
+
+                    stringOffset = DataOffset;
+                    Strings.Add(operand, stringOffset);
+                }
+
+                Write(NESInstruction.LDA, LSB(stringOffset));
+                Write(NESInstruction.LDX, MSB(stringOffset));
                 Write(NESInstruction.JSR, pushax.GetAddressAfterMain(sizeOfMain));
                 Write(NESInstruction.LDX, 0x00);
                 Write(ILOpCode.Ldc_i4_s, operand.Length, sizeOfMain);
+                DataOffset = (ushort)(DataOffset + operand.Length);
                 break;
             case ILOpCode.Call:
+                int argumentsCount = GetNumberOfArguments(operand);
+                if (Stack.Count < argumentsCount)
+                {
+                    throw new InvalidOperationException($"{operand} was called with less than {argumentsCount} on the stack.");
+                }
+
                 switch (operand)
                 {
                     case nameof(NTADR_A):
                     case nameof(NTADR_B):
                     case nameof(NTADR_C):
                     case nameof(NTADR_D):
-                        if (Stack.Count < 2)
-                        {
-                            throw new InvalidOperationException($"{operand} was called with less than 2 on the stack.");
-                        }
+                        byte y = checked((byte)Stack.Pop());
+                        byte x = checked((byte)Stack.Pop());
                         var address = operand switch
                         {
-                            nameof(NTADR_A) => NTADR_A(checked((byte)Stack.Pop()), checked((byte)Stack.Pop())),
-                            nameof(NTADR_B) => NTADR_B(checked((byte)Stack.Pop()), checked((byte)Stack.Pop())),
-                            nameof(NTADR_C) => NTADR_C(checked((byte)Stack.Pop()), checked((byte)Stack.Pop())),
-                            nameof(NTADR_D) => NTADR_D(checked((byte)Stack.Pop()), checked((byte)Stack.Pop())),
+                            nameof(NTADR_A) => NTADR_A(x, y),
+                            nameof(NTADR_B) => NTADR_B(x, y),
+                            nameof(NTADR_C) => NTADR_C(x, y),
+                            nameof(NTADR_D) => NTADR_D(x, y),
                             _ => throw new InvalidOperationException($"Address lookup of {operand} not implemented!"),
                         };
-                        SeekBack(7);
-                        //TODO: these are hardcoded until I figure this out
-                        Write(NESInstruction.LDX, 0x20);
-                        Write(NESInstruction.LDA, 0x42);
-                        Stack.Push(address);
+
+                        SeekBack(10);
+                        WriteLdc(address, sizeOfMain);
                         break;
                     default:
                         Write(NESInstruction.JSR, GetAddress(operand));
+                        // Pop N times
+                        for (int i = 0; i < argumentsCount; i++)
+                        {
+                            if (Stack.Count > 0)
+                                Stack.Pop();
+                        }
                         break;
-                }
-                // Pop N times
-                int args = GetNumberOfArguments(operand);
-                for (int i = 0; i < args; i++)
-                {
-                    if (Stack.Count > 0)
-                        Stack.Pop();
                 }
                 break;
             default:
@@ -267,12 +285,12 @@ class IL2NESWriter : NESWriter
         switch (code)
         {
             case ILOpCode.Ldtoken:
-                if (ByteArrayOffset == 0)
-                    ByteArrayOffset = rodata.GetAddressAfterMain(sizeOfMain);
-                Write(NESInstruction.LDA, (byte)(ByteArrayOffset & 0xff));
-                Write(NESInstruction.LDX, (byte)(ByteArrayOffset >> 8));
-                Stack.Push(ByteArrayOffset);
-                ByteArrayOffset = (ushort)(ByteArrayOffset + operand.Length);
+                if (DataOffset == 0)
+                    DataOffset = rodata.GetAddressAfterMain(sizeOfMain);
+                Write(NESInstruction.LDA, LSB(DataOffset));
+                Write(NESInstruction.LDX, MSB(DataOffset));
+                Stack.Push(DataOffset);
+                DataOffset = (ushort)(DataOffset + operand.Length);
                 ByteArrays.Add(operand);
                 break;
             default:
@@ -351,7 +369,11 @@ class IL2NESWriter : NESWriter
 
         if (local.Value < byte.MaxValue)
         {
-            LocalCount += 1;
+            if (!Locals.ContainsValue(local))
+            {
+                LocalCount += 1;
+            }
+
             SeekBack(6);
             Write(NESInstruction.LDA, (byte)local.Value);
             Write(NESInstruction.STA_abs, (ushort)local.Address);
@@ -381,8 +403,8 @@ class IL2NESWriter : NESWriter
         {
             Write(NESInstruction.JSR, pusha.GetAddressAfterMain(sizeOfMain));
         }
-        Write(NESInstruction.LDX, checked((byte)(operand >> 8)));
-        Write(NESInstruction.LDA, checked((byte)(operand & 0xff)));
+        Write(NESInstruction.LDX, MSB(operand));
+        Write(NESInstruction.LDA, LSB(operand));
         Stack.Push(operand);
     }
 
