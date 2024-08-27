@@ -1,6 +1,6 @@
 ﻿namespace dotnes;
 
-interface ILogger
+public interface ILogger
 {
     void WriteLine(IFormattable message);
 }
