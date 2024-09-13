@@ -7,23 +7,23 @@ namespace dotnes.tests;
 
 public class IL2NESWriterTests
 {
-    readonly byte[] data;
-    readonly MemoryStream stream = new();
+    readonly byte[] _data;
+    readonly MemoryStream _stream = new();
     readonly ILogger _logger;
 
     public IL2NESWriterTests(ITestOutputHelper output)
     {
         _logger = new XUnitLogger(output);
         using var s = Utilities.GetResource("hello.nes");
-        data = new byte[s.Length];
-        s.Read(data, 0, data.Length);
+        _data = new byte[s.Length];
+        s.Read(_data, 0, _data.Length);
     }
 
     IL2NESWriter GetWriter(byte[]? PRG_ROM = null, byte[]? CHR_ROM = null)
     {
-        stream.SetLength(0);
+        _stream.SetLength(0);
 
-        return new IL2NESWriter(stream, leaveOpen: true, logger: _logger)
+        return new IL2NESWriter(_stream, leaveOpen: true, logger: _logger)
         {
             PRG_ROM = PRG_ROM,
             CHR_ROM = CHR_ROM,
@@ -92,9 +92,9 @@ public class IL2NESWriterTests
         writer.Write(new ushort[] { nmi_data, reset_data, irq_data });
 
         // Use CHR_ROM from hello.nes
-        writer.Write(data, (int)writer.Length, NESWriter.CHR_ROM_BLOCK_SIZE);
+        writer.Write(_data, (int)writer.Length, NESWriter.CHR_ROM_BLOCK_SIZE);
 
-        AssertEx.Equal(data, writer);
+        AssertEx.Equal(_data, writer);
     }
 
     [Fact]
@@ -152,7 +152,7 @@ public class IL2NESWriterTests
         writer.Write(ILOpCode.Ldc_i4_s, 64, sizeOfMain);
         writer.Write(ILOpCode.Newarr, 16777235, sizeOfMain);
         writer.Write(ILOpCode.Dup, sizeOfMain);
-        writer.Write(ILOpCode.Ldtoken, ImmutableArray.Create(new byte[] {
+        writer.Write(ILOpCode.Ldtoken, [
           0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // rows 0-3
           0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55, // rows 4-7
           0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, // rows 8-11
@@ -161,19 +161,19 @@ public class IL2NESWriterTests
           0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, // rows 20-23
           0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, // rows 24-27
           0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f  // rows 28-29
-        }), sizeOfMain);
+        ], sizeOfMain);
         writer.Write(ILOpCode.Stloc_0, sizeOfMain);
         writer.Write(ILOpCode.Ldc_i4_s, 16, sizeOfMain);
         writer.Write(ILOpCode.Newarr, 16777235, sizeOfMain);
         writer.Write(ILOpCode.Dup, sizeOfMain);
-        writer.Write(ILOpCode.Ldtoken, ImmutableArray.Create(new byte[] {
+        writer.Write(ILOpCode.Ldtoken, [
           0x03,			// screen color
 
           0x11,0x30,0x27,0x0,	// background palette 0
           0x1c,0x20,0x2c,0x0,	// background palette 1
           0x00,0x10,0x20,0x0,	// background palette 2
           0x06,0x16,0x26        // background palette 3
-        }), sizeOfMain);
+        ], sizeOfMain);
         writer.Write(ILOpCode.Call, nameof(NESLib.pal_bg), sizeOfMain);
         writer.Write(ILOpCode.Ldc_i4, 0x2000, sizeOfMain);
         writer.Write(ILOpCode.Call, nameof(NESLib.vram_adr), sizeOfMain);
