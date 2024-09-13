@@ -17,6 +17,8 @@
     <InternalsVisibleTo Include="dotnes.tests" />
     <PackageReference Include="Microsoft.Build.Tasks.Core" Version="17.11.4" />
     <PackageReference Include="Microsoft.Build.Utilities.Core" Version="17.11.4" />
+    <!-- Fixes a NuGet security warning -->
+    <PackageReference Include="System.Formats.Asn1" Version="8.0.1" />
     <PackageReference Include="System.Reflection.Metadata" Version="8.0.0" />
     <None Update="Targets\*" CopyToOutputDirectory="PreserveNewest" TargetPath="%(FileName)%(Extension)" />
   </ItemGroup>
