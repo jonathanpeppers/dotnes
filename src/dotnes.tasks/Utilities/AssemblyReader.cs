@@ -33,7 +33,7 @@ public class AssemblyReader : IDisposable
         string line;
         do
         {
-            line = reader.ReadLine();
+            line = reader.ReadLine()!;
 
             // Blank or comments
             if (string.IsNullOrEmpty(line) || line[0] == ';')
