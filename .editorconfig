@@ -4,6 +4,10 @@ root = true
 [*]
 indent_style = space
 
+# Visual Studio Spell Checker
+spelling_exclusion_path = .\exclusion.dic
+spelling_languages = en-us
+
 # Xml files
 [*.xml]
 indent_size = 2
