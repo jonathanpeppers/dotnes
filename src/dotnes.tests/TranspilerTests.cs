@@ -93,20 +93,19 @@ ILInstruction { OpCode = Br_s, Integer = 254, String = , Bytes =  }";
     [InlineData("onelocal", false)]
     [InlineData("onelocalbyte", true)]
     [InlineData("onelocalbyte", false)]
-    public void Write(string name, bool debug)
+    public Task Write(string name, bool debug)
     {
         var configuration = debug ? "debug" : "release";
-        using var rom = Utilities.GetResource($"{name}.nes");
-        var expected = new byte[rom.Length];
-        rom.Read(expected, 0, expected.Length);
-
         var chr_generic = new StreamReader(Utilities.GetResource("chr_generic.s"));
 
         using var dll = Utilities.GetResource($"{name}.{configuration}.dll");
-        using var il = new Transpiler(dll, new[] { new AssemblyReader(chr_generic) }, _logger);
+        using var il = new Transpiler(dll, [new AssemblyReader(chr_generic)], _logger);
         using var ms = new MemoryStream();
         il.Write(ms);
 
-        AssertEx.Equal(expected, ms.ToArray());
+        var settings = new VerifySettings();
+        settings.DisableRequireUniquePrefix();
+        settings.UseFileName($"TranspilerTests.Write.{name}");
+        return Verify(ms.ToArray(), settings);
     }
 }
