@@ -36,12 +36,7 @@ logger.WriteStatus($"Target Path: {targetPath}");
 logger.WriteStatus($"Assembly File: {assemblyFile}");
 logger.WriteStatus($"Output Path: {outputPath}");
 
-var transpiler = new TranspileToNES
-{
-    DiagnosticLogging = true,
-    AssemblyFiles = [assemblyFile],
-    TargetPath = targetPath,
-    OutputPath = outputPath,
-    Logger = logger
-};
-transpiler.Execute();
+using var input = File.OpenRead(targetPath);
+using var output = File.Create(outputPath);
+using var transpiler = new Transpiler(input, [ new AssemblyReader (assemblyFile) ], logger);
+transpiler.Write(output);

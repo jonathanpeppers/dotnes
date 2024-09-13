@@ -1,18 +1,10 @@
 <Project Sdk="Microsoft.Build.NoTargets">
+  <Import Project="../NuGet.props" />
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
-    <OutputPath>../../bin/$(Configuration)/</OutputPath>
-    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
-    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
-    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <Description>.NET for the NES game console: 'dotnet new nes' project templates</Description>
-    <Authors>Jonathan Peppers</Authors>
-    <PackageProjectUrl>https://github.com/jonathanpeppers/dotnes</PackageProjectUrl>
     <PackageType>Template</PackageType>
-    <PackageTags>.NET C# NES</PackageTags>
     <PackageLicenseFile>LICENSE</PackageLicenseFile>
-    <PackageReadmeFile>README.md</PackageReadmeFile>
-    <PackageIcon>dotnes.png</PackageIcon>
     <IncludeContentInPack>true</IncludeContentInPack>
     <IncludeBuildOutput>false</IncludeBuildOutput>
     <ContentTargetFolders>content</ContentTargetFolders>
@@ -24,8 +16,6 @@
   </PropertyGroup>
   <ItemGroup>
     <None Include="../../LICENSE" Pack="true" PackagePath="" />
-    <None Include="../../README.md" Pack="true" PackagePath="" />
-    <None Include="../../assets/Transparent/dotnes.png" Pack="true" PackagePath="" />
     <Content Include="templates/**/*" />
     <Content Include="../../samples/hello/*.s" PackagePath="content/templates/nes" />
     <Content Include="../../samples/hello/*.cs" PackagePath="content/templates/nes" />

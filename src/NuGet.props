@@ -1,0 +1,20 @@
+<Project>
+  <PropertyGroup>
+    <OutputPath>../../bin/$(Configuration)/</OutputPath>
+    <Description>.NET for the NES game console: a toy project for creating 6502 NES applications in C#</Description>
+    <Authors>Jonathan Peppers</Authors>
+    <PackageProjectUrl>https://github.com/jonathanpeppers/dotnes</PackageProjectUrl>
+    <PackageTags>.NET C# NES</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageIcon>dotnes.png</PackageIcon>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="$(MSBuildThisFileDirectory)../README.md" Pack="true" PackagePath="" />
+    <None Include="$(MSBuildThisFileDirectory)../assets/Transparent/dotnes.png" Pack="true" PackagePath="" />
+  </ItemGroup>
+  <Target Name="_ClearNuGetCache" BeforeTargets="Build">
+    <RemoveDir Directories="$(MSBuildThisFileDirectory)../../samples/packages/$(PackageId)" />
+  </Target>
+</Project>
