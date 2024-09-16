@@ -93,7 +93,7 @@ public class IL2NESWriterTests
     [Fact]
     public void Write_Main_hello()
     {
-        const ushort sizeOfMain = 0x4B;
+        const ushort sizeOfMain = 0x43;
         using var writer = GetWriter();
 
         // pal_col(0, 0x02);
@@ -136,19 +136,19 @@ public class IL2NESWriterTests
         var expected = Utilities.ToByteArray(
             """
             A900    ; LDA #$00
-            20AA85  ; JSR pusha
+            20A285  ; JSR pusha
             A902    ; LDA #$02
             203E82  ; JSR pal_col
             A901    ; LDA #$01
-            20AA85  ; JSR pusha
+            20A285  ; JSR pusha
             A914    ; LDA #$14
             203E82  ; JSR pal_col
             A902    ; LDA #$02
-            20AA85  ; JSR pusha
+            20A285  ; JSR pusha
             A920    ; LDA #$20
             203E82  ; JSR pal_col
             A903    ; LDA #$03
-            20AA85  ; JSR pusha
+            20A285  ; JSR pusha
             A930    ; LDA #$30
             203E82  ; JSR pal_col
             A220    ; LDX #$20
@@ -156,12 +156,12 @@ public class IL2NESWriterTests
             20D483  ; JSR vram_adr
             A9F1    ; LDA #$F1
             A285    ; LDX #$85
-            20C085  ; JSR pushax
+            20B885  ; JSR pushax
             A200    ; LDX #$00
             A90C    ; LDA #$0C
             204F83  ; JSR vram_write
             208982  ; JSR ppu_on_all
-            4C4885  ; JMP $8548
+            4C4085  ; JMP $8548
             """);
         AssertEx.Equal(expected, writer);
     }
