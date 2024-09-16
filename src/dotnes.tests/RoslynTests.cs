@@ -4,6 +4,9 @@ using Xunit.Abstractions;
 
 namespace dotnes.tests;
 
+/// <summary>
+/// A set of tests to assert a short C# program -> 6502 assembly result
+/// </summary>
 public class RoslynTests
 {
     readonly MemoryStream _stream = new();
@@ -31,7 +34,7 @@ public class RoslynTests
                 [syntaxTree],
                 references: references,
                 options: new CSharpCompilationOptions(OutputKind.ConsoleApplication,
-                    optimizationLevel: OptimizationLevel.Debug,
+                    optimizationLevel: OptimizationLevel.Release,
                     deterministic: true));
 
         var emitResults = compilation.Emit(_stream);
@@ -52,12 +55,14 @@ public class RoslynTests
     /// </summary>
     class RoslynTranspiler : Transpiler
     {
+        readonly ILogger _logger;
         readonly MemoryStream _stream = new();
         readonly IL2NESWriter _writer;
 
         public RoslynTranspiler(Stream stream, ILogger logger)
             : base(stream, [new AssemblyReader(new StreamReader(Utilities.GetResource("chr_generic.s")))])
         {
+            _logger = logger;
             _writer = new(_stream, leaveOpen: true, logger);
         }
 
@@ -68,6 +73,8 @@ public class RoslynTests
 
             foreach (var instruction in ReadStaticVoidMain())
             {
+                _logger.WriteLine($"{instruction}");
+
                 if (instruction.Integer != null)
                 {
                     _writer.Write(instruction.OpCode, instruction.Integer.Value, sizeOfMain);
@@ -110,19 +117,19 @@ public class RoslynTests
             expectedAssembly:
                 """
                 A900    ; LDA #$00
-                20AA85  ; JSR pusha
+                20A285  ; JSR pusha
                 A902    ; LDA #$02
                 203E82  ; JSR pal_col
                 A901    ; LDA #$01
-                20AA85  ; JSR pusha
+                20A285  ; JSR pusha
                 A914    ; LDA #$14
                 203E82  ; JSR pal_col
                 A902    ; LDA #$02
-                20AA85  ; JSR pusha
+                20A285  ; JSR pusha
                 A920    ; LDA #$20
                 203E82  ; JSR pal_col
                 A903    ; LDA #$03
-                20AA85  ; JSR pusha
+                20A285  ; JSR pusha
                 A930    ; LDA #$30
                 203E82  ; JSR pal_col
                 A220    ; LDX #$20
@@ -130,15 +137,12 @@ public class RoslynTests
                 20D483  ; JSR vram_adr
                 A9F1    ; LDA #$F1
                 A285    ; LDX #$85
-                20C085  ; JSR pushax
+                20B885  ; JSR pushax
                 A200    ; LDX #$00
                 A90C    ; LDA #$0C
                 204F83  ; JSR vram_write
-                2089A9  ; JSR ppu_on_all
-                018D    ; ???
-                2403A9  ; ???
-                22A286  ; ???
-                4C4885  ; JMP $8548
+                208982  ; JSR ppu_on_all
+                4C4085  ; JMP $8540
                 """);
     }
 }
