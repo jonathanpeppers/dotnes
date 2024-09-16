@@ -5,7 +5,7 @@ namespace dotnes.tests;
 public class NESWriterTests
 {
     const ushort SizeOfMain = 67;
-    readonly MemoryStream _stream = new MemoryStream();
+    readonly MemoryStream _stream = new();
     readonly ILogger _logger;
 
     public NESWriterTests(ITestOutputHelper output)
