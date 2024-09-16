@@ -353,6 +353,8 @@ class IL2NESWriter : NESWriter
                 return 0x82AB;
             case nameof(scroll):
                 return 0x82FB;
+            case nameof(oam_spr):
+                return 0x86DF;
             default:
                 throw new NotImplementedException($"{nameof(GetAddress)} for {name} is not implemented!");
         }
