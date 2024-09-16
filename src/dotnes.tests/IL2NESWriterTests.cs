@@ -7,16 +7,12 @@ namespace dotnes.tests;
 
 public class IL2NESWriterTests
 {
-    readonly byte[] _data;
     readonly MemoryStream _stream = new();
     readonly ILogger _logger;
 
     public IL2NESWriterTests(ITestOutputHelper output)
     {
         _logger = new XUnitLogger(output);
-        using var s = Utilities.GetResource("hello.nes");
-        _data = new byte[s.Length];
-        s.Read(_data, 0, _data.Length);
     }
 
     IL2NESWriter GetWriter(byte[]? PRG_ROM = null, byte[]? CHR_ROM = null)
@@ -31,7 +27,7 @@ public class IL2NESWriterTests
     }
 
     [Fact]
-    public void Write_static_void_Main()
+    public Task Write_static_void_Main()
     {
         const ushort sizeOfMain = 0x43;
         using var writer = GetWriter();
@@ -91,10 +87,7 @@ public class IL2NESWriterTests
         ushort irq_data = 0x8202;
         writer.Write(new ushort[] { nmi_data, reset_data, irq_data });
 
-        // Use CHR_ROM from hello.nes
-        writer.Write(_data, (int)writer.Length, NESWriter.CHR_ROM_BLOCK_SIZE);
-
-        AssertEx.Equal(_data, writer);
+        return Verify(_stream.ToArray());
     }
 
     [Fact]
