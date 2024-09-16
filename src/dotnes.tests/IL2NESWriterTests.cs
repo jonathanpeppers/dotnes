@@ -93,7 +93,7 @@ public class IL2NESWriterTests
     [Fact]
     public void Write_Main_hello()
     {
-        const ushort sizeOfMain = 0x43;
+        const ushort sizeOfMain = 0x4B;
         using var writer = GetWriter();
 
         // pal_col(0, 0x02);
@@ -133,7 +133,7 @@ public class IL2NESWriterTests
         // while (true) ;
         writer.Write(ILOpCode.Br_s, 254, sizeOfMain);
 
-        var expected = Utilities.ToByteArray("A900 20A285 A902 203E82 A901 20A285 A914 203E82 A902 20A285 A920 203E82 A903 20A285 A930 203E82 A220 A942 20D483 A9F1 A285 20B885 A200 A90C 204F83 208982 4C4085");
+        var expected = Utilities.ToByteArray("A900 20AA85 A902 203E82 A901 20AA85 A914 203E82 A902 20AA85 A920 203E82 A903 20AA85 A930 203E82 A220 A942 20D483 A9F1 A285 20C085 A200 A90C 204F83 208982 4C4885");
         AssertEx.Equal(expected, writer);
     }
 

@@ -35,35 +35,7 @@ class Transpiler : IDisposable
         _logger.WriteLine($"First pass...");
 
         // Generate static void main in a first pass, so we know the size of the program
-        ushort sizeOfMain;
-        byte locals;
-        using (var mainWriter = new IL2NESWriter(new MemoryStream(), logger: _logger))
-        {
-            foreach (var instruction in ReadStaticVoidMain())
-            {
-                _logger.WriteLine($"{instruction}");
-
-                if (instruction.Integer != null)
-                {
-                    mainWriter.Write(instruction.OpCode, instruction.Integer.Value, sizeOfMain: 0);
-                }
-                else if (instruction.String != null)
-                {
-                    mainWriter.Write(instruction.OpCode, instruction.String, sizeOfMain: 0);
-                }
-                else if (instruction.Bytes != null)
-                {
-                    mainWriter.Write(instruction.OpCode, instruction.Bytes.Value, sizeOfMain: 0);
-                }
-                else
-                {
-                    mainWriter.Write(instruction.OpCode, sizeOfMain: 0);
-                }
-            }
-            mainWriter.Flush();
-            sizeOfMain = checked((ushort)mainWriter.BaseStream.Length);
-            locals = checked((byte)mainWriter.LocalCount);
-        }
+        FirstPass(out ushort sizeOfMain, out byte locals);
 
         _logger.WriteLine($"Size of main: {sizeOfMain}");
 
@@ -78,27 +50,7 @@ class Transpiler : IDisposable
 
         // Write static void main *again*, second pass
         // With a known value for sizeOfMain
-        foreach (var instruction in ReadStaticVoidMain())
-        {
-            _logger.WriteLine($"{instruction}");
-
-            if (instruction.Integer != null)
-            {
-                writer.Write(instruction.OpCode, instruction.Integer.Value, sizeOfMain);
-            }
-            else if (instruction.String != null)
-            {
-                writer.Write(instruction.OpCode, instruction.String, sizeOfMain);
-            }
-            else if (instruction.Bytes != null)
-            {
-                writer.Write(instruction.OpCode, instruction.Bytes.Value, sizeOfMain);
-            }
-            else
-            {
-                writer.Write(instruction.OpCode, sizeOfMain);
-            }
-        }
+        SecondPass(sizeOfMain, writer);
 
         // NOTE: not sure if string or byte[] is first
         _logger.WriteLine($"Writing string/byte[] table...");
@@ -167,6 +119,67 @@ class Transpiler : IDisposable
             }
         }
         writer.Flush();
+    }
+
+    /// <summary>
+    /// Generate static void main in a first pass, so we know the size of the program
+    /// </summary>
+    protected virtual void FirstPass(out ushort sizeOfMain, out byte locals)
+    {
+        using var mainWriter = new IL2NESWriter(new MemoryStream(), logger: _logger);
+        foreach (var instruction in ReadStaticVoidMain())
+        {
+            _logger.WriteLine($"{instruction}");
+
+            if (instruction.Integer != null)
+            {
+                mainWriter.Write(instruction.OpCode, instruction.Integer.Value, sizeOfMain: 0);
+            }
+            else if (instruction.String != null)
+            {
+                mainWriter.Write(instruction.OpCode, instruction.String, sizeOfMain: 0);
+            }
+            else if (instruction.Bytes != null)
+            {
+                mainWriter.Write(instruction.OpCode, instruction.Bytes.Value, sizeOfMain: 0);
+            }
+            else
+            {
+                mainWriter.Write(instruction.OpCode, sizeOfMain: 0);
+            }
+        }
+        mainWriter.Flush();
+        sizeOfMain = checked((ushort)mainWriter.BaseStream.Length);
+        locals = checked((byte)mainWriter.LocalCount);
+    }
+
+    /// <summary>
+    /// Write static void main *again*, second pass
+    /// With a known value for sizeOfMain
+    /// </summary>
+    protected virtual void SecondPass(ushort sizeOfMain, IL2NESWriter writer)
+    {
+        foreach (var instruction in ReadStaticVoidMain())
+        {
+            _logger.WriteLine($"{instruction}");
+
+            if (instruction.Integer != null)
+            {
+                writer.Write(instruction.OpCode, instruction.Integer.Value, sizeOfMain);
+            }
+            else if (instruction.String != null)
+            {
+                writer.Write(instruction.OpCode, instruction.String, sizeOfMain);
+            }
+            else if (instruction.Bytes != null)
+            {
+                writer.Write(instruction.OpCode, instruction.Bytes.Value, sizeOfMain);
+            }
+            else
+            {
+                writer.Write(instruction.OpCode, sizeOfMain);
+            }
+        }
     }
 
     /// <summary>

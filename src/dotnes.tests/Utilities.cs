@@ -1,4 +1,6 @@
-﻿namespace dotnes.tests;
+﻿using System.Text;
+
+namespace dotnes.tests;
 
 class Utilities
 {
@@ -13,8 +15,24 @@ class Utilities
     public static byte[] ToByteArray(string text)
     {
         ArgumentNullException.ThrowIfNull(text);
-        text = text.Replace(" ", "").Replace("\n", "").Replace("\r", "").Replace("\t", "");
 
+        var builder = new StringBuilder();
+        using var reader = new StringReader(text);
+        while (reader.Peek() != -1)
+        {
+            var line = reader.ReadLine();
+            if (line == null)
+                break;
+
+            int comment = line.IndexOf(';');
+            if (comment != -1)
+            {
+                line = line[..comment];
+            }
+            builder.Append(line.Replace(" ", "").Replace("\n", "").Replace("\r", "").Replace("\t", ""));
+        }
+
+        text = builder.ToString();
         int length = text.Length >> 1;
         var bytes = new byte[length];
         for (int i = 0; i < length; i++)
