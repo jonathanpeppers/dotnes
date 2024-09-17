@@ -12,12 +12,9 @@
     0x0d,0x27,0x2a	// sprite palette 3
 };
 
-oam_clear();
 pal_all(PALETTE);
+oam_clear();
+oam_spr(40, 40, 0x10, 3, 0);
 ppu_on_all();
 
-while (true)
-{
-    oam_spr(40, 40, 0x10, 3, 0);
-    ppu_wait_frame();
-}
+while (true) ;

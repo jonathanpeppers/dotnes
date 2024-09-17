@@ -320,6 +320,11 @@ class NESWriter(Stream stream, bool leaveOpen = false, ILogger? logger = null) :
     {
         Write_donelib(totalSize);
         Write_copydata(totalSize);
+        // decsp4 is optional
+        if (UsedMethods is not null && UsedMethods.Contains(nameof(NESLib.oam_spr)))
+        {
+            Write_decsp4();
+        }
         Write_popax();
         Write_incsp2();
         Write_popa();
@@ -328,12 +333,9 @@ class NESWriter(Stream stream, bool leaveOpen = false, ILogger? logger = null) :
         Write_zerobss(locals);
 
         // List of optional methods at the end
-        if (UsedMethods is not null)
+        if (UsedMethods is not null && UsedMethods.Contains(nameof(NESLib.oam_spr)))
         {
-            if (UsedMethods.Contains(nameof(NESLib.oam_spr)))
-            {
-                WriteBuiltIn(nameof(NESLib.oam_spr), totalSize);
-            }
+            WriteBuiltIn(nameof(NESLib.oam_spr), totalSize);
         }
     }
 
@@ -1673,6 +1675,28 @@ class NESWriter(Stream stream, bool leaveOpen = false, ILogger? logger = null) :
         Write(NESInstruction.BNE_rel, 0xF0);
         Write(NESInstruction.INC_zpg, tmp1);
         Write(NESInstruction.BNE_rel, 0xEF);
+        Write(NESInstruction.RTS_impl);
+    }
+
+    void Write_decsp4()
+    {
+        /*
+         * 8563	A522          	LDA sp                        ; decsp4
+         * 8565	38            	SEC                           
+         * 8566	E904          	SBC #$04                      
+         * 8568	8522          	STA sp                        
+         * 856A	9001          	BCC $856D                     
+         * 856C	60            	RTS                           
+         * 856D	C623          	DEC sp+1                      
+         * 856F	60            	RTS
+         */
+        Write(NESInstruction.LDA_zpg, sp);
+        Write(NESInstruction.SEC_impl);
+        Write(NESInstruction.SBC, NAME_UPD_ADR);
+        Write(NESInstruction.STA_zpg, sp);
+        Write(NESInstruction.BCC, 1);
+        Write(NESInstruction.RTS_impl);
+        Write(NESInstruction.DEC_zpg, sp + 1);
         Write(NESInstruction.RTS_impl);
     }
 

@@ -252,7 +252,7 @@ class IL2NESWriter : NESWriter
                         Stack.Push(address);
                         break;
                     default:
-                        Write(NESInstruction.JSR, GetAddress(operand));
+                        Write(NESInstruction.JSR, GetAddress(operand, sizeOfMain));
                         break;
                 }
                 // Pop N times
@@ -305,7 +305,7 @@ class IL2NESWriter : NESWriter
         }
     }
 
-    static ushort GetAddress(string name)
+    static ushort GetAddress(string name, ushort sizeOfMain)
     {
         switch (name)
         {
@@ -364,7 +364,7 @@ class IL2NESWriter : NESWriter
             case nameof(scroll):
                 return 0x82FB;
             case nameof(oam_spr):
-                return 0x86DF;
+                return (ushort)(0x858C + sizeOfMain);
             default:
                 throw new NotImplementedException($"{nameof(GetAddress)} for {name} is not implemented!");
         }

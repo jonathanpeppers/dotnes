@@ -217,23 +217,19 @@ public class RoslynTests
                     0x0d,0x2d,0x3a,0x0,
                     0x0d,0x27,0x2a
                 };
-                oam_clear();
                 pal_all(PALETTE);
+                oam_clear();
+                oam_spr(40, 40, 0x10, 3, 0);
                 ppu_on_all();
-                while (true)
-                {
-                    oam_spr(40, 40, 0x10, 3, 0);
-                    ppu_wait_frame();
-                }
+                while (true) ;
                 """,
             expectedAssembly:
                 """
-                20AE82  ; JSR oam_clear
-                A9E5
-                A286
+                A9D7
+                A285
                 201182  ; JSR pal_all
-                208982  ; JSR ppu_on_all
-                206786  ; JSR decsp4
+                20AE82  ; JSR oam_clear
+                ;206385  ; JSR decsp4
                 A928
                 A003
                 9122
@@ -246,9 +242,10 @@ public class RoslynTests
                 88
                 9122
                 98
-                20B986  ; JSR _oam_spr
-                20DB82  ; JSR _ppu_wait_frame
-                4C0D85  ; JMP $850D
+                00 00   ; ?
+                20B585  ; JSR oam_spr
+                208982  ; JSR ppu_on_all
+                4C2785  ; JMP $8527
                 """);
     }
 }
