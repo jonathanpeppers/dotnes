@@ -436,7 +436,7 @@ class IL2NESWriter : NESWriter
 
     void WriteLdc(ushort operand, ushort sizeOfMain)
     {
-        if (LastLDA)
+        if (Stack.Count > 0)
         {
             Write(NESInstruction.JSR, pusha.GetAddressAfterMain(sizeOfMain));
         }
@@ -447,7 +447,7 @@ class IL2NESWriter : NESWriter
 
     void WriteLdc(byte operand, ushort sizeOfMain)
     {
-        if (LastLDA)
+        if (Stack.Count > 0)
         {
             Write(NESInstruction.JSR, pusha.GetAddressAfterMain(sizeOfMain));
         }

@@ -74,8 +74,6 @@ class NESWriter(Stream stream, bool leaveOpen = false, ILogger? logger = null) :
     protected readonly BinaryWriter _writer = new(stream, Encoding, leaveOpen);
     protected readonly ILogger _logger = logger ?? new NullLogger();
 
-    public bool LastLDA { get; private set; }
-
     public Stream BaseStream => _writer.BaseStream;
 
     /// <summary>
@@ -168,13 +166,11 @@ class NESWriter(Stream stream, bool leaveOpen = false, ILogger? logger = null) :
 
     public void Write(byte[] buffer)
     {
-        LastLDA = false;
         _writer.Write(buffer);
     }
 
     public void Write(ushort[] buffer)
     {
-        LastLDA = false;
         for (int i = 0; i < buffer.Length; i++)
         {
             _writer.Write(buffer[i]);
@@ -183,7 +179,6 @@ class NESWriter(Stream stream, bool leaveOpen = false, ILogger? logger = null) :
 
     public void Write(byte[] buffer, int index, int count)
     {
-        LastLDA = false;
         _writer.Write(buffer, index, count);
     }
 
@@ -192,7 +187,6 @@ class NESWriter(Stream stream, bool leaveOpen = false, ILogger? logger = null) :
     /// </summary>
     public void WriteString(string text)
     {
-        LastLDA = false;
         int length = Encoding.GetByteCount(text);
         var bytes = ArrayPool<byte>.Shared.Rent(length);
         try
@@ -1853,7 +1847,6 @@ class NESWriter(Stream stream, bool leaveOpen = false, ILogger? logger = null) :
     /// </summary>
     public void Write(NESInstruction i)
     {
-        LastLDA = i == NESInstruction.LDA;
         _logger.WriteLine($"{i}({(int)i:X})");
         _writer.Write((byte)i);
     }
@@ -1863,7 +1856,6 @@ class NESWriter(Stream stream, bool leaveOpen = false, ILogger? logger = null) :
     /// </summary>
     public void Write (NESInstruction i, byte @byte)
     {
-        LastLDA = i == NESInstruction.LDA;
         _logger.WriteLine($"{i}({(int)i:X}) {@byte:X}");
         _writer.Write((byte)i);
         _writer.Write(@byte);
@@ -1874,7 +1866,6 @@ class NESWriter(Stream stream, bool leaveOpen = false, ILogger? logger = null) :
     /// </summary>
     public void Write(NESInstruction i, ushort address)
     {
-        LastLDA = i == NESInstruction.LDA;
         _logger.WriteLine($"{i}({(int)i:X}) {address:X}");
         _writer.Write((byte)i);
         _writer.Write(address);
