@@ -61,6 +61,10 @@ class IL2NESWriter : NESWriter
                 if (Stack.Count > 0)
                     Stack.Push(Stack.Peek());
                 break;
+            case ILOpCode.Pop:
+                if (Stack.Count > 0)
+                    Stack.Pop();
+                break;
             case ILOpCode.Ldc_i4_0:
                 WriteLdc(0, sizeOfMain);
                 break;
