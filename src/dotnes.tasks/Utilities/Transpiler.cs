@@ -106,7 +106,7 @@ class Transpiler : IDisposable
         ushort nmi_data = 0x80BC;
         ushort reset_data = 0x8000;
         ushort irq_data = 0x8202;
-        writer.Write(new ushort[] { nmi_data, reset_data, irq_data });
+        writer.Write([nmi_data, reset_data, irq_data]);
 
         _logger.WriteLine($"Writing chr_rom...");
         writer.Write(chr_rom.Bytes);
