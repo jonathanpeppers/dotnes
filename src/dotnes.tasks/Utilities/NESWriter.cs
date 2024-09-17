@@ -74,7 +74,7 @@ class NESWriter(Stream stream, bool leaveOpen = false, ILogger? logger = null) :
     protected readonly BinaryWriter _writer = new(stream, Encoding, leaveOpen);
     protected readonly ILogger _logger = logger ?? new NullLogger();
 
-    public bool LastLDA { get; private set; }
+    public bool LastLDA { get; protected set; }
 
     public Stream BaseStream => _writer.BaseStream;
 
