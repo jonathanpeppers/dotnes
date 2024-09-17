@@ -125,6 +125,11 @@ class NESWriter(Stream stream, bool leaveOpen = false, ILogger? logger = null) :
 
     public long Length => _writer.BaseStream.Length;
 
+    /// <summary>
+    /// A list of methods that were found to be used in the IL code
+    /// </summary>
+    public HashSet<string>? UsedMethods { get; set; }
+
     public void WriteHeader(byte PRG_ROM_SIZE = 0, byte CHR_ROM_SIZE = 0)
     {
         _writer.Write('N');
@@ -321,6 +326,15 @@ class NESWriter(Stream stream, bool leaveOpen = false, ILogger? logger = null) :
         Write_pusha();
         Write_pushax();
         Write_zerobss(locals);
+
+        // List of optional methods at the end
+        if (UsedMethods is not null)
+        {
+            if (UsedMethods.Contains(nameof(NESLib.oam_spr)))
+            {
+                WriteBuiltIn(nameof(NESLib.oam_spr), totalSize);
+            }
+        }
     }
 
     /// <summary>
@@ -1047,6 +1061,61 @@ class NESWriter(Stream stream, bool leaveOpen = false, ILogger? logger = null) :
                 Write(NESInstruction.JSR, ppu_wait_nmi);
                 Write(NESInstruction.DEX_impl);
                 Write(NESInstruction.BNE_rel, 0xFA);
+                Write(NESInstruction.RTS_impl);
+                break;
+            case nameof(NESLib.oam_spr):
+                /*
+                * 85B7  AA              TAX         ; _oam_spr
+                * 85B8  A000            LDY  #$00
+                * 85BA  B122            LDA (sp),y
+                * 85BC  C8              INY
+                * 85BD  9D0202          STA $0202,x
+                * 85C0  B122            LDA (sp),y
+                * 85C2  C8              INY
+                * 85C3  9D0102          STA $0201,x
+                * 85C6  B122            LDA (sp),y
+                * 85C8  C8              INY
+                * 85C9  9D0002          STA $0200,x
+                * 85CC  B122            LDA (sp),y
+                * 85CE  9D0302          STA $0203,x
+                * 85D1  A522            LDA sp
+                * 85D3  18              CLC
+                * 85D4  6904            ADC #$04
+                * 85D6  8522            STA sp
+                * 85D8  9002            BCC @1
+                * 85DA  E623            INC sp+1
+                */
+                Write(NESInstruction.TAX_impl);
+                Write(NESInstruction.LDY, 0x00);
+                Write(NESInstruction.LDA_ind_Y, sp);
+                Write(NESInstruction.INY_impl);
+                Write(NESInstruction.STA_abs_X, OAM_BUF + 2);
+                Write(NESInstruction.LDA_ind_Y, sp);
+                Write(NESInstruction.INY_impl);
+                Write(NESInstruction.STA_abs_X, OAM_BUF + 1);
+                Write(NESInstruction.LDA_ind_Y, sp);
+                Write(NESInstruction.INY_impl);
+                Write(NESInstruction.STA_abs_X, OAM_BUF + 0);
+                Write(NESInstruction.LDA_ind_Y, sp);
+                Write(NESInstruction.STA_abs_X, OAM_BUF + 3);
+                Write(NESInstruction.LDA_zpg, sp);
+                Write(NESInstruction.CLC);
+                Write(NESInstruction.ADC, 0x04);
+                Write(NESInstruction.STA_zpg, sp);
+                Write(NESInstruction.BCC, 0x02);
+                Write(NESInstruction.INC_zpg, sp + 1);
+
+                /*
+                * 85DC  8A              TXA                           ; @1
+                * 85DD  18              CLC
+                * 85DE  6904            ADC #$04
+                * 85E0  A200            LDX #$00
+                * 85E2  60              RTS
+                */
+                Write(NESInstruction.TXA_impl);
+                Write(NESInstruction.CLC);
+                Write(NESInstruction.ADC, 0x04);
+                Write(NESInstruction.LDX, 0x00);
                 Write(NESInstruction.RTS_impl);
                 break;
             default:

@@ -276,4 +276,17 @@ public class NESWriterTests
 
         return Verify(_stream.ToArray());
     }
+
+    [Fact]
+    public Task WriteUsedMethods()
+    {
+        using var writer = GetWriter();
+        writer.UsedMethods = new HashSet<string>(StringComparer.Ordinal)
+        {
+            nameof(NESLib.oam_spr),
+        };
+        writer.WriteHeader(PRG_ROM_SIZE: 2, CHR_ROM_SIZE: 1);
+        writer.WriteFinalBuiltIns(SizeOfMain, locals: 4);
+        return Verify(_stream.ToArray());
+    }
 }
