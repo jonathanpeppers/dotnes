@@ -233,7 +233,8 @@ public class RoslynTests
                 """,
             expectedAssembly:
                 """
-                8D0003  ; STA __RAM_START__ This line is new
+                A955    ; LDA #$55
+                8D0003  ; STA __RAM_START__
                 A91C    ; LDA #$1C
                 A286    ; LDX #$86
                 202B82  ; JSR pal_bg

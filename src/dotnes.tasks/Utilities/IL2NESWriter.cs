@@ -150,6 +150,10 @@ class IL2NESWriter : NESWriter
             case ILOpCode.Conv_u8:
                 // Do nothing
                 break;
+            case ILOpCode.Stelem_i1:
+                // TODO: implement this right!
+                Write(NESInstruction.STA_abs, 0x300);
+                break;
             case ILOpCode.Add:
                 Stack.Push(Stack.Pop() + Stack.Pop());
                 break;
@@ -488,6 +492,7 @@ class IL2NESWriter : NESWriter
 
     void SeekBack(int length)
     {
+        LastLDA = false;
         _logger.WriteLine($"Seek back {length} bytes");
         if (_writer.BaseStream.Length < length)
         {
