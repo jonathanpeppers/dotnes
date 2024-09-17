@@ -1,6 +1,6 @@
 # .NES ("dot" NES)
 
-![dot NES logo](assets/logo.png)
+![dot NES logo](assets/Transparent/dotnes-ms.png)
 
 .NET for the NES game console!
 
@@ -134,7 +134,7 @@ Note that the method `NESLib.pal_col()` has no actual C# implementation. In
 fact! there is *only* a reference assembly even shipped in .NES:
 
 ```powershell
-> 7z l dotnes.0.1.0-alpha1.nupkg
+> 7z l dotnes.0.1.1-alpha.nupkg
    Date      Time    Attr         Size   Compressed  Name
 ------------------- ----- ------------ ------------  ------------------------
 2023-09-14 14:37:38 .....         8192         3169  ref\net8.0\neslib.dll

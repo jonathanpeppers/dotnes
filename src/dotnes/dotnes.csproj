@@ -1,17 +1,9 @@
 <Project Sdk="Microsoft.Build.NoTargets">
+  <Import Project="../NuGet.props" />
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
-    <OutputPath>../../bin/$(Configuration)/</OutputPath>
-    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
-    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
-    <Description>.NET for the NES game console: a toy project for creating 6502 NES applications in C#</Description>
-    <Authors>Jonathan Peppers</Authors>
-    <PackageProjectUrl>https://github.com/jonathanpeppers/dotnes</PackageProjectUrl>
-    <PackageTags>.NET C# NES</PackageTags>
-    <PackageLicenseFile>LICENSE</PackageLicenseFile>
-    <PackageReadmeFile>README.md</PackageReadmeFile>
-    <PackageIcon>logo.png</PackageIcon>
     <GenerateDependencyFile>false</GenerateDependencyFile>
+    <PackageLicenseFile>LICENSE</PackageLicenseFile>
     <NoWarn>$(NoWarn);NU5131</NoWarn>
   </PropertyGroup>
   <ItemGroup>
@@ -20,8 +12,6 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="../../LICENSE" Pack="true" PackagePath="" />
-    <None Include="../../README.md" Pack="true" PackagePath="" />
-    <None Include="../../assets/logo.png" Pack="true" PackagePath="" />
     <None Include="../dotnes.tasks/bin/$(Configuration)/netstandard2.0/dotnes.tasks.dll" Pack="true" PackagePath="build" />
     <None Include="../dotnes.tasks/bin/$(Configuration)/netstandard2.0/dotnes.tasks.pdb" Pack="true" PackagePath="build" />
     <None Include="../dotnes.tasks/bin/$(Configuration)/netstandard2.0/dotnes.props" Pack="true" PackagePath="build" />
@@ -32,7 +22,4 @@
     <None Include="../dotnes.tasks/bin/$(Configuration)/netstandard2.0/neslib.pdb" Pack="true" PackagePath="build" />
     <None Include="../neslib/bin/$(Configuration)/netstandard2.0/ref/neslib.dll" Pack="true" PackagePath="ref/net8.0" />
   </ItemGroup>
-  <Target Name="_ClearNuGetCache" BeforeTargets="Build">
-    <RemoveDir Directories="$(MSBuildThisFileDirectory)../../samples/packages/$(PackageId)" />
-  </Target>
 </Project>

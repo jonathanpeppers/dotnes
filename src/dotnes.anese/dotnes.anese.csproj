@@ -1,16 +1,12 @@
 <Project Sdk="Microsoft.Build.NoTargets">
+  <Import Project="../NuGet.props" />
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
-    <OutputPath>../../bin/$(Configuration)/</OutputPath>
-    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
-    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <Description>Redistribution of ANESE for use with .NES</Description>
-    <Authors>Daniel Prilik, Jonathan Peppers</Authors>
+    <Authors>Daniel Prilik, $(Authors)</Authors>
     <PackageProjectUrl>https://github.com/daniel5151/ANESE</PackageProjectUrl>
-    <PackageTags>.NET C# NES Emulator</PackageTags>
+    <PackageTags>$(PackageTags) Emulator</PackageTags>
     <PackageLicenseFile>LICENSE</PackageLicenseFile>
-    <PackageReadmeFile>README.md</PackageReadmeFile>
-    <PackageIcon>logo.png</PackageIcon>
     <PackageVersion>0.9.1</PackageVersion>
     <MacUrl>https://github.com/daniel5151/ANESE/releases/download/$(PackageVersion)/ANESE_$(PackageVersion)_macOS.zip</MacUrl>
     <WindowsUrl>https://github.com/daniel5151/ANESE/releases/download/$(PackageVersion)/ANESE_$(PackageVersion)_win.zip</WindowsUrl>
@@ -24,8 +20,6 @@
   </PropertyGroup>
   <ItemGroup>
     <None Update="@(None)" Pack="true" PackagePath="" />
-    <None Include="../../README.md" Pack="true" PackagePath="" />
-    <None Include="../../assets/logo.png" Pack="true" PackagePath="" />
     <_Downloads Include="$(IntermediateOutputPath)ANESE_$(PackageVersion)_win.zip" />
     <_Downloads Include="$(IntermediateOutputPath)ANESE_$(PackageVersion)_macOS.zip" />
     <_Downloads Include="$(IntermediateOutputPath)LICENSE" />
@@ -59,8 +53,5 @@
       <_PackageFiles Include="$(IntermediateOutputPath)win/SDL2.dll"  PackagePath="tools/win" />
       <_PackageFiles Include="$(IntermediateOutputPath)osx/anese.app/**/*" PackagePath="tools/osx/anese.app" />
     </ItemGroup>
-  </Target>
-  <Target Name="_ClearNuGetCache" BeforeTargets="Build">
-    <RemoveDir Directories="$(MSBuildThisFileDirectory)../../samples/packages/$(PackageId)" />
   </Target>
 </Project>

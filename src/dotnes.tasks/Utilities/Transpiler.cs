@@ -14,6 +14,11 @@ class Transpiler : IDisposable
     readonly IList<AssemblyReader> _assemblyFiles;
     readonly ILogger _logger;
 
+    /// <summary>
+    /// A list of methods that were found to be used in the IL code
+    /// </summary>
+    public HashSet<string> UsedMethods { get; private set; } = new(StringComparer.Ordinal);
+
     public Transpiler(Stream stream, IList<AssemblyReader> assemblyFiles, ILogger? logger = null)
     {
         _pe = new PEReader(stream);
@@ -35,40 +40,14 @@ class Transpiler : IDisposable
         _logger.WriteLine($"First pass...");
 
         // Generate static void main in a first pass, so we know the size of the program
-        ushort sizeOfMain;
-        byte locals;
-        var instructions = ReadStaticVoidMain().ToList();
-        using (var mainWriter = new IL2NESWriter(new MemoryStream(), logger: _logger))
-        {
-            foreach (var instruction in instructions)
-            {
-                _logger.WriteLine($"{instruction}");
-
-                if (instruction.Integer != null)
-                {
-                    mainWriter.Write(instruction.OpCode, instruction.Integer.Value, sizeOfMain: 0);
-                }
-                else if (instruction.String != null)
-                {
-                    mainWriter.Write(instruction.OpCode, instruction.String, sizeOfMain: 0);
-                }
-                else if (instruction.Bytes != null)
-                {
-                    mainWriter.Write(instruction.OpCode, instruction.Bytes.Value, sizeOfMain: 0);
-                }
-                else
-                {
-                    mainWriter.Write(instruction.OpCode, sizeOfMain: 0);
-                }
-            }
-            mainWriter.Flush();
-            sizeOfMain = checked((ushort)mainWriter.BaseStream.Length);
-            locals = checked((byte)mainWriter.LocalCount);
-        }
+        FirstPass(out ushort sizeOfMain, out byte locals);
 
         _logger.WriteLine($"Size of main: {sizeOfMain}");
 
-        using var writer = new IL2NESWriter(stream, logger: _logger);
+        using var writer = new IL2NESWriter(stream, logger: _logger)
+        {
+            UsedMethods = UsedMethods,
+        };
 
         _logger.WriteLine($"Writing header...");
         writer.WriteHeader(PRG_ROM_SIZE: 2, CHR_ROM_SIZE: 1);
@@ -79,27 +58,7 @@ class Transpiler : IDisposable
 
         // Write static void main *again*, second pass
         // With a known value for sizeOfMain
-        foreach (var instruction in instructions)
-        {
-            _logger.WriteLine($"{instruction}");
-
-            if (instruction.Integer != null)
-            {
-                writer.Write(instruction.OpCode, instruction.Integer.Value, sizeOfMain);
-            }
-            else if (instruction.String != null)
-            {
-                writer.Write(instruction.OpCode, instruction.String, sizeOfMain);
-            }
-            else if (instruction.Bytes != null)
-            {
-                writer.Write(instruction.OpCode, instruction.Bytes.Value, sizeOfMain);
-            }
-            else
-            {
-                writer.Write(instruction.OpCode, sizeOfMain);
-            }
-        }
+        SecondPass(sizeOfMain, writer);
 
         // NOTE: not sure if string or byte[] is first
         _logger.WriteLine($"Writing string/byte[] table...");
@@ -171,10 +130,75 @@ class Transpiler : IDisposable
     }
 
     /// <summary>
+    /// Generate static void main in a first pass, so we know the size of the program
+    /// </summary>
+    protected virtual void FirstPass(out ushort sizeOfMain, out byte locals)
+    {
+        using var mainWriter = new IL2NESWriter(new MemoryStream(), logger: _logger)
+        {
+            UsedMethods = UsedMethods,
+        };
+        foreach (var instruction in ReadStaticVoidMain())
+        {
+            _logger.WriteLine($"{instruction}");
+
+            if (instruction.Integer != null)
+            {
+                mainWriter.Write(instruction.OpCode, instruction.Integer.Value, sizeOfMain: 0);
+            }
+            else if (instruction.String != null)
+            {
+                mainWriter.Write(instruction.OpCode, instruction.String, sizeOfMain: 0);
+            }
+            else if (instruction.Bytes != null)
+            {
+                mainWriter.Write(instruction.OpCode, instruction.Bytes.Value, sizeOfMain: 0);
+            }
+            else
+            {
+                mainWriter.Write(instruction.OpCode, sizeOfMain: 0);
+            }
+        }
+        mainWriter.Flush();
+        sizeOfMain = checked((ushort)mainWriter.BaseStream.Length);
+        locals = checked((byte)mainWriter.LocalCount);
+    }
+
+    /// <summary>
+    /// Write static void main *again*, second pass
+    /// With a known value for sizeOfMain
+    /// </summary>
+    protected virtual void SecondPass(ushort sizeOfMain, IL2NESWriter writer)
+    {
+        foreach (var instruction in ReadStaticVoidMain())
+        {
+            _logger.WriteLine($"{instruction}");
+
+            if (instruction.Integer != null)
+            {
+                writer.Write(instruction.OpCode, instruction.Integer.Value, sizeOfMain);
+            }
+            else if (instruction.String != null)
+            {
+                writer.Write(instruction.OpCode, instruction.String, sizeOfMain);
+            }
+            else if (instruction.Bytes != null)
+            {
+                writer.Write(instruction.OpCode, instruction.Bytes.Value, sizeOfMain);
+            }
+            else
+            {
+                writer.Write(instruction.OpCode, sizeOfMain);
+            }
+        }
+    }
+
+    /// <summary>
     /// Based on: https://github.com/icsharpcode/ILSpy/blob/8c508d9bbbc6a21cc244e930122ff5bca19cd11c/ILSpy/Analyzers/Builtin/MethodUsesAnalyzer.cs#L51
     /// </summary>
     public IEnumerable<ILInstruction> ReadStaticVoidMain()
     {
+        GetUsedMethods(_reader);
         var arrayValues = GetArrayValues(_reader);
 
         foreach (var h in _reader.MethodDefinitions)
@@ -281,6 +305,39 @@ class Transpiler : IDisposable
                     yield return new ILInstruction(opCode, intValue, stringValue, byteValue);
                 }
             }
+        }
+    }
+
+    void GetUsedMethods(MetadataReader reader)
+    {
+        TypeReferenceHandle? neslib = null;
+
+        // Find the TypeReference to NES.NESLib
+        foreach (var t in reader.TypeReferences)
+        {
+            var type = reader.GetTypeReference(t);
+            string ns = reader.GetString(type.Namespace);
+            if (ns != nameof(NES))
+                continue;
+
+            string typeName = reader.GetString(type.Name);
+            if (typeName != nameof(NESLib))
+                continue;
+
+            neslib = t;
+            break;
+        }
+
+        if (neslib is null)
+            throw new InvalidOperationException("Did not find TypeReference to NES.NESLib!");
+
+        // Find any methods that are used in NES.NESLib
+        foreach (var m in reader.MemberReferences)
+        {
+            var member = reader.GetMemberReference(m);
+            if (member.Parent != neslib.Value)
+                continue;
+            UsedMethods.Add(reader.GetString(member.Name));
         }
     }
 

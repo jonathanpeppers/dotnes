@@ -4,24 +4,20 @@ namespace dotnes.tests;
 
 public class NESWriterTests
 {
-    const ushort sizeOfMain = 67;
-    readonly byte[] data;
-    readonly MemoryStream stream = new MemoryStream();
+    const ushort SizeOfMain = 67;
+    readonly MemoryStream _stream = new();
     readonly ILogger _logger;
 
     public NESWriterTests(ITestOutputHelper output)
     {
         _logger = new XUnitLogger(output);
-        using var s = Utilities.GetResource("hello.nes");
-        data = new byte[s.Length];
-        s.Read(data, 0, data.Length);
     }
 
     NESWriter GetWriter(byte[]? PRG_ROM = null, byte[]? CHR_ROM = null)
     {
-        stream.SetLength(0);
+        _stream.SetLength(0);
 
-        return new NESWriter(stream, leaveOpen: true, logger: _logger)
+        return new NESWriter(_stream, leaveOpen: true, logger: _logger)
         {
             PRG_ROM = PRG_ROM,
             CHR_ROM = CHR_ROM,
@@ -31,53 +27,18 @@ public class NESWriterTests
     void AssertInstructions(string assembly)
     {
         var expected = Utilities.ToByteArray(assembly);
-        var actual = stream.ToArray();
+        var actual = _stream.ToArray();
         Assert.Equal(expected, actual);
     }
 
-    /// <summary>
-    /// Just used to slice apart 'hello.nes' for use
-    /// </summary>
-    //[Fact]
-    //public void Slice()
-    //{
-    //    using var segment0 = File.Create("segment0.nes");
-    //    segment0.Write(data, 16, 0x510 - 16);
-    //    using var segment1 = File.Create("segment1.nes");
-    //    segment1.Write(data, 0x561, 0x601 - 0x561);
-    //    using var segment2 = File.Create("segment2.nes");
-    //    segment2.Write(data, 0x60F, 0x634 - 0x60F);
-    //    using var chr_rom = File.Create("CHR_ROM.nes");
-    //    chr_rom.Write(data, 16 + 2 * NESWriter.PRG_ROM_BLOCK_SIZE, NESWriter.CHR_ROM_BLOCK_SIZE);
-    //}
-
     [Fact]
-    public void WriteHeader()
+    public Task WriteHeader()
     {
         using var writer = GetWriter(new byte[2 * NESWriter.PRG_ROM_BLOCK_SIZE], new byte[NESWriter.CHR_ROM_BLOCK_SIZE]);
         writer.WriteHeader();
         writer.Flush();
 
-        var actual = stream.ToArray();
-        for (int i = 0; i < 16; i++)
-        {
-            Assert.Equal(data[i], actual[i]);
-        }
-    }
-
-    [Fact]
-    public void WriteFullROM()
-    {
-        using var writer = GetWriter(new byte[2 * NESWriter.PRG_ROM_BLOCK_SIZE], new byte[NESWriter.CHR_ROM_BLOCK_SIZE]);
-        ArgumentNullException.ThrowIfNull(writer.PRG_ROM, nameof(writer.PRG_ROM));
-        ArgumentNullException.ThrowIfNull(writer.CHR_ROM, nameof(writer.CHR_ROM));
-
-        Array.Copy(data, 16, writer.PRG_ROM, 0, writer.PRG_ROM.Length);
-        Array.Copy(data, 16 + 2 * NESWriter.PRG_ROM_BLOCK_SIZE, writer.CHR_ROM, 0, writer.CHR_ROM.Length);
-
-        writer.Write();
-
-        AssertEx.Equal(data, writer);
+        return Verify(_stream.ToArray());
     }
 
     [Fact]
@@ -106,7 +67,7 @@ public class NESWriterTests
     public void Write_pal_all()
     {
         using var writer = GetWriter();
-        writer.WriteBuiltIn(nameof(NESLib.pal_all), sizeOfMain);
+        writer.WriteBuiltIn(nameof(NESLib.pal_all), SizeOfMain);
         writer.Flush();
         AssertInstructions("8517 8618 A200 A920");
     }
@@ -115,7 +76,7 @@ public class NESWriterTests
     public void Write_pal_copy()
     {
         using var writer = GetWriter();
-        writer.WriteBuiltIn(nameof(NESLib.pal_copy), sizeOfMain);
+        writer.WriteBuiltIn(nameof(NESLib.pal_copy), SizeOfMain);
         writer.Flush();
         AssertInstructions("8519 A000 B117 9DC001 E8 C8 C619 D0F5 E607 60");
     }
@@ -124,7 +85,7 @@ public class NESWriterTests
     public void Write_pal_bg()
     {
         using var writer = GetWriter();
-        writer.WriteBuiltIn(nameof(NESLib.pal_bg), sizeOfMain);
+        writer.WriteBuiltIn(nameof(NESLib.pal_bg), SizeOfMain);
         writer.Flush();
         AssertInstructions("8517 8618 A200 A910 D0E4");
     }
@@ -133,7 +94,7 @@ public class NESWriterTests
     public void Write_pal_spr()
     {
         using var writer = GetWriter();
-        writer.WriteBuiltIn(nameof(NESLib.pal_spr), sizeOfMain);
+        writer.WriteBuiltIn(nameof(NESLib.pal_spr), SizeOfMain);
         writer.Flush();
         AssertInstructions("8517 8618 A210 8A D0DB");
     }
@@ -142,7 +103,7 @@ public class NESWriterTests
     public void Write_pal_col()
     {
         using var writer = GetWriter();
-        writer.WriteBuiltIn(nameof(NESLib.pal_col), sizeOfMain);
+        writer.WriteBuiltIn(nameof(NESLib.pal_col), SizeOfMain);
         writer.Flush();
         AssertInstructions("8517 209285 291F AA A517 9DC001 E607 60");
     }
@@ -151,7 +112,7 @@ public class NESWriterTests
     public void Write_pal_clear()
     {
         using var writer = GetWriter();
-        writer.WriteBuiltIn(nameof(NESLib.pal_clear), sizeOfMain);
+        writer.WriteBuiltIn(nameof(NESLib.pal_clear), SizeOfMain);
         writer.Flush();
         AssertInstructions("A90F A200 9DC001 E8 E020 D0F8 8607 60");
     }
@@ -160,7 +121,7 @@ public class NESWriterTests
     public void Write_vram_adr()
     {
         using var writer = GetWriter();
-        writer.WriteBuiltIn(nameof(NESLib.vram_adr), sizeOfMain);
+        writer.WriteBuiltIn(nameof(NESLib.vram_adr), SizeOfMain);
         writer.Flush();
         AssertInstructions("8E0620 8D0620 60");
     }
@@ -169,7 +130,7 @@ public class NESWriterTests
     public void Write_vram_write()
     {
         using var writer = GetWriter();
-        writer.WriteBuiltIn(nameof(NESLib.vram_write), sizeOfMain);
+        writer.WriteBuiltIn(nameof(NESLib.vram_write), SizeOfMain);
         writer.Flush();
         AssertInstructions("8517 8618 207C85 8519 861A A000 B119 8D0720 E619 D002 E61A A517 D002 C618 C617 A517 0518 D0E7 60");
     }
@@ -178,7 +139,7 @@ public class NESWriterTests
     public void Write_ppu_on_all()
     {
         using var writer = GetWriter();
-        writer.WriteBuiltIn(nameof(NESLib.ppu_on_all), sizeOfMain);
+        writer.WriteBuiltIn(nameof(NESLib.ppu_on_all), SizeOfMain);
         writer.Flush();
         AssertInstructions("A512 0918");
     }
@@ -187,7 +148,7 @@ public class NESWriterTests
     public void Write_ppu_onoff()
     {
         using var writer = GetWriter();
-        writer.WriteBuiltIn(nameof(NESLib.ppu_onoff), sizeOfMain);
+        writer.WriteBuiltIn(nameof(NESLib.ppu_onoff), SizeOfMain);
         writer.Flush();
         AssertInstructions("8512 4CF082");
     }
@@ -196,7 +157,7 @@ public class NESWriterTests
     public void Write_ppu_on_bg()
     {
         using var writer = GetWriter();
-        writer.WriteBuiltIn(nameof(NESLib.ppu_on_bg), sizeOfMain);
+        writer.WriteBuiltIn(nameof(NESLib.ppu_on_bg), SizeOfMain);
         writer.Flush();
         AssertInstructions("A512 0908 D0F5");
     }
@@ -205,17 +166,17 @@ public class NESWriterTests
     public void Write_ppu_wait_nmi()
     {
         using var writer = GetWriter();
-        writer.WriteBuiltIn(nameof(NESLib.ppu_wait_nmi), sizeOfMain);
+        writer.WriteBuiltIn(nameof(NESLib.ppu_wait_nmi), SizeOfMain);
         writer.Flush();
         AssertInstructions("A901 8503 A501 C501 F0FC 60");
     }
 
     [Fact]
-    public void Write_Main()
+    public Task Write_Main()
     {
         using var writer = GetWriter();
         writer.WriteHeader(PRG_ROM_SIZE: 2, CHR_ROM_SIZE: 1);
-        writer.WriteBuiltIns(sizeOfMain);
+        writer.WriteBuiltIns(SizeOfMain);
 
         /*
         * 8500	A900          	LDA #$00                      ; _main
@@ -304,14 +265,28 @@ public class NESWriterTests
         // Pad 0s
         int PRG_ROM_SIZE = (int)writer.Length - 16;
         writer.WriteZeroes(NESWriter.PRG_ROM_BLOCK_SIZE - (PRG_ROM_SIZE % NESWriter.PRG_ROM_BLOCK_SIZE));
-        writer.WriteZeroes(NESWriter.PRG_ROM_BLOCK_SIZE - 6);
 
-        //TODO: no idea what these are???
-        writer.Write(new byte[] { 0xBC, 0x80, 0x00, 0x80, 0x02, 0x82 });
+        // Write interrupt vectors
+        const int VECTOR_ADDRESSES_SIZE = 6;
+        writer.WriteZeroes(NESWriter.PRG_ROM_BLOCK_SIZE - VECTOR_ADDRESSES_SIZE);
+        ushort nmi_data = 0x80BC;
+        ushort reset_data = 0x8000;
+        ushort irq_data = 0x8202;
+        writer.Write(new ushort[] { nmi_data, reset_data, irq_data });
 
-        // Use CHR_ROM from hello.nes
-        writer.Write(data, (int)writer.Length, NESWriter.CHR_ROM_BLOCK_SIZE);
+        return Verify(_stream.ToArray());
+    }
 
-        AssertEx.Equal(data, writer);
+    [Fact]
+    public Task WriteUsedMethods()
+    {
+        using var writer = GetWriter();
+        writer.UsedMethods = new HashSet<string>(StringComparer.Ordinal)
+        {
+            nameof(NESLib.oam_spr),
+        };
+        writer.WriteHeader(PRG_ROM_SIZE: 2, CHR_ROM_SIZE: 1);
+        writer.WriteFinalBuiltIns(SizeOfMain, locals: 4);
+        return Verify(_stream.ToArray());
     }
 }

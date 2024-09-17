@@ -1,5 +1,6 @@
 ﻿using System.Runtime.CompilerServices;
 
+[assembly: InternalsVisibleTo("dotnes")]
 [assembly: InternalsVisibleTo("dotnes.tasks")]
 [assembly: InternalsVisibleTo("dotnes.tests")]
 

@@ -10,9 +10,9 @@ jobs:
   build:
     runs-on: macos-latest
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     - name: install .NET
-      uses: actions/setup-dotnet@v3
+      uses: actions/setup-dotnet@v4
       with:
         dotnet-version: 8.0.x
     - name: build
@@ -27,16 +27,18 @@ jobs:
         dotnet new nes --output samples/foo && \
         dotnet build samples/foo/foo.csproj -bl:foo-debug.binlog && \
         dotnet build samples/foo/foo.csproj -c Release -bl:foo-release.binlog
+    - name: shutdown
+      run: dotnet build-server shutdown
     - name: upload logs
       if: always()
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: logs
         path: '*.binlog'
         if-no-files-found: error
     - name: upload ROMs
       if: always()
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: ROMs
         path: |
@@ -45,7 +47,7 @@ jobs:
         if-no-files-found: error
     - name: upload nupkgs
       if: always()
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: nupkgs
         path: |

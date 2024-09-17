@@ -321,18 +321,58 @@ class IL2NESWriter : NESWriter
                 return 0x823E;
             case nameof(pal_bg):
                 return 0x822B;
+            case nameof(pal_clear):
+                return 0x824E;
+            case nameof(pal_all):
+                return 0x8211;
+            case nameof(pal_spr):
+                return 0x8235;
+            case nameof(pal_spr_bright):
+                return 0x825D;
             case nameof(ppu_on_all):
                 return 0x8289;
             case nameof(vram_adr):
                 return 0x83D4;
             case nameof(ppu_wait_frame):
                 return 0x82DB;
+            case nameof(ppu_on_bg):
+                return 0x8292;
+            case nameof(ppu_on_spr):
+                return 0x8298;
+            case nameof(rand):
+                return 0x860C;
+            case nameof(rand8):
+                return 0x860C;
+            case nameof(rand16):
+                return 0x8617;
+            case nameof(set_rand):
+                return 0x8623;
+            case nameof(delay):
+                return 0x841A;
+            case nameof(nesclock):
+                return 0x8415;
+            case nameof(oam_clear):
+                return 0x82AE;
+            case nameof(oam_hide_rest):
+                return 0x82CE;
+            case nameof(oam_size):
+                return 0x82BC;
             case nameof(vram_fill):
                 return 0x83DF;
             case nameof(vram_write):
                 return 0x834F;
+            case nameof(vram_put):
+                return 0x83DB;
+            case nameof(vram_inc):
+                return 0x8401;
+            case nameof(set_vram_update):
+                return 0x8376;
+            case nameof(set_ppu_ctrl_var):
+                return 0x82AB;
             case nameof(scroll):
                 return 0x82FB;
+            case nameof(oam_spr):
+                return 0x86DF;
             default:
                 throw new NotImplementedException($"{nameof(GetAddress)} for {name} is not implemented!");
         }
@@ -342,12 +382,29 @@ class IL2NESWriter : NESWriter
     {
         switch (name)
         {
+            case nameof(ppu_on_bg):
+            case nameof(ppu_on_spr):
+            case nameof(pal_clear):
             case nameof(ppu_on_all):
             case nameof(ppu_wait_frame):
+            case nameof(rand):
+            case nameof(rand8): 
+            case nameof(rand16):
+            case nameof(nesclock):
+            case nameof(oam_clear):
                 return 0;
             case nameof(vram_adr):
             case nameof(vram_write):
+            case nameof(vram_put):
+            case nameof(set_vram_update):
+            case nameof(set_ppu_ctrl_var):
             case nameof(pal_bg):
+            case nameof(pal_spr_bright):
+            case nameof(pal_spr):
+            case nameof(pal_all):
+            case nameof(set_rand):    
+            case nameof(oam_hide_rest):
+            case nameof(oam_size):
                 return 1;
             case nameof(pal_col):
             case nameof(vram_fill):
@@ -357,6 +414,8 @@ class IL2NESWriter : NESWriter
             case nameof(NTADR_D):
             case nameof(scroll):
                 return 2;
+            case nameof(oam_spr):
+                return 5;
             default:
                 throw new NotImplementedException($"{nameof(GetNumberOfArguments)} for {name} is not implemented!");
         }
