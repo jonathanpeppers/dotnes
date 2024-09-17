@@ -200,4 +200,46 @@ public class RoslynTests
                 4C2B85  ; JMP $852B
                 """);
     }
+
+    [Fact]
+    public void StaticSprite()
+    {
+        AssertProgram(
+            csharpSource:
+                """
+                byte[] PALETTE = new byte[32] { 
+                    0x01,
+                    0x11,0x30,0x27,0x0,
+                    0x1c,0x20,0x2c,0x0,
+                    0x00,0x10,0x20,0x0,
+                    0x06,0x16,0x26,0x0,
+                    0x16,0x35,0x24,0x0,
+                    0x00,0x37,0x25,0x0,
+                    0x0d,0x2d,0x3a,0x0,
+                    0x0d,0x27,0x2a
+                };
+                pal_all(PALETTE);
+                oam_spr(40, 40, 0x10, 3, 0);
+                ppu_on_all();
+                while (true) ;
+                """,
+            expectedAssembly:
+                """
+                A9D4
+                A285
+                201182  ; JSR pal_all
+                A928
+                208585  ; JSR popa
+                A928
+                208585  ; JSR popa
+                A910
+                208585  ; JSR popa
+                A903
+                208585  ; JSR popa
+                A900
+                20D485  ; JSR oam_spr
+                208982  ; JSR ppu_on_all
+                4C2385  ; JMP $8527
+                """);
+    }
 }
