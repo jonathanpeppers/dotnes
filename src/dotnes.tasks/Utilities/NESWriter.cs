@@ -87,6 +87,8 @@ class NESWriter : IDisposable
     protected const ushort rodata = 0x85AE;
     protected const ushort donelib = 0x84FD;
 
+    protected const ushort BaseAddress = 0x7FBD;
+
     protected readonly BinaryWriter _writer;
     protected readonly ILogger _logger;
 
@@ -367,7 +369,7 @@ class NESWriter : IDisposable
     /// </summary>
     public void WriteBuiltIn(string name, ushort sizeOfMain)
     {
-        SetLabel(name, (ushort)(_writer.BaseStream.Position - 0x10 + 0x8000));
+        SetLabel(name, (ushort)(_writer.BaseStream.Position + BaseAddress));
 
         switch (name)
         {
@@ -1091,7 +1093,7 @@ class NESWriter : IDisposable
                 Write(NESInstruction.RTS_impl);
                 break;
             case nameof(NESLib.oam_spr):
-                SetLabel(nameof(NESLib.oam_spr), (ushort)(_writer.BaseStream.Position + 0x8000));
+                SetLabel(nameof(NESLib.oam_spr), (ushort)(_writer.BaseStream.Position + BaseAddress));
                 /*
                 * 85B7  AA              TAX         ; _oam_spr
                 * 85B8  A000            LDY  #$00
@@ -1634,7 +1636,7 @@ class NESWriter : IDisposable
 
     void Write_donelib(ushort totalSize)
     {
-        SetLabel(nameof(donelib), (ushort)(_writer.BaseStream.Position + 0x8000));
+        SetLabel(nameof(donelib), (ushort)(_writer.BaseStream.Position + BaseAddress));
 
         /*
          * 8546	A000          	LDY #$00                      ; donelib
@@ -1654,7 +1656,7 @@ class NESWriter : IDisposable
 
     void Write_copydata(ushort totalSize)
     {
-        SetLabel(nameof(copydata), (ushort)(_writer.BaseStream.Position + 0x8000));
+        SetLabel(nameof(copydata), (ushort)(_writer.BaseStream.Position + BaseAddress));
 
         /*
         * 854F	A9FE          	LDA #$FE                      ; copydata
@@ -1710,7 +1712,7 @@ class NESWriter : IDisposable
 
     void Write_popax()
     {
-        SetLabel(nameof(popax), (ushort)(_writer.BaseStream.Position + 0x8000));
+        SetLabel(nameof(popax), (ushort)(_writer.BaseStream.Position + BaseAddress));
         /*
          * 857F	A001          	LDY #$01                      ; popax
          * 8581	B122          	LDA (sp),y
@@ -1749,7 +1751,7 @@ class NESWriter : IDisposable
 
     void Write_popa()
     {
-        SetLabel(nameof(popa), (ushort)(_writer.BaseStream.Position + 0x8000));
+        SetLabel(nameof(popa), (ushort)(_writer.BaseStream.Position + BaseAddress));
         /*
          * 8595	A000          	LDY #$00                      ; popa
          * 8597	B122          	LDA (sp),y
@@ -1785,13 +1787,13 @@ class NESWriter : IDisposable
          * 85B4	9122          	STA (sp),y
          * 85B6	60            	RTS
         */
-        //SetLabel(nameof(pusha0sp), (ushort)(_writer.BaseStream.Position + 0x8000));
+        //SetLabel(nameof(pusha0sp), (ushort)(_writer.BaseStream.Position + BaseAddress));
         Write(NESInstruction.LDY, 0x00);
 
-        //SetLabel(nameof(pushaysp), (ushort)(_writer.BaseStream.Position + 0x8000));
+        //SetLabel(nameof(pushaysp), (ushort)(_writer.BaseStream.Position + BaseAddress));
         Write(NESInstruction.LDA_ind_Y, sp);
 
-        SetLabel(nameof(pusha), (ushort)(_writer.BaseStream.Position + 0x8000));
+        SetLabel(nameof(pusha), (ushort)(_writer.BaseStream.Position + BaseAddress));
         Write(NESInstruction.LDY_zpg, sp);
         Write(NESInstruction.BEQ_rel, PAL_UPDATE);
         Write(NESInstruction.DEC_zpg, sp);
@@ -1824,13 +1826,13 @@ class NESWriter : IDisposable
         * 85CE	9122          	STA (sp),y
         * 85D0	60            	RTS
         */
-        //SetLabel(nameof(push0), (ushort)(_writer.BaseStream.Position + 0x8000));
+        //SetLabel(nameof(push0), (ushort)(_writer.BaseStream.Position + BaseAddress));
         Write(NESInstruction.LDA, 0x00);
 
-        //SetLabel(nameof(pusha0), (ushort)(_writer.BaseStream.Position + 0x8000));
+        //SetLabel(nameof(pusha0), (ushort)(_writer.BaseStream.Position + BaseAddress));
         Write(NESInstruction.LDX, 0x00);
 
-        SetLabel(nameof(pushax), (ushort)(_writer.BaseStream.Position + 0x8000));
+        SetLabel(nameof(pushax), (ushort)(_writer.BaseStream.Position + BaseAddress));
         Write(NESInstruction.PHA_impl);
         Write(NESInstruction.LDA_zpg, sp);
         Write(NESInstruction.SEC_impl);
@@ -1849,7 +1851,7 @@ class NESWriter : IDisposable
 
     void Write_zerobss(byte locals)
     {
-        SetLabel(nameof(zerobss), (ushort)(_writer.BaseStream.Position + 0x8000));
+        SetLabel(nameof(zerobss), (ushort)(_writer.BaseStream.Position + BaseAddress));
         /*
          * 85D1	A925          	LDA #$25                      ; zerobss
          * 85D3	852A          	STA ptr1
