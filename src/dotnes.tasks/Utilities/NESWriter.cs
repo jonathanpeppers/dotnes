@@ -16,14 +16,14 @@ class NESWriter : IDisposable
     {
         _writer = new(stream, Encoding, leaveOpen);
         _logger = logger ?? new NullLogger();
-        Labels[nameof(copydata)] = 0x850C;
-        Labels[nameof(popa)] = 0x854F;
-        Labels[nameof(popax)] = 0x8539;
-        Labels[nameof(pusha)] = 0x855F;
-        Labels[nameof(pushax)] = 0x8575;
-        Labels[nameof(zerobss)] = 0x858B;
-        Labels[nameof(rodata)] = 0x85AE;
-        Labels[nameof(donelib)] = 0x84FD;
+        Labels[nameof(copydata)] = copydata;
+        Labels[nameof(popa)] = popa;
+        Labels[nameof(popax)] = popax;
+        Labels[nameof(pusha)] = pusha;
+        Labels[nameof(pushax)] = pushax;
+        Labels[nameof(zerobss)] = zerobss;
+        Labels[nameof(rodata)] = rodata;
+        Labels[nameof(donelib)] = donelib;
     }
 
     /// <summary>
