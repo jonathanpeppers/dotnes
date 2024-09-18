@@ -10,14 +10,6 @@ class IL2NESWriter : NESWriter
     public IL2NESWriter(Stream stream, bool leaveOpen = false, ILogger? logger = null)
         : base(stream, leaveOpen, logger)
     {
-        Labels[nameof(copydata)] = 0x850C;
-        Labels[nameof(popa)] = 0x854F;
-        Labels[nameof(popax)] = 0x8539;
-        Labels[nameof(pusha)] = 0x855F;
-        Labels[nameof(pushax)] = 0x8575;
-        Labels[nameof(zerobss)] = 0x858B;
-        Labels[nameof(rodata)] = 0x85AE;
-        Labels[nameof(donelib)] = 0x84FD;
     }
 
     /// <summary>

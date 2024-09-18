@@ -9,9 +9,23 @@ namespace dotnes;
 /// * https://wiki.nesdev.org/w/index.php/INES
 /// * https://bheisler.github.io/post/nes-rom-parser-with-nom/
 /// </summary>
-class NESWriter(Stream stream, bool leaveOpen = false, ILogger? logger = null) : IDisposable
+class NESWriter : IDisposable
 {
     public static readonly Encoding Encoding = Encoding.ASCII;
+
+    public NESWriter(Stream stream, bool leaveOpen = false, ILogger? logger = null)
+    {
+        _writer = new(stream, Encoding, leaveOpen);
+        _logger = logger ?? new NullLogger();
+        Labels[nameof(copydata)] = 0x850C;
+        Labels[nameof(popa)] = 0x854F;
+        Labels[nameof(popax)] = 0x8539;
+        Labels[nameof(pusha)] = 0x855F;
+        Labels[nameof(pushax)] = 0x8575;
+        Labels[nameof(zerobss)] = 0x858B;
+        Labels[nameof(rodata)] = 0x85AE;
+        Labels[nameof(donelib)] = 0x84FD;
+    }
 
     /// <summary>
     /// PRG_ROM is in 16 KB units
@@ -74,8 +88,8 @@ class NESWriter(Stream stream, bool leaveOpen = false, ILogger? logger = null) :
     protected const ushort rodata = 0x85AE;
     protected const ushort donelib = 0x84FD;
 
-    protected readonly BinaryWriter _writer = new(stream, Encoding, leaveOpen);
-    protected readonly ILogger _logger = logger ?? new NullLogger();
+    protected readonly BinaryWriter _writer;
+    protected readonly ILogger _logger;
 
     public bool LastLDA { get; private set; }
 
