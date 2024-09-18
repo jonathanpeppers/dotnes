@@ -78,7 +78,6 @@ class Transpiler : IDisposable
 
         _logger.WriteLine($"First pass...");
 
-        Debugger.Launch();
         var labels = CalculateAddressLabels(0);
 
         // Generate static void main in a first pass, so we know the size of the program
