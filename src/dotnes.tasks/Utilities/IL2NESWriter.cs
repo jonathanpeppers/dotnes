@@ -363,14 +363,7 @@ class IL2NESWriter : NESWriter
             case nameof(scroll):
                 return 0x82FB;
             case nameof(oam_spr):
-                if (Labels.TryGetValue(nameof(oam_spr), out var address))
-                {
-                    return address;
-                }
-                else
-                {
-                    return 0x0000;
-                }
+                return Labels[nameof(oam_spr)];
             default:
                 throw new NotImplementedException($"{nameof(GetAddress)} for {name} is not implemented!");
         }
