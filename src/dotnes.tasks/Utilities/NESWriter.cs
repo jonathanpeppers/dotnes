@@ -1634,7 +1634,7 @@ class NESWriter : IDisposable
 
     void Write_donelib(ushort totalSize)
     {
-        //SetLabel(nameof(donelib), (ushort)(_writer.BaseStream.Position + 0x8000));
+        SetLabel(nameof(donelib), (ushort)(_writer.BaseStream.Position + 0x8000));
 
         /*
          * 8546	A000          	LDY #$00                      ; donelib
@@ -1654,7 +1654,8 @@ class NESWriter : IDisposable
 
     void Write_copydata(ushort totalSize)
     {
-        //SetLabel(nameof(copydata), (ushort)(_writer.BaseStream.Position + 0x8000));
+        SetLabel(nameof(copydata), (ushort)(_writer.BaseStream.Position + 0x8000));
+
         /*
         * 854F	A9FE          	LDA #$FE                      ; copydata
         * 8551	852A          	STA ptr1
