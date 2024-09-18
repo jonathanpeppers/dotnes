@@ -2,7 +2,7 @@
 
 /// <summary>
 /// List of NES 6502 assembly instructions
-/// 
+///
 /// See: https://www.masswerk.at/6502/6502_instruction_set.html
 /// </summary>
 enum NESInstruction : byte

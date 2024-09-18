@@ -27,6 +27,46 @@ class Transpiler : IDisposable
         _logger = logger ?? new NullLogger();
     }
 
+    /// <summary>
+    /// Figure out the addresses of functions so we can use to them for JMPs.
+    /// TODO: ASM-type labels would be nice...
+    /// </summary>
+    /// <param name="sizeOfMain"></param>
+    /// <returns></returns>
+    private Dictionary<string, ushort> CalculateAddressLabels(ushort sizeOfMain)
+    {
+        using var ms = new MemoryStream();
+        using var writer = new IL2NESWriter(ms, logger: _logger);
+
+        // Write built-in functions
+        writer.WriteBuiltIns(sizeOfMain);
+
+        // Write main program
+        foreach (var instruction in ReadStaticVoidMain())
+        {
+            if (instruction.Integer != null)
+            {
+                writer.Write(instruction.OpCode, instruction.Integer.Value, sizeOfMain);
+            }
+            else if (instruction.String != null)
+            {
+                writer.Write(instruction.OpCode, instruction.String, sizeOfMain);
+            }
+            else if (instruction.Bytes != null)
+            {
+                writer.Write(instruction.OpCode, instruction.Bytes.Value, sizeOfMain);
+            }
+            else
+            {
+                writer.Write(instruction.OpCode, sizeOfMain);
+            }
+        }
+
+        writer.WriteFinalBuiltIns(0, 0);
+
+        return writer.Labels;
+    }
+
     public void Write(Stream stream)
     {
         if (_assemblyFiles.Count == 0)
@@ -39,8 +79,10 @@ class Transpiler : IDisposable
 
         _logger.WriteLine($"First pass...");
 
+        var labels = CalculateAddressLabels(0);
+
         // Generate static void main in a first pass, so we know the size of the program
-        FirstPass(out ushort sizeOfMain, out byte locals);
+        FirstPass(labels, out ushort sizeOfMain, out byte locals);
 
         _logger.WriteLine($"Size of main: {sizeOfMain}");
 
@@ -48,6 +90,7 @@ class Transpiler : IDisposable
         {
             UsedMethods = UsedMethods,
         };
+        writer.SetLabels(labels);
 
         _logger.WriteLine($"Writing header...");
         writer.WriteHeader(PRG_ROM_SIZE: 2, CHR_ROM_SIZE: 1);
@@ -132,12 +175,13 @@ class Transpiler : IDisposable
     /// <summary>
     /// Generate static void main in a first pass, so we know the size of the program
     /// </summary>
-    protected virtual void FirstPass(out ushort sizeOfMain, out byte locals)
+    protected virtual void FirstPass(Dictionary<string, ushort> labels, out ushort sizeOfMain, out byte locals)
     {
         using var mainWriter = new IL2NESWriter(new MemoryStream(), logger: _logger)
         {
             UsedMethods = UsedMethods,
         };
+        mainWriter.SetLabels(labels);
         foreach (var instruction in ReadStaticVoidMain())
         {
             _logger.WriteLine($"{instruction}");

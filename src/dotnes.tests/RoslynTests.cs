@@ -66,11 +66,12 @@ public class RoslynTests
             _writer = new(_stream, leaveOpen: true, logger);
         }
 
-        protected override void SecondPass(ushort sizeOfMain, IL2NESWriter _)
+        protected override void SecondPass(ushort sizeOfMain, IL2NESWriter parent)
         {
             // Still call base if we ever want to check binary at the end
-            base.SecondPass(sizeOfMain, _);
+            base.SecondPass(sizeOfMain, parent);
 
+            _writer.SetLabels(parent.Labels);
             foreach (var instruction in ReadStaticVoidMain())
             {
                 _logger.WriteLine($"{instruction}");
