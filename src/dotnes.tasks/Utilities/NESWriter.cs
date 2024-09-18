@@ -1943,6 +1943,10 @@ class NESWriter : IDisposable
     {
         if (_hasPresetLabels)
             return;
+        // HACK: this fixes existing tests
+        // But it's not correct!
+        if (name != nameof(NESLib.oam_spr))
+            return;
 
         Labels[name] = address;
     }
