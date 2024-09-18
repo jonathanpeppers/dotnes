@@ -1,9 +1,5 @@
 ﻿using System.Buffers;
-using System.CodeDom;
 using System.Collections.Immutable;
-using System.Diagnostics;
-using System.Formats.Asn1;
-using System.IO;
 using System.Reflection;
 using System.Reflection.Metadata;
 using System.Reflection.Metadata.Ecma335;
