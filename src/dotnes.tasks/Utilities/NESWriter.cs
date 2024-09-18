@@ -1,5 +1,4 @@
 ﻿using System.Buffers;
-using System.Diagnostics;
 using System.Text;
 
 namespace dotnes;
@@ -341,7 +340,7 @@ class NESWriter : IDisposable
 
     /// <summary>
     /// These are any subroutines after our `static void main()` method
-    /// </summary>045E
+    /// </summary>
     public void WriteFinalBuiltIns(ushort totalSize, byte locals)
     {
         Write_donelib(totalSize);
