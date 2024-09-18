@@ -36,7 +36,10 @@ class Transpiler : IDisposable
     private Dictionary<string, ushort> CalculateAddressLabels(ushort sizeOfMain)
     {
         using var ms = new MemoryStream();
-        using var writer = new IL2NESWriter(ms, logger: _logger);
+        using var writer = new IL2NESWriter(ms, logger: _logger)
+        {
+            UsedMethods = UsedMethods,
+        };
 
         // Write built-in functions
         writer.WriteBuiltIns(sizeOfMain);

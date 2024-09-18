@@ -94,7 +94,7 @@ class NESWriter : IDisposable
     protected readonly BinaryWriter _writer;
     protected readonly ILogger _logger;
 
-    public bool LastLDA { get; private set; }
+    public bool LastLDA { get; protected set; }
 
     public Stream BaseStream => _writer.BaseStream;
 
@@ -1095,7 +1095,6 @@ class NESWriter : IDisposable
                 Write(NESInstruction.RTS_impl);
                 break;
             case nameof(NESLib.oam_spr):
-                SetLabel(nameof(NESLib.oam_spr), (ushort)(_writer.BaseStream.Position + BaseAddress));
                 /*
                 * 85B7  AA              TAX         ; _oam_spr
                 * 85B8  A000            LDY  #$00

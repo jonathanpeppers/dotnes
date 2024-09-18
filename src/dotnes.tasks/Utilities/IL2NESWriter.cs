@@ -502,6 +502,7 @@ class IL2NESWriter : NESWriter
 
     void SeekBack(int length)
     {
+        LastLDA = false;
         _logger.WriteLine($"Seek back {length} bytes");
         if (_writer.BaseStream.Length < length)
         {
