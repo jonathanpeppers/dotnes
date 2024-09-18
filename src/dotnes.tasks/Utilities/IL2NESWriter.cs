@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using System.Diagnostics;
 using System.Reflection.Metadata;
 using static NES.NESLib;
 
@@ -157,7 +158,10 @@ class IL2NESWriter : NESWriter
             case ILOpCode.Add:
                 Stack.Push(Stack.Pop() + Stack.Pop());
                 break;
-            default:
+			case ILOpCode.And:
+				Stack.Push(Stack.Pop() & Stack.Pop());
+				break;
+			default:
                 throw new NotImplementedException($"OpCode {code} with no operands is not implemented!");
         }
         previous = code;
@@ -203,7 +207,15 @@ class IL2NESWriter : NESWriter
             case ILOpCode.Ldloc_s:
                 WriteLdloc(Locals[operand], sizeOfMain);
                 break;
-            default:
+			case ILOpCode.Brtrue_s:
+                Debugger.Break();
+                var val = Stack.Pop();
+                if (val != 0)
+                {
+                    //Write(NESInstruction.JSR, operand);
+                }
+				break;
+			default:
                 throw new NotImplementedException($"OpCode {code} with Int32 operand is not implemented!");
         }
         previous = code;
@@ -272,7 +284,7 @@ class IL2NESWriter : NESWriter
         {
             case ILOpCode.Ldtoken:
                 if (ByteArrayOffset == 0)
-                    ByteArrayOffset = rodata.GetAddressAfterMain(sizeOfMain);
+                    ByteArrayOffset = Labels[nameof(rodata)];
                 Write(NESInstruction.LDA, (byte)(ByteArrayOffset & 0xff));
                 Write(NESInstruction.LDX, (byte)(ByteArrayOffset >> 8));
                 Stack.Push(ByteArrayOffset);
@@ -363,15 +375,14 @@ class IL2NESWriter : NESWriter
             case nameof(scroll):
                 return 0x82FB;
             case nameof(oam_spr):
-                if (Labels.TryGetValue(nameof(oam_spr), out var address))
                 {
-                    return address;
+                    return Labels.TryGetValue(nameof(oam_spr), out var address) ? address : (ushort)0x0000;
                 }
-                else
+            case nameof(pad_poll):
                 {
-                    return 0x0000;
+                    return Labels.TryGetValue(nameof(pad_poll), out var address) ? address : (ushort)0x0000;
                 }
-            default:
+			default:
                 throw new NotImplementedException($"{nameof(GetAddress)} for {name} is not implemented!");
         }
     }
@@ -403,7 +414,8 @@ class IL2NESWriter : NESWriter
             case nameof(set_rand):    
             case nameof(oam_hide_rest):
             case nameof(oam_size):
-                return 1;
+            case nameof(pad_poll):
+				return 1;
             case nameof(pal_col):
             case nameof(vram_fill):
             case nameof(NTADR_A):

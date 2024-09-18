@@ -130,14 +130,30 @@ public static class NESLib
     /// <returns>returns sprid+4, which is offset for a next sprite</returns>
     public static byte oam_spr(byte x, byte y, byte chrnum, byte attr, byte sprid) => default;
 
-    /// <summary>
-    /// set metasprite in OAM buffer
-    /// meta sprite is a const unsigned char array, it contains four bytes per sprite
-    /// in order x offset, y offset, tile, attribute
-    /// x=128 is end of a meta sprite
-    /// </summary>
-    /// <returns>returns sprid+4, which is offset for a next sprite</returns>
-    public static byte oam_meta_spr(byte x, byte y, byte sprid, byte[] data) => default;
+	public const byte PAD_A = 0x01;
+	public const byte PAD_B = 0x02;
+	public const byte PAD_SELECT = 0x04;
+	public const byte PAD_START = 0x08;
+	public const byte PAD_UP = 0x10;
+	public const byte PAD_DOWN = 0x20;
+	public const byte PAD_LEFT = 0x40;
+	public const byte PAD_RIGHT = 0x80;
+
+	/// <summary>
+	/// poll controller and return flags like PAD_LEFT etc
+	/// </summary>
+	/// <param name="pad">pad number (0 or 1)</param>
+	/// <returns></returns>
+	public static byte pad_poll(byte pad) => default;
+
+	/// <summary>
+	/// set metasprite in OAM buffer
+	/// meta sprite is a const unsigned char array, it contains four bytes per sprite
+	/// in order x offset, y offset, tile, attribute
+	/// x=128 is end of a meta sprite
+	/// </summary>
+	/// <returns>returns sprid+4, which is offset for a next sprite</returns>
+	public static byte oam_meta_spr(byte x, byte y, byte sprid, byte[] data) => default;
 
     /// <summary>
     /// hide all remaining sprites from given offset
@@ -350,4 +366,6 @@ public static class NESLib
         0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30,
         0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30,
     ];
+
+
 }

@@ -65,10 +65,11 @@ enum NESInstruction : byte
     /// AND Memory with Accumulator
     /// </summary>
     AND_X_ind = 0x21,
-    /// <summary>
-    /// Test Bits in Memory with Accumulator
-    /// </summary>
-    BIT_zpg   = 0x24,
+    AND_Y_abs = 0x39,
+	/// <summary>
+	/// Test Bits in Memory with Accumulator
+	/// </summary>
+	BIT_zpg   = 0x24,
     /// <summary>
     /// AND Memory with Accumulator
     /// </summary>
@@ -158,10 +159,12 @@ enum NESInstruction : byte
     /// Rotate One Bit Right (Memory or Accumulator)
     /// </summary>
     ROR_A     = 0x6A,
-    /// <summary>
-    /// Jump to New Location
-    /// </summary>
-    JMP_ind   = 0x6C,
+    ROR_X_zpg = 0x76,
+	ROR_X_abs = 0x7E,
+	/// <summary>
+	/// Jump to New Location
+	/// </summary>
+	JMP_ind   = 0x6C,
     /// <summary>
     /// Add Memory to Accumulator with Carry
     /// </summary>
@@ -224,10 +227,14 @@ enum NESInstruction : byte
     /// 91: Store Accumulator in Memory
     /// </summary>
     STA_ind_Y = 0x91,
-    /// <summary>
-    /// Store Accumulator in Memory
-    /// </summary>
-    STA_zpg_X = 0x95,
+	/// <summary>
+	/// Store Accumulator in Memory
+	/// </summary>
+	STA_abs_Y = 0x99,
+	/// <summary>
+	/// Store Accumulator in Memory
+	/// </summary>
+	STA_zpg_X = 0x95,
     /// <summary>
     /// Transfer Index Y to Accumulator
     /// </summary>
@@ -256,10 +263,10 @@ enum NESInstruction : byte
     /// A2: Load Index X with Memory
     /// </summary>
     LDX       = 0xA2,
-    /// <summary>
-    /// Load Index Y with Memory
-    /// </summary>
-    LDY_zpg   = 0xA4,
+	/// <summary>
+	/// Load Index Y with Memory, operand is zeropage address: $LL,Y, Y-indexed
+	/// </summary>
+	LDY_zpg = 0xA4,
     /// <summary>
     /// Load Accumulator with Memory
     /// </summary>
@@ -299,18 +306,18 @@ enum NESInstruction : byte
     /// Branch on Carry Set
     /// </summary>
     BCS = 0xB0,
-    /// <summary>
-    /// Load Accumulator with Memory
-    /// </summary>
-    LDA_ind_Y = 0xB1,
-    /// <summary>
-    /// Load Accumulator with Memory
-    /// </summary>
-    LDA_abs_y =0xB9,
-    /// <summary>
-    /// Load Accumulator with Memory
-    /// </summary>
-    LDA_abs_X = 0xBD,
+	/// <summary>
+	/// Load Accumulator with Memory, operand is address: ($LLHH)
+	/// </summary>
+	LDA_ind_Y = 0xB1,
+	/// <summary>
+	/// Load Accumulator with Memory, operand is address: $LLHH, Y-indexed
+	/// </summary>
+	LDA_abs_y = 0xB9,
+	/// <summary>
+	/// Load Accumulator with Memory, operand is address: $LLHH, X-indexed
+	/// </summary>
+	LDA_abs_X = 0xBD,
 
     //TODO:C
     /// <summary>
@@ -405,4 +412,14 @@ enum NESInstruction : byte
     /// Branch on Result Zero
     /// </summary>
     BEQ_rel   = 0xF0,
+
+	/// <summary>
+	/// Logical shift right
+	/// </summary>
+	LSR_impl = 0x4A,
+
+	/// <summary>
+	/// Exclusive-OR Memory with Accumulator
+	/// </summary>
+	EOR_Y_abs = 0x59,
 }

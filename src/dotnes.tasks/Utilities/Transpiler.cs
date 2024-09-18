@@ -1,5 +1,6 @@
 ﻿using System.Buffers;
 using System.Collections.Immutable;
+using System.Diagnostics;
 using System.Reflection;
 using System.Reflection.Metadata;
 using System.Reflection.Metadata.Ecma335;
@@ -13,6 +14,7 @@ class Transpiler : IDisposable
     readonly MetadataReader _reader;
     readonly IList<AssemblyReader> _assemblyFiles;
     readonly ILogger _logger;
+    private long _copySize;
 
     /// <summary>
     /// A list of methods that were found to be used in the IL code
@@ -41,6 +43,8 @@ class Transpiler : IDisposable
         // Write built-in functions
         writer.WriteBuiltIns(sizeOfMain);
 
+        _copySize = -writer.BaseStream.Length;
+
         // Write main program
         foreach (var instruction in ReadStaticVoidMain())
         {
@@ -64,6 +68,9 @@ class Transpiler : IDisposable
 
         writer.WriteFinalBuiltIns(0, 0);
 
+        // Just want size of program + final built-ins/functions
+        _copySize += writer.BaseStream.Length;
+
         return writer.Labels;
     }
 
@@ -78,6 +85,8 @@ class Transpiler : IDisposable
         int CHR_ROM_SIZE = (int)(chr_rom.Bytes.Length / NESWriter.CHR_ROM_BLOCK_SIZE);
 
         _logger.WriteLine($"First pass...");
+
+        Debugger.Launch();
 
         var labels = CalculateAddressLabels(0);
 
@@ -130,8 +139,8 @@ class Transpiler : IDisposable
                 }
             }
 
-            const ushort PRG_LAST = 0x85AE;
-            writer.WriteFinalBuiltIns((ushort)(PRG_LAST.GetAddressAfterMain(sizeOfMain) + memoryStream.Length), locals);
+            _copySize += memoryStream.Length;
+            writer.WriteFinalBuiltIns((ushort)(_copySize), locals);
             memoryStream.Position = 0;
             memoryStream.CopyTo(writer.BaseStream);
         }
