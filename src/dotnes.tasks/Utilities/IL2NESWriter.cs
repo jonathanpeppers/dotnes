@@ -185,6 +185,7 @@ class IL2NESWriter : NESWriter
                 }
                 break;
             case ILOpCode.Br_s:
+                // NOTE: This is (-3) because we want to go to the instruction right before donelib, that is "jump to self"
                 Write(NESInstruction.JMP_abs, (ushort)(Labels[nameof(donelib)] - 3));
                 break;
             case ILOpCode.Newarr:
