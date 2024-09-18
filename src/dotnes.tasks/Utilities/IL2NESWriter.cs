@@ -276,7 +276,15 @@ class IL2NESWriter : NESWriter
         {
             case ILOpCode.Ldtoken:
                 if (ByteArrayOffset == 0)
+                {
                     ByteArrayOffset = rodata.GetAddressAfterMain(sizeOfMain);
+
+                    // HACK: adjust ByteArrayOffset based on length of oam_spr
+                    if (UsedMethods is not null && UsedMethods.Contains(nameof(oam_spr)))
+                    {
+                        ByteArrayOffset += 44;
+                    }
+                }
                 Write(NESInstruction.LDA, (byte)(ByteArrayOffset & 0xff));
                 Write(NESInstruction.LDX, (byte)(ByteArrayOffset >> 8));
                 Stack.Push(ByteArrayOffset);
