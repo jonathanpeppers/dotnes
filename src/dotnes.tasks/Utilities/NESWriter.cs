@@ -1,4 +1,5 @@
 ﻿using System.Buffers;
+using System.Diagnostics;
 using System.Text;
 
 namespace dotnes;
@@ -62,6 +63,8 @@ class NESWriter(Stream stream, bool leaveOpen = false, ILogger? logger = null) :
     protected const ushort updName = 0x8385;
     protected const ushort palBrightTableL = 0x8422;
     protected const ushort palBrightTableH = 0x842B;
+
+    // Post-main functions
     protected const ushort copydata = 0x850C;
     protected const ushort popa = 0x854F;
     protected const ushort popax = 0x8539;
@@ -124,6 +127,15 @@ class NESWriter(Stream stream, bool leaveOpen = false, ILogger? logger = null) :
     public byte Flags10 { get; set; }
 
     public long Length => _writer.BaseStream.Length;
+
+    public Dictionary<string, ushort> Labels { get; private set; } = new();
+    private bool _hasPresetLabels = false;
+
+    public void SetLabels(Dictionary<string, ushort> labels)
+    {
+        Labels = labels;
+        _hasPresetLabels = true;
+    }
 
     public void WriteHeader(byte PRG_ROM_SIZE = 0, byte CHR_ROM_SIZE = 0)
     {
@@ -276,19 +288,19 @@ class NESWriter(Stream stream, bool leaveOpen = false, ILogger? logger = null) :
     {
         /*
          * 8602	8D0E03        	STA $030E                     ; __DESTRUCTOR_TABLE__
-         * 8605	8E0F03        	STX $030F                     
-         * 8608	8D1503        	STA $0315                     
-         * 860B	8E1603        	STX $0316                     
-         * 860E	88            	DEY                           
-         * 860F	B9FFFF        	LDA $FFFF,y                   
-         * 8612	8D1F03        	STA $031F                     
-         * 8615	88            	DEY                           
-         * 8616	B9FFFF        	LDA $FFFF,y                   
-         * 8619	8D1E03        	STA $031E                     
-         * 861C	8C2103        	STY $0321                     
-         * 861F	20FFFF        	JSR $FFFF                     
-         * 8622	A0FF          	LDY #$FF                      
-         * 8624	D0E8          	BNE $860E                     
+         * 8605	8E0F03        	STX $030F
+         * 8608	8D1503        	STA $0315
+         * 860B	8E1603        	STX $0316
+         * 860E	88            	DEY
+         * 860F	B9FFFF        	LDA $FFFF,y
+         * 8612	8D1F03        	STA $031F
+         * 8615	88            	DEY
+         * 8616	B9FFFF        	LDA $FFFF,y
+         * 8619	8D1E03        	STA $031E
+         * 861C	8C2103        	STY $0321
+         * 861F	20FFFF        	JSR $FFFF
+         * 8622	A0FF          	LDY #$FF
+         * 8624	D0E8          	BNE $860E
          * 8626	60            	RTS
          */
         Write(NESInstruction.STA_abs, 0x030E);
@@ -310,7 +322,7 @@ class NESWriter(Stream stream, bool leaveOpen = false, ILogger? logger = null) :
 
     /// <summary>
     /// These are any subroutines after our `static void main()` method
-    /// </summary>
+    /// </summary>045E
     public void WriteFinalBuiltIns(ushort totalSize, byte locals)
     {
         Write_donelib(totalSize);
@@ -320,6 +332,7 @@ class NESWriter(Stream stream, bool leaveOpen = false, ILogger? logger = null) :
         Write_popa();
         Write_pusha();
         Write_pushax();
+        Write_OAM_Sprite();
         Write_zerobss(locals);
     }
 
@@ -328,14 +341,16 @@ class NESWriter(Stream stream, bool leaveOpen = false, ILogger? logger = null) :
     /// </summary>
     public void WriteBuiltIn(string name, ushort sizeOfMain)
     {
+        SetLabel(name, (ushort)(_writer.BaseStream.Position - 0x10 + 0x8000));
+
         switch (name)
         {
             case nameof(NESLib.pal_all):
                 /*
                  * 8211	8517          	STA TEMP                      ; _pal_all
-                 * 8213	8618          	STX TEMP+1                    
-                 * 8215	A200          	LDX #$00                      
-                 * 8217	A920          	LDA #$20                      
+                 * 8213	8618          	STX TEMP+1
+                 * 8215	A200          	LDX #$00
+                 * 8217	A920          	LDA #$20
                  */
                 Write(NESInstruction.STA_zpg, TEMP);
                 Write(NESInstruction.STX_zpg, TEMP + 1);
@@ -345,14 +360,14 @@ class NESWriter(Stream stream, bool leaveOpen = false, ILogger? logger = null) :
             case nameof (NESLib.pal_copy):
                 /*
                  * 8219	8519          	STA $19                       ; pal_copy
-                 * 821B	A000          	LDY #$00                      
+                 * 821B	A000          	LDY #$00
                  * 821D	B117          	LDA (TEMP),y                  ; @0
-                 * 821F	9DC001        	STA $01C0,x                   
-                 * 8222	E8            	INX                           
-                 * 8223	C8            	INY                           
-                 * 8224	C619          	DEC $19                       
-                 * 8226	D0F5          	BNE @0                        
-                 * 8228	E607          	INC PAL_UPDATE                
+                 * 821F	9DC001        	STA $01C0,x
+                 * 8222	E8            	INX
+                 * 8223	C8            	INY
+                 * 8224	C619          	DEC $19
+                 * 8226	D0F5          	BNE @0
+                 * 8228	E607          	INC PAL_UPDATE
                  * 822A	60            	RTS
                  */
                 Write(NESInstruction.STA_zpg, 0x19);
@@ -369,9 +384,9 @@ class NESWriter(Stream stream, bool leaveOpen = false, ILogger? logger = null) :
             case nameof(NESLib.pal_bg):
                 /*
                  * 822B	8517          	STA TEMP                      ; _pal_bg
-                 * 822D	8618          	STX TEMP+1                    
-                 * 822F	A200          	LDX #$00                      
-                 * 8231	A910          	LDA #$10                      
+                 * 822D	8618          	STX TEMP+1
+                 * 822F	A200          	LDX #$00
+                 * 8231	A910          	LDA #$10
                  * 8233	D0E4          	BNE pal_copy
                  */
                 Write(NESInstruction.STA_zpg, TEMP);
@@ -383,9 +398,9 @@ class NESWriter(Stream stream, bool leaveOpen = false, ILogger? logger = null) :
             case nameof(NESLib.pal_spr):
                 /*
                  * 8235	8517          	STA TEMP                      ; _pal_spr
-                 * 8237	8618          	STX TEMP+1                    
-                 * 8239	A210          	LDX #$10                      
-                 * 823B	8A            	TXA                           
+                 * 8237	8618          	STX TEMP+1
+                 * 8239	A210          	LDX #$10
+                 * 823B	8A            	TXA
                  * 823C	D0DB          	BNE pal_copy
                  */
                 Write(NESInstruction.STA_zpg, TEMP);
@@ -397,16 +412,16 @@ class NESWriter(Stream stream, bool leaveOpen = false, ILogger? logger = null) :
             case nameof(NESLib.pal_col):
                 /*
                  * 823E	8517          	STA TEMP                      ; _pal_col
-                 * 8240	209285        	JSR popa                      
-                 * 8243	291F          	AND #$1F                      
-                 * 8245	AA            	TAX                           
-                 * 8246	A517          	LDA TEMP                      
-                 * 8248	9DC001        	STA $01C0,x                   
-                 * 824B	E607          	INC PAL_UPDATE                
+                 * 8240	209285        	JSR popa
+                 * 8243	291F          	AND #$1F
+                 * 8245	AA            	TAX
+                 * 8246	A517          	LDA TEMP
+                 * 8248	9DC001        	STA $01C0,x
+                 * 824B	E607          	INC PAL_UPDATE
                  * 824D	60            	RTS
                  */
                 Write(NESInstruction.STA_zpg, TEMP);
-                Write(NESInstruction.JSR, popa.GetAddressAfterMain(sizeOfMain));
+                Write(NESInstruction.JSR, Labels[nameof(popa)]);
                 Write(NESInstruction.AND, 0x1F);
                 Write(NESInstruction.TAX_impl);
                 Write(NESInstruction.LDA_zpg, TEMP);
@@ -417,13 +432,13 @@ class NESWriter(Stream stream, bool leaveOpen = false, ILogger? logger = null) :
             case nameof(NESLib.pal_clear):
                 /*
                  * 824E	A90F          	LDA #$0F                      ; _pal_clear
-                 * 8250	A200          	LDX #$00                      
-                 * 8252	9DC001        	STA $01C0,x                   
-                 * 8255	E8            	INX                           
-                 * 8256	E020          	CPX #$20                      
-                 * 8258	D0F8          	BNE $8252                     
-                 * 825A	8607          	STX PAL_UPDATE                
-                 * 825C	60            	RTS 
+                 * 8250	A200          	LDX #$00
+                 * 8252	9DC001        	STA $01C0,x
+                 * 8255	E8            	INX
+                 * 8256	E020          	CPX #$20
+                 * 8258	D0F8          	BNE $8252
+                 * 825A	8607          	STX PAL_UPDATE
+                 * 825C	60            	RTS
                  */
                 Write(NESInstruction.LDA, 0x0F);
                 Write(NESInstruction.LDX, 0x00);
@@ -437,12 +452,12 @@ class NESWriter(Stream stream, bool leaveOpen = false, ILogger? logger = null) :
             case nameof(NESLib.pal_spr_bright):
                 /*
                  * 825D	AA            	TAX                           ; _pal_spr_bright
-                 * 825E	BD2284        	LDA palBrightTableL,x         
-                 * 8261	850A          	STA PAL_SPR_PTR               
-                 * 8263	BD2B84        	LDA palBrightTableH,x         
-                 * 8266	850B          	STA PAL_SPR_PTR+1             
-                 * 8268	8507          	STA PAL_UPDATE                
-                 * 826A	60            	RTS 
+                 * 825E	BD2284        	LDA palBrightTableL,x
+                 * 8261	850A          	STA PAL_SPR_PTR
+                 * 8263	BD2B84        	LDA palBrightTableH,x
+                 * 8266	850B          	STA PAL_SPR_PTR+1
+                 * 8268	8507          	STA PAL_UPDATE
+                 * 826A	60            	RTS
                  */
                 Write(NESInstruction.TAX_impl);
                 Write(NESInstruction.LDA_abs_X, palBrightTableL);
@@ -455,11 +470,11 @@ class NESWriter(Stream stream, bool leaveOpen = false, ILogger? logger = null) :
             case nameof(NESLib.pal_bg_bright):
                 /*
                  * 826B	AA            	TAX                           ; _pal_bg_bright
-                 * 826C	BD2284        	LDA palBrightTableL,x         
-                 * 826F	8508          	STA PAL_BG_PTR                
-                 * 8271	BD2B84        	LDA palBrightTableH,x         
-                 * 8274	8509          	STA PAL_BG_PTR+1              
-                 * 8276	8507          	STA PAL_UPDATE                
+                 * 826C	BD2284        	LDA palBrightTableL,x
+                 * 826F	8508          	STA PAL_BG_PTR
+                 * 8271	BD2B84        	LDA palBrightTableH,x
+                 * 8274	8509          	STA PAL_BG_PTR+1
+                 * 8276	8507          	STA PAL_UPDATE
                  * 8278	60            	RTS
                  */
                 Write(NESInstruction.TAX_impl);
@@ -473,7 +488,7 @@ class NESWriter(Stream stream, bool leaveOpen = false, ILogger? logger = null) :
             case nameof(NESLib.pal_bright):
                 /*
                  * 8279	205D82        	JSR _pal_spr_bright           ; _pal_bright
-                 * 827C	8A            	TXA                           
+                 * 827C	8A            	TXA
                  * 827D	4C6B82        	JMP _pal_bg_bright
                  */
                 Write(NESInstruction.JSR, 0x825D);
@@ -483,9 +498,9 @@ class NESWriter(Stream stream, bool leaveOpen = false, ILogger? logger = null) :
             case nameof(NESLib.ppu_off):
                 /*
                  * 8280	A512          	LDA PPU_MASK_VAR              ; _ppu_off
-                 * 8282	29E7          	AND #$E7                      
-                 * 8284	8512          	STA PPU_MASK_VAR              
-                 * 8286	4CF082        	JMP _ppu_wait_nmi 
+                 * 8282	29E7          	AND #$E7
+                 * 8284	8512          	STA PPU_MASK_VAR
+                 * 8286	4CF082        	JMP _ppu_wait_nmi
                  */
                 Write(NESInstruction.LDA_zpg, PPU_MASK_VAR);
                 Write(NESInstruction.AND, 0xE7);
@@ -495,7 +510,7 @@ class NESWriter(Stream stream, bool leaveOpen = false, ILogger? logger = null) :
             case nameof(NESLib.ppu_on_all):
                 /*
                  * 8289	A512          	LDA PPU_MASK_VAR              ; _ppu_on_all
-                 * 828B	0918          	ORA #$18   
+                 * 828B	0918          	ORA #$18
                  */
                 Write(NESInstruction.LDA_zpg, 0x12);
                 Write(NESInstruction.ORA, 0x18);
@@ -504,7 +519,7 @@ class NESWriter(Stream stream, bool leaveOpen = false, ILogger? logger = null) :
                 //TODO: not sure if we should emit ppu_onoff at the same place
                 /*
                  * 828D	8512          	STA PPU_MASK_VAR              ; ppu_onoff
-                 * 828F	4CF082        	JMP _ppu_wait_nmi  
+                 * 828F	4CF082        	JMP _ppu_wait_nmi
                  */
                 Write(NESInstruction.STA_zpg, 0x12);
                 Write(NESInstruction.JMP_abs, ppu_wait_nmi);
@@ -512,8 +527,8 @@ class NESWriter(Stream stream, bool leaveOpen = false, ILogger? logger = null) :
             case nameof(NESLib.ppu_on_bg):
                 /*
                  * 8292	A512          	LDA PPU_MASK_VAR              ; _ppu_on_bg
-                 * 8294	0908          	ORA #$08                      
-                 * 8296	D0F5          	BNE ppu_onoff 
+                 * 8294	0908          	ORA #$08
+                 * 8296	D0F5          	BNE ppu_onoff
                  */
                 Write(NESInstruction.LDA_zpg, PPU_MASK_VAR);
                 Write(NESInstruction.ORA, PAL_BG_PTR);
@@ -522,7 +537,7 @@ class NESWriter(Stream stream, bool leaveOpen = false, ILogger? logger = null) :
             case nameof(NESLib.ppu_on_spr):
                 /*
                  * 8298	A512          	LDA PPU_MASK_VAR              ; _ppu_on_spr
-                 * 829A	0910          	ORA #$10                      
+                 * 829A	0910          	ORA #$10
                  * 829C	D0EF          	BNE ppu_onoff
                  */
                 Write(NESInstruction.LDA_zpg, PPU_MASK_VAR);
@@ -540,7 +555,7 @@ class NESWriter(Stream stream, bool leaveOpen = false, ILogger? logger = null) :
             case nameof(NESLib.ppu_system):
                 /*
                  * 82A1	A500          	LDA __ZP_START__              ; _ppu_system
-                 * 82A3	A200          	LDX #$00                      
+                 * 82A3	A200          	LDX #$00
                  * 82A5	60            	RTS
                  */
                 Write(NESInstruction.LDA_zpg, ZP_START);
@@ -550,7 +565,7 @@ class NESWriter(Stream stream, bool leaveOpen = false, ILogger? logger = null) :
             case nameof(NESLib.get_ppu_ctrl_var):
                 /*
                  * 82A6	A510          	LDA __PRG_FILEOFFS__          ; _get_ppu_ctrl_var
-                 * 82A8	A200          	LDX #$00                      
+                 * 82A8	A200          	LDX #$00
                  * 82AA	60            	RTS
                  */
                 Write(NESInstruction.LDA_zpg, PRG_FILEOFFS);
@@ -568,13 +583,13 @@ class NESWriter(Stream stream, bool leaveOpen = false, ILogger? logger = null) :
             case nameof(NESLib.oam_clear):
                 /*
                  * 82AE	A200          	LDX #$00                      ; _oam_clear
-                 * 82B0	A9FF          	LDA #$FF                      
-                 * 82B2	9D0002        	STA $0200,x                   
-                 * 82B5	E8            	INX                           
-                 * 82B6	E8            	INX                           
-                 * 82B7	E8            	INX                           
-                 * 82B8	E8            	INX                           
-                 * 82B9	D0F7          	BNE $82B2                     
+                 * 82B0	A9FF          	LDA #$FF
+                 * 82B2	9D0002        	STA $0200,x
+                 * 82B5	E8            	INX
+                 * 82B6	E8            	INX
+                 * 82B7	E8            	INX
+                 * 82B8	E8            	INX
+                 * 82B9	D0F7          	BNE $82B2
                  * 82BB	60            	RTS
                  */
                 Write(NESInstruction.LDX, 0x00);
@@ -590,16 +605,16 @@ class NESWriter(Stream stream, bool leaveOpen = false, ILogger? logger = null) :
             case nameof(NESLib.oam_size):
                 /*
                  * 82BC	0A            	ASL                           ; _oam_size
-                 * 82BD	0A            	ASL                           
-                 * 82BE	0A            	ASL                           
-                 * 82BF	0A            	ASL                           
-                 * 82C0	0A            	ASL                           
-                 * 82C1	2920          	AND #$20                      
-                 * 82C3	8517          	STA TEMP                      
-                 * 82C5	A510          	LDA __PRG_FILEOFFS__          
-                 * 82C7	29DF          	AND #$DF                      
-                 * 82C9	0517          	ORA TEMP                      
-                 * 82CB	8510          	STA __PRG_FILEOFFS__          
+                 * 82BD	0A            	ASL
+                 * 82BE	0A            	ASL
+                 * 82BF	0A            	ASL
+                 * 82C0	0A            	ASL
+                 * 82C1	2920          	AND #$20
+                 * 82C3	8517          	STA TEMP
+                 * 82C5	A510          	LDA __PRG_FILEOFFS__
+                 * 82C7	29DF          	AND #$DF
+                 * 82C9	0517          	ORA TEMP
+                 * 82CB	8510          	STA __PRG_FILEOFFS__
                  * 82CD	60            	RTS
                  */
                 Write(NESInstruction.ASL_A);
@@ -618,13 +633,13 @@ class NESWriter(Stream stream, bool leaveOpen = false, ILogger? logger = null) :
             case nameof(NESLib.oam_hide_rest):
                 /*
                  * 82CE	AA            	TAX                           ; _oam_hide_rest
-                 * 82CF	A9F0          	LDA #$F0                      
-                 * 82D1	9D0002        	STA $0200,x                   
-                 * 82D4	E8            	INX                           
-                 * 82D5	E8            	INX                           
-                 * 82D6	E8            	INX                           
-                 * 82D7	E8            	INX                           
-                 * 82D8	D0F7          	BNE $82D1                     
+                 * 82CF	A9F0          	LDA #$F0
+                 * 82D1	9D0002        	STA $0200,x
+                 * 82D4	E8            	INX
+                 * 82D5	E8            	INX
+                 * 82D6	E8            	INX
+                 * 82D7	E8            	INX
+                 * 82D8	D0F7          	BNE $82D1
                  * 82DA	60            	RTS
                  */
                 Write(NESInstruction.TAX_impl);
@@ -640,15 +655,15 @@ class NESWriter(Stream stream, bool leaveOpen = false, ILogger? logger = null) :
             case nameof(NESLib.ppu_wait_frame):
                 /*
                  * 82DB	A901          	LDA #$01                      ; _ppu_wait_frame
-                 * 82DD	8503          	STA VRAM_UPDATE               
-                 * 82DF	A501          	LDA __STARTUP__               
-                 * 82E1	C501          	CMP __STARTUP__               
-                 * 82E3	F0FC          	BEQ $82E1                     
-                 * 82E5	A500          	LDA __ZP_START__              
-                 * 82E7	F006          	BEQ @3                        
-                 * 82E9	A502          	LDA NES_PRG_BANKS             
-                 * 82EB	C905          	CMP #$05                      
-                 * 82ED	F0FA          	BEQ $82E9                     
+                 * 82DD	8503          	STA VRAM_UPDATE
+                 * 82DF	A501          	LDA __STARTUP__
+                 * 82E1	C501          	CMP __STARTUP__
+                 * 82E3	F0FC          	BEQ $82E1
+                 * 82E5	A500          	LDA __ZP_START__
+                 * 82E7	F006          	BEQ @3
+                 * 82E9	A502          	LDA NES_PRG_BANKS
+                 * 82EB	C905          	CMP #$05
+                 * 82ED	F0FA          	BEQ $82E9
                  * 82EF	60            	RTS                           ; @3
                  */
                 Write(NESInstruction.LDA, 0x01);
@@ -666,10 +681,10 @@ class NESWriter(Stream stream, bool leaveOpen = false, ILogger? logger = null) :
             case nameof(NESLib.ppu_wait_nmi):
                 /*
                  * 82F0	A901          	LDA #$01                      ; _ppu_wait_nmi
-                 * 82F2	8503          	STA VRAM_UPDATE               
-                 * 82F4	A501          	LDA __STARTUP__               
-                 * 82F6	C501          	CMP __STARTUP__               
-                 * 82F8	F0FC          	BEQ $82F6                     
+                 * 82F2	8503          	STA VRAM_UPDATE
+                 * 82F4	A501          	LDA __STARTUP__
+                 * 82F6	C501          	CMP __STARTUP__
+                 * 82F8	F0FC          	BEQ $82F6
                  * 82FA	60            	RTS
                  */
                 Write(NESInstruction.LDA, 0x01);
@@ -682,31 +697,31 @@ class NESWriter(Stream stream, bool leaveOpen = false, ILogger? logger = null) :
             case nameof(NESLib.scroll):
                 /*
                  * 82FB	8517          	STA TEMP                      ; _scroll
-                 * 82FD	8A            	TXA                           
-                 * 82FE	D00E          	BNE $830E                     
-                 * 8300	A517          	LDA TEMP                      
-                 * 8302	C9F0          	CMP #$F0                      
-                 * 8304	B008          	BCS $830E                     
-                 * 8306	850D          	STA SCROLL_Y                  
-                 * 8308	A900          	LDA #$00                      
-                 * 830A	8517          	STA TEMP                      
-                 * 830C	F00B          	BEQ $8319                     
-                 * 830E	38            	SEC                           
-                 * 830F	A517          	LDA TEMP                      
-                 * 8311	E9F0          	SBC #$F0                      
-                 * 8313	850D          	STA SCROLL_Y                  
-                 * 8315	A902          	LDA #$02                      
-                 * 8317	8517          	STA TEMP                      
-                 * 8319	207F85        	JSR popax                     
-                 * 831C	850C          	STA SCROLL_X                  
-                 * 831E	8A            	TXA                           
-                 * 831F	2901          	AND #$01                      
-                 * 8321	0517          	ORA TEMP                      
-                 * 8323	8517          	STA TEMP                      
-                 * 8325	A510          	LDA __PRG_FILEOFFS__          
-                 * 8327	29FC          	AND #$FC                      
-                 * 8329	0517          	ORA TEMP                      
-                 * 832B	8510          	STA __PRG_FILEOFFS__          
+                 * 82FD	8A            	TXA
+                 * 82FE	D00E          	BNE $830E
+                 * 8300	A517          	LDA TEMP
+                 * 8302	C9F0          	CMP #$F0
+                 * 8304	B008          	BCS $830E
+                 * 8306	850D          	STA SCROLL_Y
+                 * 8308	A900          	LDA #$00
+                 * 830A	8517          	STA TEMP
+                 * 830C	F00B          	BEQ $8319
+                 * 830E	38            	SEC
+                 * 830F	A517          	LDA TEMP
+                 * 8311	E9F0          	SBC #$F0
+                 * 8313	850D          	STA SCROLL_Y
+                 * 8315	A902          	LDA #$02
+                 * 8317	8517          	STA TEMP
+                 * 8319	207F85        	JSR popax
+                 * 831C	850C          	STA SCROLL_X
+                 * 831E	8A            	TXA
+                 * 831F	2901          	AND #$01
+                 * 8321	0517          	ORA TEMP
+                 * 8323	8517          	STA TEMP
+                 * 8325	A510          	LDA __PRG_FILEOFFS__
+                 * 8327	29FC          	AND #$FC
+                 * 8329	0517          	ORA TEMP
+                 * 832B	8510          	STA __PRG_FILEOFFS__
                  * 832D	60            	RTS
                  */
                 Write(NESInstruction.STA_zpg, TEMP);
@@ -725,7 +740,7 @@ class NESWriter(Stream stream, bool leaveOpen = false, ILogger? logger = null) :
                 Write(NESInstruction.STA_zpg, SCROLL_Y); // 8313
                 Write(NESInstruction.LDA, 0x02);
                 Write(NESInstruction.STA_zpg, TEMP);
-                Write(NESInstruction.JSR, popax.GetAddressAfterMain(sizeOfMain));
+                Write(NESInstruction.JSR, Labels[nameof(popax)]);
                 Write(NESInstruction.STA_zpg, SCROLL_X); // 831C
                 Write(NESInstruction.TXA_impl);
                 Write(NESInstruction.AND, 0x01);
@@ -740,14 +755,14 @@ class NESWriter(Stream stream, bool leaveOpen = false, ILogger? logger = null) :
             case nameof(NESLib.bank_spr):
                 /*
                  * 832E	2901          	AND #$01                      ; _bank_spr
-                 * 8330	0A            	ASL                           
-                 * 8331	0A            	ASL                           
-                 * 8332	0A            	ASL                           
-                 * 8333	8517          	STA TEMP                      
-                 * 8335	A510          	LDA __PRG_FILEOFFS__          
-                 * 8337	29F7          	AND #$F7                      
-                 * 8339	0517          	ORA TEMP                      
-                 * 833B	8510          	STA __PRG_FILEOFFS__          
+                 * 8330	0A            	ASL
+                 * 8331	0A            	ASL
+                 * 8332	0A            	ASL
+                 * 8333	8517          	STA TEMP
+                 * 8335	A510          	LDA __PRG_FILEOFFS__
+                 * 8337	29F7          	AND #$F7
+                 * 8339	0517          	ORA TEMP
+                 * 833B	8510          	STA __PRG_FILEOFFS__
                  * 833D	60            	RTS
                  */
                 Write(NESInstruction.AND, 0x01);
@@ -764,15 +779,15 @@ class NESWriter(Stream stream, bool leaveOpen = false, ILogger? logger = null) :
             case nameof(NESLib.bank_bg):
                 /*
                  * 833E	2901          	AND #$01                      ; _bank_bg
-                 * 8340	0A            	ASL                           
-                 * 8341	0A            	ASL                           
-                 * 8342	0A            	ASL                           
-                 * 8343	0A            	ASL                           
-                 * 8344	8517          	STA TEMP                      
-                 * 8346	A510          	LDA __PRG_FILEOFFS__          
-                 * 8348	29EF          	AND #$EF                      
-                 * 834A	0517          	ORA TEMP                      
-                 * 834C	8510          	STA __PRG_FILEOFFS__          
+                 * 8340	0A            	ASL
+                 * 8341	0A            	ASL
+                 * 8342	0A            	ASL
+                 * 8343	0A            	ASL
+                 * 8344	8517          	STA TEMP
+                 * 8346	A510          	LDA __PRG_FILEOFFS__
+                 * 8348	29EF          	AND #$EF
+                 * 834A	0517          	ORA TEMP
+                 * 834C	8510          	STA __PRG_FILEOFFS__
                  * 834E	60            	RTS
                  */
                 Write(NESInstruction.AND, 0x01);
@@ -790,28 +805,28 @@ class NESWriter(Stream stream, bool leaveOpen = false, ILogger? logger = null) :
             case nameof(NESLib.vram_write):
                 /*
                  * 834F	8517          	STA TEMP                      ; _vram_write
-                 * 8351	8618          	STX TEMP+1                    
-                 * 8353	203A85        	JSR popax                     
-                 * 8356	8519          	STA $19                       
-                 * 8358	861A          	STX $1A                       
-                 * 835A	A000          	LDY #$00                      
-                 * 835C	B119          	LDA ($19),y                   
-                 * 835E	8D0720        	STA $2007                     
-                 * 8361	E619          	INC $19                       
-                 * 8363	D002          	BNE $8367                     
-                 * 8365	E61A          	INC $1A                       
-                 * 8367	A517          	LDA TEMP                      
-                 * 8369	D002          	BNE $836D                     
-                 * 836B	C618          	DEC TEMP+1                    
-                 * 836D	C617          	DEC TEMP                      
-                 * 836F	A517          	LDA TEMP                      
-                 * 8371	0518          	ORA TEMP+1                    
-                 * 8373	D0E7          	BNE $835C                     
+                 * 8351	8618          	STX TEMP+1
+                 * 8353	203A85        	JSR popax
+                 * 8356	8519          	STA $19
+                 * 8358	861A          	STX $1A
+                 * 835A	A000          	LDY #$00
+                 * 835C	B119          	LDA ($19),y
+                 * 835E	8D0720        	STA $2007
+                 * 8361	E619          	INC $19
+                 * 8363	D002          	BNE $8367
+                 * 8365	E61A          	INC $1A
+                 * 8367	A517          	LDA TEMP
+                 * 8369	D002          	BNE $836D
+                 * 836B	C618          	DEC TEMP+1
+                 * 836D	C617          	DEC TEMP
+                 * 836F	A517          	LDA TEMP
+                 * 8371	0518          	ORA TEMP+1
+                 * 8373	D0E7          	BNE $835C
                  * 8375	60            	RTS
                  */
                 Write(NESInstruction.STA_zpg, TEMP);
                 Write(NESInstruction.STX_zpg, TEMP + 1);
-                Write(NESInstruction.JSR, popax.GetAddressAfterMain(sizeOfMain));
+                Write(NESInstruction.JSR, Labels[nameof(popax)]);
                 Write(NESInstruction.STA_zpg, 0x19);
                 Write(NESInstruction.STX_zpg, 0x1A);
                 Write(NESInstruction.LDY, 0x00);
@@ -832,9 +847,9 @@ class NESWriter(Stream stream, bool leaveOpen = false, ILogger? logger = null) :
             case nameof(NESLib.set_vram_update):
                 /*
                  * 8376	8504          	STA NAME_UPD_ADR              ; _set_vram_update
-                 * 8378	8605          	STX NAME_UPD_ADR+1            
-                 * 837A	0505          	ORA NAME_UPD_ADR+1            
-                 * 837C	8506          	STA NAME_UPD_ENABLE           
+                 * 8378	8605          	STX NAME_UPD_ADR+1
+                 * 837A	0505          	ORA NAME_UPD_ADR+1
+                 * 837C	8506          	STA NAME_UPD_ENABLE
                  * 837E	60            	RTS
                  */
                 Write(NESInstruction.STA_zpg, NAME_UPD_ADR);
@@ -846,7 +861,7 @@ class NESWriter(Stream stream, bool leaveOpen = false, ILogger? logger = null) :
             case nameof(NESLib.flush_vram_update):
                 /*
                  * 837F	8504          	STA NAME_UPD_ADR              ; _flush_vram_update
-                 * 8381	8605          	STX NAME_UPD_ADR+1            
+                 * 8381	8605          	STX NAME_UPD_ADR+1
                  * 8383	A000          	LDY #$00                      ; _flush_vram_update_nmi
                  */
                 Write(NESInstruction.STA_zpg, NAME_UPD_ADR);
@@ -855,17 +870,17 @@ class NESWriter(Stream stream, bool leaveOpen = false, ILogger? logger = null) :
 
                 /*
                  * 8385	B104          	LDA (NAME_UPD_ADR),y          ; @updName
-                 * 8387	C8            	INY                           
-                 * 8388	C940          	CMP #$40                      
-                 * 838A	B012          	BCS @updNotSeq                
-                 * 838C	8D0620        	STA $2006                     
-                 * 838F	B104          	LDA (NAME_UPD_ADR),y          
-                 * 8391	C8            	INY                           
-                 * 8392	8D0620        	STA $2006                     
-                 * 8395	B104          	LDA (NAME_UPD_ADR),y          
-                 * 8397	C8            	INY                           
-                 * 8398	8D0720        	STA $2007                     
-                 * 839B	4C8583        	JMP @updName                  
+                 * 8387	C8            	INY
+                 * 8388	C940          	CMP #$40
+                 * 838A	B012          	BCS @updNotSeq
+                 * 838C	8D0620        	STA $2006
+                 * 838F	B104          	LDA (NAME_UPD_ADR),y
+                 * 8391	C8            	INY
+                 * 8392	8D0620        	STA $2006
+                 * 8395	B104          	LDA (NAME_UPD_ADR),y
+                 * 8397	C8            	INY
+                 * 8398	8D0720        	STA $2007
+                 * 839B	4C8583        	JMP @updName
                  */
                 Write(NESInstruction.LDA_ind_Y, NAME_UPD_ADR);
                 Write(NESInstruction.INY_impl);
@@ -882,11 +897,11 @@ class NESWriter(Stream stream, bool leaveOpen = false, ILogger? logger = null) :
 
                 /*
                  * 839E	AA            	TAX                           ; @updNotSeq
-                 * 839F	A510          	LDA __PRG_FILEOFFS__          
-                 * 83A1	E080          	CPX #$80                      
-                 * 83A3	9008          	BCC @updHorzSeq               
-                 * 83A5	E0FF          	CPX #$FF                      
-                 * 83A7	F02A          	BEQ @updDone                  
+                 * 839F	A510          	LDA __PRG_FILEOFFS__
+                 * 83A1	E080          	CPX #$80
+                 * 83A3	9008          	BCC @updHorzSeq
+                 * 83A5	E0FF          	CPX #$FF
+                 * 83A7	F02A          	BEQ @updDone
                  */
                 Write(NESInstruction.TAX_impl);
                 Write(NESInstruction.LDA_zpg, PRG_FILEOFFS);
@@ -897,18 +912,18 @@ class NESWriter(Stream stream, bool leaveOpen = false, ILogger? logger = null) :
 
                 /*
                  * 83A9	0904          	ORA #$04                      ; @updVertSeq
-                 * 83AB	D002          	BNE @updNameSeq               
+                 * 83AB	D002          	BNE @updNameSeq
                  * 83AD	29FB          	AND #$FB                      ; @updHorzSeq
                  * 83AF	8D0020        	STA $2000                     ; @updNameSeq
-                 * 83B2	8A            	TXA                           
-                 * 83B3	293F          	AND #$3F                      
-                 * 83B5	8D0620        	STA $2006                     
-                 * 83B8	B104          	LDA (NAME_UPD_ADR),y          
-                 * 83BA	C8            	INY                           
-                 * 83BB	8D0620        	STA $2006                     
-                 * 83BE	B104          	LDA (NAME_UPD_ADR),y          
-                 * 83C0	C8            	INY                           
-                 * 83C1	AA            	TAX                           
+                 * 83B2	8A            	TXA
+                 * 83B3	293F          	AND #$3F
+                 * 83B5	8D0620        	STA $2006
+                 * 83B8	B104          	LDA (NAME_UPD_ADR),y
+                 * 83BA	C8            	INY
+                 * 83BB	8D0620        	STA $2006
+                 * 83BE	B104          	LDA (NAME_UPD_ADR),y
+                 * 83C0	C8            	INY
+                 * 83C1	AA            	TAX
                  */
                 Write(NESInstruction.ORA, 0x04);
                 Write(NESInstruction.BNE_rel, 0x02);
@@ -926,13 +941,13 @@ class NESWriter(Stream stream, bool leaveOpen = false, ILogger? logger = null) :
 
                 /*
                  * 83C2	B104          	LDA (NAME_UPD_ADR),y          ; @updNameLoop
-                 * 83C4	C8            	INY                           
-                 * 83C5	8D0720        	STA $2007                     
-                 * 83C8	CA            	DEX                           
-                 * 83C9	D0F7          	BNE @updNameLoop              
-                 * 83CB	A510          	LDA __PRG_FILEOFFS__          
-                 * 83CD	8D0020        	STA $2000                     
-                 * 83D0	4C8583        	JMP @updName                  
+                 * 83C4	C8            	INY
+                 * 83C5	8D0720        	STA $2007
+                 * 83C8	CA            	DEX
+                 * 83C9	D0F7          	BNE @updNameLoop
+                 * 83CB	A510          	LDA __PRG_FILEOFFS__
+                 * 83CD	8D0020        	STA $2000
+                 * 83D0	4C8583        	JMP @updName
                  * 83D3	60            	RTS                           ; @updDone
                  */
                 Write(NESInstruction.LDA_ind_Y, NAME_UPD_ADR);
@@ -948,7 +963,7 @@ class NESWriter(Stream stream, bool leaveOpen = false, ILogger? logger = null) :
             case nameof(NESLib.vram_adr):
                 /*
                  * 83D4	8E0620        	STX $2006                     ; _vram_adr
-                 * 83D7	8D0620        	STA $2006                     
+                 * 83D7	8D0620        	STA $2006
                  * 83DA	60            	RTS
                  */
                 Write(NESInstruction.STX_abs, PPU_ADDR);
@@ -958,7 +973,7 @@ class NESWriter(Stream stream, bool leaveOpen = false, ILogger? logger = null) :
             case nameof(NESLib.vram_put):
                 /*
                  * 83DB	8D0720        	STA $2007                     ; _vram_put
-                 * 83DE	60            	RTS  
+                 * 83DE	60            	RTS
                  */
                 Write(NESInstruction.STA_abs, PPU_DATA);
                 Write(NESInstruction.RTS_impl);
@@ -966,26 +981,26 @@ class NESWriter(Stream stream, bool leaveOpen = false, ILogger? logger = null) :
             case nameof(NESLib.vram_fill):
                 /*
                  * 83DF	8519          	STA $19                       ; _vram_fill
-                 * 83E1	861A          	STX $1A                       
-                 * 83E3	209585        	JSR popa                      
-                 * 83E6	A61A          	LDX $1A                       
-                 * 83E8	F00C          	BEQ $83F6                     
-                 * 83EA	A200          	LDX #$00                      
-                 * 83EC	8D0720        	STA $2007                     
-                 * 83EF	CA            	DEX                           
-                 * 83F0	D0FA          	BNE $83EC                     
-                 * 83F2	C61A          	DEC $1A                       
-                 * 83F4	D0F6          	BNE $83EC                     
-                 * 83F6	A619          	LDX $19                       
-                 * 83F8	F006          	BEQ @4                        
-                 * 83FA	8D0720        	STA $2007                     
-                 * 83FD	CA            	DEX                           
-                 * 83FE	D0FA          	BNE $83FA                     
+                 * 83E1	861A          	STX $1A
+                 * 83E3	209585        	JSR popa
+                 * 83E6	A61A          	LDX $1A
+                 * 83E8	F00C          	BEQ $83F6
+                 * 83EA	A200          	LDX #$00
+                 * 83EC	8D0720        	STA $2007
+                 * 83EF	CA            	DEX
+                 * 83F0	D0FA          	BNE $83EC
+                 * 83F2	C61A          	DEC $1A
+                 * 83F4	D0F6          	BNE $83EC
+                 * 83F6	A619          	LDX $19
+                 * 83F8	F006          	BEQ @4
+                 * 83FA	8D0720        	STA $2007
+                 * 83FD	CA            	DEX
+                 * 83FE	D0FA          	BNE $83FA
                  * 8400	60            	RTS                           ; @4
                  */
                 Write(NESInstruction.STA_zpg, 0x19);
                 Write(NESInstruction.STX_zpg, 0x1A);
-                Write(NESInstruction.JSR, popa.GetAddressAfterMain(sizeOfMain));
+                Write(NESInstruction.JSR, Labels[nameof(popa)]);
                 Write(NESInstruction.LDX_zpg, 0x1A);
                 Write(NESInstruction.BEQ_rel, 0x0C);
                 Write(NESInstruction.LDX, 0x00);
@@ -1004,15 +1019,15 @@ class NESWriter(Stream stream, bool leaveOpen = false, ILogger? logger = null) :
             case nameof(NESLib.vram_inc):
                 /*
                  * 8401	0900          	ORA #$00                      ; _vram_inc
-                 * 8403	F002          	BEQ $8407                     
-                 * 8405	A904          	LDA #$04                      
-                 * 8407	8517          	STA TEMP                      
-                 * 8409	A510          	LDA __PRG_FILEOFFS__          
-                 * 840B	29FB          	AND #$FB                      
-                 * 840D	0517          	ORA TEMP                      
-                 * 840F	8510          	STA __PRG_FILEOFFS__          
-                 * 8411	8D0020        	STA $2000                     
-                 * 8414	60            	RTS 
+                 * 8403	F002          	BEQ $8407
+                 * 8405	A904          	LDA #$04
+                 * 8407	8517          	STA TEMP
+                 * 8409	A510          	LDA __PRG_FILEOFFS__
+                 * 840B	29FB          	AND #$FB
+                 * 840D	0517          	ORA TEMP
+                 * 840F	8510          	STA __PRG_FILEOFFS__
+                 * 8411	8D0020        	STA $2000
+                 * 8414	60            	RTS
                  */
                 Write(NESInstruction.ORA, 0x00);
                 Write(NESInstruction.BEQ_rel, 0x02);
@@ -1028,7 +1043,7 @@ class NESWriter(Stream stream, bool leaveOpen = false, ILogger? logger = null) :
             case nameof(NESLib.nesclock):
                 /*
                  * 8415	A501          	LDA __STARTUP__               ; _nesclock
-                 * 8417	A200          	LDX #$00                      
+                 * 8417	A200          	LDX #$00
                  * 8419	60            	RTS
                  */
                 Write(NESInstruction.LDA_zpg, STARTUP);
@@ -1038,9 +1053,9 @@ class NESWriter(Stream stream, bool leaveOpen = false, ILogger? logger = null) :
             case nameof(NESLib.delay):
                 /*
                  * 841A	AA            	TAX                           ; _delay
-                 * 841B	20F082        	JSR _ppu_wait_nmi             
-                 * 841E	CA            	DEX                           
-                 * 841F	D0FA          	BNE _delay+1                  
+                 * 841B	20F082        	JSR _ppu_wait_nmi
+                 * 841E	CA            	DEX
+                 * 841F	D0FA          	BNE _delay+1
                  * 8421	60            	RTS
                  */
                 Write(NESInstruction.TAX_impl);
@@ -1086,7 +1101,7 @@ class NESWriter(Stream stream, bool leaveOpen = false, ILogger? logger = null) :
          * @2:
          *     bit PPU_STATUS
          *     bpl @2
-         * 
+         *
          * ; no APU frame counter IRQs
          *     lda #$40
          *     sta PPU_FRAMECNT
@@ -1169,22 +1184,22 @@ class NESWriter(Stream stream, bool leaveOpen = false, ILogger? logger = null) :
         *     sta $700,x
         *     inx
         *     bne @1
-        * 
+        *
         *     lda #4
         *     jsr _pal_bright
         *     jsr _pal_clear
         *     jsr _oam_clear
-        * 
+        *
         *     jsr	zerobss
         *     jsr	copydata
-        * 
+        *
         *     lda #<(__RAM_START__+__RAM_SIZE__)
         *     sta	sp
         *     lda	#>(__RAM_START__+__RAM_SIZE__)
         *     sta	sp+1            ; Set argument stack ptr
-        * 
+        *
         *     jsr	initlib
-        * 
+        *
         *     lda #%10000000
         *     sta <PPU_CTRL_VAR
         *     sta PPU_CTRL		;enable NMI
@@ -1203,8 +1218,8 @@ class NESWriter(Stream stream, bool leaveOpen = false, ILogger? logger = null) :
         Write(NESInstruction.JSR, 0x8279);
         Write(NESInstruction.JSR, 0x824E);
         Write(NESInstruction.JSR, 0x82AE);
-        Write(NESInstruction.JSR, zerobss.GetAddressAfterMain(sizeOfMain));
-        Write(NESInstruction.JSR, copydata.GetAddressAfterMain(sizeOfMain));
+        Write(NESInstruction.JSR, Labels[nameof(zerobss)]);
+        Write(NESInstruction.JSR, Labels[nameof(copydata)].GetAddressAfterMain(sizeOfMain));
         Write(NESInstruction.LDA, 0x00);
         Write(NESInstruction.STA_zpg, sp);
         Write(NESInstruction.LDA, PAL_BG_PTR);
@@ -1277,7 +1292,7 @@ class NESWriter(Stream stream, bool leaveOpen = false, ILogger? logger = null) :
          * pha
          * tya
          * pha
-         * 
+         *
          * lda <PPU_MASK_VAR	;if rendering is disabled, do not access the VRAM at all
          * and #%00011000
          * bne @doUpdate
@@ -1300,7 +1315,7 @@ class NESWriter(Stream stream, bool leaveOpen = false, ILogger? logger = null) :
          * https://github.com/clbr/neslib/blob/d061b0f7f1a449941111c31eee0fc2e85b1826d7/neslib.sinc#L40
          * lda #>OAM_BUF		;update OAM
          * sta PPU_OAM_DMA
-         * 
+         *
          * lda <PAL_UPDATE		;update palette if needed
          * bne @updPal
          * jmp @updVRAM
@@ -1318,7 +1333,7 @@ class NESWriter(Stream stream, bool leaveOpen = false, ILogger? logger = null) :
          * https://github.com/clbr/neslib/blob/d061b0f7f1a449941111c31eee0fc2e85b1826d7/neslib.sinc#L49
          * ldx #0
          * stx <PAL_UPDATE
-         * 
+         *
          * lda #$3f
          * sta PPU_ADDR
          * stx PPU_ADDR
@@ -1401,11 +1416,11 @@ class NESWriter(Stream stream, bool leaveOpen = false, ILogger? logger = null) :
     {
         /*
          * 81C0	A503          	LDA VRAM_UPDATE               ; @updVRAM
-         * 81C2	F00B          	BEQ @skipUpd                  
-         * 81C4	A900          	LDA #$00                      
-         * 81C6	8503          	STA VRAM_UPDATE               
-         * 81C8	A506          	LDA NAME_UPD_ENABLE           
-         * 81CA	F003          	BEQ @skipUpd                  
+         * 81C2	F00B          	BEQ @skipUpd
+         * 81C4	A900          	LDA #$00
+         * 81C6	8503          	STA VRAM_UPDATE
+         * 81C8	A506          	LDA NAME_UPD_ENABLE
+         * 81CA	F003          	BEQ @skipUpd
          * 81CC	208383        	JSR _flush_vram_update_nmi
          */
         Write(NESInstruction.LDA_zpg, VRAM_UPDATE);
@@ -1421,14 +1436,14 @@ class NESWriter(Stream stream, bool leaveOpen = false, ILogger? logger = null) :
     {
         /*
          * 81CF	A900          	LDA #$00                      ; @skipUpd
-         * 81D1	8D0620        	STA $2006                     
-         * 81D4	8D0620        	STA $2006                     
-         * 81D7	A50C          	LDA SCROLL_X                  
-         * 81D9	8D0520        	STA $2005                     
-         * 81DC	A50D          	LDA SCROLL_Y                  
-         * 81DE	8D0520        	STA $2005                     
-         * 81E1	A510          	LDA __PRG_FILEOFFS__          
-         * 81E3	8D0020        	STA $2000 
+         * 81D1	8D0620        	STA $2006
+         * 81D4	8D0620        	STA $2006
+         * 81D7	A50C          	LDA SCROLL_X
+         * 81D9	8D0520        	STA $2005
+         * 81DC	A50D          	LDA SCROLL_Y
+         * 81DE	8D0520        	STA $2005
+         * 81E1	A510          	LDA __PRG_FILEOFFS__
+         * 81E3	8D0020        	STA $2000
          */
         Write(NESInstruction.LDA, 0x00);
         Write(NESInstruction.STA_abs, PPU_ADDR);
@@ -1445,14 +1460,14 @@ class NESWriter(Stream stream, bool leaveOpen = false, ILogger? logger = null) :
     {
         /*
          * 81E6	A512          	LDA PPU_MASK_VAR              ; @skipAll
-         * 81E8	8D0120        	STA $2001                     
-         * 81EB	E601          	INC __STARTUP__               
-         * 81ED	E602          	INC NES_PRG_BANKS             
-         * 81EF	A502          	LDA NES_PRG_BANKS             
-         * 81F1	C906          	CMP #$06                      
-         * 81F3	D004          	BNE skipNtsc                  
-         * 81F5	A900          	LDA #$00                      
-         * 81F7	8502          	STA NES_PRG_BANKS 
+         * 81E8	8D0120        	STA $2001
+         * 81EB	E601          	INC __STARTUP__
+         * 81ED	E602          	INC NES_PRG_BANKS
+         * 81EF	A502          	LDA NES_PRG_BANKS
+         * 81F1	C906          	CMP #$06
+         * 81F3	D004          	BNE skipNtsc
+         * 81F5	A900          	LDA #$00
+         * 81F7	8502          	STA NES_PRG_BANKS
          */
         Write(NESInstruction.LDA_zpg, PPU_MASK_VAR);
         Write(NESInstruction.STA_abs, PPU_MASK);
@@ -1469,11 +1484,11 @@ class NESWriter(Stream stream, bool leaveOpen = false, ILogger? logger = null) :
     {
         /*
          * 81F9	201400        	JSR NMICallback               ; skipNtsc
-         * 81FC	68            	PLA                           
-         * 81FD	A8            	TAY                           
-         * 81FE	68            	PLA                           
-         * 81FF	AA            	TAX                           
-         * 8200	68            	PLA                           
+         * 81FC	68            	PLA
+         * 81FD	A8            	TAY
+         * 81FE	68            	PLA
+         * 81FF	AA            	TAX
+         * 8200	68            	PLA
          * 8201	40            	RTI
          */
         Write(NESInstruction.JSR, (ushort)0x0014);
@@ -1489,11 +1504,11 @@ class NESWriter(Stream stream, bool leaveOpen = false, ILogger? logger = null) :
     {
         /*
          * 8202	48            	PHA                           ; irq
-         * 8203	8A            	TXA                           
-         * 8204	48            	PHA                           
-         * 8205	98            	TYA                           
-         * 8206	48            	PHA                           
-         * 8207	A9FF          	LDA #$FF                      
+         * 8203	8A            	TXA
+         * 8204	48            	PHA
+         * 8205	98            	TYA
+         * 8206	48            	PHA
+         * 8207	A9FF          	LDA #$FF
          * 8209	4CF981        	JMP skipNtsc
          */
         Write(NESInstruction.PHA_impl);
@@ -1509,7 +1524,7 @@ class NESWriter(Stream stream, bool leaveOpen = false, ILogger? logger = null) :
     {
         /*
          * 820C	8515          	STA NMICallback+1             ; _nmi_set_callback
-         * 820E	8616          	STX $16                       
+         * 820E	8616          	STX $16
          * 8210	60            	RTS                           ; HandyRTS
          */
         Write(NESInstruction.STA_zpg, 0x15);
@@ -1521,10 +1536,10 @@ class NESWriter(Stream stream, bool leaveOpen = false, ILogger? logger = null) :
     {
         /*
          * 84F4	A000          	LDY #$00                      ; initlib
-         * 84F6	F007          	BEQ $84FF                     
-         * 84F8	A900          	LDA #$00                      
-         * 84FA	A285          	LDX #$85                      
-         * 84FC	4C0003        	JMP condes                    
+         * 84F6	F007          	BEQ $84FF
+         * 84F8	A900          	LDA #$00
+         * 84FA	A285          	LDX #$85
+         * 84FC	4C0003        	JMP condes
          * 84FF	60            	RTS
          */
         Write(NESInstruction.LDY, 0x00);
@@ -1537,12 +1552,14 @@ class NESWriter(Stream stream, bool leaveOpen = false, ILogger? logger = null) :
 
     void Write_donelib(ushort totalSize)
     {
+        //SetLabel(nameof(donelib), (ushort)(_writer.BaseStream.Position + 0x8000));
+
         /*
          * 8546	A000          	LDY #$00                      ; donelib
-         * 8548	F007          	BEQ $8551                     
-         * 8547	A9FE          	LDA #$FE                      
-         * 8549	A285          	LDX #$85 
-         * 854E	4C0003        	JMP condes                    
+         * 8548	F007          	BEQ $8551
+         * 8547	A9FE          	LDA #$FE
+         * 8549	A285          	LDX #$85
+         * 854E	4C0003        	JMP condes
          * 8551	60            	RTS
          */
         Write(NESInstruction.LDY, 0x00);
@@ -1555,30 +1572,31 @@ class NESWriter(Stream stream, bool leaveOpen = false, ILogger? logger = null) :
 
     void Write_copydata(ushort totalSize)
     {
+        //SetLabel(nameof(copydata), (ushort)(_writer.BaseStream.Position + 0x8000));
         /*
         * 854F	A9FE          	LDA #$FE                      ; copydata
-        * 8551	852A          	STA ptr1                      
-        * 8553	A985          	LDA #$85 
-        * 8558	852B          	STA ptr1+1                    
-        * 855A	A900          	LDA #$00                      
-        * 855C	852C          	STA ptr2                      
-        * 855E	A903          	LDA #$03                      
-        * 8560	852D          	STA ptr2+1                    
-        * 8562	A2DA          	LDX #$DA                      
-        * 8564	A9FF          	LDA #$FF                      
-        * 8566	8532          	STA tmp1                      
-        * 8568	A000          	LDY #$00                      
-        * 856A	E8            	INX                           
-        * 856B	F00D          	BEQ $857A                     
-        * 856D	B12A          	LDA (ptr1),y                  
-        * 856F	912C          	STA (ptr2),y                  
-        * 8571	C8            	INY                           
-        * 8572	D0F6          	BNE $856A                     
-        * 8574	E62B          	INC ptr1+1                    
-        * 8576	E62D          	INC ptr2+1                    
-        * 8578	D0F0          	BNE $856A                     
-        * 857A	E632          	INC tmp1                      
-        * 857C	D0EF          	BNE $856D                     
+        * 8551	852A          	STA ptr1
+        * 8553	A985          	LDA #$85
+        * 8558	852B          	STA ptr1+1
+        * 855A	A900          	LDA #$00
+        * 855C	852C          	STA ptr2
+        * 855E	A903          	LDA #$03
+        * 8560	852D          	STA ptr2+1
+        * 8562	A2DA          	LDX #$DA
+        * 8564	A9FF          	LDA #$FF
+        * 8566	8532          	STA tmp1
+        * 8568	A000          	LDY #$00
+        * 856A	E8            	INX
+        * 856B	F00D          	BEQ $857A
+        * 856D	B12A          	LDA (ptr1),y
+        * 856F	912C          	STA (ptr2),y
+        * 8571	C8            	INY
+        * 8572	D0F6          	BNE $856A
+        * 8574	E62B          	INC ptr1+1
+        * 8576	E62D          	INC ptr2+1
+        * 8578	D0F0          	BNE $856A
+        * 857A	E632          	INC tmp1
+        * 857C	D0EF          	BNE $856D
         * 857E	60            	RTS
         */
         Write(NESInstruction.LDA, (byte)(totalSize & 0xff));
@@ -1609,11 +1627,12 @@ class NESWriter(Stream stream, bool leaveOpen = false, ILogger? logger = null) :
 
     void Write_popax()
     {
+        SetLabel(nameof(popax), (ushort)(_writer.BaseStream.Position + 0x8000));
         /*
          * 857F	A001          	LDY #$01                      ; popax
-         * 8581	B122          	LDA (sp),y                    
-         * 8583	AA            	TAX                           
-         * 8584	88            	DEY                           
+         * 8581	B122          	LDA (sp),y
+         * 8583	AA            	TAX
+         * 8584	88            	DEY
          * 8585	B122          	LDA (sp),y
          */
         Write(NESInstruction.LDY, 0x01);
@@ -1627,12 +1646,12 @@ class NESWriter(Stream stream, bool leaveOpen = false, ILogger? logger = null) :
     {
         /*
         * 8587	E622          	INC sp                        ; incsp2
-        * 8589	F005          	BEQ $8590                     
-        * 858B	E622          	INC sp                        
-        * 858D	F003          	BEQ $8592                     
-        * 858F	60            	RTS                           
-        * 8590	E622          	INC sp                        
-        * 8592	E623          	INC sp+1                      
+        * 8589	F005          	BEQ $8590
+        * 858B	E622          	INC sp
+        * 858D	F003          	BEQ $8592
+        * 858F	60            	RTS
+        * 8590	E622          	INC sp
+        * 8592	E623          	INC sp+1
         * 8594	60            	RTS
         */
         Write(NESInstruction.INC_zpg, sp);
@@ -1647,14 +1666,15 @@ class NESWriter(Stream stream, bool leaveOpen = false, ILogger? logger = null) :
 
     void Write_popa()
     {
+        SetLabel(nameof(popa), (ushort)(_writer.BaseStream.Position + 0x8000));
         /*
          * 8595	A000          	LDY #$00                      ; popa
-         * 8597	B122          	LDA (sp),y                    
-         * 8599	E622          	INC sp                        
-         * 859B	F001          	BEQ $859E                     
-         * 859D	60            	RTS                           
-         * 859E	E623          	INC sp+1                      
-         * 85A0	60            	RTS   
+         * 8597	B122          	LDA (sp),y
+         * 8599	E622          	INC sp
+         * 859B	F001          	BEQ $859E
+         * 859D	60            	RTS
+         * 859E	E623          	INC sp+1
+         * 85A0	60            	RTS
          */
         Write(NESInstruction.LDY, 0x00);
         Write(NESInstruction.LDA_ind_Y, sp);
@@ -1667,22 +1687,28 @@ class NESWriter(Stream stream, bool leaveOpen = false, ILogger? logger = null) :
 
     void Write_pusha()
     {
+        //
         /*
          * 85A1	A000          	LDY #$00                      ; pusha0sp
          * 85A3	B122          	LDA (sp),y                    ; pushaysp
          * 85A5	A422          	LDY sp                        ; pusha
-         * 85A7	F007          	BEQ $85B0                     
-         * 85A9	C622          	DEC sp                        
-         * 85AB	A000          	LDY #$00                      
-         * 85AD	9122          	STA (sp),y                    
-         * 85AF	60            	RTS                           
-         * 85B0	C623          	DEC sp+1                      
-         * 85B2	C622          	DEC sp                        
-         * 85B4	9122          	STA (sp),y                    
+         * 85A7	F007          	BEQ $85B0
+         * 85A9	C622          	DEC sp
+         * 85AB	A000          	LDY #$00
+         * 85AD	9122          	STA (sp),y
+         * 85AF	60            	RTS
+         * 85B0	C623          	DEC sp+1
+         * 85B2	C622          	DEC sp
+         * 85B4	9122          	STA (sp),y
          * 85B6	60            	RTS
         */
+        //SetLabel(nameof(pusha0sp), (ushort)(_writer.BaseStream.Position + 0x8000));
         Write(NESInstruction.LDY, 0x00);
+
+        //SetLabel(nameof(pushaysp), (ushort)(_writer.BaseStream.Position + 0x8000));
         Write(NESInstruction.LDA_ind_Y, sp);
+
+        SetLabel(nameof(pusha), (ushort)(_writer.BaseStream.Position + 0x8000));
         Write(NESInstruction.LDY_zpg, sp);
         Write(NESInstruction.BEQ_rel, PAL_UPDATE);
         Write(NESInstruction.DEC_zpg, sp);
@@ -1701,22 +1727,27 @@ class NESWriter(Stream stream, bool leaveOpen = false, ILogger? logger = null) :
         * 85B7	A900          	LDA #$00                      ; push0
         * 85B9	A200          	LDX #$00                      ; pusha0
         * 85BB	48            	PHA                           ; pushax
-        * 85BC	A522          	LDA sp                        
-        * 85BE	38            	SEC                           
-        * 85BF	E902          	SBC #$02                      
-        * 85C1	8522          	STA sp                        
-        * 85C3	B002          	BCS $85C7                     
-        * 85C5	C623          	DEC sp+1                      
-        * 85C7	A001          	LDY #$01                      
-        * 85C9	8A            	TXA                           
-        * 85CA	9122          	STA (sp),y                    
-        * 85CC	68            	PLA                           
-        * 85CD	88            	DEY                           
-        * 85CE	9122          	STA (sp),y                    
+        * 85BC	A522          	LDA sp
+        * 85BE	38            	SEC
+        * 85BF	E902          	SBC #$02
+        * 85C1	8522          	STA sp
+        * 85C3	B002          	BCS $85C7
+        * 85C5	C623          	DEC sp+1
+        * 85C7	A001          	LDY #$01
+        * 85C9	8A            	TXA
+        * 85CA	9122          	STA (sp),y
+        * 85CC	68            	PLA
+        * 85CD	88            	DEY
+        * 85CE	9122          	STA (sp),y
         * 85D0	60            	RTS
         */
+        //SetLabel(nameof(push0), (ushort)(_writer.BaseStream.Position + 0x8000));
         Write(NESInstruction.LDA, 0x00);
+
+        //SetLabel(nameof(pusha0), (ushort)(_writer.BaseStream.Position + 0x8000));
         Write(NESInstruction.LDX, 0x00);
+
+        SetLabel(nameof(pushax), (ushort)(_writer.BaseStream.Position + 0x8000));
         Write(NESInstruction.PHA_impl);
         Write(NESInstruction.LDA_zpg, sp);
         Write(NESInstruction.SEC_impl);
@@ -1735,26 +1766,27 @@ class NESWriter(Stream stream, bool leaveOpen = false, ILogger? logger = null) :
 
     void Write_zerobss(byte locals)
     {
+        SetLabel(nameof(zerobss), (ushort)(_writer.BaseStream.Position + 0x8000));
         /*
          * 85D1	A925          	LDA #$25                      ; zerobss
-         * 85D3	852A          	STA ptr1                      
-         * 85D5	A903          	LDA #$03                      
-         * 85D7	852B          	STA ptr1+1                    
-         * 85D9	A900          	LDA #$00                      
-         * 85DB	A8            	TAY                           
-         * 85DC	A200          	LDX #$00                      
-         * 85DE	F00A          	BEQ $85EA                     
-         * 85E0	912A          	STA (ptr1),y                  
-         * 85E2	C8            	INY                           
-         * 85E3	D0FB          	BNE $85E0                     
-         * 85E5	E62B          	INC ptr1+1                    
-         * 85E7	CA            	DEX                           
-         * 85E8	D0F6          	BNE $85E0                     
-         * 85EA	C000          	CPY #$00                      
-         * 85EC	F005          	BEQ $85F3                     
-         * 85EE	912A          	STA (ptr1),y                  
-         * 85F0	C8            	INY                           
-         * 85F1	D0F7          	BNE $85EA                     
+         * 85D3	852A          	STA ptr1
+         * 85D5	A903          	LDA #$03
+         * 85D7	852B          	STA ptr1+1
+         * 85D9	A900          	LDA #$00
+         * 85DB	A8            	TAY
+         * 85DC	A200          	LDX #$00
+         * 85DE	F00A          	BEQ $85EA
+         * 85E0	912A          	STA (ptr1),y
+         * 85E2	C8            	INY
+         * 85E3	D0FB          	BNE $85E0
+         * 85E5	E62B          	INC ptr1+1
+         * 85E7	CA            	DEX
+         * 85E8	D0F6          	BNE $85E0
+         * 85EA	C000          	CPY #$00
+         * 85EC	F005          	BEQ $85F3
+         * 85EE	912A          	STA (ptr1),y
+         * 85F0	C8            	INY
+         * 85F1	D0F7          	BNE $85EA
          * 85F3	60            	RTS
          */
         Write(NESInstruction.LDA, 0x25);
@@ -1776,6 +1808,64 @@ class NESWriter(Stream stream, bool leaveOpen = false, ILogger? logger = null) :
         Write(NESInstruction.STA_ind_Y, ptr1);
         Write(NESInstruction.INY_impl);
         Write(NESInstruction.BNE_rel, 0xF7);
+        Write(NESInstruction.RTS_impl);
+    }
+
+    void Write_OAM_Sprite()
+    {
+        SetLabel(nameof(NESLib.oam_spr), (ushort)(_writer.BaseStream.Position + 0x8000));
+        /*
+        * 85B7	AA            	TAX         ; _oam_spr
+        * 85B8	A000            LDY  #$00
+        * 85BA	B122          	LDA (sp),y
+        * 85BC	C8            	INY
+        * 85BD	9D0202        	STA $0202,x
+        * 85C0	B122          	LDA (sp),y
+        * 85C2	C8            	INY
+        * 85C3	9D0102        	STA $0201,x
+        * 85C6	B122          	LDA (sp),y
+        * 85C8	C8            	INY
+        * 85C9	9D0002        	STA $0200,x
+        * 85CC	B122          	LDA (sp),y
+        * 85CE	9D0302        	STA $0203,x
+        * 85D1	A522          	LDA sp
+        * 85D3	18            	CLC
+        * 85D4	6904          	ADC #$04
+        * 85D6	8522          	STA sp
+        * 85D8	9002          	BCC @1
+        * 85DA	E623          	INC sp+1
+        */
+        Write(NESInstruction.TAX_impl);
+        Write(NESInstruction.LDY, 0x00);
+        Write(NESInstruction.LDA_ind_Y, sp);
+        Write(NESInstruction.INY_impl);
+        Write(NESInstruction.STA_abs_X, OAM_BUF + 2);
+        Write(NESInstruction.LDA_ind_Y, sp);
+        Write(NESInstruction.INY_impl);
+        Write(NESInstruction.STA_abs_X, OAM_BUF + 1);
+        Write(NESInstruction.LDA_ind_Y, sp);
+        Write(NESInstruction.INY_impl);
+        Write(NESInstruction.STA_abs_X, OAM_BUF + 0);
+        Write(NESInstruction.LDA_ind_Y, sp);
+        Write(NESInstruction.STA_abs_X, OAM_BUF + 3);
+        Write(NESInstruction.LDA_zpg, sp);
+        Write(NESInstruction.CLC);
+        Write(NESInstruction.ADC, 0x04);
+        Write(NESInstruction.STA_zpg, sp);
+        Write(NESInstruction.BCC, 0x02);
+        Write(NESInstruction.INC_zpg, sp + 1);
+
+        /*
+         * 85DC	8A            	TXA                           ; @1
+         * 85DD	18            	CLC
+         * 85DE	6904          	ADC #$04
+         * 85E0	A200          	LDX #$00
+         * 85E2	60            	RTS
+         */
+        Write(NESInstruction.TXA_impl);
+        Write(NESInstruction.CLC);
+        Write(NESInstruction.ADC, 0x04);
+        Write(NESInstruction.LDX, 0x00);
         Write(NESInstruction.RTS_impl);
     }
 
@@ -1822,6 +1912,14 @@ class NESWriter(Stream stream, bool leaveOpen = false, ILogger? logger = null) :
             _writer.Write(Trainer);
         if (INST_ROM != null)
             _writer.Write(INST_ROM);
+    }
+
+    private void SetLabel(string name, ushort address)
+    {
+        if (_hasPresetLabels)
+            return;
+
+        Labels[name] = address;
     }
 
     public void Flush() => _writer.Flush();

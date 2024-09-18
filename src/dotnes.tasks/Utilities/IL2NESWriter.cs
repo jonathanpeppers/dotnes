@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using System.Diagnostics;
 using System.Reflection.Metadata;
 using static NES.NESLib;
 
@@ -9,6 +10,14 @@ class IL2NESWriter : NESWriter
     public IL2NESWriter(Stream stream, bool leaveOpen = false, ILogger? logger = null)
         : base(stream, leaveOpen, logger)
     {
+        Labels[nameof(copydata)] = 0x850C;
+        Labels[nameof(popa)] = 0x854F;
+        Labels[nameof(popax)] = 0x8539;
+        Labels[nameof(pusha)] = 0x855F;
+        Labels[nameof(pushax)] = 0x8575;
+        Labels[nameof(zerobss)] = 0x858B;
+        Labels[nameof(rodata)] = 0x85AE;
+        Labels[nameof(donelib)] = 0x84FD;
     }
 
     /// <summary>
@@ -153,6 +162,9 @@ class IL2NESWriter : NESWriter
             case ILOpCode.Add:
                 Stack.Push(Stack.Pop() + Stack.Pop());
                 break;
+            case ILOpCode.Pop:
+                Stack.Pop();
+                break;
             default:
                 throw new NotImplementedException($"OpCode {code} with no operands is not implemented!");
         }
@@ -181,7 +193,7 @@ class IL2NESWriter : NESWriter
                 }
                 break;
             case ILOpCode.Br_s:
-                Write(NESInstruction.JMP_abs, donelib.GetAddressAfterMain(sizeOfMain));
+                Write(NESInstruction.JMP_abs, Labels[nameof(donelib)].GetAddressAfterMain(sizeOfMain));
                 break;
             case ILOpCode.Newarr:
                 if (previous == ILOpCode.Ldc_i4_s)
@@ -215,7 +227,7 @@ class IL2NESWriter : NESWriter
                 //TODO: hardcoded until string table figured out
                 Write(NESInstruction.LDA, 0xF1);
                 Write(NESInstruction.LDX, 0x85);
-                Write(NESInstruction.JSR, pushax.GetAddressAfterMain(sizeOfMain));
+                Write(NESInstruction.JSR, Labels[nameof(pushax)]);
                 Write(NESInstruction.LDX, 0x00);
                 Write(ILOpCode.Ldc_i4_s, operand.Length, sizeOfMain);
                 break;
@@ -295,8 +307,13 @@ class IL2NESWriter : NESWriter
         }
     }
 
-    static ushort GetAddress(string name)
+    ushort GetAddress(string name)
     {
+        //if (Labels.TryGetValue(name, out var address))
+        //{
+        //    return address;
+        //}
+
         switch (name)
         {
             case nameof(pal_col):
@@ -353,6 +370,15 @@ class IL2NESWriter : NESWriter
                 return 0x82AB;
             case nameof(scroll):
                 return 0x82FB;
+            case nameof(oam_spr):
+                if (Labels.TryGetValue(nameof(oam_spr), out var address))
+                {
+                    return address;
+                }
+                else
+                {
+                    return 0x0000;
+                }
             default:
                 throw new NotImplementedException($"{nameof(GetAddress)} for {name} is not implemented!");
         }
@@ -436,7 +462,7 @@ class IL2NESWriter : NESWriter
     {
         if (LastLDA)
         {
-            Write(NESInstruction.JSR, pusha.GetAddressAfterMain(sizeOfMain));
+            Write(NESInstruction.JSR, Labels[nameof(pusha)]);
         }
         Write(NESInstruction.LDX, checked((byte)(operand >> 8)));
         Write(NESInstruction.LDA, checked((byte)(operand & 0xff)));
@@ -447,7 +473,7 @@ class IL2NESWriter : NESWriter
     {
         if (LastLDA)
         {
-            Write(NESInstruction.JSR, pusha.GetAddressAfterMain(sizeOfMain));
+            Write(NESInstruction.JSR, Labels[nameof(pusha)]);
         }
         Write(NESInstruction.LDA, operand);
         Stack.Push(operand);
@@ -461,11 +487,11 @@ class IL2NESWriter : NESWriter
             if (local.Value < byte.MaxValue)
             {
                 Write(NESInstruction.LDA_abs, (ushort)local.Address);
-                Write(NESInstruction.JSR, pusha.GetAddressAfterMain(sizeOfMain));
+                Write(NESInstruction.JSR, Labels[nameof(pusha)]);
             }
             else if (local.Value < ushort.MaxValue)
             {
-                Write(NESInstruction.JSR, pusha.GetAddressAfterMain(sizeOfMain));
+                Write(NESInstruction.JSR, Labels[nameof(pusha)]);
                 Write(NESInstruction.LDA_abs, (ushort)local.Address);
                 Write(NESInstruction.LDX_abs, (ushort)(local.Address + 1));
             }
@@ -479,7 +505,7 @@ class IL2NESWriter : NESWriter
             // This is more like an inline constant value
             Write(NESInstruction.LDA, (byte)(local.Value & 0xff));
             Write(NESInstruction.LDX, (byte)(local.Value >> 8));
-            Write(NESInstruction.JSR, pushax.GetAddressAfterMain(sizeOfMain));
+            Write(NESInstruction.JSR, Labels[nameof(pushax)]);
             Write(NESInstruction.LDX, 0x00);
             Write(NESInstruction.LDA, 0x40);
         }

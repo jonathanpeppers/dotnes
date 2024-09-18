@@ -2,7 +2,7 @@
 
 /// <summary>
 /// List of NES 6502 assembly instructions
-/// 
+///
 /// See: https://www.masswerk.at/6502/6502_instruction_set.html
 /// </summary>
 enum NESInstruction : byte
@@ -401,4 +401,9 @@ enum NESInstruction : byte
     /// Branch on Result Zero
     /// </summary>
     BEQ_rel   = 0xF0,
+
+    /// <summary>
+    /// Clear carry flag
+    /// </summary>
+    CLC       =  0x18,
 }
