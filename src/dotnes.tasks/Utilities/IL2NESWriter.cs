@@ -302,11 +302,6 @@ class IL2NESWriter : NESWriter
 
     ushort GetAddress(string name)
     {
-        //if (Labels.TryGetValue(name, out var address))
-        //{
-        //    return address;
-        //}
-
         switch (name)
         {
             case nameof(pal_col):
