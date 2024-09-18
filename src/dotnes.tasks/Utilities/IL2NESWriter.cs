@@ -260,6 +260,9 @@ class IL2NESWriter : NESWriter
                     if (Stack.Count > 0)
                         Stack.Pop();
                 }
+                // Return value, dup for now might be fine?
+                if (HasReturnValue(operand) && Stack.Count > 0)
+                    Stack.Push(Stack.Peek());
                 break;
             default:
                 throw new NotImplementedException($"OpCode {code} with String operand is not implemented!");
@@ -412,6 +415,20 @@ class IL2NESWriter : NESWriter
                 return 5;
             default:
                 throw new NotImplementedException($"{nameof(GetNumberOfArguments)} for {name} is not implemented!");
+        }
+    }
+
+    static bool HasReturnValue(string name)
+    {
+        switch (name)
+        {
+            case nameof(rand):
+            case nameof(rand8):
+            case nameof(rand16):
+            case nameof(oam_spr):
+                return true;
+            default:
+                return false;
         }
     }
 
