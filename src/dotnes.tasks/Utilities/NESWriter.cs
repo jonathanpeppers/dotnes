@@ -448,7 +448,7 @@ class NESWriter : IDisposable
                  * 824D	60            	RTS
                  */
                 Write(NESInstruction.STA_zpg, TEMP);
-                Write(NESInstruction.JSR, Labels[nameof(popa)]);
+                Write(NESInstruction.JSR, Labels[nameof(popa)].GetAddressAfterMain(sizeOfMain));
                 Write(NESInstruction.AND, 0x1F);
                 Write(NESInstruction.TAX_impl);
                 Write(NESInstruction.LDA_zpg, TEMP);
@@ -767,7 +767,7 @@ class NESWriter : IDisposable
                 Write(NESInstruction.STA_zpg, SCROLL_Y); // 8313
                 Write(NESInstruction.LDA, 0x02);
                 Write(NESInstruction.STA_zpg, TEMP);
-                Write(NESInstruction.JSR, Labels[nameof(popax)]);
+                Write(NESInstruction.JSR, Labels[nameof(popax)].GetAddressAfterMain(sizeOfMain));
                 Write(NESInstruction.STA_zpg, SCROLL_X); // 831C
                 Write(NESInstruction.TXA_impl);
                 Write(NESInstruction.AND, 0x01);
@@ -853,7 +853,7 @@ class NESWriter : IDisposable
                  */
                 Write(NESInstruction.STA_zpg, TEMP);
                 Write(NESInstruction.STX_zpg, TEMP + 1);
-                Write(NESInstruction.JSR, Labels[nameof(popax)]);
+                Write(NESInstruction.JSR, Labels[nameof(popax)].GetAddressAfterMain(sizeOfMain));
                 Write(NESInstruction.STA_zpg, 0x19);
                 Write(NESInstruction.STX_zpg, 0x1A);
                 Write(NESInstruction.LDY, 0x00);
@@ -1027,7 +1027,7 @@ class NESWriter : IDisposable
                  */
                 Write(NESInstruction.STA_zpg, 0x19);
                 Write(NESInstruction.STX_zpg, 0x1A);
-                Write(NESInstruction.JSR, Labels[nameof(popa)]);
+                Write(NESInstruction.JSR, Labels[nameof(popa)].GetAddressAfterMain(sizeOfMain));
                 Write(NESInstruction.LDX_zpg, 0x1A);
                 Write(NESInstruction.BEQ_rel, 0x0C);
                 Write(NESInstruction.LDX, 0x00);
@@ -1300,7 +1300,7 @@ class NESWriter : IDisposable
         Write(NESInstruction.JSR, 0x8279);
         Write(NESInstruction.JSR, 0x824E);
         Write(NESInstruction.JSR, 0x82AE);
-        Write(NESInstruction.JSR, Labels[nameof(zerobss)]);
+        Write(NESInstruction.JSR, Labels[nameof(zerobss)].GetAddressAfterMain(sizeOfMain));
         Write(NESInstruction.JSR, Labels[nameof(copydata)].GetAddressAfterMain(sizeOfMain));
         Write(NESInstruction.LDA, 0x00);
         Write(NESInstruction.STA_zpg, sp);
