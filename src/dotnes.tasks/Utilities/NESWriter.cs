@@ -16,14 +16,16 @@ class NESWriter : IDisposable
     {
         _writer = new(stream, Encoding, leaveOpen);
         _logger = logger ?? new NullLogger();
-        Labels[nameof(copydata)] = copydata;
-        Labels[nameof(popa)] = popa;
-        Labels[nameof(popax)] = popax;
-        Labels[nameof(pusha)] = pusha;
-        Labels[nameof(pushax)] = pushax;
-        Labels[nameof(zerobss)] = zerobss;
-        Labels[nameof(rodata)] = rodata;
-        Labels[nameof(donelib)] = donelib;
+
+        // NOTE: starting values so they exist in dictionary
+        Labels[nameof(copydata)] = 0;
+        Labels[nameof(popa)] = 0;
+        Labels[nameof(popax)] = 0;
+        Labels[nameof(pusha)] = 0;
+        Labels[nameof(pushax)] = 0;
+        Labels[nameof(zerobss)] = 0;
+        Labels[nameof(rodata)] = 0;
+        Labels[nameof(donelib)] = 0;
     }
 
     /// <summary>
@@ -87,7 +89,7 @@ class NESWriter : IDisposable
     protected const ushort rodata = 0x85AE;
     protected const ushort donelib = 0x84FD;
 
-    protected const ushort BaseAddress = 0x7FBD;
+    protected const ushort BaseAddress = 0x8000;
 
     protected readonly BinaryWriter _writer;
     protected readonly ILogger _logger;
@@ -449,7 +451,7 @@ class NESWriter : IDisposable
                  * 824D	60            	RTS
                  */
                 Write(NESInstruction.STA_zpg, TEMP);
-                Write(NESInstruction.JSR, Labels[nameof(popa)].GetAddressAfterMain(sizeOfMain));
+                Write(NESInstruction.JSR, Labels[nameof(popa)]);
                 Write(NESInstruction.AND, 0x1F);
                 Write(NESInstruction.TAX_impl);
                 Write(NESInstruction.LDA_zpg, TEMP);
@@ -768,7 +770,7 @@ class NESWriter : IDisposable
                 Write(NESInstruction.STA_zpg, SCROLL_Y); // 8313
                 Write(NESInstruction.LDA, 0x02);
                 Write(NESInstruction.STA_zpg, TEMP);
-                Write(NESInstruction.JSR, Labels[nameof(popax)].GetAddressAfterMain(sizeOfMain));
+                Write(NESInstruction.JSR, Labels[nameof(popax)]);
                 Write(NESInstruction.STA_zpg, SCROLL_X); // 831C
                 Write(NESInstruction.TXA_impl);
                 Write(NESInstruction.AND, 0x01);
@@ -854,7 +856,7 @@ class NESWriter : IDisposable
                  */
                 Write(NESInstruction.STA_zpg, TEMP);
                 Write(NESInstruction.STX_zpg, TEMP + 1);
-                Write(NESInstruction.JSR, Labels[nameof(popax)].GetAddressAfterMain(sizeOfMain));
+                Write(NESInstruction.JSR, Labels[nameof(popax)]);
                 Write(NESInstruction.STA_zpg, 0x19);
                 Write(NESInstruction.STX_zpg, 0x1A);
                 Write(NESInstruction.LDY, 0x00);
@@ -1028,7 +1030,7 @@ class NESWriter : IDisposable
                  */
                 Write(NESInstruction.STA_zpg, 0x19);
                 Write(NESInstruction.STX_zpg, 0x1A);
-                Write(NESInstruction.JSR, Labels[nameof(popa)].GetAddressAfterMain(sizeOfMain));
+                Write(NESInstruction.JSR, Labels[nameof(popa)]);
                 Write(NESInstruction.LDX_zpg, 0x1A);
                 Write(NESInstruction.BEQ_rel, 0x0C);
                 Write(NESInstruction.LDX, 0x00);
@@ -1302,8 +1304,8 @@ class NESWriter : IDisposable
         Write(NESInstruction.JSR, 0x8279);
         Write(NESInstruction.JSR, 0x824E);
         Write(NESInstruction.JSR, 0x82AE);
-        Write(NESInstruction.JSR, Labels[nameof(zerobss)].GetAddressAfterMain(sizeOfMain));
-        Write(NESInstruction.JSR, Labels[nameof(copydata)].GetAddressAfterMain(sizeOfMain));
+        Write(NESInstruction.JSR, Labels[nameof(zerobss)]);
+        Write(NESInstruction.JSR, Labels[nameof(copydata)]);
         Write(NESInstruction.LDA, 0x00);
         Write(NESInstruction.STA_zpg, sp);
         Write(NESInstruction.LDA, PAL_BG_PTR);
@@ -1945,11 +1947,6 @@ class NESWriter : IDisposable
     {
         if (_hasPresetLabels)
             return;
-        // HACK: this fixes existing tests
-        // But it's not correct!
-        if (name != nameof(NESLib.oam_spr))
-            return;
-
         Labels[name] = address;
     }
 
