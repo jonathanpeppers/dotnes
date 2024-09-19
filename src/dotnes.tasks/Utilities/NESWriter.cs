@@ -363,7 +363,85 @@ class NESWriter : IDisposable
             {
                 WriteBuiltIn(nameof(NESLib.oam_spr), totalSize);
             }
+            if (UsedMethods.Contains(nameof(NESLib.pad_poll)))
+            {
+                Write_pad_poll();
+            }
         }
+    }
+
+    void Write_pad_poll()
+    {
+        SetLabel(nameof(NESLib.pad_poll), (ushort)(_writer.BaseStream.Position + BaseAddress));
+        /*
+         * 8598	A8            	TAY                           ; _pad_poll
+         * 8599	A200          	LDX #$00                      
+         * 859B	A901          	LDA #$01                      ; @padPollPort
+         * 859D	8D1640        	STA $4016                     
+         * 85A0	A900          	LDA #$00                      
+         * 85A2	8D1640        	STA $4016                     
+         * 85A5	A908          	LDA #$08                      
+         * 85A7	8517          	STA TEMP                      
+         * 
+         * 85A9	B91640        	LDA $4016,y                   ; @padPollLoop
+         * 85AC	4A            	LSR                           
+         * 85AD	7618          	ROR TEMP+1,x                  
+         * 85AF	C617          	DEC TEMP                      
+         * 85B1	D0F6          	BNE @padPollLoop              
+         * 85B3	E8            	INX                           
+         * 85B4	E003          	CPX #$03                      
+         * 85B6	D0E3          	BNE @padPollPort              
+         * 85B8	A518          	LDA TEMP+1                    
+         * 85BA	C519          	CMP $19                       
+         * 85BC	F006          	BEQ @done                     
+         * 85BE	C51A          	CMP $1A                       
+         * 85C0	F002          	BEQ @done                     
+         * 85C2	A519          	LDA $19
+         * 
+         * 85C4	993C00        	STA PAD_STATE,y               ; @done
+         * 85C7	AA            	TAX                           
+         * 85C8	593E00        	EOR PAD_STATEP,y              
+         * 85CB	393C00        	AND PAD_STATE,y               
+         * 85CE	994000        	STA PAD_STATET,y              
+         * 85D1	8A            	TXA                           
+         * 85D2	993E00        	STA PAD_STATEP,y              
+         * 85D5	A200          	LDX #$00                      
+         * 85D7	60            	RTS 
+         */
+        Write(NESInstruction.TAY_impl);
+        Write(NESInstruction.LDX, 0x00);
+        // Pad poll port
+        Write(NESInstruction.LDA, 0x01);
+        Write(NESInstruction.STA_abs, 0x4016);
+        Write(NESInstruction.LDA, 0x00);
+        Write(NESInstruction.STA_abs, 0x4016);
+        Write(NESInstruction.LDA, 0x08);
+        Write(NESInstruction.STA_zpg, TEMP);
+        // Pad poll loop
+        Write(NESInstruction.LDA_abs_y, 0x4016);
+        Write(NESInstruction.LSR_impl);
+        Write(NESInstruction.ROR_X_zpg, TEMP + 1);
+        Write(NESInstruction.DEC_zpg, TEMP);
+        Write(NESInstruction.BNE_rel, 0xF6);  // Pad poll loop
+        Write(NESInstruction.INX_impl);
+        Write(NESInstruction.CPX, 0x03);
+        Write(NESInstruction.BNE_rel, 0xE3); // Pad poll port
+        Write(NESInstruction.LDA_zpg, TEMP + 1);
+        Write(NESInstruction.CMP_zpg, 0x19);
+        Write(NESInstruction.BEQ_rel, 0x06);
+        Write(NESInstruction.CMP_zpg, 0x1A);
+        Write(NESInstruction.BEQ_rel, 0x02); // Done
+        Write(NESInstruction.LDA_zpg, @byte: 0x19);
+        // Pad done
+        Write(NESInstruction.STA_abs_Y, (ushort)0x003C);
+        Write(NESInstruction.TAX_impl);
+        Write(NESInstruction.EOR_Y_abs, (ushort)0x003E);
+        Write(NESInstruction.AND_Y_abs, (ushort)0x003C);
+        Write(NESInstruction.STA_abs_Y, (ushort)0x0040);
+        Write(NESInstruction.TXA_impl);
+        Write(NESInstruction.STA_abs_Y, (ushort)0x003E);
+        Write(NESInstruction.LDX, 0x0);
+        Write(NESInstruction.RTS_impl);
     }
 
     /// <summary>

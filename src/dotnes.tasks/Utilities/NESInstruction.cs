@@ -112,7 +112,11 @@ enum NESInstruction : byte
     /// Set Carry Flag
     /// </summary>
     SEC_impl  = 0x38,
-    //TODO: rest of 3
+    /// <summary>
+    /// AND Memory with Accumulator
+    /// </summary>
+    AND_Y_abs = 0x39,
+    //TODO: rest of them
 
     /// <summary>
     /// Return from Interrupt
@@ -126,7 +130,16 @@ enum NESInstruction : byte
     /// Push Accumulator on Stack
     /// </summary>
     PHA_impl  = 0x48,
-    //TODO: 4-5
+
+    /// <summary>
+    /// Logical shift right
+    /// </summary>
+    LSR_impl = 0x4A,
+
+    /// <summary>
+    /// Exclusive-OR Memory with Accumulator
+    /// </summary>
+    EOR_Y_abs = 0x59,
 
     // 6
 
@@ -173,9 +186,17 @@ enum NESInstruction : byte
 
     //TODO: 7
     /// <summary>
+    /// Rotate One Bit Right (Memory or Accumulator)
+    /// </summary>
+    ROR_X_zpg = 0x76,
+    /// <summary>
     /// Set Interrupt Disable Status
     /// </summary>
     SEI_impl  = 0x78,
+    /// <summary>
+    /// Rotate One Bit Right (Memory or Accumulator)
+    /// </summary>
+    ROR_X_abs = 0x7E,
 
     /// <summary>
     /// Store Accumulator in Memory
@@ -232,7 +253,11 @@ enum NESInstruction : byte
     /// Transfer Index Y to Accumulator
     /// </summary>
     TYA_impl  = 0x98,
-    //TODO: rest of 9
+    /// <summary>
+    /// Store Accumulator in Memory
+    /// </summary>
+    STA_abs_Y = 0x99,
+    //TODO: rest of them
     /// <summary>
     /// 9D: Store Accumulator in Memory
     /// </summary>

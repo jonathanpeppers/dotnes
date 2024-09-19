@@ -370,14 +370,8 @@ class IL2NESWriter : NESWriter
             case nameof(scroll):
                 return 0x82FB;
             case nameof(oam_spr):
-                if (Labels.TryGetValue(nameof(oam_spr), out var address))
-                {
-                    return address;
-                }
-                else
-                {
-                    return 0x0000;
-                }
+            case nameof(pad_poll):
+                return Labels.TryGetValue(name, out var address) ? address : (ushort)0;
             default:
                 throw new NotImplementedException($"{nameof(GetAddress)} for {name} is not implemented!");
         }
@@ -407,9 +401,10 @@ class IL2NESWriter : NESWriter
             case nameof(pal_spr_bright):
             case nameof(pal_spr):
             case nameof(pal_all):
-            case nameof(set_rand):    
+            case nameof(set_rand):
             case nameof(oam_hide_rest):
             case nameof(oam_size):
+            case nameof(pad_poll):
                 return 1;
             case nameof(pal_col):
             case nameof(vram_fill):
