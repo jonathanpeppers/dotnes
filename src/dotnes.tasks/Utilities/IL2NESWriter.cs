@@ -219,6 +219,12 @@ class IL2NESWriter : NESWriter
                 Write(NESInstruction.CMP, checked((byte)Stack.Pop()));
                 Write(NESInstruction.BNE_rel, NumberOfInstructionsForBranch(instruction.Offset + operand + 2, sizeOfMain));
                 break;
+            case ILOpCode.Brtrue_s:
+                //TODO: implement
+                break;
+            case ILOpCode.Brfalse_s:
+                //TODO: implement
+                break;
             default:
                 throw new NotImplementedException($"OpCode {instruction.OpCode} with Int32 operand is not implemented!");
         }

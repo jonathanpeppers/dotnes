@@ -22,10 +22,14 @@ public class RoslynTests
         csharpSource = $"using NES;using static NES.NESLib;{Environment.NewLine}{csharpSource}";
 
         var syntaxTree = CSharpSyntaxTree.ParseText(csharpSource);
+        var systemObjectPath = typeof(object).Assembly.Location;
+        var folder = Path.GetDirectoryName(systemObjectPath)!;
         var references = new List<MetadataReference>
         {
-            MetadataReference.CreateFromFile(typeof(object).Assembly.Location),
-            MetadataReference.CreateFromFile(typeof(NESLib).Assembly.Location)
+            MetadataReference.CreateFromFile(systemObjectPath),
+            MetadataReference.CreateFromFile(Path.Combine(folder, "netstandard.dll")),
+            MetadataReference.CreateFromFile(Path.Combine(folder, "System.Runtime.dll")),
+            MetadataReference.CreateFromFile(typeof(NESLib).Assembly.Location),
         };
 
         var compilation = CSharpCompilation
@@ -410,6 +414,66 @@ public class RoslynTests
                 20E585  ; JSR oam_spr
                 208982  ; JSR ppu_on_all
                 4C3485
+                """);
+    }
+
+    [Fact]
+    public void PadInput()
+    {
+        AssertProgram(
+            csharpSource:
+                """
+                byte[] PALETTE = new byte[32] { 
+                    0x01,
+                    0x11,0x30,0x27,0x0,
+                    0x1c,0x20,0x2c,0x0,
+                    0x00,0x10,0x20,0x0,
+                    0x06,0x16,0x26,0x0,
+                    0x16,0x35,0x24,0x0,
+                    0x00,0x37,0x25,0x0,
+                    0x0d,0x2d,0x3a,0x0,
+                    0x0d,0x27,0x2a
+                };
+                pal_all(PALETTE);
+                ppu_on_all();
+                byte x = 40;
+                while (true) {
+                    if (pad_poll(0) != 0)
+                        x++;
+                    oam_spr(x, x, 0x10, 3, 0);
+                    ppu_wait_frame();
+                }
+                """,
+            expectedAssembly:
+                """
+                A9F6
+                A285
+                201182  ; JSR _pal_all
+                208982  ; JSR _ppu_on_all
+                A928
+                8D2403
+                A922
+                A286
+                A900
+                202286
+                AD2403
+                20A785  ; JSR popa
+                A929
+                8D2403
+                A922
+                A286
+                AD2403
+                20A785  ; JSR popa
+                AD2403
+                20A785  ; JSR popa
+                A910
+                20A785  ; JSR popa
+                A903
+                20A785  ; JSR popa
+                A900
+                20F685  ; JSR _oam_spr
+                20DB82  ; JSR _ppu_wait_frame
+                4C4585  ; JMP $8512
                 """);
     }
 }
