@@ -19,7 +19,7 @@ public class RoslynTests
         _stream.SetLength(0);
 
         // Implicit global using
-        csharpSource = $"using static NES.NESLib;{Environment.NewLine}{csharpSource}";
+        csharpSource = $"using NES;using static NES.NESLib;{Environment.NewLine}{csharpSource}";
 
         var syntaxTree = CSharpSyntaxTree.ParseText(csharpSource);
         var references = new List<MetadataReference>
