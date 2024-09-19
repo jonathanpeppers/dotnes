@@ -1,19 +1,19 @@
-﻿ILInstruction { OpCode = Ldc_i4_s, Integer = 64, String = , Bytes =  }
-ILInstruction { OpCode = Newarr, Integer = 16777235, String = , Bytes =  }
-ILInstruction { OpCode = Dup, Integer = , String = , Bytes =  }
-ILInstruction { OpCode = Ldtoken, Integer = , String = , Bytes = System.Collections.Immutable.ImmutableArray`1[System.Byte] }
-ILInstruction { OpCode = Stloc_0, Integer = , String = , Bytes =  }
-ILInstruction { OpCode = Ldc_i4_s, Integer = 16, String = , Bytes =  }
-ILInstruction { OpCode = Newarr, Integer = 16777235, String = , Bytes =  }
-ILInstruction { OpCode = Dup, Integer = , String = , Bytes =  }
-ILInstruction { OpCode = Ldtoken, Integer = , String = , Bytes = System.Collections.Immutable.ImmutableArray`1[System.Byte] }
-ILInstruction { OpCode = Call, Integer = , String = pal_bg, Bytes =  }
-ILInstruction { OpCode = Ldc_i4, Integer = 8192, String = , Bytes =  }
-ILInstruction { OpCode = Call, Integer = , String = vram_adr, Bytes =  }
-ILInstruction { OpCode = Ldc_i4_s, Integer = 22, String = , Bytes =  }
-ILInstruction { OpCode = Ldc_i4, Integer = 960, String = , Bytes =  }
-ILInstruction { OpCode = Call, Integer = , String = vram_fill, Bytes =  }
-ILInstruction { OpCode = Ldloc_0, Integer = , String = , Bytes =  }
-ILInstruction { OpCode = Call, Integer = , String = vram_write, Bytes =  }
-ILInstruction { OpCode = Call, Integer = , String = ppu_on_all, Bytes =  }
-ILInstruction { OpCode = Br_s, Integer = 254, String = , Bytes =  }
+﻿ILInstruction { OpCode = Ldc_i4_s, Offset = 0, Integer = 64, String = , Bytes =  }
+ILInstruction { OpCode = Newarr, Offset = 2, Integer = 16777235, String = , Bytes =  }
+ILInstruction { OpCode = Dup, Offset = 7, Integer = , String = , Bytes =  }
+ILInstruction { OpCode = Ldtoken, Offset = 8, Integer = , String = , Bytes = System.Collections.Immutable.ImmutableArray`1[System.Byte] }
+ILInstruction { OpCode = Stloc_0, Offset = 18, Integer = , String = , Bytes =  }
+ILInstruction { OpCode = Ldc_i4_s, Offset = 19, Integer = 16, String = , Bytes =  }
+ILInstruction { OpCode = Newarr, Offset = 21, Integer = 16777235, String = , Bytes =  }
+ILInstruction { OpCode = Dup, Offset = 26, Integer = , String = , Bytes =  }
+ILInstruction { OpCode = Ldtoken, Offset = 27, Integer = , String = , Bytes = System.Collections.Immutable.ImmutableArray`1[System.Byte] }
+ILInstruction { OpCode = Call, Offset = 37, Integer = , String = pal_bg, Bytes =  }
+ILInstruction { OpCode = Ldc_i4, Offset = 42, Integer = 8192, String = , Bytes =  }
+ILInstruction { OpCode = Call, Offset = 47, Integer = , String = vram_adr, Bytes =  }
+ILInstruction { OpCode = Ldc_i4_s, Offset = 52, Integer = 22, String = , Bytes =  }
+ILInstruction { OpCode = Ldc_i4, Offset = 54, Integer = 960, String = , Bytes =  }
+ILInstruction { OpCode = Call, Offset = 59, Integer = , String = vram_fill, Bytes =  }
+ILInstruction { OpCode = Ldloc_0, Offset = 64, Integer = , String = , Bytes =  }
+ILInstruction { OpCode = Call, Offset = 65, Integer = , String = vram_write, Bytes =  }
+ILInstruction { OpCode = Call, Offset = 70, Integer = , String = ppu_on_all, Bytes =  }
+ILInstruction { OpCode = Br_s, Offset = 75, Integer = 254, String = , Bytes =  }

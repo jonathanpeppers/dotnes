@@ -49,19 +49,19 @@ class Transpiler : IDisposable
         {
             if (instruction.Integer != null)
             {
-                writer.Write(instruction.OpCode, instruction.Integer.Value, sizeOfMain);
+                writer.Write(instruction, instruction.Integer.Value, sizeOfMain);
             }
             else if (instruction.String != null)
             {
-                writer.Write(instruction.OpCode, instruction.String, sizeOfMain);
+                writer.Write(instruction, instruction.String, sizeOfMain);
             }
             else if (instruction.Bytes != null)
             {
-                writer.Write(instruction.OpCode, instruction.Bytes.Value, sizeOfMain);
+                writer.Write(instruction, instruction.Bytes.Value, sizeOfMain);
             }
             else
             {
-                writer.Write(instruction.OpCode, sizeOfMain);
+                writer.Write(instruction, sizeOfMain);
             }
         }
 
@@ -180,35 +180,34 @@ class Transpiler : IDisposable
     /// </summary>
     protected virtual void FirstPass(Dictionary<string, ushort> labels, out ushort sizeOfMain, out byte locals)
     {
-        using var mainWriter = new IL2NESWriter(new MemoryStream(), logger: _logger)
+        using var writer = new IL2NESWriter(new MemoryStream(), logger: _logger)
         {
             UsedMethods = UsedMethods,
         };
-        mainWriter.SetLabels(labels);
+        writer.SetLabels(labels);
         foreach (var instruction in ReadStaticVoidMain())
         {
             _logger.WriteLine($"{instruction}");
-
             if (instruction.Integer != null)
             {
-                mainWriter.Write(instruction.OpCode, instruction.Integer.Value, sizeOfMain: 0);
+                writer.Write(instruction, instruction.Integer.Value, sizeOfMain: 0);
             }
             else if (instruction.String != null)
             {
-                mainWriter.Write(instruction.OpCode, instruction.String, sizeOfMain: 0);
+                writer.Write(instruction, instruction.String, sizeOfMain: 0);
             }
             else if (instruction.Bytes != null)
             {
-                mainWriter.Write(instruction.OpCode, instruction.Bytes.Value, sizeOfMain: 0);
+                writer.Write(instruction, instruction.Bytes.Value, sizeOfMain: 0);
             }
             else
             {
-                mainWriter.Write(instruction.OpCode, sizeOfMain: 0);
+                writer.Write(instruction, sizeOfMain: 0);
             }
         }
-        mainWriter.Flush();
-        sizeOfMain = checked((ushort)mainWriter.BaseStream.Length);
-        locals = checked((byte)mainWriter.LocalCount);
+        writer.Flush();
+        sizeOfMain = checked((ushort)writer.BaseStream.Length);
+        locals = checked((byte)writer.LocalCount);
     }
 
     /// <summary>
@@ -219,23 +218,21 @@ class Transpiler : IDisposable
     {
         foreach (var instruction in ReadStaticVoidMain())
         {
-            _logger.WriteLine($"{instruction}");
-
             if (instruction.Integer != null)
             {
-                writer.Write(instruction.OpCode, instruction.Integer.Value, sizeOfMain);
+                writer.Write(instruction, instruction.Integer.Value, sizeOfMain);
             }
             else if (instruction.String != null)
             {
-                writer.Write(instruction.OpCode, instruction.String, sizeOfMain);
+                writer.Write(instruction, instruction.String, sizeOfMain);
             }
             else if (instruction.Bytes != null)
             {
-                writer.Write(instruction.OpCode, instruction.Bytes.Value, sizeOfMain);
+                writer.Write(instruction, instruction.Bytes.Value, sizeOfMain);
             }
             else
             {
-                writer.Write(instruction.OpCode, sizeOfMain);
+                writer.Write(instruction, sizeOfMain);
             }
         }
     }
@@ -262,6 +259,7 @@ class Transpiler : IDisposable
 
                 while (blob.RemainingBytes > 0)
                 {
+                    int offset = blob.Offset;
                     ILOpCode opCode = DecodeOpCode(ref blob);
 
                     OperandType operandType = GetOperandType(opCode);
@@ -349,7 +347,7 @@ class Transpiler : IDisposable
                             throw new NotSupportedException($"{opCode}, OperandType={operandType} is not supported.");
                     }
 
-                    yield return new ILInstruction(opCode, intValue, stringValue, byteValue);
+                    yield return new ILInstruction(opCode, offset, intValue, stringValue, byteValue);
                 }
             }
         }

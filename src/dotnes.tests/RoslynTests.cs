@@ -78,19 +78,19 @@ public class RoslynTests
 
                 if (instruction.Integer != null)
                 {
-                    _writer.Write(instruction.OpCode, instruction.Integer.Value, sizeOfMain);
+                    _writer.Write(instruction, instruction.Integer.Value, sizeOfMain);
                 }
                 else if (instruction.String != null)
                 {
-                    _writer.Write(instruction.OpCode, instruction.String, sizeOfMain);
+                    _writer.Write(instruction, instruction.String, sizeOfMain);
                 }
                 else if (instruction.Bytes != null)
                 {
-                    _writer.Write(instruction.OpCode, instruction.Bytes.Value, sizeOfMain);
+                    _writer.Write(instruction, instruction.Bytes.Value, sizeOfMain);
                 }
                 else
                 {
-                    _writer.Write(instruction.OpCode, sizeOfMain);
+                    _writer.Write(instruction, sizeOfMain);
                 }
             }
 

@@ -51,9 +51,9 @@ class IL2NESWriter : NESWriter
 
     record Local(int Value, int? Address = null);
 
-    public void Write(ILOpCode code, ushort sizeOfMain)
+    public void Write(ILInstruction instruction, ushort sizeOfMain)
     {
-        switch (code)
+        switch (instruction.OpCode)
         {
             case ILOpCode.Nop:
                 break;
@@ -176,14 +176,14 @@ class IL2NESWriter : NESWriter
                 Stack.Push(Stack.Pop() ^ Stack.Pop());
                 break;
             default:
-                throw new NotImplementedException($"OpCode {code} with no operands is not implemented!");
+                throw new NotImplementedException($"OpCode {instruction.OpCode} with no operands is not implemented!");
         }
-        previous = code;
+        previous = instruction.OpCode;
     }
 
-    public void Write(ILOpCode code, int operand, ushort sizeOfMain)
+    public void Write(ILInstruction instruction, int operand, ushort sizeOfMain)
     {
-        switch (code)
+        switch (instruction.OpCode)
         {
             case ILOpCode.Nop:
                 break;
@@ -191,7 +191,7 @@ class IL2NESWriter : NESWriter
             case ILOpCode.Ldc_i4_s:
                 if (operand > ushort.MaxValue)
                 {
-                    throw new NotImplementedException($"{code} not implemented for value larger than ushort: {operand}");
+                    throw new NotImplementedException($"{instruction.OpCode} not implemented for value larger than ushort: {operand}");
                 }
                 else if (operand > byte.MaxValue)
                 {
@@ -223,14 +223,14 @@ class IL2NESWriter : NESWriter
                 WriteLdloc(Locals[operand], sizeOfMain);
                 break;
             default:
-                throw new NotImplementedException($"OpCode {code} with Int32 operand is not implemented!");
+                throw new NotImplementedException($"OpCode {instruction.OpCode} with Int32 operand is not implemented!");
         }
-        previous = code;
+        previous = instruction.OpCode;
     }
 
-    public void Write(ILOpCode code, string operand, ushort sizeOfMain)
+    public void Write(ILInstruction instruction, string operand, ushort sizeOfMain)
     {
-        switch (code)
+        switch (instruction.OpCode)
         {
             case ILOpCode.Nop:
                 break;
@@ -240,7 +240,18 @@ class IL2NESWriter : NESWriter
                 Write(NESInstruction.LDX, 0x85);
                 Write(NESInstruction.JSR, Labels[nameof(pushax)]);
                 Write(NESInstruction.LDX, 0x00);
-                Write(ILOpCode.Ldc_i4_s, operand.Length, sizeOfMain);
+                if (operand.Length > ushort.MaxValue)
+                {
+                    throw new NotImplementedException($"{instruction.OpCode} not implemented for value larger than ushort: {operand}");
+                }
+                else if (operand.Length > byte.MaxValue)
+                {
+                    WriteLdc(checked((ushort)operand.Length), sizeOfMain);
+                }
+                else
+                {
+                    WriteLdc((byte)operand.Length, sizeOfMain);
+                }
                 break;
             case ILOpCode.Call:
                 switch (operand)
@@ -283,14 +294,14 @@ class IL2NESWriter : NESWriter
                     Stack.Push(Stack.Peek());
                 break;
             default:
-                throw new NotImplementedException($"OpCode {code} with String operand is not implemented!");
+                throw new NotImplementedException($"OpCode {instruction.OpCode} with String operand is not implemented!");
         }
-        previous = code;
+        previous = instruction.OpCode;
     }
 
-    public void Write(ILOpCode code, ImmutableArray<byte> operand, ushort sizeOfMain)
+    public void Write(ILInstruction instruction, ImmutableArray<byte> operand, ushort sizeOfMain)
     {
-        switch (code)
+        switch (instruction.OpCode)
         {
             case ILOpCode.Ldtoken:
                 if (ByteArrayOffset == 0)
@@ -310,9 +321,9 @@ class IL2NESWriter : NESWriter
                 ByteArrays.Add(operand);
                 break;
             default:
-                throw new NotImplementedException($"OpCode {code} with byte[] operand is not implemented!");
+                throw new NotImplementedException($"OpCode {instruction.OpCode} with byte[] operand is not implemented!");
         }
-        previous = code;
+        previous = instruction.OpCode;
     }
 
     /// <summary>
