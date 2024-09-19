@@ -45,8 +45,11 @@ class Transpiler : IDisposable
         writer.WriteBuiltIns(sizeOfMain);
 
         // Write main program
-        foreach (var instruction in ReadStaticVoidMain())
+        writer.Instructions = ReadStaticVoidMain().ToArray();
+        for (int i = 0; i < writer.Instructions.Length; i++)
         {
+            writer.Index = i;
+            var instruction = writer.Instructions[i];
             if (instruction.Integer != null)
             {
                 writer.Write(instruction, instruction.Integer.Value, sizeOfMain);
@@ -185,8 +188,11 @@ class Transpiler : IDisposable
             UsedMethods = UsedMethods,
         };
         writer.SetLabels(labels);
-        foreach (var instruction in ReadStaticVoidMain())
+        writer.Instructions = ReadStaticVoidMain().ToArray();
+        for (int i = 0; i < writer.Instructions.Length; i++)
         {
+            writer.Index = i;
+            var instruction = writer.Instructions[i];
             _logger.WriteLine($"{instruction}");
             if (instruction.Integer != null)
             {
@@ -216,8 +222,11 @@ class Transpiler : IDisposable
     /// </summary>
     protected virtual void SecondPass(ushort sizeOfMain, IL2NESWriter writer)
     {
-        foreach (var instruction in ReadStaticVoidMain())
+        writer.Instructions = ReadStaticVoidMain().ToArray();
+        for (int i = 0; i < writer.Instructions.Length; i++)
         {
+            writer.Index = i;
+            var instruction = writer.Instructions[i];
             if (instruction.Integer != null)
             {
                 writer.Write(instruction, instruction.Integer.Value, sizeOfMain);
