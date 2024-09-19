@@ -157,6 +157,24 @@ class IL2NESWriter : NESWriter
             case ILOpCode.Add:
                 Stack.Push(Stack.Pop() + Stack.Pop());
                 break;
+            case ILOpCode.Sub:
+                Stack.Push(Stack.Pop() - Stack.Pop());
+                break;
+            case ILOpCode.Mul:
+                Stack.Push(Stack.Pop() * Stack.Pop());
+                break;
+            case ILOpCode.Div:
+                Stack.Push(Stack.Pop() / Stack.Pop());
+                break;
+            case ILOpCode.And:
+                Stack.Push(Stack.Pop() & Stack.Pop());
+                break;
+            case ILOpCode.Or:
+                Stack.Push(Stack.Pop() | Stack.Pop());
+                break;
+            case ILOpCode.Xor:
+                Stack.Push(Stack.Pop() ^ Stack.Pop());
+                break;
             default:
                 throw new NotImplementedException($"OpCode {code} with no operands is not implemented!");
         }
