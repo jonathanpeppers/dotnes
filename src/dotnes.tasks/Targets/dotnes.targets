@@ -5,7 +5,7 @@
     <IncrementalCleanDependsOn>$(IncrementalCleanDependsOn);Transpile</IncrementalCleanDependsOn>
   </PropertyGroup>
   <Target Name="Transpile" AfterTargets="Build"
-      Inputs="$(TargetPath)" Outputs="$(NESTargetPath)">
+      Inputs="$(TargetPath);@(NESAssembly)" Outputs="$(NESTargetPath)">
     <TranspileToNES
         TargetPath="$(TargetPath)"
         AssemblyFiles="@(NESAssembly)"
