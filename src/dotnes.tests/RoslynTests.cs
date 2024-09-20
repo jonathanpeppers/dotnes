@@ -202,6 +202,65 @@ public class RoslynTests
     }
 
     [Fact]
+    public void OneLocal()
+    {
+        AssertProgram(
+            csharpSource:
+                """
+                byte[] ATTRIBUTE_TABLE = new byte[0x40] {
+                  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                  0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55,
+                  0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa,
+                  0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+                  0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+                  0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
+                  0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
+                  0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f
+                };
+                byte[] PALETTE = new byte[16] {
+                  0x03,
+                  0x11,0x30,0x27,0x0,
+                  0x1c,0x20,0x2c,0x0,
+                  0x00,0x10,0x20,0x0,
+                  0x06,0x16,0x26
+                };
+                uint num = 32 * 30;
+                pal_bg(PALETTE);
+                vram_adr(NAMETABLE_A);
+                vram_fill(0x16, num);
+                vram_write(ATTRIBUTE_TABLE);
+                ppu_on_all();
+                while (true) ;
+                """,
+            expectedAssembly:
+                """
+                A203
+                A9C0
+                8D2503
+                8E2603
+                A928
+                A286
+                202B82  ; JSR pal_bg
+                A220
+                A900
+                20D483  ; JSR vram_adr
+                A916
+                209985  ; JSR pusha
+                AD2503
+                AE2603
+                20DF83  ; JSR vram_fill
+                A9E8
+                A285
+                20AF85  ; JSR pushax
+                A200
+                A940
+                204F83  ; JSR vram_write
+                208982  ; JSR ppu_on_all
+                4C3785  ; JMP $8537
+                """);
+    }
+
+    [Fact]
     public void StaticSprite()
     {
         AssertProgram(
