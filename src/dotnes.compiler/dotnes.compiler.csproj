@@ -4,6 +4,7 @@
     <PackageId>dotnes.compiler</PackageId>
     <OutputType>Exe</OutputType>
     <TargetFramework>net8.0</TargetFramework>
+    <PackageLicenseFile>LICENSE</PackageLicenseFile>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AssemblyName>dotnes</AssemblyName>
