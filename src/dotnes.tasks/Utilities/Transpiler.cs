@@ -39,13 +39,13 @@ class Transpiler : IDisposable
         using var writer = new IL2NESWriter(ms, logger: _logger)
         {
             UsedMethods = UsedMethods,
+            Instructions = instructions,
         };
 
         // Write built-in functions
         writer.WriteBuiltIns(sizeOfMain: 0);
 
         // Write main program
-        writer.Instructions = instructions;
         for (int i = 0; i < writer.Instructions.Length; i++)
         {
             writer.Index = i;
