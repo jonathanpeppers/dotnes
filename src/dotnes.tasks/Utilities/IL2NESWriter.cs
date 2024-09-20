@@ -95,7 +95,6 @@ class IL2NESWriter : NESWriter
             case ILOpCode.Stloc_0:
                 if (previous == ILOpCode.Ldtoken)
                 {
-                    SeekBack(4);
                     Locals[0] = new Local(Stack.Pop());
                 }
                 else
@@ -106,7 +105,6 @@ class IL2NESWriter : NESWriter
             case ILOpCode.Stloc_1:
                 if (previous == ILOpCode.Ldtoken)
                 {
-                    SeekBack(4);
                     Locals[1] = new Local(Stack.Pop());
                 }
                 else
@@ -117,7 +115,6 @@ class IL2NESWriter : NESWriter
             case ILOpCode.Stloc_2:
                 if (previous == ILOpCode.Ldtoken)
                 {
-                    SeekBack(4);
                     Locals[2] = new Local(Stack.Pop());
                 }
                 else
@@ -128,7 +125,6 @@ class IL2NESWriter : NESWriter
             case ILOpCode.Stloc_3:
                 if (previous == ILOpCode.Ldtoken)
                 {
-                    SeekBack(4);
                     Locals[3] = new Local(Stack.Pop());
                 }
                 else
@@ -213,10 +209,6 @@ class IL2NESWriter : NESWriter
                 }
                 break;
             case ILOpCode.Stloc_s:
-                if (previous == ILOpCode.Ldtoken)
-                {
-                    SeekBack(4);
-                }
                 Locals[operand] = new Local(Stack.Pop());
                 break;
             case ILOpCode.Ldloc_s:
@@ -358,8 +350,12 @@ class IL2NESWriter : NESWriter
                         ByteArrayOffset += 44;
                     }
                 }
-                Write(NESInstruction.LDA, (byte)(ByteArrayOffset & 0xff));
-                Write(NESInstruction.LDX, (byte)(ByteArrayOffset >> 8));
+                // HACK: write these if next instruction is Call
+                if (Instructions is not null && Instructions[Index + 1].OpCode == ILOpCode.Call)
+                {
+                    Write(NESInstruction.LDA, (byte)(ByteArrayOffset & 0xff));
+                    Write(NESInstruction.LDX, (byte)(ByteArrayOffset >> 8));
+                }
                 Stack.Push(ByteArrayOffset);
                 ByteArrayOffset = (ushort)(ByteArrayOffset + operand.Length);
                 ByteArrays.Add(operand);

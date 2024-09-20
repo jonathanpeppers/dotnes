@@ -297,7 +297,7 @@ public class RoslynTests
             expectedAssembly:
                 """
                 A916
-                8D2503
+                8D2503  ; STA M0001
                 A922
                 A286
                 202B82  ; JSR pal_bg
