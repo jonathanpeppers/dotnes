@@ -1,6 +1,6 @@
 # .NES ("dot" NES)
 
-![dot NES logo](assets/Transparent/dotnes-ms.png)
+<img height="128" src="assets/Transparent/dotnes-ms.png" alt="dot NES logo" />
 
 .NET for the NES game console!
 
