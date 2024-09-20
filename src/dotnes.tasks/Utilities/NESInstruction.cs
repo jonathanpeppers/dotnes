@@ -22,7 +22,7 @@ enum NESInstruction : byte
     /// </summary>
     ORA_zpg   = 0x05,
     /// <summary>
-    /// Shift Left One Bit (Memory or Accumulator)
+    /// Arithmetic Shift Left One Bit (Memory or Accumulator)
     /// </summary>
     ASL_zpg   = 0x06,
     /// <summary>
@@ -34,7 +34,7 @@ enum NESInstruction : byte
     /// </summary>
     ORA       = 0x09,
     /// <summary>
-    /// Shift Left One Bit (Memory or Accumulator)
+    /// Arithmetic Shift Left One Bit (Memory or Accumulator)
     /// </summary>
     ASL_A     = 0x0A,
     /// <summary>
@@ -42,7 +42,7 @@ enum NESInstruction : byte
     /// </summary>
     ORA_abs   = 0x0D,
     /// <summary>
-    /// Shift Left One Bit (Memory or Accumulator)
+    /// Arithmetic Shift Left One Bit (Memory or Accumulator)
     /// </summary>
     ASL_abs   = 0x0E,
 
@@ -51,6 +51,14 @@ enum NESInstruction : byte
     /// Branch on Result Plus
     /// </summary>
     BPL       = 0x10,
+    /// <summary>
+    /// Arithmetic Shift Left One Bit (Memory or Accumulator)
+    /// </summary>
+    ASL_zpg_X = 0x16,
+    /// <summary>
+    /// Arithmetic Shift Left One Bit (Memory or Accumulator)
+    /// </summary>
+    ASL_abs_X = 0x1E,
     /// <summary>
     /// Clear Carry Flag
     /// </summary>
@@ -109,6 +117,10 @@ enum NESInstruction : byte
     /// </summary>
     BMI       = 0x30,
     /// <summary>
+    /// AND Memory with Accumulator
+    /// </summary>
+    AND_Y_ind = 0x31,
+    /// <summary>
     /// Set Carry Flag
     /// </summary>
     SEC_impl  = 0x38,
@@ -116,30 +128,72 @@ enum NESInstruction : byte
     /// AND Memory with Accumulator
     /// </summary>
     AND_Y_abs = 0x39,
-    //TODO: rest of them
+
+    // 4
 
     /// <summary>
     /// Return from Interrupt
     /// </summary>
     RTI_impl  = 0x40,
     /// <summary>
-    /// Jump to New Location
+    /// XOR Memory with Accumulator
     /// </summary>
-    JMP_abs   = 0x4C,
+    EOR_zpg = 0x45,
+    /// <summary>
+    /// Logical Shift Right One Bit (Memory or Accumulator)
+    /// </summary>
+    LSR_zpg = 0x46,
     /// <summary>
     /// Push Accumulator on Stack
     /// </summary>
     PHA_impl  = 0x48,
-
     /// <summary>
-    /// Logical shift right
+    /// XOR Memory with Accumulator
+    /// </summary>
+    EOR_imm = 0x49,
+    /// <summary>
+    /// Logical Shift Right One Bit (Memory or Accumulator)
     /// </summary>
     LSR_impl = 0x4A,
+    /// <summary>
+    /// Jump to New Location
+    /// </summary>
+    JMP_abs   = 0x4C,
+    /// <summary>
+    /// XOR Memory with Accumulator
+    /// </summary>
+    EOR_abs = 0x4D,
+    /// <summary>
+    /// Logical Shift Right One Bit (Memory or Accumulator)
+    /// </summary>
+    LSR_abs = 0x4E,
 
+    // 5
+
+    /// <summary>
+    /// XOR Memory with Accumulator
+    /// </summary>
+    EOR_Y_ind = 0x51,
+    /// <summary>
+    /// XOR Memory with Accumulator
+    /// </summary>
+    EOR_zpg_X = 0x55,
+    /// <summary>
+    /// Logical Shift Right One Bit (Memory or Accumulator)
+    /// </summary>
+    LSR_zpg_X = 0x56,
     /// <summary>
     /// Exclusive-OR Memory with Accumulator
     /// </summary>
     EOR_Y_abs = 0x59,
+    /// <summary>
+    /// XOR Memory with Accumulator
+    /// </summary>
+    EOR_X = 0x5D,
+    /// <summary>
+    /// Logical Shift Right One Bit (Memory or Accumulator)
+    /// </summary>
+    LSR_abs_X = 0x5E,
 
     // 6
 
@@ -184,7 +238,8 @@ enum NESInstruction : byte
     /// </summary>
     ROR_abs   = 0x6E,
 
-    //TODO: 7
+    // 7
+
     /// <summary>
     /// Rotate One Bit Right (Memory or Accumulator)
     /// </summary>
