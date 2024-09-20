@@ -6,6 +6,16 @@
 
 ![Gif of NES Emulator launching from VS Code](assets/vscode.gif)
 
+## Contributing
+
+PRs of any kind are welcome! If you have a question, feel free to:
+
+* [File an Issue](https://github.com/jonathanpeppers/dotnes/issues)
+* [Open a Discussion](https://github.com/jonathanpeppers/dotnes/discussions)
+* [Join the Discord](https://discord.gg/YbAyj6KP)
+
+Thanks!
+
 ## Getting Started
 
 Simply install the template:
