@@ -72,8 +72,11 @@ public class RoslynTests
             base.SecondPass(sizeOfMain, parent);
 
             _writer.SetLabels(parent.Labels);
-            foreach (var instruction in ReadStaticVoidMain())
+            _writer.Instructions = parent.Instructions!;
+            for (int i = 0; i < _writer.Instructions.Length; i++)
             {
+                _writer.Index = i;
+                var instruction = _writer.Instructions[i];
                 _logger.WriteLine($"{instruction}");
 
                 if (instruction.Integer != null)
@@ -294,7 +297,7 @@ public class RoslynTests
             expectedAssembly:
                 """
                 A916
-                8D2503
+                8D2503  ; STA M0001
                 A922
                 A286
                 202B82  ; JSR pal_bg
@@ -356,6 +359,57 @@ public class RoslynTests
                 20D485  ; JSR oam_spr
                 208982  ; JSR ppu_on_all
                 4C2385  ; JMP $8527
+                """);
+    }
+
+    [Fact]
+    public void Branch()
+    {
+        AssertProgram(
+            csharpSource:
+                """
+                byte[] PALETTE = new byte[32] { 
+                    0x01,
+                    0x11,0x30,0x27,0x0,
+                    0x1c,0x20,0x2c,0x0,
+                    0x00,0x10,0x20,0x0,
+                    0x06,0x16,0x26,0x0,
+                    0x16,0x35,0x24,0x0,
+                    0x00,0x37,0x25,0x0,
+                    0x0d,0x2d,0x3a,0x0,
+                    0x0d,0x27,0x2a
+                };
+                pal_all(PALETTE);
+                byte x = 40;
+                if (x == 40)
+                    oam_spr(x, 40, 0x10, 3, 0);
+                ppu_on_all();
+                while (true) ;
+                """,
+            expectedAssembly:
+                """
+                A9E5
+                A285
+                201182  ; JSR pal_all
+                A928
+                8D2403  ; STA M0001
+                A922
+                A286
+                AD2403  ; LDA M0001
+                C928    ; CMP #$28
+                D01D    ; BNE $8530
+                AD2403  ; LDA M0001
+                209685  ; JSR popa
+                A928
+                209685  ; JSR popa
+                A910
+                209685  ; JSR popa
+                A903
+                209685  ; JSR popa
+                A900
+                20E585  ; JSR oam_spr
+                208982  ; JSR ppu_on_all
+                4C3485
                 """);
     }
 }

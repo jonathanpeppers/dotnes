@@ -33,35 +33,38 @@ class Transpiler : IDisposable
     /// </summary>
     /// <param name="sizeOfMain"></param>
     /// <returns></returns>
-    private Dictionary<string, ushort> CalculateAddressLabels(ushort sizeOfMain)
+    private Dictionary<string, ushort> CalculateAddressLabels(ILInstruction[] instructions)
     {
         using var ms = new MemoryStream();
         using var writer = new IL2NESWriter(ms, logger: _logger)
         {
             UsedMethods = UsedMethods,
+            Instructions = instructions,
         };
 
         // Write built-in functions
-        writer.WriteBuiltIns(sizeOfMain);
+        writer.WriteBuiltIns(sizeOfMain: 0);
 
         // Write main program
-        foreach (var instruction in ReadStaticVoidMain())
+        for (int i = 0; i < writer.Instructions.Length; i++)
         {
+            writer.Index = i;
+            var instruction = writer.Instructions[i];
             if (instruction.Integer != null)
             {
-                writer.Write(instruction, instruction.Integer.Value, sizeOfMain);
+                writer.Write(instruction, instruction.Integer.Value, sizeOfMain: 0);
             }
             else if (instruction.String != null)
             {
-                writer.Write(instruction, instruction.String, sizeOfMain);
+                writer.Write(instruction, instruction.String, sizeOfMain: 0);
             }
             else if (instruction.Bytes != null)
             {
-                writer.Write(instruction, instruction.Bytes.Value, sizeOfMain);
+                writer.Write(instruction, instruction.Bytes.Value, sizeOfMain: 0);
             }
             else
             {
-                writer.Write(instruction, sizeOfMain);
+                writer.Write(instruction, sizeOfMain: 0);
             }
         }
 
@@ -82,15 +85,17 @@ class Transpiler : IDisposable
 
         _logger.WriteLine($"First pass...");
 
-        var labels = CalculateAddressLabels(0);
+        var instructions = ReadStaticVoidMain().ToArray();
+        var labels = CalculateAddressLabels(instructions);
 
         // Generate static void main in a first pass, so we know the size of the program
-        FirstPass(labels, out ushort sizeOfMain, out byte locals);
+        FirstPass(labels, instructions, out ushort sizeOfMain, out byte locals);
 
         _logger.WriteLine($"Size of main: {sizeOfMain}");
 
         using var writer = new IL2NESWriter(stream, logger: _logger)
         {
+            Instructions = instructions,
             UsedMethods = UsedMethods,
         };
         writer.SetLabels(labels);
@@ -178,15 +183,18 @@ class Transpiler : IDisposable
     /// <summary>
     /// Generate static void main in a first pass, so we know the size of the program
     /// </summary>
-    protected virtual void FirstPass(Dictionary<string, ushort> labels, out ushort sizeOfMain, out byte locals)
+    protected virtual void FirstPass(Dictionary<string, ushort> labels, ILInstruction[] instructions, out ushort sizeOfMain, out byte locals)
     {
         using var writer = new IL2NESWriter(new MemoryStream(), logger: _logger)
         {
             UsedMethods = UsedMethods,
+            Instructions = instructions,
         };
         writer.SetLabels(labels);
-        foreach (var instruction in ReadStaticVoidMain())
+        for (int i = 0; i < writer.Instructions.Length; i++)
         {
+            writer.Index = i;
+            var instruction = writer.Instructions[i];
             _logger.WriteLine($"{instruction}");
             if (instruction.Integer != null)
             {
@@ -216,8 +224,13 @@ class Transpiler : IDisposable
     /// </summary>
     protected virtual void SecondPass(ushort sizeOfMain, IL2NESWriter writer)
     {
-        foreach (var instruction in ReadStaticVoidMain())
+        if (writer.Instructions is null)
+            throw new ArgumentNullException(nameof(writer.Instructions));
+
+        for (int i = 0; i < writer.Instructions.Length; i++)
         {
+            writer.Index = i;
+            var instruction = writer.Instructions[i];
             if (instruction.Integer != null)
             {
                 writer.Write(instruction, instruction.Integer.Value, sizeOfMain);

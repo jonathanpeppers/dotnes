@@ -95,7 +95,6 @@ class IL2NESWriter : NESWriter
             case ILOpCode.Stloc_0:
                 if (previous == ILOpCode.Ldtoken)
                 {
-                    SeekBack(4);
                     Locals[0] = new Local(Stack.Pop());
                 }
                 else
@@ -106,7 +105,6 @@ class IL2NESWriter : NESWriter
             case ILOpCode.Stloc_1:
                 if (previous == ILOpCode.Ldtoken)
                 {
-                    SeekBack(4);
                     Locals[1] = new Local(Stack.Pop());
                 }
                 else
@@ -117,7 +115,6 @@ class IL2NESWriter : NESWriter
             case ILOpCode.Stloc_2:
                 if (previous == ILOpCode.Ldtoken)
                 {
-                    SeekBack(4);
                     Locals[2] = new Local(Stack.Pop());
                 }
                 else
@@ -128,7 +125,6 @@ class IL2NESWriter : NESWriter
             case ILOpCode.Stloc_3:
                 if (previous == ILOpCode.Ldtoken)
                 {
-                    SeekBack(4);
                     Locals[3] = new Local(Stack.Pop());
                 }
                 else
@@ -213,19 +209,59 @@ class IL2NESWriter : NESWriter
                 }
                 break;
             case ILOpCode.Stloc_s:
-                if (previous == ILOpCode.Ldtoken)
-                {
-                    SeekBack(4);
-                }
                 Locals[operand] = new Local(Stack.Pop());
                 break;
             case ILOpCode.Ldloc_s:
                 WriteLdloc(Locals[operand], sizeOfMain);
                 break;
+            case ILOpCode.Bne_un_s:
+                SeekBack(5);
+                Write(NESInstruction.CMP, checked((byte)Stack.Pop()));
+                Write(NESInstruction.BNE_rel, NumberOfInstructionsForBranch(instruction.Offset + operand + 2, sizeOfMain));
+                break;
             default:
                 throw new NotImplementedException($"OpCode {instruction.OpCode} with Int32 operand is not implemented!");
         }
         previous = instruction.OpCode;
+    }
+
+    public ILInstruction[]? Instructions { get; set; }
+
+    public int Index { get; set; }
+
+    byte NumberOfInstructionsForBranch(int stopAt, ushort sizeOfMain)
+    {
+        _logger.WriteLine($"Reading forward until IL_{stopAt:x4}...");
+
+        if (Instructions is null)
+            throw new ArgumentNullException(nameof(Instructions));
+
+        long nesPosition = _writer.BaseStream.Position;
+        for (int i = Index + 1; ; i++)
+        {
+            var instruction = Instructions[i];
+            if (instruction.Integer != null)
+            {
+                Write(instruction, instruction.Integer.Value, sizeOfMain);
+            }
+            else if (instruction.String != null)
+            {
+                Write(instruction, instruction.String, sizeOfMain);
+            }
+            else if (instruction.Bytes != null)
+            {
+                Write(instruction, instruction.Bytes.Value, sizeOfMain);
+            }
+            else
+            {
+                Write(instruction, sizeOfMain);
+            }
+            if (instruction.Offset >= stopAt)
+                break;
+        }
+        byte numberOfInstructions = checked((byte)(_writer.BaseStream.Position - nesPosition));
+        SeekBack(numberOfInstructions);
+        return numberOfInstructions;
     }
 
     public void Write(ILInstruction instruction, string operand, ushort sizeOfMain)
@@ -314,8 +350,12 @@ class IL2NESWriter : NESWriter
                         ByteArrayOffset += 44;
                     }
                 }
-                Write(NESInstruction.LDA, (byte)(ByteArrayOffset & 0xff));
-                Write(NESInstruction.LDX, (byte)(ByteArrayOffset >> 8));
+                // HACK: write these if next instruction is Call
+                if (Instructions is not null && Instructions[Index + 1].OpCode == ILOpCode.Call)
+                {
+                    Write(NESInstruction.LDA, (byte)(ByteArrayOffset & 0xff));
+                    Write(NESInstruction.LDX, (byte)(ByteArrayOffset >> 8));
+                }
                 Stack.Push(ByteArrayOffset);
                 ByteArrayOffset = (ushort)(ByteArrayOffset + operand.Length);
                 ByteArrays.Add(operand);
@@ -472,7 +512,7 @@ class IL2NESWriter : NESWriter
         if (local.Value < byte.MaxValue)
         {
             LocalCount += 1;
-            SeekBack(6);
+            SeekBack(2);
             Write(NESInstruction.LDA, (byte)local.Value);
             Write(NESInstruction.STA_abs, (ushort)local.Address);
             Write(NESInstruction.LDA, 0x22);
@@ -481,7 +521,7 @@ class IL2NESWriter : NESWriter
         else if (local.Value < ushort.MaxValue)
         {
             LocalCount += 2;
-            SeekBack(8);
+            SeekBack(4);
             Write(NESInstruction.LDX, 0x03);
             Write(NESInstruction.LDA, 0xC0);
             Write(NESInstruction.STA_abs, (ushort)local.Address);
