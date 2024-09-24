@@ -474,6 +474,7 @@ class IL2NESWriter : NESWriter
             case nameof(oam_hide_rest):
             case nameof(oam_size):
             case nameof(pad_poll):
+            case nameof(delay):
                 return 1;
             case nameof(pal_col):
             case nameof(vram_fill):
