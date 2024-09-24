@@ -24,6 +24,7 @@ class IL2NESWriter : NESWriter
     /// </summary>
     readonly List<ImmutableArray<byte>> ByteArrays = new();
     readonly ushort local = 0x324;
+    readonly ReflectionCache _reflectionCache = new();
     ushort ByteArrayOffset = 0;
     ILOpCode previous;
 
@@ -319,14 +320,14 @@ class IL2NESWriter : NESWriter
                         break;
                 }
                 // Pop N times
-                int args = GetNumberOfArguments(operand);
+                int args = _reflectionCache.GetNumberOfArguments(operand);
                 for (int i = 0; i < args; i++)
                 {
                     if (Stack.Count > 0)
                         Stack.Pop();
                 }
                 // Return value, dup for now might be fine?
-                if (HasReturnValue(operand) && Stack.Count > 0)
+                if (_reflectionCache.HasReturnValue(operand) && Stack.Count > 0)
                     Stack.Push(Stack.Peek());
                 break;
             default:
@@ -443,65 +444,6 @@ class IL2NESWriter : NESWriter
                 return Labels.TryGetValue(name, out var address) ? address : (ushort)0;
             default:
                 throw new NotImplementedException($"{nameof(GetAddress)} for {name} is not implemented!");
-        }
-    }
-
-    static int GetNumberOfArguments(string name)
-    {
-        switch (name)
-        {
-            case nameof(ppu_on_bg):
-            case nameof(ppu_on_spr):
-            case nameof(pal_clear):
-            case nameof(ppu_on_all):
-            case nameof(ppu_wait_frame):
-            case nameof(rand):
-            case nameof(rand8): 
-            case nameof(rand16):
-            case nameof(nesclock):
-            case nameof(oam_clear):
-                return 0;
-            case nameof(vram_adr):
-            case nameof(vram_write):
-            case nameof(vram_put):
-            case nameof(set_vram_update):
-            case nameof(set_ppu_ctrl_var):
-            case nameof(pal_bg):
-            case nameof(pal_spr_bright):
-            case nameof(pal_spr):
-            case nameof(pal_all):
-            case nameof(set_rand):
-            case nameof(oam_hide_rest):
-            case nameof(oam_size):
-            case nameof(pad_poll):
-            case nameof(delay):
-                return 1;
-            case nameof(pal_col):
-            case nameof(vram_fill):
-            case nameof(NTADR_A):
-            case nameof(NTADR_B):
-            case nameof(NTADR_C):
-            case nameof(NTADR_D):
-            case nameof(scroll):
-                return 2;
-            case nameof(oam_spr):
-                return 5;
-            default:
-                throw new NotImplementedException($"{nameof(GetNumberOfArguments)} for {name} is not implemented!");
-        }
-    }
-
-    static bool HasReturnValue(string name)
-    {
-        switch (name)
-        {
-            case nameof(rand):
-            case nameof(rand8):
-            case nameof(rand16):
-            case nameof(oam_spr):
-                return true;
-            default:
-                return false;
         }
     }
 
