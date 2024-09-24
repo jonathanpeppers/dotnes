@@ -4,7 +4,7 @@ namespace dotnes;
 
 class ReflectionCache
 {
-    readonly Dictionary<string, MethodInfo> _cache = [];
+    readonly Dictionary<string, MethodInfo> _cache = new(StringComparer.Ordinal);
 
     public MethodInfo GetMethod(string name)
     {
