@@ -1,20 +1,20 @@
-﻿ILInstruction { OpCode = Ldc_i4_0, Integer = , String = , Bytes =  }
-ILInstruction { OpCode = Ldc_i4_2, Integer = , String = , Bytes =  }
-ILInstruction { OpCode = Call, Integer = , String = pal_col, Bytes =  }
-ILInstruction { OpCode = Ldc_i4_1, Integer = , String = , Bytes =  }
-ILInstruction { OpCode = Ldc_i4_s, Integer = 20, String = , Bytes =  }
-ILInstruction { OpCode = Call, Integer = , String = pal_col, Bytes =  }
-ILInstruction { OpCode = Ldc_i4_2, Integer = , String = , Bytes =  }
-ILInstruction { OpCode = Ldc_i4_s, Integer = 32, String = , Bytes =  }
-ILInstruction { OpCode = Call, Integer = , String = pal_col, Bytes =  }
-ILInstruction { OpCode = Ldc_i4_3, Integer = , String = , Bytes =  }
-ILInstruction { OpCode = Ldc_i4_s, Integer = 48, String = , Bytes =  }
-ILInstruction { OpCode = Call, Integer = , String = pal_col, Bytes =  }
-ILInstruction { OpCode = Ldc_i4_2, Integer = , String = , Bytes =  }
-ILInstruction { OpCode = Ldc_i4_2, Integer = , String = , Bytes =  }
-ILInstruction { OpCode = Call, Integer = , String = NTADR_A, Bytes =  }
-ILInstruction { OpCode = Call, Integer = , String = vram_adr, Bytes =  }
-ILInstruction { OpCode = Ldstr, Integer = , String = HELLO, .NET!, Bytes =  }
-ILInstruction { OpCode = Call, Integer = , String = vram_write, Bytes =  }
-ILInstruction { OpCode = Call, Integer = , String = ppu_on_all, Bytes =  }
-ILInstruction { OpCode = Br_s, Integer = 254, String = , Bytes =  }
+﻿ILInstruction { OpCode = Ldc_i4_0, Offset = 0, Integer = , String = , Bytes =  }
+ILInstruction { OpCode = Ldc_i4_2, Offset = 1, Integer = , String = , Bytes =  }
+ILInstruction { OpCode = Call, Offset = 2, Integer = , String = pal_col, Bytes =  }
+ILInstruction { OpCode = Ldc_i4_1, Offset = 7, Integer = , String = , Bytes =  }
+ILInstruction { OpCode = Ldc_i4_s, Offset = 8, Integer = 20, String = , Bytes =  }
+ILInstruction { OpCode = Call, Offset = 10, Integer = , String = pal_col, Bytes =  }
+ILInstruction { OpCode = Ldc_i4_2, Offset = 15, Integer = , String = , Bytes =  }
+ILInstruction { OpCode = Ldc_i4_s, Offset = 16, Integer = 32, String = , Bytes =  }
+ILInstruction { OpCode = Call, Offset = 18, Integer = , String = pal_col, Bytes =  }
+ILInstruction { OpCode = Ldc_i4_3, Offset = 23, Integer = , String = , Bytes =  }
+ILInstruction { OpCode = Ldc_i4_s, Offset = 24, Integer = 48, String = , Bytes =  }
+ILInstruction { OpCode = Call, Offset = 26, Integer = , String = pal_col, Bytes =  }
+ILInstruction { OpCode = Ldc_i4_2, Offset = 31, Integer = , String = , Bytes =  }
+ILInstruction { OpCode = Ldc_i4_2, Offset = 32, Integer = , String = , Bytes =  }
+ILInstruction { OpCode = Call, Offset = 33, Integer = , String = NTADR_A, Bytes =  }
+ILInstruction { OpCode = Call, Offset = 38, Integer = , String = vram_adr, Bytes =  }
+ILInstruction { OpCode = Ldstr, Offset = 43, Integer = , String = HELLO, .NET!, Bytes =  }
+ILInstruction { OpCode = Call, Offset = 48, Integer = , String = vram_write, Bytes =  }
+ILInstruction { OpCode = Call, Offset = 53, Integer = , String = ppu_on_all, Bytes =  }
+ILInstruction { OpCode = Br_s, Offset = 58, Integer = 254, String = , Bytes =  }

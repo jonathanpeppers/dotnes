@@ -31,6 +31,7 @@ class IL2NESWriter : NESWriter
     
     readonly ushort local = 0x324;
     ushort DataOffset = 0;
+    readonly ReflectionCache _reflectionCache = new();
     ILOpCode previous;
 
     /// <summary>
@@ -57,15 +58,19 @@ class IL2NESWriter : NESWriter
 
     record Local(int Value, int? Address = null);
 
-    public void Write(ILOpCode code, ushort sizeOfMain)
+    public void Write(ILInstruction instruction, ushort sizeOfMain)
     {
-        switch (code)
+        switch (instruction.OpCode)
         {
             case ILOpCode.Nop:
                 break;
             case ILOpCode.Dup:
                 if (Stack.Count > 0)
                     Stack.Push(Stack.Peek());
+                break;
+            case ILOpCode.Pop:
+                if (Stack.Count > 0)
+                    Stack.Pop();
                 break;
             case ILOpCode.Ldc_i4_0:
                 WriteLdc(0, sizeOfMain);
@@ -97,7 +102,6 @@ class IL2NESWriter : NESWriter
             case ILOpCode.Stloc_0:
                 if (previous == ILOpCode.Ldtoken)
                 {
-                    SeekBack(4);
                     Locals[0] = new Local(Stack.Pop());
                 }
                 else
@@ -108,7 +112,6 @@ class IL2NESWriter : NESWriter
             case ILOpCode.Stloc_1:
                 if (previous == ILOpCode.Ldtoken)
                 {
-                    SeekBack(4);
                     Locals[1] = new Local(Stack.Pop());
                 }
                 else
@@ -119,7 +122,6 @@ class IL2NESWriter : NESWriter
             case ILOpCode.Stloc_2:
                 if (previous == ILOpCode.Ldtoken)
                 {
-                    SeekBack(4);
                     Locals[2] = new Local(Stack.Pop());
                 }
                 else
@@ -130,7 +132,6 @@ class IL2NESWriter : NESWriter
             case ILOpCode.Stloc_3:
                 if (previous == ILOpCode.Ldtoken)
                 {
-                    SeekBack(4);
                     Locals[3] = new Local(Stack.Pop());
                 }
                 else
@@ -159,15 +160,33 @@ class IL2NESWriter : NESWriter
             case ILOpCode.Add:
                 Stack.Push(Stack.Pop() + Stack.Pop());
                 break;
+            case ILOpCode.Sub:
+                Stack.Push(Stack.Pop() - Stack.Pop());
+                break;
+            case ILOpCode.Mul:
+                Stack.Push(Stack.Pop() * Stack.Pop());
+                break;
+            case ILOpCode.Div:
+                Stack.Push(Stack.Pop() / Stack.Pop());
+                break;
+            case ILOpCode.And:
+                Stack.Push(Stack.Pop() & Stack.Pop());
+                break;
+            case ILOpCode.Or:
+                Stack.Push(Stack.Pop() | Stack.Pop());
+                break;
+            case ILOpCode.Xor:
+                Stack.Push(Stack.Pop() ^ Stack.Pop());
+                break;
             default:
-                throw new NotImplementedException($"OpCode {code} with no operands is not implemented!");
+                throw new NotImplementedException($"OpCode {instruction.OpCode} with no operands is not implemented!");
         }
-        previous = code;
+        previous = instruction.OpCode;
     }
 
-    public void Write(ILOpCode code, int operand, ushort sizeOfMain)
+    public void Write(ILInstruction instruction, int operand, ushort sizeOfMain)
     {
-        switch (code)
+        switch (instruction.OpCode)
         {
             case ILOpCode.Nop:
                 break;
@@ -175,7 +194,7 @@ class IL2NESWriter : NESWriter
             case ILOpCode.Ldc_i4_s:
                 if (operand > ushort.MaxValue)
                 {
-                    throw new NotImplementedException($"{code} not implemented for value larger than ushort: {operand}");
+                    throw new NotImplementedException($"{instruction.OpCode} not implemented for value larger than ushort: {operand}");
                 }
                 else if (operand > byte.MaxValue)
                 {
@@ -187,7 +206,8 @@ class IL2NESWriter : NESWriter
                 }
                 break;
             case ILOpCode.Br_s:
-                Write(NESInstruction.JMP_abs, donelib.GetAddressAfterMain(sizeOfMain));
+                // NOTE: This is (-3) because we want to go to the instruction right before donelib, that is "jump to self"
+                Write(NESInstruction.JMP_abs, (ushort)(Labels[nameof(donelib)] - 3));
                 break;
             case ILOpCode.Newarr:
                 if (previous == ILOpCode.Ldc_i4_s)
@@ -196,24 +216,64 @@ class IL2NESWriter : NESWriter
                 }
                 break;
             case ILOpCode.Stloc_s:
-                if (previous == ILOpCode.Ldtoken)
-                {
-                    SeekBack(4);
-                }
                 Locals[operand] = new Local(Stack.Pop());
                 break;
             case ILOpCode.Ldloc_s:
                 WriteLdloc(Locals[operand], sizeOfMain);
                 break;
+            case ILOpCode.Bne_un_s:
+                SeekBack(5);
+                Write(NESInstruction.CMP, checked((byte)Stack.Pop()));
+                Write(NESInstruction.BNE_rel, NumberOfInstructionsForBranch(instruction.Offset + operand + 2, sizeOfMain));
+                break;
             default:
-                throw new NotImplementedException($"OpCode {code} with Int32 operand is not implemented!");
+                throw new NotImplementedException($"OpCode {instruction.OpCode} with Int32 operand is not implemented!");
         }
-        previous = code;
+        previous = instruction.OpCode;
     }
 
-    public void Write(ILOpCode code, string operand, ushort sizeOfMain)
+    public ILInstruction[]? Instructions { get; set; }
+
+    public int Index { get; set; }
+
+    byte NumberOfInstructionsForBranch(int stopAt, ushort sizeOfMain)
     {
-        switch (code)
+        _logger.WriteLine($"Reading forward until IL_{stopAt:x4}...");
+
+        if (Instructions is null)
+            throw new ArgumentNullException(nameof(Instructions));
+
+        long nesPosition = _writer.BaseStream.Position;
+        for (int i = Index + 1; ; i++)
+        {
+            var instruction = Instructions[i];
+            if (instruction.Integer != null)
+            {
+                Write(instruction, instruction.Integer.Value, sizeOfMain);
+            }
+            else if (instruction.String != null)
+            {
+                Write(instruction, instruction.String, sizeOfMain);
+            }
+            else if (instruction.Bytes != null)
+            {
+                Write(instruction, instruction.Bytes.Value, sizeOfMain);
+            }
+            else
+            {
+                Write(instruction, sizeOfMain);
+            }
+            if (instruction.Offset >= stopAt)
+                break;
+        }
+        byte numberOfInstructions = checked((byte)(_writer.BaseStream.Position - nesPosition));
+        SeekBack(numberOfInstructions);
+        return numberOfInstructions;
+    }
+
+    public void Write(ILInstruction instruction, string operand, ushort sizeOfMain)
+    {
+        switch (instruction.OpCode)
         {
             case ILOpCode.Nop:
                 break;
@@ -231,7 +291,7 @@ class IL2NESWriter : NESWriter
 
                 Write(NESInstruction.LDA, LSB(stringOffset));
                 Write(NESInstruction.LDX, MSB(stringOffset));
-                Write(NESInstruction.JSR, pushax.GetAddressAfterMain(sizeOfMain));
+                Write(NESInstruction.JSR, Labels[nameof(pushax)]);
                 Write(NESInstruction.LDX, 0x00);
                 Write(ILOpCode.Ldc_i4_s, operand.Length, sizeOfMain);
                 DataOffset = (ushort)(DataOffset + operand.Length);
@@ -273,30 +333,52 @@ class IL2NESWriter : NESWriter
                         }
                         break;
                 }
+                // Pop N times
+                int args = _reflectionCache.GetNumberOfArguments(operand);
+                for (int i = 0; i < args; i++)
+                {
+                    if (Stack.Count > 0)
+                        Stack.Pop();
+                }
+                // Return value, dup for now might be fine?
+                if (_reflectionCache.HasReturnValue(operand) && Stack.Count > 0)
+                    Stack.Push(Stack.Peek());
                 break;
             default:
-                throw new NotImplementedException($"OpCode {code} with String operand is not implemented!");
+                throw new NotImplementedException($"OpCode {instruction.OpCode} with String operand is not implemented!");
         }
-        previous = code;
+        previous = instruction.OpCode;
     }
 
-    public void Write(ILOpCode code, ImmutableArray<byte> operand, ushort sizeOfMain)
+    public void Write(ILInstruction instruction, ImmutableArray<byte> operand, ushort sizeOfMain)
     {
-        switch (code)
+        switch (instruction.OpCode)
         {
             case ILOpCode.Ldtoken:
                 if (DataOffset == 0)
+                {
                     DataOffset = rodata.GetAddressAfterMain(sizeOfMain);
-                Write(NESInstruction.LDA, LSB(DataOffset));
-                Write(NESInstruction.LDX, MSB(DataOffset));
+
+                    // HACK: adjust ByteArrayOffset based on length of oam_spr
+                    if (UsedMethods is not null && UsedMethods.Contains(nameof(oam_spr)))
+                    {
+                        DataOffset += 44;
+                    }
+                }
+                // HACK: write these if next instruction is Call
+                if (Instructions is not null && Instructions[Index + 1].OpCode == ILOpCode.Call)
+                {
+                    Write(NESInstruction.LDA, (byte)(DataOffset & 0xff));
+                    Write(NESInstruction.LDX, (byte)(DataOffset >> 8));
+                }
                 Stack.Push(DataOffset);
                 DataOffset = (ushort)(DataOffset + operand.Length);
                 ByteArrays.Add(operand);
                 break;
             default:
-                throw new NotImplementedException($"OpCode {code} with byte[] operand is not implemented!");
+                throw new NotImplementedException($"OpCode {instruction.OpCode} with byte[] operand is not implemented!");
         }
-        previous = code;
+        previous = instruction.OpCode;
     }
 
     /// <summary>
@@ -313,7 +395,7 @@ class IL2NESWriter : NESWriter
         }
     }
 
-    static ushort GetAddress(string name)
+    ushort GetAddress(string name)
     {
         switch (name)
         {
@@ -372,52 +454,10 @@ class IL2NESWriter : NESWriter
             case nameof(scroll):
                 return 0x82FB;
             case nameof(oam_spr):
-                return 0x86DF;
+            case nameof(pad_poll):
+                return Labels.TryGetValue(name, out var address) ? address : (ushort)0;
             default:
                 throw new NotImplementedException($"{nameof(GetAddress)} for {name} is not implemented!");
-        }
-    }
-
-    static int GetNumberOfArguments(string name)
-    {
-        switch (name)
-        {
-            case nameof(ppu_on_bg):
-            case nameof(ppu_on_spr):
-            case nameof(pal_clear):
-            case nameof(ppu_on_all):
-            case nameof(ppu_wait_frame):
-            case nameof(rand):
-            case nameof(rand8): 
-            case nameof(rand16):
-            case nameof(nesclock):
-            case nameof(oam_clear):
-                return 0;
-            case nameof(vram_adr):
-            case nameof(vram_write):
-            case nameof(vram_put):
-            case nameof(set_vram_update):
-            case nameof(set_ppu_ctrl_var):
-            case nameof(pal_bg):
-            case nameof(pal_spr_bright):
-            case nameof(pal_spr):
-            case nameof(pal_all):
-            case nameof(set_rand):    
-            case nameof(oam_hide_rest):
-            case nameof(oam_size):
-                return 1;
-            case nameof(pal_col):
-            case nameof(vram_fill):
-            case nameof(NTADR_A):
-            case nameof(NTADR_B):
-            case nameof(NTADR_C):
-            case nameof(NTADR_D):
-            case nameof(scroll):
-                return 2;
-            case nameof(oam_spr):
-                return 5;
-            default:
-                throw new NotImplementedException($"{nameof(GetNumberOfArguments)} for {name} is not implemented!");
         }
     }
 
@@ -433,7 +473,7 @@ class IL2NESWriter : NESWriter
                 LocalCount += 1;
             }
 
-            SeekBack(6);
+            SeekBack(2);
             Write(NESInstruction.LDA, (byte)local.Value);
             Write(NESInstruction.STA_abs, (ushort)local.Address);
             Write(NESInstruction.LDA, 0x22);
@@ -442,7 +482,7 @@ class IL2NESWriter : NESWriter
         else if (local.Value < ushort.MaxValue)
         {
             LocalCount += 2;
-            SeekBack(8);
+            SeekBack(4);
             Write(NESInstruction.LDX, 0x03);
             Write(NESInstruction.LDA, 0xC0);
             Write(NESInstruction.STA_abs, (ushort)local.Address);
@@ -460,7 +500,7 @@ class IL2NESWriter : NESWriter
     {
         if (LastLDA)
         {
-            Write(NESInstruction.JSR, pusha.GetAddressAfterMain(sizeOfMain));
+            Write(NESInstruction.JSR, Labels[nameof(pusha)]);
         }
         Write(NESInstruction.LDX, MSB(operand));
         Write(NESInstruction.LDA, LSB(operand));
@@ -471,7 +511,7 @@ class IL2NESWriter : NESWriter
     {
         if (LastLDA)
         {
-            Write(NESInstruction.JSR, pusha.GetAddressAfterMain(sizeOfMain));
+            Write(NESInstruction.JSR, Labels[nameof(pusha)]);
         }
         Write(NESInstruction.LDA, operand);
         Stack.Push(operand);
@@ -485,11 +525,11 @@ class IL2NESWriter : NESWriter
             if (local.Value < byte.MaxValue)
             {
                 Write(NESInstruction.LDA_abs, (ushort)local.Address);
-                Write(NESInstruction.JSR, pusha.GetAddressAfterMain(sizeOfMain));
+                Write(NESInstruction.JSR, Labels[nameof(pusha)]);
             }
             else if (local.Value < ushort.MaxValue)
             {
-                Write(NESInstruction.JSR, pusha.GetAddressAfterMain(sizeOfMain));
+                Write(NESInstruction.JSR, Labels[nameof(pusha)]);
                 Write(NESInstruction.LDA_abs, (ushort)local.Address);
                 Write(NESInstruction.LDX_abs, (ushort)(local.Address + 1));
             }
@@ -503,7 +543,7 @@ class IL2NESWriter : NESWriter
             // This is more like an inline constant value
             Write(NESInstruction.LDA, (byte)(local.Value & 0xff));
             Write(NESInstruction.LDX, (byte)(local.Value >> 8));
-            Write(NESInstruction.JSR, pushax.GetAddressAfterMain(sizeOfMain));
+            Write(NESInstruction.JSR, Labels[nameof(pushax)]);
             Write(NESInstruction.LDX, 0x00);
             Write(NESInstruction.LDA, 0x40);
         }
@@ -512,6 +552,7 @@ class IL2NESWriter : NESWriter
 
     void SeekBack(int length)
     {
+        LastLDA = false;
         _logger.WriteLine($"Seek back {length} bytes");
         if (_writer.BaseStream.Length < length)
         {

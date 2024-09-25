@@ -27,6 +27,52 @@ class Transpiler : IDisposable
         _logger = logger ?? new NullLogger();
     }
 
+    /// <summary>
+    /// Figure out the addresses of functions so we can use to them for JMPs.
+    /// TODO: ASM-type labels would be nice...
+    /// </summary>
+    /// <param name="sizeOfMain"></param>
+    /// <returns></returns>
+    private Dictionary<string, ushort> CalculateAddressLabels(ILInstruction[] instructions)
+    {
+        using var ms = new MemoryStream();
+        using var writer = new IL2NESWriter(ms, logger: _logger)
+        {
+            UsedMethods = UsedMethods,
+            Instructions = instructions,
+        };
+
+        // Write built-in functions
+        writer.WriteBuiltIns(sizeOfMain: 0);
+
+        // Write main program
+        for (int i = 0; i < writer.Instructions.Length; i++)
+        {
+            writer.Index = i;
+            var instruction = writer.Instructions[i];
+            if (instruction.Integer != null)
+            {
+                writer.Write(instruction, instruction.Integer.Value, sizeOfMain: 0);
+            }
+            else if (instruction.String != null)
+            {
+                writer.Write(instruction, instruction.String, sizeOfMain: 0);
+            }
+            else if (instruction.Bytes != null)
+            {
+                writer.Write(instruction, instruction.Bytes.Value, sizeOfMain: 0);
+            }
+            else
+            {
+                writer.Write(instruction, sizeOfMain: 0);
+            }
+        }
+
+        writer.WriteFinalBuiltIns(0, 0);
+
+        return writer.Labels;
+    }
+
     public void Write(Stream stream)
     {
         if (_assemblyFiles.Count == 0)
@@ -39,15 +85,20 @@ class Transpiler : IDisposable
 
         _logger.WriteLine($"First pass...");
 
+        var instructions = ReadStaticVoidMain().ToArray();
+        var labels = CalculateAddressLabels(instructions);
+
         // Generate static void main in a first pass, so we know the size of the program
-        FirstPass(out ushort sizeOfMain, out byte locals);
+        FirstPass(labels, instructions, out ushort sizeOfMain, out byte locals);
 
         _logger.WriteLine($"Size of main: {sizeOfMain}");
 
         using var writer = new IL2NESWriter(stream, logger: _logger)
         {
+            Instructions = instructions,
             UsedMethods = UsedMethods,
         };
+        writer.SetLabels(labels);
 
         _logger.WriteLine($"Writing header...");
         writer.WriteHeader(PRG_ROM_SIZE: 2, CHR_ROM_SIZE: 1);
@@ -106,7 +157,7 @@ class Transpiler : IDisposable
         ushort nmi_data = 0x80BC;
         ushort reset_data = 0x8000;
         ushort irq_data = 0x8202;
-        writer.Write(new ushort[] { nmi_data, reset_data, irq_data });
+        writer.Write([nmi_data, reset_data, irq_data]);
 
         _logger.WriteLine($"Writing chr_rom...");
         writer.Write(chr_rom.Bytes);
@@ -132,36 +183,39 @@ class Transpiler : IDisposable
     /// <summary>
     /// Generate static void main in a first pass, so we know the size of the program
     /// </summary>
-    protected virtual void FirstPass(out ushort sizeOfMain, out byte locals)
+    protected virtual void FirstPass(Dictionary<string, ushort> labels, ILInstruction[] instructions, out ushort sizeOfMain, out byte locals)
     {
-        using var mainWriter = new IL2NESWriter(new MemoryStream(), logger: _logger)
+        using var writer = new IL2NESWriter(new MemoryStream(), logger: _logger)
         {
             UsedMethods = UsedMethods,
+            Instructions = instructions,
         };
-        foreach (var instruction in ReadStaticVoidMain())
+        writer.SetLabels(labels);
+        for (int i = 0; i < writer.Instructions.Length; i++)
         {
+            writer.Index = i;
+            var instruction = writer.Instructions[i];
             _logger.WriteLine($"{instruction}");
-
             if (instruction.Integer != null)
             {
-                mainWriter.Write(instruction.OpCode, instruction.Integer.Value, sizeOfMain: 0);
+                writer.Write(instruction, instruction.Integer.Value, sizeOfMain: 0);
             }
             else if (instruction.String != null)
             {
-                mainWriter.Write(instruction.OpCode, instruction.String, sizeOfMain: 0);
+                writer.Write(instruction, instruction.String, sizeOfMain: 0);
             }
             else if (instruction.Bytes != null)
             {
-                mainWriter.Write(instruction.OpCode, instruction.Bytes.Value, sizeOfMain: 0);
+                writer.Write(instruction, instruction.Bytes.Value, sizeOfMain: 0);
             }
             else
             {
-                mainWriter.Write(instruction.OpCode, sizeOfMain: 0);
+                writer.Write(instruction, sizeOfMain: 0);
             }
         }
-        mainWriter.Flush();
-        sizeOfMain = checked((ushort)mainWriter.BaseStream.Length);
-        locals = checked((byte)mainWriter.LocalCount);
+        writer.Flush();
+        sizeOfMain = checked((ushort)writer.BaseStream.Length);
+        locals = checked((byte)writer.LocalCount);
     }
 
     /// <summary>
@@ -170,25 +224,28 @@ class Transpiler : IDisposable
     /// </summary>
     protected virtual void SecondPass(ushort sizeOfMain, IL2NESWriter writer)
     {
-        foreach (var instruction in ReadStaticVoidMain())
-        {
-            _logger.WriteLine($"{instruction}");
+        if (writer.Instructions is null)
+            throw new ArgumentNullException(nameof(writer.Instructions));
 
+        for (int i = 0; i < writer.Instructions.Length; i++)
+        {
+            writer.Index = i;
+            var instruction = writer.Instructions[i];
             if (instruction.Integer != null)
             {
-                writer.Write(instruction.OpCode, instruction.Integer.Value, sizeOfMain);
+                writer.Write(instruction, instruction.Integer.Value, sizeOfMain);
             }
             else if (instruction.String != null)
             {
-                writer.Write(instruction.OpCode, instruction.String, sizeOfMain);
+                writer.Write(instruction, instruction.String, sizeOfMain);
             }
             else if (instruction.Bytes != null)
             {
-                writer.Write(instruction.OpCode, instruction.Bytes.Value, sizeOfMain);
+                writer.Write(instruction, instruction.Bytes.Value, sizeOfMain);
             }
             else
             {
-                writer.Write(instruction.OpCode, sizeOfMain);
+                writer.Write(instruction, sizeOfMain);
             }
         }
     }
@@ -215,6 +272,7 @@ class Transpiler : IDisposable
 
                 while (blob.RemainingBytes > 0)
                 {
+                    int offset = blob.Offset;
                     ILOpCode opCode = DecodeOpCode(ref blob);
 
                     OperandType operandType = GetOperandType(opCode);
@@ -302,7 +360,7 @@ class Transpiler : IDisposable
                             throw new NotSupportedException($"{opCode}, OperandType={operandType} is not supported.");
                     }
 
-                    yield return new ILInstruction(opCode, intValue, stringValue, byteValue);
+                    yield return new ILInstruction(opCode, offset, intValue, stringValue, byteValue);
                 }
             }
         }

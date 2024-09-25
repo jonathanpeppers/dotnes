@@ -1,10 +1,20 @@
 # .NES ("dot" NES)
 
-![dot NES logo](assets/Transparent/dotnes-ms.png)
+<img height="128" src="assets/Transparent/dotnes-ms.png" alt="dot NES logo" />
 
 .NET for the NES game console!
 
 ![Gif of NES Emulator launching from VS Code](assets/vscode.gif)
+
+## Contributing
+
+PRs of any kind are welcome! If you have a question, feel free to:
+
+* [File an Issue](https://github.com/jonathanpeppers/dotnes/issues)
+* [Open a Discussion](https://github.com/jonathanpeppers/dotnes/discussions)
+* [Join the Discord](https://discord.gg/YbAyj6KP)
+
+Thanks!
 
 ## Getting Started
 
@@ -134,7 +144,7 @@ Note that the method `NESLib.pal_col()` has no actual C# implementation. In
 fact! there is *only* a reference assembly even shipped in .NES:
 
 ```powershell
-> 7z l dotnes.0.1.1-alpha.nupkg
+> 7z l dotnes.0.2.0-alpha.nupkg
    Date      Time    Attr         Size   Compressed  Name
 ------------------- ----- ------------ ------------  ------------------------
 2023-09-14 14:37:38 .....         8192         3169  ref\net8.0\neslib.dll

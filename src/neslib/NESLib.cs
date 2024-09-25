@@ -131,6 +131,13 @@ public static class NESLib
     public static byte oam_spr(byte x, byte y, byte chrnum, byte attr, byte sprid) => default;
 
     /// <summary>
+    /// poll controller and return enum like PAD.LEFT, etc.
+    /// </summary>
+    /// <param name="pad">pad number (0 or 1)</param>
+    /// <returns>Enum like PAD.LEFT, etc.</returns>
+    public static PAD pad_poll(byte pad) => default;
+
+    /// <summary>
     /// set metasprite in OAM buffer
     /// meta sprite is a const unsigned char array, it contains four bytes per sprite
     /// in order x offset, y offset, tile, attribute

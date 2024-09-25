@@ -6,4 +6,4 @@ namespace dotnes;
 /// <summary>
 /// Holds info about IL
 /// </summary>
-record ILInstruction(ILOpCode OpCode, int? Integer = null, string? String = null, ImmutableArray<byte>? Bytes = null);
+record ILInstruction(ILOpCode OpCode, int Offset = 0, int? Integer = null, string? String = null, ImmutableArray<byte>? Bytes = null);
