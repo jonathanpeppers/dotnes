@@ -446,34 +446,36 @@ public class RoslynTests
                 """,
             expectedAssembly:
                 """
-                A9F6
+                A9FA
                 A285
-                201182  ; JSR _pal_all
-                208982  ; JSR _ppu_on_all
+                201182  ; JSR pal_all
+                208982  ; JSR ppu_on_all
                 A928
                 8D2403
                 A922
                 A286
                 A900
-                202286
+                202686  ; JSR pad_poll
+                C900
+                F015
                 AD2403
-                20A785  ; JSR popa
-                A929
+                20AB85  ; JSR popa
+                A92A
                 8D2403
                 A922
                 A286
                 AD2403
-                20A785  ; JSR popa
+                20AB85  ; JSR popa
                 AD2403
-                20A785  ; JSR popa
+                20AB85  ; JSR popa
                 A910
-                20A785  ; JSR popa
+                20AB85  ; JSR popa
                 A903
-                20A785  ; JSR popa
+                20AB85  ; JSR popa
                 A900
-                20F685  ; JSR _oam_spr
-                20DB82  ; JSR _ppu_wait_frame
-                4C4585  ; JMP $8512
+                20FA85  ; JSR oam_spr
+                20DB82  ; JSR ppu_wait_frame
+                4C4985  ; JMP $8512
                 """);
     }
 }
