@@ -54,9 +54,75 @@ public static class NESLib
     /// </summary>
     public static void pal_bg_bright(byte bright) { }
 
+    /// <summary>
+    /// play music
+    /// </summary>
+    public static void music_play(byte song) => throw null!;
 
+    /// <summary>
+    /// stop music
+    /// </summary>
+    public static void music_stop() => throw null!;
 
+    /// <summary>
+    /// pause music
+    /// </summary>
+    public static void music_pause(byte pause) => throw null!;
 
+    /// <summary>
+    /// play sound effect
+    /// </summary>
+    public static void sfx_play(byte sound, byte channel) => throw null!;
+
+    /// <summary>
+    /// play sample
+    /// </summary>
+    public static void sample_play(byte sample) => throw null!;
+
+    /// <summary>
+    /// get pad trigger
+    /// </summary>
+    public static byte pad_trigger(byte pad) => throw null!;
+
+    /// <summary>
+    /// get pad state
+    /// </summary>
+    public static byte pad_state(byte pad) => throw null!;
+
+    /// <summary>
+    /// read from vram
+    /// </summary>
+    public static void vram_read(byte[] dst, uint size) => throw null!;
+
+    /// <summary>
+    /// write to vram
+    /// </summary>
+    public static void vram_write(byte[] src, uint size) => throw null!;
+
+    /// <summary>
+    /// unpack LZ4 data to vram
+    /// </summary>
+    public static void vram_unlz4(byte[] input, byte[] output, uint uncompressedSize) => throw null!;
+
+    /// <summary>
+    /// fill memory
+    /// </summary>
+    public static void memfill(object dst, byte value, uint len) => throw null!;
+
+    /// <summary>
+    /// clear OAM buffer fast
+    /// </summary>
+    public static void oam_clear_fast() => throw null!;
+
+    /// <summary>
+    /// set metasprite in OAM buffer with palette
+    /// </summary>
+    public static void oam_meta_spr_pal(byte x, byte y, byte pal, byte[] metasprite) => throw null!;
+
+    /// <summary>
+    /// set metasprite in OAM buffer with clipping
+    /// </summary>
+    public static void oam_meta_spr_clip(int x, byte y, byte[] metasprite) => throw null!;
 
     /// <summary>
     /// wait actual TV frame, 50hz for PAL, 60hz for NTSC
@@ -113,7 +179,6 @@ public static class NESLib
     /// </summary>
     public static void set_ppu_ctrl_var(byte var) { }
 
-
     /// <summary>
     /// clear OAM buffer, all the sprites are hidden
     /// </summary>
@@ -150,7 +215,6 @@ public static class NESLib
     /// hide all remaining sprites from given offset
     /// </summary>
     public static void oam_hide_rest(byte sprid) { }
-
 
     /// <summary>
     /// set vram pointer to write operations if you need to write some data to vram
@@ -207,7 +271,6 @@ public static class NESLib
     /// </summary>
     public static void split(int x, int y) { }
 
-
     /// <summary>
     /// select current chr bank for sprites, 0..1
     /// </summary>
@@ -222,10 +285,12 @@ public static class NESLib
     /// get random number 0..255, same as rand8()
     /// </summary>
     public static byte rand() => default;
+
     /// <summary>
     /// get random number 0..255
     /// </summary>
     public static byte rand8() => default;
+
     /// <summary>
     /// get random number 0..65535
     /// </summary>
