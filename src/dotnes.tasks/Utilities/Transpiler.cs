@@ -50,6 +50,7 @@ class Transpiler : IDisposable
         {
             writer.Index = i;
             var instruction = writer.Instructions[i];
+            writer.Labels.Add($"instruction_{instruction.Offset:X2}", (ushort)ms.Position);
             if (instruction.Integer != null)
             {
                 writer.Write(instruction, instruction.Integer.Value, sizeOfMain: 0);
@@ -387,7 +388,9 @@ class Transpiler : IDisposable
         }
 
         if (neslib is null)
-            throw new InvalidOperationException("Did not find TypeReference to NES.NESLib!");
+            // We don't have NES.NESLib, but that's fine
+            // since we can be generic NES transpiler and that's useful for testing transpiler itself.
+            return;
 
         // Find any methods that are used in NES.NESLib
         foreach (var m in reader.MemberReferences)
