@@ -50,7 +50,7 @@ class Transpiler : IDisposable
         {
             writer.Index = i;
             var instruction = writer.Instructions[i];
-            writer.Labels.Add($"instruction_{instruction.Offset:X2}", (ushort)ms.Position);
+            writer.RecordLabel(instruction);
             if (instruction.Integer != null)
             {
                 writer.Write(instruction, instruction.Integer.Value, sizeOfMain: 0);
