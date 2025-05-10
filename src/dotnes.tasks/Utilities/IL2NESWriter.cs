@@ -52,6 +52,11 @@ class IL2NESWriter : NESWriter
 
     record Local(int Value, int? Address = null);
 
+    public void RecordLabel(ILInstruction instruction)
+    {
+        Labels.Add($"instruction_{instruction.Offset:X2}", (ushort)(_writer.BaseStream.Position + BaseAddress));
+    }
+
     public void Write(ILInstruction instruction, ushort sizeOfMain)
     {
         switch (instruction.OpCode)
@@ -200,8 +205,11 @@ class IL2NESWriter : NESWriter
                 }
                 break;
             case ILOpCode.Br_s:
-                // NOTE: This is (-3) because we want to go to the instruction right before donelib, that is "jump to self"
-                Write(NESInstruction.JMP_abs, (ushort)(Labels[nameof(donelib)] - 3));
+                {
+                    operand = (sbyte)(byte)operand;
+                    Labels.TryGetValue($"instruction_{instruction.Offset + operand + 2:X2}", out var label);
+                    Write(NESInstruction.JMP_abs, label);
+                }
                 break;
             case ILOpCode.Newarr:
                 if (previous == ILOpCode.Ldc_i4_s)
