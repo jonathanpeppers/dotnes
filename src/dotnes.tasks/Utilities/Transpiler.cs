@@ -388,9 +388,7 @@ class Transpiler : IDisposable
         }
 
         if (neslib is null)
-            // We don't have NES.NESLib, but that's fine
-            // since we can be generic NES transpiler and that's useful for testing transpiler itself.
-            return;
+            throw new InvalidOperationException("Did not find TypeReference to NES.NESLib!");
 
         // Find any methods that are used in NES.NESLib
         foreach (var m in reader.MemberReferences)
