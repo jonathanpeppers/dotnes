@@ -50,6 +50,7 @@ class Transpiler : IDisposable
         {
             writer.Index = i;
             var instruction = writer.Instructions[i];
+            writer.RecordLabel(instruction);
             if (instruction.Integer != null)
             {
                 writer.Write(instruction, instruction.Integer.Value, sizeOfMain: 0);
