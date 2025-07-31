@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.Build.NoTargets">
   <Import Project="../NuGet.props" />
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFramework>net9.0</TargetFramework>
     <Description>Redistribution of ANESE for use with .NES</Description>
     <Authors>Daniel Prilik, $(Authors)</Authors>
     <PackageProjectUrl>https://github.com/daniel5151/ANESE</PackageProjectUrl>

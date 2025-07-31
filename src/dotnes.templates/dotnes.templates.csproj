@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.Build.NoTargets">
   <Import Project="../NuGet.props" />
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFramework>net9.0</TargetFramework>
     <Description>.NET for the NES game console: 'dotnet new nes' project templates</Description>
     <PackageType>Template</PackageType>
     <PackageLicenseFile>LICENSE</PackageLicenseFile>
