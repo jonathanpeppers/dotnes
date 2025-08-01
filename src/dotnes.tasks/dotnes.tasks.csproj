@@ -15,8 +15,8 @@
     <Using Include="Microsoft.Build.Utilities" />
     <Using Include="NES" />
     <InternalsVisibleTo Include="dotnes.tests" />
-    <PackageReference Include="Microsoft.Build.Tasks.Core" Version="17.11.4" />
-    <PackageReference Include="Microsoft.Build.Utilities.Core" Version="17.11.4" />
+    <PackageReference Include="Microsoft.Build.Tasks.Core" Version="17.14.8" />
+    <PackageReference Include="Microsoft.Build.Utilities.Core" Version="17.14.8" />
     <!-- Fixes a NuGet security warning -->
     <PackageReference Include="System.Formats.Asn1" Version="8.0.1" />
     <PackageReference Include="System.Reflection.Metadata" Version="8.0.0" />
