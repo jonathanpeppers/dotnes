@@ -147,7 +147,7 @@ fact! there is *only* a reference assembly even shipped in .NES:
 > 7z l dotnes.0.2.0-alpha.nupkg
    Date      Time    Attr         Size   Compressed  Name
 ------------------- ----- ------------ ------------  ------------------------
-2023-09-14 14:37:38 .....         8192         3169  ref\net9.0\neslib.dll
+2023-09-14 14:37:38 .....         8192         3169  ref\net10.0\neslib.dll
 ```
 
 If you decompile `neslib.dll`, no code is inside:

@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.Build.NoTargets">
   <Import Project="../NuGet.props" />
   <PropertyGroup>
-    <TargetFramework>net9.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <GenerateDependencyFile>false</GenerateDependencyFile>
     <PackageLicenseFile>LICENSE</PackageLicenseFile>
     <NoWarn>$(NoWarn);NU5131</NoWarn>
@@ -20,6 +20,6 @@
     <None Include="../dotnes.tasks/bin/$(Configuration)/netstandard2.0/System.Collections.Immutable.dll" Pack="true" PackagePath="build" />
     <None Include="../dotnes.tasks/bin/$(Configuration)/netstandard2.0/neslib.dll" Pack="true" PackagePath="build" />
     <None Include="../dotnes.tasks/bin/$(Configuration)/netstandard2.0/neslib.pdb" Pack="true" PackagePath="build" />
-    <None Include="../neslib/bin/$(Configuration)/netstandard2.0/ref/neslib.dll" Pack="true" PackagePath="ref/net9.0" />
+    <None Include="../neslib/bin/$(Configuration)/netstandard2.0/ref/neslib.dll" Pack="true" PackagePath="ref/net10.0" />
   </ItemGroup>
 </Project>
