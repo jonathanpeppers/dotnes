@@ -27,9 +27,11 @@ Program.cs → dotnet build → .dll (MSIL) → Transpiler → .nes ROM
 
 ```bash
 dotnet build                    # Build entire solution
-dotnet test src/dotnes.tests/   # Run tests with Verify snapshots
+dotnet test                     # Run tests (ALWAYS rebuilds, NEVER use --no-build)
 cd samples/hello && dotnet run  # Build + run in emulator
 ```
+
+**⚠️ IMPORTANT:** Always run `dotnet test` without `--no-build`. The test project depends on build outputs that must be fresh.
 
 **Diagnostic logging:** Add `<NESDiagnosticLogging>true</NESDiagnosticLogging>` to project.
 
