@@ -478,73 +478,20 @@ class NESWriter : IDisposable
                 Write(NESInstruction.BNE_rel, 0xDB);
                 break;
             case nameof(NESLib.pal_col):
-                /*
-                 * 823E	8517          	STA TEMP                      ; _pal_col
-                 * 8240	209285        	JSR popa
-                 * 8243	291F          	AND #$1F
-                 * 8245	AA            	TAX
-                 * 8246	A517          	LDA TEMP
-                 * 8248	9DC001        	STA $01C0,x
-                 * 824B	E607          	INC PAL_UPDATE
-                 * 824D	60            	RTS
-                 */
-                Write(NESInstruction.STA_zpg, TEMP);
-                Write(NESInstruction.JSR, Labels[nameof(popa)]);
-                Write(NESInstruction.AND, 0x1F);
-                Write(NESInstruction.TAX_impl);
-                Write(NESInstruction.LDA_zpg, TEMP);
-                Write(NESInstruction.STA_abs_X, PAL_BUF);
-                Write(NESInstruction.INC_zpg, PAL_UPDATE);
-                Write(NESInstruction.RTS_impl);
+                WriteBlock(BuiltInSubroutines.PalCol());
                 break;
             case nameof(NESLib.pal_clear):
                 WriteBlock(BuiltInSubroutines.PalClear());
                 break;
             case nameof(NESLib.pal_spr_bright):
-                /*
-                 * 825D	AA            	TAX                           ; _pal_spr_bright
-                 * 825E	BD2284        	LDA palBrightTableL,x
-                 * 8261	850A          	STA PAL_SPR_PTR
-                 * 8263	BD2B84        	LDA palBrightTableH,x
-                 * 8266	850B          	STA PAL_SPR_PTR+1
-                 * 8268	8507          	STA PAL_UPDATE
-                 * 826A	60            	RTS
-                 */
-                Write(NESInstruction.TAX_impl);
-                Write(NESInstruction.LDA_abs_X, palBrightTableL);
-                Write(NESInstruction.STA_zpg, PAL_SPR_PTR);
-                Write(NESInstruction.LDA_abs_X, palBrightTableH);
-                Write(NESInstruction.STA_zpg, PAL_SPR_PTR + 1);
-                Write(NESInstruction.STA_zpg, PAL_UPDATE);
-                Write(NESInstruction.RTS_impl);
+                WriteBlock(BuiltInSubroutines.PalSprBright());
                 break;
             case nameof(NESLib.pal_bg_bright):
-                /*
-                 * 826B	AA            	TAX                           ; _pal_bg_bright
-                 * 826C	BD2284        	LDA palBrightTableL,x
-                 * 826F	8508          	STA PAL_BG_PTR
-                 * 8271	BD2B84        	LDA palBrightTableH,x
-                 * 8274	8509          	STA PAL_BG_PTR+1
-                 * 8276	8507          	STA PAL_UPDATE
-                 * 8278	60            	RTS
-                 */
-                Write(NESInstruction.TAX_impl);
-                Write(NESInstruction.LDA_abs_X, palBrightTableL);
-                Write(NESInstruction.STA_zpg, PAL_BG_PTR);
-                Write(NESInstruction.LDA_abs_X, palBrightTableH);
-                Write(NESInstruction.STA_zpg, PAL_BG_PTR + 1);
-                Write(NESInstruction.STA_zpg, PAL_UPDATE);
-                Write(NESInstruction.RTS_impl);
+                WriteBlock(BuiltInSubroutines.PalBgBright());
                 break;
             case nameof(NESLib.pal_bright):
-                /*
-                 * 8279	205D82        	JSR _pal_spr_bright           ; _pal_bright
-                 * 827C	8A            	TXA
-                 * 827D	4C6B82        	JMP _pal_bg_bright
-                 */
-                Write(NESInstruction.JSR, 0x825D);
-                Write(NESInstruction.TXA_impl);
-                Write(NESInstruction.JMP_abs, 0x826B);
+                WriteBlock(BuiltInSubroutines.PalBright());
+                break;
                 break;
             case nameof(NESLib.ppu_off):
                 WriteBlock(BuiltInSubroutines.PpuOff());
@@ -672,54 +619,10 @@ class NESWriter : IDisposable
                 Write(NESInstruction.RTS_impl);
                 break;
             case nameof(NESLib.bank_spr):
-                /*
-                 * 832E	2901          	AND #$01                      ; _bank_spr
-                 * 8330	0A            	ASL
-                 * 8331	0A            	ASL
-                 * 8332	0A            	ASL
-                 * 8333	8517          	STA TEMP
-                 * 8335	A510          	LDA __PRG_FILEOFFS__
-                 * 8337	29F7          	AND #$F7
-                 * 8339	0517          	ORA TEMP
-                 * 833B	8510          	STA __PRG_FILEOFFS__
-                 * 833D	60            	RTS
-                 */
-                Write(NESInstruction.AND, 0x01);
-                Write(NESInstruction.ASL_A);
-                Write(NESInstruction.ASL_A);
-                Write(NESInstruction.ASL_A);
-                Write(NESInstruction.STA_zpg, TEMP);
-                Write(NESInstruction.LDA_zpg, PRG_FILEOFFS);
-                Write(NESInstruction.AND, 0xF7);
-                Write(NESInstruction.ORA_zpg, TEMP);
-                Write(NESInstruction.STA_zpg, PRG_FILEOFFS);
-                Write(NESInstruction.RTS_impl);
+                WriteBlock(BuiltInSubroutines.BankSpr());
                 break;
             case nameof(NESLib.bank_bg):
-                /*
-                 * 833E	2901          	AND #$01                      ; _bank_bg
-                 * 8340	0A            	ASL
-                 * 8341	0A            	ASL
-                 * 8342	0A            	ASL
-                 * 8343	0A            	ASL
-                 * 8344	8517          	STA TEMP
-                 * 8346	A510          	LDA __PRG_FILEOFFS__
-                 * 8348	29EF          	AND #$EF
-                 * 834A	0517          	ORA TEMP
-                 * 834C	8510          	STA __PRG_FILEOFFS__
-                 * 834E	60            	RTS
-                 */
-                Write(NESInstruction.AND, 0x01);
-                Write(NESInstruction.ASL_A);
-                Write(NESInstruction.ASL_A);
-                Write(NESInstruction.ASL_A);
-                Write(NESInstruction.ASL_A);
-                Write(NESInstruction.STA_zpg, TEMP);
-                Write(NESInstruction.LDA_zpg, PRG_FILEOFFS);
-                Write(NESInstruction.AND, 0xEF);
-                Write(NESInstruction.ORA_zpg, TEMP);
-                Write(NESInstruction.STA_zpg, PRG_FILEOFFS);
-                Write(NESInstruction.RTS_impl);
+                WriteBlock(BuiltInSubroutines.BankBg());
                 break;
             case nameof(NESLib.vram_write):
                 /*

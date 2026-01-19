@@ -270,9 +270,9 @@ internal static class BuiltInSubroutines
     public static Block PalBright()
     {
         var block = new Block("_pal_bright");
-        block.Emit(JSR("_pal_spr_bright"))
+        block.Emit(JSR(pal_spr_bright))
              .Emit(TXA())
-             .Emit(JMP_abs("_pal_bg_bright"));
+             .Emit(JMP_abs(pal_bg_bright));
         return block;
     }
 
@@ -540,14 +540,15 @@ internal static class BuiltInSubroutines
     public static Block BankSpr()
     {
         var block = new Block("_bank_spr");
-        block.Emit(ASL_A())
+        block.Emit(AND(0x01))
+             .Emit(ASL_A())
              .Emit(ASL_A())
              .Emit(ASL_A())
              .Emit(STA_zpg(TEMP))
-             .Emit(LDA_zpg(0x13))  // PPU_CTRL_VAR
+             .Emit(LDA_zpg(PRG_FILEOFFS))
              .Emit(AND(0xF7))
              .Emit(ORA_zpg(TEMP))
-             .Emit(STA_zpg(0x13))
+             .Emit(STA_zpg(PRG_FILEOFFS))
              .Emit(RTS());
         return block;
     }
@@ -558,15 +559,16 @@ internal static class BuiltInSubroutines
     public static Block BankBg()
     {
         var block = new Block("_bank_bg");
-        block.Emit(ASL_A())
+        block.Emit(AND(0x01))
+             .Emit(ASL_A())
              .Emit(ASL_A())
              .Emit(ASL_A())
              .Emit(ASL_A())
              .Emit(STA_zpg(TEMP))
-             .Emit(LDA_zpg(0x13))  // PPU_CTRL_VAR
+             .Emit(LDA_zpg(PRG_FILEOFFS))
              .Emit(AND(0xEF))
              .Emit(ORA_zpg(TEMP))
-             .Emit(STA_zpg(0x13))
+             .Emit(STA_zpg(PRG_FILEOFFS))
              .Emit(RTS());
         return block;
     }
@@ -603,20 +605,41 @@ internal static class BuiltInSubroutines
     /// </summary>
     public static Block VramFill()
     {
+        // 83DF STA $19       ; _vram_fill
+        // 83E1 STX $1A
+        // 83E3 JSR popa
+        // 83E6 LDX $1A
+        // 83E8 BEQ +$0C      ; to @3
+        // 83EA LDX #$00      ; @1
+        // 83EC STA $2007     ; @2
+        // 83EF DEX
+        // 83F0 BNE -$06      ; to @2
+        // 83F2 DEC $1A
+        // 83F4 BNE -$0A      ; to @2
+        // 83F6 LDX $19       ; @3
+        // 83F8 BEQ +$06      ; to @4
+        // 83FA STA $2007
+        // 83FD DEX
+        // 83FE BNE -$06      ; to 83FA
+        // 8400 RTS           ; @4
         var block = new Block("_vram_fill");
-        block.Emit(STA_zpg(TEMP))
-             .Emit(STX_zpg(TEMP + 1))
+        block.Emit(STA_zpg(0x19))
+             .Emit(STX_zpg(0x1A))
              .Emit(JSR("popa"))
-             .Emit(LDX_zpg(TEMP))
-             .Emit(BEQ(6))  // skip if low byte is 0
-             .Emit(INC_zpg(TEMP + 1))
-             .Emit(LDY(0x00))
-             .Emit(STA_abs(PPU_DATA), "@1")
+             .Emit(LDX_zpg(0x1A))
+             .Emit(BEQ(0x0C))  // branch to @3
+             .Emit(LDX(0x00), "@1")
+             .Emit(STA_abs(PPU_DATA), "@2")
              .Emit(DEX())
-             .Emit(BNE(-5))  // branch back to @1
-             .Emit(DEC_zpg(TEMP + 1))
-             .Emit(BNE(-8))  // continue if high byte > 0
-             .Emit(RTS());
+             .Emit(BNE(0xFA))  // branch back to @2 (-6)
+             .Emit(DEC_zpg(0x1A))
+             .Emit(BNE(0xF6))  // branch back to @2 (-10)
+             .Emit(LDX_zpg(0x19), "@3")
+             .Emit(BEQ(0x06))  // branch to @4
+             .Emit(STA_abs(PPU_DATA))
+             .Emit(DEX())
+             .Emit(BNE(0xFA))  // branch back (-6)
+             .Emit(RTS(), "@4");
         return block;
     }
 
@@ -625,9 +648,26 @@ internal static class BuiltInSubroutines
     /// </summary>
     public static Block VramInc()
     {
+        // 8401 ORA #$00      ; _vram_inc
+        // 8403 BEQ +$02
+        // 8405 LDA #$04
+        // 8407 STA TEMP
+        // 8409 LDA PRG_FILEOFFS
+        // 840B AND #$FB
+        // 840D ORA TEMP
+        // 840F STA PRG_FILEOFFS
+        // 8411 STA $2000
+        // 8414 RTS
         var block = new Block("_vram_inc");
-        block.Emit(ORA_zpg(0x13))  // PPU_CTRL_VAR
-             .Emit(STA_zpg(0x13))
+        block.Emit(ORA(0x00))
+             .Emit(BEQ(0x02))
+             .Emit(LDA(0x04))
+             .Emit(STA_zpg(TEMP))
+             .Emit(LDA_zpg(PRG_FILEOFFS))
+             .Emit(AND(0xFB))
+             .Emit(ORA_zpg(TEMP))
+             .Emit(STA_zpg(PRG_FILEOFFS))
+             .Emit(STA_abs(PPU_CTRL))
              .Emit(RTS());
         return block;
     }
@@ -637,22 +677,44 @@ internal static class BuiltInSubroutines
     /// </summary>
     public static Block VramWrite()
     {
+        // 834F STA TEMP      ; _vram_write
+        // 8351 STX TEMP+1
+        // 8353 JSR popax
+        // 8356 STA $19
+        // 8358 STX $1A
+        // 835A LDY #$00
+        // 835C LDA ($19),y   ; @1
+        // 835E STA $2007
+        // 8361 INC $19
+        // 8363 BNE +$02
+        // 8365 INC $1A
+        // 8367 LDA TEMP
+        // 8369 BNE +$02
+        // 836B DEC TEMP+1
+        // 836D DEC TEMP
+        // 836F LDA TEMP
+        // 8371 ORA TEMP+1
+        // 8373 BNE -$19      ; to @1
+        // 8375 RTS
         var block = new Block("_vram_write");
         block.Emit(STA_zpg(TEMP))
              .Emit(STX_zpg(TEMP + 1))
-             .Emit(JSR("popa"))
-             .Emit(TAY())
-             .Emit(LDX(0x00), "@1")
-             .Emit(LDA_ind_X(ptr1))
+             .Emit(JSR("popax"))
+             .Emit(STA_zpg(0x19))
+             .Emit(STX_zpg(0x1A))
+             .Emit(LDY(0x00))
+             .Emit(LDA_ind_Y(0x19), "@1")
              .Emit(STA_abs(PPU_DATA))
-             .Emit(INC_zpg(ptr1))
-             .Emit(BNE(2))   // skip increment of high byte
-             .Emit(INC_zpg(ptr1 + 1))
-             .Emit(INX())
-             .Emit(CPX_zpg(TEMP))
-             .Emit(BNE(-14)) // branch back to @1
-             .Emit(DEY())
-             .Emit(BNE(-17))
+             .Emit(INC_zpg(0x19))
+             .Emit(BNE(0x02))
+             .Emit(INC_zpg(0x1A))
+             .Emit(LDA_zpg(TEMP))
+             .Emit(BNE(0x02))
+             .Emit(DEC_zpg(TEMP + 1))
+             .Emit(DEC_zpg(TEMP))
+             .Emit(LDA_zpg(TEMP))
+             .Emit(ORA_zpg(TEMP + 1))
+             .Emit(BNE(0xE7))  // branch back to @1 (-25)
              .Emit(RTS());
         return block;
     }

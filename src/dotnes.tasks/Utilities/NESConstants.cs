@@ -49,6 +49,8 @@ internal static class NESConstants
     // Built-in subroutine addresses (resolved after linking)
     public const ushort skipNtsc = 0x81F9;
     public const ushort pal_col = 0x823E;
+    public const ushort pal_spr_bright = 0x825D;
+    public const ushort pal_bg_bright = 0x826B;
     public const ushort vram_adr = 0x83D4;
     public const ushort vram_write = 0x834F;
     public const ushort ppu_on_all = 0x8289;
