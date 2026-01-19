@@ -227,41 +227,41 @@ class NESWriter : IDisposable
         WriteBlock(BuiltInSubroutines.SkipNtsc());
         WriteBlock(BuiltInSubroutines.Irq());
         WriteBlock(BuiltInSubroutines.NmiSetCallback());
-        WriteBuiltIn(nameof(NESLib.pal_all), sizeOfMain);
-        WriteBuiltIn(nameof(NESLib.pal_copy), sizeOfMain);
-        WriteBuiltIn(nameof(NESLib.pal_bg), sizeOfMain);
-        WriteBuiltIn(nameof(NESLib.pal_spr), sizeOfMain);
-        WriteBuiltIn(nameof(NESLib.pal_col), sizeOfMain);
-        WriteBuiltIn(nameof(NESLib.pal_clear), sizeOfMain);
-        WriteBuiltIn(nameof(NESLib.pal_spr_bright), sizeOfMain);
-        WriteBuiltIn(nameof(NESLib.pal_bg_bright), sizeOfMain);
-        WriteBuiltIn(nameof(NESLib.pal_bright), sizeOfMain);
-        WriteBuiltIn(nameof(NESLib.ppu_off), sizeOfMain);
-        WriteBuiltIn(nameof(NESLib.ppu_on_all), sizeOfMain);
-        WriteBuiltIn(nameof(NESLib.ppu_onoff), sizeOfMain);
-        WriteBuiltIn(nameof(NESLib.ppu_on_bg), sizeOfMain);
-        WriteBuiltIn(nameof(NESLib.ppu_on_spr), sizeOfMain);
-        WriteBuiltIn(nameof(NESLib.ppu_mask), sizeOfMain);
-        WriteBuiltIn(nameof(NESLib.ppu_system), sizeOfMain);
-        WriteBuiltIn(nameof(NESLib.get_ppu_ctrl_var), sizeOfMain);
-        WriteBuiltIn(nameof(NESLib.set_ppu_ctrl_var), sizeOfMain);
-        WriteBuiltIn(nameof(NESLib.oam_clear), sizeOfMain);
-        WriteBuiltIn(nameof(NESLib.oam_size), sizeOfMain);
-        WriteBuiltIn(nameof(NESLib.oam_hide_rest), sizeOfMain);
-        WriteBuiltIn(nameof(NESLib.ppu_wait_frame), sizeOfMain);
-        WriteBuiltIn(nameof(NESLib.ppu_wait_nmi), sizeOfMain);
-        WriteBuiltIn(nameof(NESLib.scroll), sizeOfMain);
-        WriteBuiltIn(nameof(NESLib.bank_spr), sizeOfMain);
-        WriteBuiltIn(nameof(NESLib.bank_bg), sizeOfMain);
-        WriteBuiltIn(nameof(NESLib.vram_write), sizeOfMain);
-        WriteBuiltIn(nameof(NESLib.set_vram_update), sizeOfMain);
-        WriteBuiltIn(nameof(NESLib.flush_vram_update), sizeOfMain);
-        WriteBuiltIn(nameof(NESLib.vram_adr), sizeOfMain);
-        WriteBuiltIn(nameof(NESLib.vram_put), sizeOfMain);
-        WriteBuiltIn(nameof(NESLib.vram_fill), sizeOfMain);
-        WriteBuiltIn(nameof(NESLib.vram_inc), sizeOfMain);
-        WriteBuiltIn(nameof(NESLib.nesclock), sizeOfMain);
-        WriteBuiltIn(nameof(NESLib.delay), sizeOfMain);
+        WriteBlock(BuiltInSubroutines.PalAll());
+        WriteBlock(BuiltInSubroutines.PalCopy());
+        WriteBlock(BuiltInSubroutines.PalBg());
+        WriteBlock(BuiltInSubroutines.PalSpr());
+        WriteBlock(BuiltInSubroutines.PalCol());
+        WriteBlock(BuiltInSubroutines.PalClear());
+        WriteBlock(BuiltInSubroutines.PalSprBright());
+        WriteBlock(BuiltInSubroutines.PalBgBright());
+        WriteBlock(BuiltInSubroutines.PalBright());
+        WriteBlock(BuiltInSubroutines.PpuOff());
+        WriteBlock(BuiltInSubroutines.PpuOnAll());
+        WriteBlock(BuiltInSubroutines.PpuOnOff());
+        WriteBlock(BuiltInSubroutines.PpuOnBg());
+        WriteBlock(BuiltInSubroutines.PpuOnSpr());
+        WriteBlock(BuiltInSubroutines.PpuMask());
+        WriteBlock(BuiltInSubroutines.PpuSystem());
+        WriteBlock(BuiltInSubroutines.GetPpuCtrlVar());
+        WriteBlock(BuiltInSubroutines.SetPpuCtrlVar());
+        WriteBlock(BuiltInSubroutines.OamClear());
+        WriteBlock(BuiltInSubroutines.OamSize());
+        WriteBlock(BuiltInSubroutines.OamHideRest());
+        WriteBlock(BuiltInSubroutines.PpuWaitFrame());
+        WriteBlock(BuiltInSubroutines.PpuWaitNmi());
+        WriteBlock(BuiltInSubroutines.Scroll());
+        WriteBlock(BuiltInSubroutines.BankSpr());
+        WriteBlock(BuiltInSubroutines.BankBg());
+        WriteBlock(BuiltInSubroutines.VramWrite());
+        WriteBlock(BuiltInSubroutines.SetVramUpdate());
+        WriteBlock(BuiltInSubroutines.FlushVramUpdate());
+        WriteBlock(BuiltInSubroutines.VramAdr());
+        WriteBlock(BuiltInSubroutines.VramPut());
+        WriteBlock(BuiltInSubroutines.VramFill());
+        WriteBlock(BuiltInSubroutines.VramInc());
+        WriteBlock(BuiltInSubroutines.NesClock());
+        WriteBlock(BuiltInSubroutines.Delay());
         Write(NESLib.palBrightTableL);
         Write(NESLib.palBrightTable0);
         Write(NESLib.palBrightTable1);
@@ -299,138 +299,12 @@ class NESWriter : IDisposable
         {
             if (UsedMethods.Contains(nameof(NESLib.oam_spr)))
             {
-                WriteBuiltIn(nameof(NESLib.oam_spr), totalSize);
+                WriteBlock(BuiltInSubroutines.OamSpr());
             }
             if (UsedMethods.Contains(nameof(NESLib.pad_poll)))
             {
                 WriteBlock(BuiltInSubroutines.PadPoll());
             }
-        }
-    }
-
-    /// <summary>
-    /// Writes a built-in method from NESLib
-    /// </summary>
-    public void WriteBuiltIn(string name, ushort sizeOfMain)
-    {
-        SetLabel(name, CurrentAddress);
-
-        switch (name)
-        {
-            case nameof(NESLib.pal_all):
-                WriteBlock(BuiltInSubroutines.PalAll());
-                break;
-            case nameof (NESLib.pal_copy):
-                WriteBlock(BuiltInSubroutines.PalCopy());
-                break;
-            case nameof(NESLib.pal_bg):
-                WriteBlock(BuiltInSubroutines.PalBg());
-                break;
-            case nameof(NESLib.pal_spr):
-                WriteBlock(BuiltInSubroutines.PalSpr());
-                break;
-            case nameof(NESLib.pal_col):
-                WriteBlock(BuiltInSubroutines.PalCol());
-                break;
-            case nameof(NESLib.pal_clear):
-                WriteBlock(BuiltInSubroutines.PalClear());
-                break;
-            case nameof(NESLib.pal_spr_bright):
-                WriteBlock(BuiltInSubroutines.PalSprBright());
-                break;
-            case nameof(NESLib.pal_bg_bright):
-                WriteBlock(BuiltInSubroutines.PalBgBright());
-                break;
-            case nameof(NESLib.pal_bright):
-                WriteBlock(BuiltInSubroutines.PalBright());
-                break;
-            case nameof(NESLib.ppu_off):
-                WriteBlock(BuiltInSubroutines.PpuOff());
-                break;
-            case nameof(NESLib.ppu_on_all):
-                // Falls through to ppu_onoff, no RTS
-                WriteBlock(BuiltInSubroutines.PpuOnAll());
-                break;
-            case nameof(NESLib.ppu_onoff):
-                // JMP to ppu_wait_nmi (uses constant address)
-                WriteBlock(BuiltInSubroutines.PpuOnOff());
-                break;
-            case nameof(NESLib.ppu_on_bg):
-                // BNE backward to ppu_onoff - label should be in Labels dict
-                WriteBlock(BuiltInSubroutines.PpuOnBg());
-                break;
-            case nameof(NESLib.ppu_on_spr):
-                // BNE backward to ppu_onoff - label should be in Labels dict
-                WriteBlock(BuiltInSubroutines.PpuOnSpr());
-                break;
-            case nameof(NESLib.ppu_mask):
-                WriteBlock(BuiltInSubroutines.PpuMask());
-                break;
-            case nameof(NESLib.ppu_system):
-                WriteBlock(BuiltInSubroutines.PpuSystem());
-                break;
-            case nameof(NESLib.get_ppu_ctrl_var):
-                WriteBlock(BuiltInSubroutines.GetPpuCtrlVar());
-                break;
-            case nameof(NESLib.set_ppu_ctrl_var):
-                WriteBlock(BuiltInSubroutines.SetPpuCtrlVar());
-                break;
-            case nameof(NESLib.oam_clear):
-                WriteBlock(BuiltInSubroutines.OamClear());
-                break;
-            case nameof(NESLib.oam_size):
-                WriteBlock(BuiltInSubroutines.OamSize());
-                break;
-            case nameof(NESLib.oam_hide_rest):
-                WriteBlock(BuiltInSubroutines.OamHideRest());
-                break;
-            case nameof(NESLib.ppu_wait_frame):
-                WriteBlock(BuiltInSubroutines.PpuWaitFrame());
-                break;
-            case nameof(NESLib.ppu_wait_nmi):
-                WriteBlock(BuiltInSubroutines.PpuWaitNmi());
-                break;
-            case nameof(NESLib.scroll):
-                WriteBlock(BuiltInSubroutines.Scroll());
-                break;
-            case nameof(NESLib.bank_spr):
-                WriteBlock(BuiltInSubroutines.BankSpr());
-                break;
-            case nameof(NESLib.bank_bg):
-                WriteBlock(BuiltInSubroutines.BankBg());
-                break;
-            case nameof(NESLib.vram_write):
-                WriteBlock(BuiltInSubroutines.VramWrite());
-                break;
-            case nameof(NESLib.set_vram_update):
-                WriteBlock(BuiltInSubroutines.SetVramUpdate());
-                break;
-            case nameof(NESLib.flush_vram_update):
-                WriteBlock(BuiltInSubroutines.FlushVramUpdate());
-                break;
-            case nameof(NESLib.vram_adr):
-                WriteBlock(BuiltInSubroutines.VramAdr());
-                break;
-            case nameof(NESLib.vram_put):
-                WriteBlock(BuiltInSubroutines.VramPut());
-                break;
-            case nameof(NESLib.vram_fill):
-                WriteBlock(BuiltInSubroutines.VramFill());
-                break;
-            case nameof(NESLib.vram_inc):
-                WriteBlock(BuiltInSubroutines.VramInc());
-                break;
-            case nameof(NESLib.nesclock):
-                WriteBlock(BuiltInSubroutines.NesClock());
-                break;
-            case nameof(NESLib.delay):
-                WriteBlock(BuiltInSubroutines.Delay());
-                break;
-            case nameof(NESLib.oam_spr):
-                WriteBlock(BuiltInSubroutines.OamSpr());
-                break;
-            default:
-                throw new NotImplementedException($"{name} is not implemented!");
         }
     }
 
@@ -494,7 +368,7 @@ class NESWriter : IDisposable
     /// <summary>
     /// Writes a Block to the stream, resolving any label references using the Labels dictionary.
     /// </summary>
-    protected void WriteBlock(Block block)
+    public void WriteBlock(Block block)
     {
         ushort currentAddress = CurrentAddress;
         

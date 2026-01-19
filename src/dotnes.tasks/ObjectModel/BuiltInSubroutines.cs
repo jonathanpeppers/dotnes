@@ -144,7 +144,7 @@ internal static class BuiltInSubroutines
     /// </summary>
     public static Block PalAll()
     {
-        var block = new Block("_pal_all");
+        var block = new Block("pal_all");
         block.Emit(STA_zpg(TEMP))
              .Emit(STX_zpg(TEMP + 1))
              .Emit(LDX(0x00))
@@ -178,7 +178,7 @@ internal static class BuiltInSubroutines
     /// </summary>
     public static Block PalBg()
     {
-        var block = new Block("_pal_bg");
+        var block = new Block("pal_bg");
         block.Emit(STA_zpg(TEMP))
              .Emit(STX_zpg(TEMP + 1))
              .Emit(LDX(0x00))
@@ -193,7 +193,7 @@ internal static class BuiltInSubroutines
     /// </summary>
     public static Block PalSpr()
     {
-        var block = new Block("_pal_spr");
+        var block = new Block("pal_spr");
         block.Emit(STA_zpg(TEMP))
              .Emit(STX_zpg(TEMP + 1))
              .Emit(LDX(0x10))
@@ -207,7 +207,7 @@ internal static class BuiltInSubroutines
     /// </summary>
     public static Block PalCol()
     {
-        var block = new Block("_pal_col");
+        var block = new Block("pal_col");
         block.Emit(STA_zpg(TEMP))
              .Emit(JSR("popa"))
              .Emit(AND(0x1F))
@@ -224,7 +224,7 @@ internal static class BuiltInSubroutines
     /// </summary>
     public static Block PalClear()
     {
-        var block = new Block("_pal_clear");
+        var block = new Block("pal_clear");
         block.Emit(LDA(0x0F))
              .Emit(LDX(0x00))
              .Emit(STA_abs_X(PAL_BUF), "@1")
@@ -241,7 +241,7 @@ internal static class BuiltInSubroutines
     /// </summary>
     public static Block PalSprBright()
     {
-        var block = new Block("_pal_spr_bright");
+        var block = new Block("pal_spr_bright");
         block.Emit(TAX())
              .Emit(LDA_abs_X(palBrightTableL))
              .Emit(STA_zpg(PAL_SPR_PTR))
@@ -257,7 +257,7 @@ internal static class BuiltInSubroutines
     /// </summary>
     public static Block PalBgBright()
     {
-        var block = new Block("_pal_bg_bright");
+        var block = new Block("pal_bg_bright");
         block.Emit(TAX())
              .Emit(LDA_abs_X(palBrightTableL))
              .Emit(STA_zpg(PAL_BG_PTR))
@@ -273,7 +273,7 @@ internal static class BuiltInSubroutines
     /// </summary>
     public static Block PalBright()
     {
-        var block = new Block("_pal_bright");
+        var block = new Block("pal_bright");
         block.Emit(JSR(pal_spr_bright))
              .Emit(TXA())
              .Emit(JMP_abs(pal_bg_bright));
@@ -289,7 +289,7 @@ internal static class BuiltInSubroutines
     /// </summary>
     public static Block PpuOff()
     {
-        var block = new Block("_ppu_off");
+        var block = new Block("ppu_off");
         block.Emit(LDA_zpg(PPU_MASK_VAR))
              .Emit(AND(0xE7))
              .Emit(STA_zpg(PPU_MASK_VAR))
@@ -303,7 +303,7 @@ internal static class BuiltInSubroutines
     /// </summary>
     public static Block PpuOnAll()
     {
-        var block = new Block("_ppu_on_all");
+        var block = new Block("ppu_on_all");
         block.Emit(LDA_zpg(PPU_MASK_VAR))
              .Emit(ORA(0x18));
         // Falls through to ppu_onoff
@@ -327,7 +327,7 @@ internal static class BuiltInSubroutines
     /// </summary>
     public static Block PpuOnBg()
     {
-        var block = new Block("_ppu_on_bg");
+        var block = new Block("ppu_on_bg");
         block.Emit(LDA_zpg(PPU_MASK_VAR))
              .Emit(ORA(0x08))
              .Emit(BNE("ppu_onoff"));
@@ -340,7 +340,7 @@ internal static class BuiltInSubroutines
     /// </summary>
     public static Block PpuOnSpr()
     {
-        var block = new Block("_ppu_on_spr");
+        var block = new Block("ppu_on_spr");
         block.Emit(LDA_zpg(PPU_MASK_VAR))
              .Emit(ORA(0x10))
              .Emit(BNE("ppu_onoff"));
@@ -352,7 +352,7 @@ internal static class BuiltInSubroutines
     /// </summary>
     public static Block PpuMask()
     {
-        var block = new Block("_ppu_mask");
+        var block = new Block("ppu_mask");
         block.Emit(STA_zpg(PPU_MASK_VAR))
              .Emit(RTS());
         return block;
@@ -380,7 +380,7 @@ internal static class BuiltInSubroutines
     public static Block PpuWaitFrame()
     {
         // NESWriter has more complex logic with ZP_START and NES_PRG_BANKS checks
-        var block = new Block("_ppu_wait_frame");
+        var block = new Block("ppu_wait_frame");
         block.Emit(LDA(0x01))
              .Emit(STA_zpg(VRAM_UPDATE))
              .Emit(LDA_zpg(STARTUP))
@@ -401,7 +401,7 @@ internal static class BuiltInSubroutines
     public static Block PpuSystem()
     {
         // NESWriter: LDA ZP_START ($00), LDX #$00, RTS
-        var block = new Block("_ppu_system");
+        var block = new Block("ppu_system");
         block.Emit(LDA_zpg(ZP_START))
              .Emit(LDX(0x00))
              .Emit(RTS());
@@ -414,7 +414,7 @@ internal static class BuiltInSubroutines
     public static Block GetPpuCtrlVar()
     {
         // NESWriter: LDA PRG_FILEOFFS ($10), LDX #$00, RTS
-        var block = new Block("_get_ppu_ctrl_var");
+        var block = new Block("get_ppu_ctrl_var");
         block.Emit(LDA_zpg(PRG_FILEOFFS))
              .Emit(LDX(0x00))
              .Emit(RTS());
@@ -427,7 +427,7 @@ internal static class BuiltInSubroutines
     public static Block SetPpuCtrlVar()
     {
         // NESWriter: STA PRG_FILEOFFS ($10), RTS
-        var block = new Block("_set_ppu_ctrl_var");
+        var block = new Block("set_ppu_ctrl_var");
         block.Emit(STA_zpg(PRG_FILEOFFS))
              .Emit(RTS());
         return block;
@@ -443,7 +443,7 @@ internal static class BuiltInSubroutines
     public static Block OamClear()
     {
         // NESWriter: LDX #$00, LDA #$FF, STA $0200,X, INX x4, BNE -9, RTS
-        var block = new Block("_oam_clear");
+        var block = new Block("oam_clear");
         block.Emit(LDX(0x00))
              .Emit(LDA(0xFF))
              .Emit(STA_abs_X(OAM_BUF), "@1")
@@ -462,7 +462,7 @@ internal static class BuiltInSubroutines
     public static Block OamSize()
     {
         // NESWriter uses PRG_FILEOFFS ($10), not PPU_CTRL_VAR ($13)
-        var block = new Block("_oam_size");
+        var block = new Block("oam_size");
         block.Emit(ASL_A())
              .Emit(ASL_A())
              .Emit(ASL_A())
@@ -484,7 +484,7 @@ internal static class BuiltInSubroutines
     public static Block OamHideRest()
     {
         // NESWriter: TAX, LDA #$F0, STA $0200,X, INX x4, BNE -9, RTS
-        var block = new Block("_oam_hide_rest");
+        var block = new Block("oam_hide_rest");
         block.Emit(TAX())
              .Emit(LDA(0xF0))
              .Emit(STA_abs_X(OAM_BUF), "@1")
@@ -526,7 +526,7 @@ internal static class BuiltInSubroutines
         // 85DE ADC #$04
         // 85E0 LDX #$00
         // 85E2 RTS
-        var block = new Block("_oam_spr");
+        var block = new Block("oam_spr");
         block.Emit(TAX())
              .Emit(LDY(0x00))
              .Emit(LDA_ind_Y(sp))
@@ -590,7 +590,7 @@ internal static class BuiltInSubroutines
         // 8329 ORA TEMP
         // 832B STA PRG_FILEOFFS
         // 832D RTS
-        var block = new Block("_scroll");
+        var block = new Block("scroll");
         block.Emit(STA_zpg(TEMP))
              .Emit(TXA())
              .Emit(BNE(0x0E))    // to @1
@@ -626,7 +626,7 @@ internal static class BuiltInSubroutines
     /// </summary>
     public static Block BankSpr()
     {
-        var block = new Block("_bank_spr");
+        var block = new Block("bank_spr");
         block.Emit(AND(0x01))
              .Emit(ASL_A())
              .Emit(ASL_A())
@@ -645,7 +645,7 @@ internal static class BuiltInSubroutines
     /// </summary>
     public static Block BankBg()
     {
-        var block = new Block("_bank_bg");
+        var block = new Block("bank_bg");
         block.Emit(AND(0x01))
              .Emit(ASL_A())
              .Emit(ASL_A())
@@ -669,7 +669,7 @@ internal static class BuiltInSubroutines
     /// </summary>
     public static Block VramAdr()
     {
-        var block = new Block("_vram_adr");
+        var block = new Block("vram_adr");
         block.Emit(STX_abs(PPU_ADDR))
              .Emit(STA_abs(PPU_ADDR))
              .Emit(RTS());
@@ -681,7 +681,7 @@ internal static class BuiltInSubroutines
     /// </summary>
     public static Block VramPut()
     {
-        var block = new Block("_vram_put");
+        var block = new Block("vram_put");
         block.Emit(STA_abs(PPU_DATA))
              .Emit(RTS());
         return block;
@@ -709,7 +709,7 @@ internal static class BuiltInSubroutines
         // 83FD DEX
         // 83FE BNE -$06      ; to 83FA
         // 8400 RTS           ; @4
-        var block = new Block("_vram_fill");
+        var block = new Block("vram_fill");
         block.Emit(STA_zpg(0x19))
              .Emit(STX_zpg(0x1A))
              .Emit(JSR("popa"))
@@ -745,7 +745,7 @@ internal static class BuiltInSubroutines
         // 840F STA PRG_FILEOFFS
         // 8411 STA $2000
         // 8414 RTS
-        var block = new Block("_vram_inc");
+        var block = new Block("vram_inc");
         block.Emit(ORA(0x00))
              .Emit(BEQ(0x02))
              .Emit(LDA(0x04))
@@ -783,7 +783,7 @@ internal static class BuiltInSubroutines
         // 8371 ORA TEMP+1
         // 8373 BNE -$19      ; to @1
         // 8375 RTS
-        var block = new Block("_vram_write");
+        var block = new Block("vram_write");
         block.Emit(STA_zpg(TEMP))
              .Emit(STX_zpg(TEMP + 1))
              .Emit(JSR("popax"))
@@ -811,7 +811,7 @@ internal static class BuiltInSubroutines
     /// </summary>
     public static Block SetVramUpdate()
     {
-        var block = new Block("_set_vram_update");
+        var block = new Block("set_vram_update");
         block.Emit(STA_zpg(NAME_UPD_ADR))
              .Emit(STX_zpg(NAME_UPD_ADR + 1))
              .Emit(ORA_zpg(NAME_UPD_ADR + 1))
@@ -826,7 +826,7 @@ internal static class BuiltInSubroutines
     /// </summary>
     public static Block FlushVramUpdate()
     {
-        var block = new Block("_flush_vram_update");
+        var block = new Block("flush_vram_update");
         
         // 837F: STA NAME_UPD_ADR, STX NAME_UPD_ADR+1, LDY #$00
         block.Emit(STA_zpg(NAME_UPD_ADR))
@@ -901,7 +901,7 @@ internal static class BuiltInSubroutines
     public static Block NesClock()
     {
         // NESWriter: LDA __STARTUP__ ($01), LDX #$00, RTS
-        var block = new Block("_nesclock");
+        var block = new Block("nesclock");
         block.Emit(LDA_zpg(STARTUP))
              .Emit(LDX(0x00))
              .Emit(RTS());
@@ -918,7 +918,7 @@ internal static class BuiltInSubroutines
         // 841C DEX
         // 841D BNE @1
         // 8420 RTS
-        var block = new Block("_delay");
+        var block = new Block("delay");
         block.Emit(TAX())
              .Emit(JSR(ppu_wait_nmi), "@1")
              .Emit(DEX())
@@ -932,7 +932,7 @@ internal static class BuiltInSubroutines
     /// </summary>
     public static Block NmiSetCallback()
     {
-        var block = new Block("_nmi_set_callback");
+        var block = new Block("nmi_set_callback");
         block.Emit(STA_zpg(0x15))  // NMI_CALLBACK+1
              .Emit(STX_zpg(0x16))
              .Emit(RTS());
