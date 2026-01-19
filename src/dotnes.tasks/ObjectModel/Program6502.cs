@@ -341,4 +341,161 @@ public class Program6502
     {
         _addressesValid = false;
     }
+
+    /// <summary>
+    /// Gets the labels dictionary for compatibility with NESWriter.
+    /// Returns a copy of the current label addresses.
+    /// </summary>
+    public Dictionary<string, ushort> GetLabels()
+    {
+        if (!_addressesValid)
+            ResolveAddresses();
+
+        var result = new Dictionary<string, ushort>();
+        foreach (var kvp in _labels.Labels)
+            result[kvp.Key] = kvp.Value;
+        return result;
+    }
+
+    /// <summary>
+    /// Creates a Program6502 with all standard NES built-in subroutines.
+    /// Note: Forward references (popa, popax, etc.) are initialized to 0.
+    /// Call AddFinalBuiltIns() after adding main program to set actual addresses.
+    /// </summary>
+    public static Program6502 CreateWithBuiltIns()
+    {
+        var program = new Program6502 { BaseAddress = 0x8000 };
+
+        // Pre-define forward references with placeholder addresses (0)
+        // These will be updated when AddFinalBuiltIns() is called
+        program.DefineExternalLabel("popa", 0);
+        program.DefineExternalLabel("popax", 0);
+        program.DefineExternalLabel("pusha", 0);
+        program.DefineExternalLabel("pushax", 0);
+        program.DefineExternalLabel("zerobss", 0);
+        program.DefineExternalLabel("copydata", 0);
+        program.DefineExternalLabel("updName", NESConstants.updName);
+
+        // Add all standard built-in subroutines (same order as NESWriter.WriteBuiltIns)
+        program.AddBlock(BuiltInSubroutines.Exit());
+        program.AddBlock(BuiltInSubroutines.InitPPU());
+        program.AddBlock(BuiltInSubroutines.ClearPalette());
+        program.AddBlock(BuiltInSubroutines.ClearVRAM());
+        program.AddBlock(BuiltInSubroutines.ClearRAM());
+        program.AddBlock(BuiltInSubroutines.WaitSync3());
+        program.AddBlock(BuiltInSubroutines.DetectNTSC());
+        program.AddBlock(BuiltInSubroutines.Nmi());
+        program.AddBlock(BuiltInSubroutines.DoUpdate());
+        program.AddBlock(BuiltInSubroutines.UpdPal());
+        program.AddBlock(BuiltInSubroutines.UpdVRAM());
+        program.AddBlock(BuiltInSubroutines.SkipUpd());
+        program.AddBlock(BuiltInSubroutines.SkipAll());
+        program.AddBlock(BuiltInSubroutines.SkipNtsc());
+        program.AddBlock(BuiltInSubroutines.Irq());
+        program.AddBlock(BuiltInSubroutines.NmiSetCallback());
+        program.AddBlock(BuiltInSubroutines.PalAll());
+        program.AddBlock(BuiltInSubroutines.PalCopy());
+        program.AddBlock(BuiltInSubroutines.PalBg());
+        program.AddBlock(BuiltInSubroutines.PalSpr());
+        program.AddBlock(BuiltInSubroutines.PalCol());
+        program.AddBlock(BuiltInSubroutines.PalClear());
+        program.AddBlock(BuiltInSubroutines.PalSprBright());
+        program.AddBlock(BuiltInSubroutines.PalBgBright());
+        program.AddBlock(BuiltInSubroutines.PalBright());
+        program.AddBlock(BuiltInSubroutines.PpuOff());
+        program.AddBlock(BuiltInSubroutines.PpuOnAll());
+        program.AddBlock(BuiltInSubroutines.PpuOnOff());
+        program.AddBlock(BuiltInSubroutines.PpuOnBg());
+        program.AddBlock(BuiltInSubroutines.PpuOnSpr());
+        program.AddBlock(BuiltInSubroutines.PpuMask());
+        program.AddBlock(BuiltInSubroutines.PpuSystem());
+        program.AddBlock(BuiltInSubroutines.GetPpuCtrlVar());
+        program.AddBlock(BuiltInSubroutines.SetPpuCtrlVar());
+        program.AddBlock(BuiltInSubroutines.OamClear());
+        program.AddBlock(BuiltInSubroutines.OamSize());
+        program.AddBlock(BuiltInSubroutines.OamHideRest());
+        program.AddBlock(BuiltInSubroutines.PpuWaitFrame());
+        program.AddBlock(BuiltInSubroutines.PpuWaitNmi());
+        program.AddBlock(BuiltInSubroutines.Scroll());
+        program.AddBlock(BuiltInSubroutines.BankSpr());
+        program.AddBlock(BuiltInSubroutines.BankBg());
+        program.AddBlock(BuiltInSubroutines.VramWrite());
+        program.AddBlock(BuiltInSubroutines.SetVramUpdate());
+        program.AddBlock(BuiltInSubroutines.FlushVramUpdate());
+        program.AddBlock(BuiltInSubroutines.VramAdr());
+        program.AddBlock(BuiltInSubroutines.VramPut());
+        program.AddBlock(BuiltInSubroutines.VramFill());
+        program.AddBlock(BuiltInSubroutines.VramInc());
+        program.AddBlock(BuiltInSubroutines.NesClock());
+        program.AddBlock(BuiltInSubroutines.Delay());
+
+        // Add palette brightness tables as raw data
+        program.AddRawData(NESLib.palBrightTableL);
+        program.AddRawData(NESLib.palBrightTable0);
+        program.AddRawData(NESLib.palBrightTable1);
+        program.AddRawData(NESLib.palBrightTable2);
+        program.AddRawData(NESLib.palBrightTable3);
+        program.AddRawData(NESLib.palBrightTable4);
+        program.AddRawData(NESLib.palBrightTable5);
+        program.AddRawData(NESLib.palBrightTable6);
+        program.AddRawData(NESLib.palBrightTable7);
+        program.AddRawData(NESLib.palBrightTable8);
+
+        program.AddBlock(BuiltInSubroutines.Initlib());
+
+        return program;
+    }
+
+    /// <summary>
+    /// Adds the final built-in subroutines that come after main().
+    /// </summary>
+    public void AddFinalBuiltIns(ushort totalSize, byte locals, HashSet<string>? usedMethods = null)
+    {
+        AddBlock(BuiltInSubroutines.Donelib(totalSize));
+        AddBlock(BuiltInSubroutines.Copydata(totalSize));
+        AddBlock(BuiltInSubroutines.Popax());
+        AddBlock(BuiltInSubroutines.Incsp2());
+        AddBlock(BuiltInSubroutines.Popa());
+        AddBlock(BuiltInSubroutines.Pusha());
+        AddBlock(BuiltInSubroutines.Pushax());
+        AddBlock(BuiltInSubroutines.Zerobss(locals));
+
+        // Optional methods
+        if (usedMethods != null)
+        {
+            if (usedMethods.Contains("oam_spr"))
+                AddBlock(BuiltInSubroutines.OamSpr());
+            if (usedMethods.Contains("pad_poll"))
+                AddBlock(BuiltInSubroutines.PadPoll());
+        }
+    }
+
+    /// <summary>
+    /// Adds the destructor table block.
+    /// </summary>
+    public void AddDestructorTable()
+    {
+        AddBlock(BuiltInSubroutines.DestructorTable());
+    }
+
+    /// <summary>
+    /// Gets labels for all built-in subroutines without actually emitting bytes.
+    /// This is useful for early label resolution in the transpiler.
+    /// </summary>
+    /// <returns>Dictionary mapping label names to their addresses</returns>
+    public static Dictionary<string, ushort> GetBuiltInLabels()
+    {
+        var program = CreateWithBuiltIns();
+        program.ResolveAddresses();
+        return program.GetLabels();
+    }
+
+    /// <summary>
+    /// Calculates the total size of all built-in subroutines (without main program).
+    /// </summary>
+    public static int GetBuiltInSize()
+    {
+        var program = CreateWithBuiltIns();
+        return program.TotalSize;
+    }
 }

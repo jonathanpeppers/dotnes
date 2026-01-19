@@ -558,4 +558,116 @@ public class Program6502WriterTests
     }
 
     #endregion
+
+    #region Program6502 Integration Tests
+
+    [Fact]
+    public void CreateWithBuiltIns_DefinesExpectedLabels()
+    {
+        // Build program using new object model
+        var program = Program6502.CreateWithBuiltIns();
+        program.ResolveAddresses();
+        var programLabels = program.GetLabels();
+
+        // Verify key labels are defined with non-zero addresses
+        var expectedLabels = new[]
+        {
+            "pal_col", "pal_bg", "pal_all", "pal_spr", "pal_clear",
+            "ppu_on_all", "ppu_on_bg", "ppu_on_spr", "ppu_off",
+            "vram_adr", "vram_write", "vram_put", "vram_fill",
+            "oam_clear", "oam_size", "oam_hide_rest",
+            "scroll", "delay", "nesclock", "initlib"
+        };
+
+        foreach (var label in expectedLabels)
+        {
+            Assert.True(programLabels.ContainsKey(label), $"Program6502 missing label: {label}");
+            Assert.NotEqual(0, programLabels[label]);
+        }
+    }
+
+    [Fact]
+    public void CreateWithBuiltIns_ProducesValidProgram()
+    {
+        var program = Program6502.CreateWithBuiltIns();
+        
+        // Should have many blocks
+        Assert.True(program.BlockCount > 40, $"Expected > 40 blocks, got {program.BlockCount}");
+        
+        // Should be able to resolve addresses without error
+        program.ResolveAddresses();
+        
+        // Should be able to emit bytes without error
+        var bytes = program.ToBytes();
+        Assert.True(bytes.Length > 1000, $"Expected > 1000 bytes, got {bytes.Length}");
+    }
+
+    [Fact]
+    public void CreateWithBuiltIns_HasForwardReferences()
+    {
+        var program = Program6502.CreateWithBuiltIns();
+        program.ResolveAddresses();
+        var labels = program.GetLabels();
+
+        // Forward references should be defined (with placeholder value 0)
+        Assert.True(labels.ContainsKey("popa"));
+        Assert.True(labels.ContainsKey("popax"));
+        Assert.True(labels.ContainsKey("pusha"));
+        Assert.True(labels.ContainsKey("pushax"));
+        Assert.True(labels.ContainsKey("zerobss"));
+        Assert.True(labels.ContainsKey("copydata"));
+    }
+
+    [Fact]
+    public void AddFinalBuiltIns_SetsCorrectAddresses()
+    {
+        var program = Program6502.CreateWithBuiltIns();
+        
+        // Add final built-ins (these define popa, popax, etc.)
+        program.AddFinalBuiltIns(totalSize: 0x85FE, locals: 0);
+        program.ResolveAddresses();
+        
+        var labels = program.GetLabels();
+
+        // Forward references should now have non-zero addresses
+        Assert.NotEqual(0, labels["popa"]);
+        Assert.NotEqual(0, labels["popax"]);
+        Assert.NotEqual(0, labels["pusha"]);
+        Assert.NotEqual(0, labels["pushax"]);
+        Assert.NotEqual(0, labels["zerobss"]);
+        Assert.NotEqual(0, labels["copydata"]);
+    }
+
+    [Fact]
+    public void GetBuiltInLabels_ReturnsExpectedLabels()
+    {
+        var labels = Program6502.GetBuiltInLabels();
+
+        // Should have all the key labels
+        var expectedLabels = new[]
+        {
+            "pal_col", "pal_bg", "pal_all", "pal_spr", "pal_clear",
+            "ppu_on_all", "ppu_on_bg", "ppu_on_spr", "ppu_off",
+            "vram_adr", "vram_write", "vram_put", "vram_fill",
+            "oam_clear", "oam_size", "oam_hide_rest",
+            "scroll", "delay", "nesclock", "initlib"
+        };
+
+        foreach (var label in expectedLabels)
+        {
+            Assert.True(labels.ContainsKey(label), $"Missing label: {label}");
+            Assert.NotEqual(0, labels[label]);
+        }
+    }
+
+    [Fact]
+    public void GetBuiltInSize_ReturnsPositiveSize()
+    {
+        var size = Program6502.GetBuiltInSize();
+        
+        // Built-ins should be a significant size
+        Assert.True(size > 1000, $"Expected > 1000 bytes, got {size}");
+    }
+
+    #endregion
 }
