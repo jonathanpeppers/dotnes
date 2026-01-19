@@ -85,6 +85,9 @@ public class NESWriterTests
     public void Write_pal_bg()
     {
         using var writer = GetWriter();
+        // pal_copy label must be set for the BNE branch to resolve
+        // BNE at offset 8 needs relative offset 0xE4 (-28) -> target = 0x800A - 28 = 0x7FEE
+        writer.Labels["pal_copy"] = 0x7FEE;
         writer.WriteBuiltIn(nameof(NESLib.pal_bg), SizeOfMain);
         writer.Flush();
         AssertInstructions("8517 8618 A200 A910 D0E4");
@@ -94,6 +97,9 @@ public class NESWriterTests
     public void Write_pal_spr()
     {
         using var writer = GetWriter();
+        // pal_copy label must be set for the BNE branch to resolve
+        // BNE at offset 7 needs relative offset 0xDB (-37) -> target = 0x8009 - 37 = 0x7FE4
+        writer.Labels["pal_copy"] = 0x7FE4;
         writer.WriteBuiltIn(nameof(NESLib.pal_spr), SizeOfMain);
         writer.Flush();
         AssertInstructions("8517 8618 A210 8A D0DB");

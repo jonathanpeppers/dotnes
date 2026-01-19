@@ -821,15 +821,73 @@ internal static class BuiltInSubroutines
     }
 
     /// <summary>
-    /// _flush_vram_update - Force VRAM update
+    /// _flush_vram_update - Force VRAM update with full update loop
+    /// This is a large subroutine that handles various VRAM update modes
     /// </summary>
     public static Block FlushVramUpdate()
     {
         var block = new Block("_flush_vram_update");
-        block.Emit(LDA_zpg(NAME_UPD_ENABLE))
-             .Emit(BEQ(3))    // skip if disabled
-             .Emit(JSR("updName"))
-             .Emit(RTS());
+        
+        // 837F: STA NAME_UPD_ADR, STX NAME_UPD_ADR+1, LDY #$00
+        block.Emit(STA_zpg(NAME_UPD_ADR))
+             .Emit(STX_zpg(NAME_UPD_ADR + 1))
+             .Emit(LDY(0x00));
+        
+        // @updName (8385): Main update loop start
+        block.Emit(LDA_ind_Y(NAME_UPD_ADR), "@updName")
+             .Emit(INY())
+             .Emit(CMP(0x40))
+             .Emit(BCS(0x12))  // BCS @updNotSeq
+             .Emit(STA_abs(PPU_ADDR))
+             .Emit(LDA_ind_Y(NAME_UPD_ADR))
+             .Emit(INY())
+             .Emit(STA_abs(PPU_ADDR))
+             .Emit(LDA_ind_Y(NAME_UPD_ADR))
+             .Emit(INY())
+             .Emit(STA_abs(PPU_DATA))
+             .Emit(JMP("updName"));  // JMP @updName - uses global label
+        
+        // @updNotSeq (839E)
+        block.Emit(TAX())
+             .Emit(LDA_zpg(PRG_FILEOFFS))
+             .Emit(CPX(0x80))
+             .Emit(BCC(PAL_BG_PTR))  // BCC @updHorzSeq (8 bytes forward)
+             .Emit(CPX(0xFF))
+             .Emit(BEQ(0x2A));  // BEQ @updDone
+        
+        // @updVertSeq (83A9)
+        block.Emit(ORA(0x04))
+             .Emit(BNE(0x02));  // BNE @updNameSeq
+        
+        // @updHorzSeq (83AD)
+        block.Emit(AND(0xFB));
+        
+        // @updNameSeq (83AF)
+        block.Emit(STA_abs(PPU_CTRL))
+             .Emit(TXA())
+             .Emit(AND(0x3F))
+             .Emit(STA_abs(PPU_ADDR))
+             .Emit(LDA_ind_Y(NAME_UPD_ADR))
+             .Emit(INY())
+             .Emit(STA_abs(PPU_ADDR))
+             .Emit(LDA_ind_Y(NAME_UPD_ADR))
+             .Emit(INY())
+             .Emit(TAX());
+        
+        // @updNameLoop (83C2)
+        block.Emit(LDA_ind_Y(NAME_UPD_ADR), "@updNameLoop")
+             .Emit(INY())
+             .Emit(STA_abs(PPU_DATA))
+             .Emit(DEX())
+             .Emit(BNE(0xF7));  // BNE @updNameLoop (0xF7 = -9)
+        
+        block.Emit(LDA_zpg(PRG_FILEOFFS))
+             .Emit(STA_abs(PPU_CTRL))
+             .Emit(JMP("updName"));  // JMP @updName - uses global label
+        
+        // @updDone (83D3)
+        block.Emit(RTS());
+        
         return block;
     }
 
@@ -1017,43 +1075,336 @@ internal static class BuiltInSubroutines
 
     /// <summary>
     /// donelib - Cleanup C runtime library
-    /// Note: NESWriter uses totalSize parameter. This is a simplified version.
+    /// Note: NESWriter uses totalSize parameter.
     /// </summary>
-    public static Block Donelib()
+    public static Block Donelib() => Donelib(0x85FE);
+
+    /// <summary>
+    /// donelib - Cleanup C runtime library (parameterized version)
+    /// </summary>
+    public static Block Donelib(ushort totalSize)
     {
-        // NESWriter: A000 F007 A9xx A2xx 4C0003 60 (xx = totalSize bytes)
-        // Simplified version with no destructors (Y=0 means skip)
         var block = new Block("donelib");
         block.Emit(LDY(0x00))
              .Emit(BEQ(7))       // PAL_UPDATE = 7, skip to RTS
-             .Emit(LDA(0xFE))    // placeholder low byte
-             .Emit(LDX(0x85))    // placeholder high byte
+             .Emit(LDA((byte)(totalSize & 0xff)))
+             .Emit(LDX((byte)(totalSize >> 8)))
              .Emit(JMP_abs(condes))
              .Emit(RTS());
         return block;
     }
 
     /// <summary>
-    /// copydata - Copy initialized data section
+    /// __DESTRUCTOR_TABLE__ - Constructor/Destructor dispatch table
     /// </summary>
-    public static Block Copydata()
+    public static Block DestructorTable()
     {
-        var block = new Block("copydata");
-        // Simplified - actual implementation is more complex
-        block.Emit(RTS());
+        /*
+         * 8602	8D0E03        	STA $030E                     ; __DESTRUCTOR_TABLE__
+         * 8605	8E0F03        	STX $030F
+         * 8608	8D1503        	STA $0315
+         * 860B	8E1603        	STX $0316
+         * 860E	88            	DEY
+         * 860F	B9FFFF        	LDA $FFFF,y
+         * 8612	8D1F03        	STA $031F
+         * 8615	88            	DEY
+         * 8616	B9FFFF        	LDA $FFFF,y
+         * 8619	8D1E03        	STA $031E
+         * 861C	8C2103        	STY $0321
+         * 861F	20FFFF        	JSR $FFFF
+         * 8622	A0FF          	LDY #$FF
+         * 8624	D0E8          	BNE $860E
+         * 8626	60            	RTS
+         */
+        var block = new Block("__DESTRUCTOR_TABLE__");
+        block.Emit(STA_abs(0x030E))
+             .Emit(STX_abs(0x030F))
+             .Emit(STA_abs(0x0315))
+             .Emit(STX_abs(0x0316))
+             .Emit(DEY(), "@loop")
+             .Emit(LDA_abs_Y(0xFFFF))
+             .Emit(STA_abs(0x031F))
+             .Emit(DEY())
+             .Emit(LDA_abs_Y(0xFFFF))
+             .Emit(STA_abs(0x031E))
+             .Emit(STY_abs(0x0321))
+             .Emit(JSR(0xFFFF))
+             .Emit(LDY(0xFF))
+             .Emit(BNE(-24))  // 0xE8 = -24, back to @loop
+             .Emit(RTS());
         return block;
     }
 
     /// <summary>
-    /// zerobss - Zero BSS section
+    /// copydata - Copy initialized data section (simplified)
     /// </summary>
-    public static Block Zerobss()
+    public static Block Copydata() => Copydata(0x85FE);
+
+    /// <summary>
+    /// copydata - Copy initialized data section (parameterized version)
+    /// </summary>
+    public static Block Copydata(ushort totalSize)
+    {
+        var block = new Block("copydata");
+        block.Emit(LDA((byte)(totalSize & 0xff)))
+             .Emit(STA_zpg(ptr1))
+             .Emit(LDA((byte)(totalSize >> 8)))
+             .Emit(STA_zpg(ptr1 + 1))
+             .Emit(LDA(0x00))
+             .Emit(STA_zpg(ptr2))
+             .Emit(LDA(0x03))
+             .Emit(STA_zpg(ptr2 + 1))
+             .Emit(LDX(0xDA))
+             .Emit(LDA(0xFF))
+             .Emit(STA_zpg(tmp1))
+             .Emit(LDY(0x00))
+             .Emit(INX(), "@loop1")
+             .Emit(BEQ(13))      // 0x0D
+             .Emit(LDA_ind_Y(ptr1), "@copyLoop")
+             .Emit(STA_ind_Y(ptr2))
+             .Emit(INY())
+             .Emit(BNE(-10))     // 0xF6
+             .Emit(INC_zpg(ptr1 + 1))
+             .Emit(INC_zpg(ptr2 + 1))
+             .Emit(BNE(-16))     // 0xF0
+             .Emit(INC_zpg(tmp1), "@incTmp")
+             .Emit(BNE(-17))     // 0xEF
+             .Emit(RTS());
+        return block;
+    }
+
+    /// <summary>
+    /// zerobss - Zero BSS section (simplified)
+    /// </summary>
+    public static Block Zerobss() => Zerobss(0x00);
+
+    /// <summary>
+    /// zerobss - Zero BSS section (parameterized version)
+    /// </summary>
+    public static Block Zerobss(byte locals)
     {
         var block = new Block("zerobss");
-        block.Emit(LDA(0x00))
+        block.Emit(LDA(0x25))
              .Emit(STA_zpg(ptr1))
+             .Emit(LDA(0x03))
              .Emit(STA_zpg(ptr1 + 1))
+             .Emit(LDA(0x00))
+             .Emit(TAY())
+             .Emit(LDX(0x00))
+             .Emit(BEQ(10))          // PAL_SPR_PTR = 0x0A
+             .Emit(STA_ind_Y(ptr1), "@zeroLoop")
+             .Emit(INY())
+             .Emit(BNE(-5))          // 0xFB
+             .Emit(INC_zpg(ptr1 + 1))
+             .Emit(DEX())
+             .Emit(BNE(-10))         // 0xF6
+             .Emit(CPY(locals), "@checkDone")
+             .Emit(BEQ(5))           // 0x05
+             .Emit(STA_ind_Y(ptr1))
+             .Emit(INY())
+             .Emit(BNE(-9))          // 0xF7
              .Emit(RTS());
+        return block;
+    }
+
+    #endregion
+
+    #region NMI and Update Routines
+
+    /// <summary>
+    /// detectNTSC - Detect NTSC/PAL and jump to main
+    /// </summary>
+    public static Block DetectNTSC()
+    {
+        var block = new Block("detectNTSC");
+        block.Emit(LDX(0x34))
+             .Emit(LDY(0x18))
+             .Emit(DEX(), "@loop")
+             .Emit(BNE(-3))      // 0xFD
+             .Emit(DEY())
+             .Emit(BNE(-6))      // 0xFA
+             .Emit(LDA_abs(PPU_STATUS))
+             .Emit(AND(0x80))
+             .Emit(STA_zpg(0x00))
+             .Emit(JSR(0x8280))  // ppu_wait_frame
+             .Emit(LDA(0x00))
+             .Emit(STA_abs(PPU_SCROLL))
+             .Emit(STA_abs(PPU_SCROLL))
+             .Emit(STA_abs(PPU_OAM_ADDR))
+             .Emit(JMP_abs(0x8500));  // main
+        return block;
+    }
+
+    /// <summary>
+    /// doUpdate - Start NMI update sequence
+    /// </summary>
+    public static Block DoUpdate()
+    {
+        var block = new Block("doUpdate");
+        block.Emit(LDA(0x02))          // >OAM_BUF
+             .Emit(STA_abs(PPU_OAM_DMA))
+             .Emit(LDA_zpg(PAL_UPDATE))
+             .Emit(BNE(3))             // branch to updPal
+             .Emit(JMP_abs(0x81C0));   // updVRAM
+        return block;
+    }
+
+    /// <summary>
+    /// updPal - Update palette in VRAM
+    /// </summary>
+    public static Block UpdPal()
+    {
+        var block = new Block("updPal");
+        block.Emit(LDX(0x00))
+             .Emit(STX_zpg(PAL_UPDATE))
+             .Emit(LDA(0x3F))
+             .Emit(STA_abs(PPU_ADDR))
+             .Emit(STX_abs(PPU_ADDR))
+             // Background color
+             .Emit(LDY_abs(PAL_BUF))
+             .Emit(LDA_ind_Y(PAL_BG_PTR))
+             .Emit(STA_abs(PPU_DATA))
+             .Emit(TAX());
+        // First 3 palette entries
+        for (int i = 1; i <= 3; i++)
+        {
+            block.Emit(LDY_abs((ushort)(PAL_BUF + i)))
+                 .Emit(LDA_ind_Y(PAL_BG_PTR))
+                 .Emit(STA_abs(PPU_DATA));
+        }
+        // Remaining background palettes (3 sets of 4)
+        for (int j = 1; j <= 3; j++)
+        {
+            block.Emit(STX_abs(PPU_DATA));  // background color
+            for (int i = 1; i <= 3; i++)
+            {
+                block.Emit(LDY_abs((ushort)(PAL_BUF + (j * 4) + i)))
+                     .Emit(LDA_ind_Y(PAL_BG_PTR))
+                     .Emit(STA_abs(PPU_DATA));
+            }
+        }
+        // Sprite palettes (4 sets of 4)
+        for (int j = 1; j <= 4; j++)
+        {
+            block.Emit(STX_abs(PPU_DATA));  // background color
+            for (int i = 1; i <= 3; i++)
+            {
+                block.Emit(LDY_abs((ushort)(PAL_BUF + 12 + (j * 4) + i)))
+                     .Emit(LDA_ind_Y(PAL_SPR_PTR))
+                     .Emit(STA_abs(PPU_DATA));
+            }
+        }
+        return block;
+    }
+
+    /// <summary>
+    /// updVRAM - Update VRAM if needed
+    /// </summary>
+    public static Block UpdVRAM()
+    {
+        var block = new Block("updVRAM");
+        block.Emit(LDA_zpg(VRAM_UPDATE))
+             .Emit(BEQ(11))        // 0x0B - skip to skipUpd
+             .Emit(LDA(0x00))
+             .Emit(STA_zpg(VRAM_UPDATE))
+             .Emit(LDA_zpg(NAME_UPD_ENABLE))
+             .Emit(BEQ(3))         // 0x03 - skip to skipUpd
+             .Emit(JSR(0x8383));   // _flush_vram_update_nmi
+        return block;
+    }
+
+    /// <summary>
+    /// skipUpd - Reset PPU scroll after update
+    /// </summary>
+    public static Block SkipUpd()
+    {
+        var block = new Block("skipUpd");
+        block.Emit(LDA(0x00))
+             .Emit(STA_abs(PPU_ADDR))
+             .Emit(STA_abs(PPU_ADDR))
+             .Emit(LDA_zpg(SCROLL_X))
+             .Emit(STA_abs(PPU_SCROLL))
+             .Emit(LDA_zpg(SCROLL_Y))
+             .Emit(STA_abs(PPU_SCROLL))
+             .Emit(LDA_zpg(PRG_FILEOFFS))
+             .Emit(STA_abs(PPU_CTRL));
+        return block;
+    }
+
+    /// <summary>
+    /// skipAll - Update PPU mask and frame counter
+    /// </summary>
+    public static Block SkipAll()
+    {
+        var block = new Block("skipAll");
+        block.Emit(LDA_zpg(PPU_MASK_VAR))
+             .Emit(STA_abs(PPU_MASK))
+             .Emit(INC_zpg(STARTUP))
+             .Emit(INC_zpg(NES_PRG_BANKS))
+             .Emit(LDA_zpg(NES_PRG_BANKS))
+             .Emit(CMP(0x06))
+             .Emit(BNE(4))         // skip to skipNtsc
+             .Emit(LDA(0x00))
+             .Emit(STA_zpg(NES_PRG_BANKS));
+        return block;
+    }
+
+    /// <summary>
+    /// skipNtsc - Finish NMI, call callback and return
+    /// </summary>
+    public static Block SkipNtsc()
+    {
+        var block = new Block("skipNtsc");
+        block.Emit(JSR(0x0014))    // NMICallback (at $0014)
+             .Emit(PLA())
+             .Emit(TAY())
+             .Emit(PLA())
+             .Emit(TAX())
+             .Emit(PLA())
+             .Emit(RTI());
+        return block;
+    }
+
+    /// <summary>
+    /// clearRAM - Clear RAM and initialize system
+    /// Note: Uses fixed addresses for labels (pal_bright=0x8279, pal_clear=0x824E, oam_clear=0x82AE, initlib=0x84F4)
+    /// </summary>
+    public static Block ClearRAM()
+    {
+        var block = new Block("clearRAM");
+        block.Emit(TXA())
+             .Emit(STA_zpg_X(0x00), "@loop")
+             .Emit(STA_abs_X(0x0100))
+             .Emit(STA_abs_X(0x0200))
+             .Emit(STA_abs_X(0x0300))
+             .Emit(STA_abs_X(0x0400))
+             .Emit(STA_abs_X(0x0500))
+             .Emit(STA_abs_X(0x0600))
+             .Emit(STA_abs_X(0x0700))
+             .Emit(INX())
+             .Emit(BNE(-26))       // 0xE6 - back to @loop
+             .Emit(LDA(0x04))
+             .Emit(JSR(0x8279))    // pal_bright
+             .Emit(JSR(0x824E))    // pal_clear
+             .Emit(JSR(0x82AE))    // oam_clear
+             .Emit(JSR("zerobss"))
+             .Emit(JSR("copydata"))
+             .Emit(LDA(0x00))
+             .Emit(STA_zpg(sp))
+             .Emit(LDA(PAL_BG_PTR))  // 0x08 = stack high byte
+             .Emit(STA_zpg(sp + 1))
+             .Emit(JSR(0x84F4))    // initlib
+             .Emit(LDA(0x4C))      // JMP opcode
+             .Emit(STA_zpg(0x14))
+             .Emit(LDA(0x10))      // low byte of callback
+             .Emit(STA_zpg(0x15))
+             .Emit(LDA(0x82))      // high byte of callback
+             .Emit(STA_zpg(0x16))
+             .Emit(LDA(0x80))      // PPU_CTRL setting
+             .Emit(STA_zpg(0x10))
+             .Emit(STA_abs(PPU_CTRL))
+             .Emit(LDA(0x06))      // PPU_MASK setting
+             .Emit(STA_zpg(0x12));
         return block;
     }
 
