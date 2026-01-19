@@ -103,6 +103,9 @@ class Transpiler : IDisposable
 
         _logger.WriteLine($"Writing header...");
         writer.WriteHeader(PRG_ROM_SIZE: 2, CHR_ROM_SIZE: 1);
+        // Set the code base offset so WriteBlock calculates addresses correctly
+        // (Labels were computed in first pass without header, so we need to account for it)
+        writer.CodeBaseOffset = writer.BaseStream.Position;
         _logger.WriteLine($"Writing built-ins...");
         writer.WriteBuiltIns(sizeOfMain);
 

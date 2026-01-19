@@ -107,6 +107,13 @@ class NESWriter : IDisposable
 
     public Dictionary<string, ushort> Labels { get; private set; } = new();
     private bool _hasPresetLabels = false;
+    
+    /// <summary>
+    /// Stream offset where code begins. Used to calculate correct addresses when
+    /// a header has been written before code. In the first pass (no header), this is 0.
+    /// In the second pass (after header), this should be set to the header size (16).
+    /// </summary>
+    public long CodeBaseOffset { get; set; } = 0;
 
     public void SetLabels(Dictionary<string, ushort> labels)
     {
@@ -428,40 +435,20 @@ class NESWriter : IDisposable
                 WriteBlock(BuiltInSubroutines.PpuOff());
                 break;
             case nameof(NESLib.ppu_on_all):
-                /*
-                 * 8289	A512          	LDA PPU_MASK_VAR              ; _ppu_on_all
-                 * 828B	0918          	ORA #$18
-                 */
-                Write(NESInstruction.LDA_zpg, 0x12);
-                Write(NESInstruction.ORA, 0x18);
+                // Falls through to ppu_onoff, no RTS
+                WriteBlock(BuiltInSubroutines.PpuOnAll());
                 break;
             case nameof(NESLib.ppu_onoff):
-                /*
-                 * 828D	8512          	STA PPU_MASK_VAR              ; ppu_onoff
-                 * 828F	4CF082        	JMP _ppu_wait_nmi
-                 */
-                Write(NESInstruction.STA_zpg, 0x12);
-                Write(NESInstruction.JMP_abs, ppu_wait_nmi);
+                // JMP to ppu_wait_nmi (uses constant address)
+                WriteBlock(BuiltInSubroutines.PpuOnOff());
                 break;
             case nameof(NESLib.ppu_on_bg):
-                /*
-                 * 8292	A512          	LDA PPU_MASK_VAR              ; _ppu_on_bg
-                 * 8294	0908          	ORA #$08
-                 * 8296	D0F5          	BNE ppu_onoff
-                 */
-                Write(NESInstruction.LDA_zpg, PPU_MASK_VAR);
-                Write(NESInstruction.ORA, PAL_BG_PTR);
-                Write(NESInstruction.BNE_rel, 0xF5);
+                // BNE backward to ppu_onoff - label should be in Labels dict
+                WriteBlock(BuiltInSubroutines.PpuOnBg());
                 break;
             case nameof(NESLib.ppu_on_spr):
-                /*
-                 * 8298	A512          	LDA PPU_MASK_VAR              ; _ppu_on_spr
-                 * 829A	0910          	ORA #$10
-                 * 829C	D0EF          	BNE ppu_onoff
-                 */
-                Write(NESInstruction.LDA_zpg, PPU_MASK_VAR);
-                Write(NESInstruction.ORA, 0x10);
-                Write(NESInstruction.BNE_rel, 0xEF);
+                // BNE backward to ppu_onoff - label should be in Labels dict
+                WriteBlock(BuiltInSubroutines.PpuOnSpr());
                 break;
             case nameof(NESLib.ppu_mask):
                 WriteBlock(BuiltInSubroutines.PpuMask());
@@ -1333,7 +1320,8 @@ class NESWriter : IDisposable
     /// </summary>
     protected void WriteBlock(Block block)
     {
-        ushort currentAddress = (ushort)(_writer.BaseStream.Position + BaseAddress);
+        // Calculate the current address in ROM, accounting for any header offset
+        ushort currentAddress = (ushort)(_writer.BaseStream.Position - CodeBaseOffset + BaseAddress);
         
         // Build a local label table for intra-block labels
         var localLabels = new Dictionary<string, ushort>();

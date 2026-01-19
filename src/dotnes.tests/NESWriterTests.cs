@@ -160,6 +160,10 @@ public class NESWriterTests
     public void Write_ppu_on_bg()
     {
         using var writer = GetWriter();
+        // ppu_on_bg branches backward to ppu_onoff with offset -11 (0xF5)
+        // At stream position 0 (address 0x8000), BNE is at address 0x8004
+        // Target = 0x8004 + 2 - 11 = 0x7FFB
+        writer.Labels["ppu_onoff"] = 0x7FFB;
         writer.WriteBuiltIn(nameof(NESLib.ppu_on_bg), SizeOfMain);
         writer.Flush();
         AssertInstructions("A512 0908 D0F5");
