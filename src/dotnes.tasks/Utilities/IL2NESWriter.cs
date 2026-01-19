@@ -666,47 +666,7 @@ class IL2NESWriter : NESWriter
 
     static (Opcode opcode, AddressMode mode) ConvertNESInstruction(NESInstruction instruction)
     {
-        return instruction switch
-        {
-            NESInstruction.LDA => (Opcode.LDA, AddressMode.Immediate),
-            NESInstruction.LDX => (Opcode.LDX, AddressMode.Immediate),
-            NESInstruction.LDY => (Opcode.LDY, AddressMode.Immediate),
-            NESInstruction.STA_zpg => (Opcode.STA, AddressMode.ZeroPage),
-            NESInstruction.STX_zpg => (Opcode.STX, AddressMode.ZeroPage),
-            NESInstruction.STY_zpg => (Opcode.STY, AddressMode.ZeroPage),
-            NESInstruction.STA_abs => (Opcode.STA, AddressMode.Absolute),
-            NESInstruction.STX_abs => (Opcode.STX, AddressMode.Absolute),
-            NESInstruction.LDA_abs => (Opcode.LDA, AddressMode.Absolute),
-            NESInstruction.LDX_abs => (Opcode.LDX, AddressMode.Absolute),
-            NESInstruction.LDA_zpg => (Opcode.LDA, AddressMode.ZeroPage),
-            NESInstruction.LDY_zpg => (Opcode.LDY, AddressMode.ZeroPage),
-            NESInstruction.JSR => (Opcode.JSR, AddressMode.Absolute),
-            NESInstruction.JMP_abs => (Opcode.JMP, AddressMode.Absolute),
-            NESInstruction.BNE_rel => (Opcode.BNE, AddressMode.Relative),
-            NESInstruction.BEQ_rel => (Opcode.BEQ, AddressMode.Relative),
-            NESInstruction.CMP => (Opcode.CMP, AddressMode.Immediate),
-            NESInstruction.CMP_zpg => (Opcode.CMP, AddressMode.ZeroPage),
-            NESInstruction.AND => (Opcode.AND, AddressMode.Immediate),
-            NESInstruction.ORA => (Opcode.ORA, AddressMode.Immediate),
-            NESInstruction.INC_zpg => (Opcode.INC, AddressMode.ZeroPage),
-            NESInstruction.DEC_zpg => (Opcode.DEC, AddressMode.ZeroPage),
-            NESInstruction.TAX_impl => (Opcode.TAX, AddressMode.Implied),
-            NESInstruction.TAY_impl => (Opcode.TAY, AddressMode.Implied),
-            NESInstruction.TXA_impl => (Opcode.TXA, AddressMode.Implied),
-            NESInstruction.TYA_impl => (Opcode.TYA, AddressMode.Implied),
-            NESInstruction.INX_impl => (Opcode.INX, AddressMode.Implied),
-            NESInstruction.INY_impl => (Opcode.INY, AddressMode.Implied),
-            NESInstruction.DEX_impl => (Opcode.DEX, AddressMode.Implied),
-            NESInstruction.DEY_impl => (Opcode.DEY, AddressMode.Implied),
-            NESInstruction.RTS_impl => (Opcode.RTS, AddressMode.Implied),
-            NESInstruction.PHA_impl => (Opcode.PHA, AddressMode.Implied),
-            NESInstruction.PLA_impl => (Opcode.PLA, AddressMode.Implied),
-            NESInstruction.SEC_impl => (Opcode.SEC, AddressMode.Implied),
-            NESInstruction.CLC => (Opcode.CLC, AddressMode.Implied),
-            NESInstruction.ADC => (Opcode.ADC, AddressMode.Immediate),
-            NESInstruction.SBC => (Opcode.SBC, AddressMode.Immediate),
-            _ => throw new NotImplementedException($"ConvertNESInstruction not implemented for {instruction}"),
-        };
+        return NESInstructionConverter.Convert(instruction);
     }
 
     /// <summary>

@@ -5,6 +5,14 @@
 ///
 /// See: https://www.masswerk.at/6502/6502_instruction_set.html
 /// </summary>
+/// <remarks>
+/// This enum combines opcode and addressing mode into a single byte value.
+/// For new code, prefer using <see cref="dotnes.ObjectModel.Opcode"/> and 
+/// <see cref="dotnes.ObjectModel.AddressMode"/> separately.
+/// Use <see cref="dotnes.ObjectModel.NESInstructionConverter"/> to convert
+/// from this enum to the new types.
+/// </remarks>
+[Obsolete("Use Opcode and AddressMode from dotnes.ObjectModel namespace instead. Use NESInstructionConverter.Convert() to migrate.")]
 enum NESInstruction : byte
 {
     // 0

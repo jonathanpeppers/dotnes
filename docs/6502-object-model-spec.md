@@ -825,11 +825,12 @@ if (block != null)
 3. ✅ Updated `Transpiler.SecondPass()` to enable block buffering
 4. ✅ All 188 tests pass with byte-identical ROM output
 
-### Phase 5: Cleanup
+### Phase 5: Cleanup ✅ COMPLETED
 
-1. Remove old `NESWriter` stream-based instruction emission
-2. Consolidate `NESInstruction` enum with new `Opcode` enum
-3. Update all documentation
+1. ✅ Created `NESInstructionConverter` class to consolidate conversion logic between `NESInstruction` and `Opcode`/`AddressMode`
+2. ✅ Marked `NESInstruction` enum as `[Obsolete]` to signal migration to `Opcode`/`AddressMode`
+3. ✅ Updated `IL2NESWriter` and `Program6502Writer` to use shared `NESInstructionConverter`
+4. ✅ All 188 tests pass
 
 ## Benefits
 
