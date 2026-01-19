@@ -60,7 +60,7 @@ internal static class BuiltInSubroutines
              .Emit(LDX(0x20))
              .Emit(STA_abs(PPU_DATA), "@1")
              .Emit(DEX())
-             .Emit(BNE(-5));  // branch back to @1
+             .Emit(BNE(-6));  // branch back to @1
         return block;
     }
 
@@ -75,12 +75,12 @@ internal static class BuiltInSubroutines
              .Emit(LDY(0x20))
              .Emit(STY_abs(PPU_ADDR))
              .Emit(STA_abs(PPU_ADDR))
-             .Emit(LDY(0x10), "@1")
-             .Emit(STA_abs(PPU_DATA), "@2")
+             .Emit(LDY(0x10))
+             .Emit(STA_abs(PPU_DATA), "@1")
              .Emit(INX())
-             .Emit(BNE(-5))   // branch back to @2
+             .Emit(BNE(-6))   // branch back to @1
              .Emit(DEY())
-             .Emit(BNE(-8));  // branch back to @1
+             .Emit(BNE(-9));  // branch back to STA (inner loop start)
         return block;
     }
 
@@ -118,12 +118,18 @@ internal static class BuiltInSubroutines
     }
 
     /// <summary>
-    /// IRQ handler (just returns)
+    /// IRQ handler - pushes registers and jumps to skipNtsc
     /// </summary>
     public static Block Irq()
     {
         var block = new Block("_irq");
-        block.Emit(RTI());
+        block.Emit(PHA())
+             .Emit(TXA())
+             .Emit(PHA())
+             .Emit(TYA())
+             .Emit(PHA())
+             .Emit(LDA(0xFF))
+             .Emit(JMP_abs("_skipNtsc"));
         return block;
     }
 
@@ -350,21 +356,35 @@ internal static class BuiltInSubroutines
     /// </summary>
     public static Block PpuWaitNmi()
     {
+        // NESWriter: LDA #$01, STA VRAM_UPDATE, LDA STARTUP, CMP STARTUP, BEQ -4, RTS
         var block = new Block("_ppu_wait_nmi");
-        block.Emit(LDA_zpg(0x1B))
-             .Emit(CMP_zpg(0x1B), "@1")
+        block.Emit(LDA(0x01))
+             .Emit(STA_zpg(VRAM_UPDATE))
+             .Emit(LDA_zpg(STARTUP))
+             .Emit(CMP_zpg(STARTUP), "@1")
              .Emit(BEQ(-4))   // branch back to @1
              .Emit(RTS());
         return block;
     }
 
     /// <summary>
-    /// _ppu_wait_frame - Alias for ppu_wait_nmi
+    /// _ppu_wait_frame - Wait for frame, with extended checks
     /// </summary>
     public static Block PpuWaitFrame()
     {
+        // NESWriter has more complex logic with ZP_START and NES_PRG_BANKS checks
         var block = new Block("_ppu_wait_frame");
-        block.Emit(JMP_abs("_ppu_wait_nmi"));
+        block.Emit(LDA(0x01))
+             .Emit(STA_zpg(VRAM_UPDATE))
+             .Emit(LDA_zpg(STARTUP))
+             .Emit(CMP_zpg(STARTUP), "@1")
+             .Emit(BEQ(-4))   // branch back to @1
+             .Emit(LDA_zpg(ZP_START))
+             .Emit(BEQ(6), "@2")   // branch to @3 (end)
+             .Emit(LDA_zpg(NES_PRG_BANKS))
+             .Emit(CMP(0x05), "@loop")
+             .Emit(BEQ(-6))   // branch back to @loop (actually to LDA NES_PRG_BANKS)
+             .Emit(RTS());
         return block;
     }
 
@@ -410,16 +430,16 @@ internal static class BuiltInSubroutines
     /// </summary>
     public static Block OamClear()
     {
+        // NESWriter: LDX #$00, LDA #$FF, STA $0200,X, INX x4, BNE -9, RTS
         var block = new Block("_oam_clear");
         block.Emit(LDX(0x00))
-             .Emit(STX_zpg(0x14))  // OAM_INDEX
              .Emit(LDA(0xFF))
              .Emit(STA_abs_X(OAM_BUF), "@1")
              .Emit(INX())
              .Emit(INX())
              .Emit(INX())
              .Emit(INX())
-             .Emit(BNE(-10))  // branch back to @1
+             .Emit(BNE(-9))  // branch back to @1
              .Emit(RTS());
         return block;
     }
@@ -429,17 +449,19 @@ internal static class BuiltInSubroutines
     /// </summary>
     public static Block OamSize()
     {
+        // NESWriter uses PRG_FILEOFFS ($10), not PPU_CTRL_VAR ($13)
         var block = new Block("_oam_size");
         block.Emit(ASL_A())
              .Emit(ASL_A())
              .Emit(ASL_A())
              .Emit(ASL_A())
              .Emit(ASL_A())
+             .Emit(AND(0x20))
              .Emit(STA_zpg(TEMP))
-             .Emit(LDA_zpg(0x13))  // PPU_CTRL_VAR
+             .Emit(LDA_zpg(PRG_FILEOFFS))
              .Emit(AND(0xDF))
              .Emit(ORA_zpg(TEMP))
-             .Emit(STA_zpg(0x13))
+             .Emit(STA_zpg(PRG_FILEOFFS))
              .Emit(RTS());
         return block;
     }
@@ -449,15 +471,16 @@ internal static class BuiltInSubroutines
     /// </summary>
     public static Block OamHideRest()
     {
+        // NESWriter: TAX, LDA #$F0, STA $0200,X, INX x4, BNE -9, RTS
         var block = new Block("_oam_hide_rest");
-        block.Emit(LDX_zpg(0x14))  // OAM_INDEX
+        block.Emit(TAX())
              .Emit(LDA(0xF0))
              .Emit(STA_abs_X(OAM_BUF), "@1")
              .Emit(INX())
              .Emit(INX())
              .Emit(INX())
              .Emit(INX())
-             .Emit(BNE(-10))  // branch back to @1
+             .Emit(BNE(-9))  // branch back to @1
              .Emit(RTS());
         return block;
     }
@@ -665,9 +688,10 @@ internal static class BuiltInSubroutines
     /// </summary>
     public static Block NesClock()
     {
+        // NESWriter: LDA __STARTUP__ ($01), LDX #$00, RTS
         var block = new Block("_nesclock");
-        block.Emit(LDA_zpg(0x1B))
-             .Emit(LDX_zpg(0x1C))
+        block.Emit(LDA_zpg(STARTUP))
+             .Emit(LDX(0x00))
              .Emit(RTS());
         return block;
     }

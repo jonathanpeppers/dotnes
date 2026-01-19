@@ -28,17 +28,69 @@ public class BuiltInSubroutinesTests
     }
 
     [Fact]
-    public void Irq_ProducesCorrectBytes()
+    public void InitPPU_ProducesCorrectBytes()
     {
-        var block = BuiltInSubroutines.Irq();
+        var block = BuiltInSubroutines.InitPPU();
         var program = new Program6502 { BaseAddress = 0x8000 };
         program.AddBlock(block);
         program.ResolveAddresses();
 
         var bytes = program.ToBytes();
 
-        // RTI
-        Assert.Equal([0x40], bytes);
+        // BIT $2002, BIT $2002, BPL -5, BIT $2002, BPL -5, LDA #$40, STA $4017
+        Assert.Equal(
+            [0x2C, 0x02, 0x20, 0x2C, 0x02, 0x20, 0x10, 0xFB, 0x2C, 0x02, 0x20, 0x10, 0xFB, 0xA9, 0x40, 0x8D, 0x17, 0x40],
+            bytes);
+    }
+
+    [Fact]
+    public void ClearPalette_ProducesCorrectBytes()
+    {
+        var block = BuiltInSubroutines.ClearPalette();
+        var program = new Program6502 { BaseAddress = 0x8000 };
+        program.AddBlock(block);
+        program.ResolveAddresses();
+
+        var bytes = program.ToBytes();
+
+        // LDA #$3F, STA $2006, STX $2006, LDA #$0F, LDX #$20, STA $2007, DEX, BNE -6 (0xFA)
+        Assert.Equal(
+            [0xA9, 0x3F, 0x8D, 0x06, 0x20, 0x8E, 0x06, 0x20, 0xA9, 0x0F, 0xA2, 0x20, 0x8D, 0x07, 0x20, 0xCA, 0xD0, 0xFA],
+            bytes);
+    }
+
+    [Fact]
+    public void ClearVRAM_ProducesCorrectBytes()
+    {
+        var block = BuiltInSubroutines.ClearVRAM();
+        var program = new Program6502 { BaseAddress = 0x8000 };
+        program.AddBlock(block);
+        program.ResolveAddresses();
+
+        var bytes = program.ToBytes();
+
+        // TXA, LDY #$20, STY $2006, STA $2006, LDY #$10, STA $2007, INX, BNE -6 (0xFA), DEY, BNE -9 (0xF7)
+        Assert.Equal(
+            [0x8A, 0xA0, 0x20, 0x8C, 0x06, 0x20, 0x8D, 0x06, 0x20, 0xA0, 0x10, 0x8D, 0x07, 0x20, 0xE8, 0xD0, 0xFA, 0x88, 0xD0, 0xF7],
+            bytes);
+    }
+
+    [Fact]
+    public void Irq_ProducesCorrectBytes()
+    {
+        var block = BuiltInSubroutines.Irq();
+        var program = new Program6502 { BaseAddress = 0x8000 };
+        program.AddBlock(block);
+        // Add skipNtsc label for the JMP target
+        var skipNtscBlock = new Block("_skipNtsc");
+        skipNtscBlock.Emit(NOP());
+        program.AddBlock(skipNtscBlock);
+        program.ResolveAddresses();
+
+        var bytes = program.ToBytes();
+
+        // PHA, TXA, PHA, TYA, PHA, LDA #$FF, JMP to _skipNtsc (0x800A)
+        Assert.Equal([0x48, 0x8A, 0x48, 0x98, 0x48, 0xA9, 0xFF, 0x4C, 0x0A, 0x80, 0xEA], bytes);
     }
 
     #endregion
@@ -197,6 +249,35 @@ public class BuiltInSubroutinesTests
         Assert.Equal([0xA5, 0x15, 0x60], bytes);
     }
 
+    [Fact]
+    public void PpuWaitNmi_ProducesCorrectBytes()
+    {
+        var block = BuiltInSubroutines.PpuWaitNmi();
+        var program = new Program6502 { BaseAddress = 0x8000 };
+        program.AddBlock(block);
+        program.ResolveAddresses();
+
+        var bytes = program.ToBytes();
+
+        // LDA #$01, STA $03, LDA $01, CMP $01, BEQ -4 ($FC), RTS
+        Assert.Equal([0xA9, 0x01, 0x85, 0x03, 0xA5, 0x01, 0xC5, 0x01, 0xF0, 0xFC, 0x60], bytes);
+    }
+
+    [Fact]
+    public void PpuWaitFrame_ProducesCorrectBytes()
+    {
+        var block = BuiltInSubroutines.PpuWaitFrame();
+        var program = new Program6502 { BaseAddress = 0x8000 };
+        program.AddBlock(block);
+        program.ResolveAddresses();
+
+        var bytes = program.ToBytes();
+
+        // LDA #$01, STA $03, LDA $01, CMP $01, BEQ -4, LDA $00, BEQ +6, LDA $02, CMP #$05, BEQ -6, RTS
+        Assert.Equal([0xA9, 0x01, 0x85, 0x03, 0xA5, 0x01, 0xC5, 0x01, 0xF0, 0xFC, 
+                      0xA5, 0x00, 0xF0, 0x06, 0xA5, 0x02, 0xC9, 0x05, 0xF0, 0xFA, 0x60], bytes);
+    }
+
     #endregion
 
     #region OAM Subroutines
@@ -211,9 +292,9 @@ public class BuiltInSubroutinesTests
 
         var bytes = program.ToBytes();
 
-        // LDX #$00, STX $14, LDA #$FF, STA $0200,X, INX, INX, INX, INX, BNE -10, RTS
+        // NESWriter: LDX #$00, LDA #$FF, STA $0200,X, INX, INX, INX, INX, BNE -9 ($F7), RTS
         Assert.Equal(
-            [0xA2, 0x00, 0x86, 0x14, 0xA9, 0xFF, 0x9D, 0x00, 0x02, 0xE8, 0xE8, 0xE8, 0xE8, 0xD0, 0xF6, 0x60],
+            [0xA2, 0x00, 0xA9, 0xFF, 0x9D, 0x00, 0x02, 0xE8, 0xE8, 0xE8, 0xE8, 0xD0, 0xF7, 0x60],
             bytes);
     }
 
@@ -227,9 +308,9 @@ public class BuiltInSubroutinesTests
 
         var bytes = program.ToBytes();
 
-        // LDX $14, LDA #$F0, STA $0200,X, INX, INX, INX, INX, BNE -10, RTS
+        // NESWriter: TAX, LDA #$F0, STA $0200,X, INX, INX, INX, INX, BNE -9 ($F7), RTS
         Assert.Equal(
-            [0xA6, 0x14, 0xA9, 0xF0, 0x9D, 0x00, 0x02, 0xE8, 0xE8, 0xE8, 0xE8, 0xD0, 0xF6, 0x60],
+            [0xAA, 0xA9, 0xF0, 0x9D, 0x00, 0x02, 0xE8, 0xE8, 0xE8, 0xE8, 0xD0, 0xF7, 0x60],
             bytes);
     }
 
@@ -297,8 +378,8 @@ public class BuiltInSubroutinesTests
 
         var bytes = program.ToBytes();
 
-        // LDA $1B, LDX $1C, RTS
-        Assert.Equal([0xA5, 0x1B, 0xA6, 0x1C, 0x60], bytes);
+        // LDA $01 (STARTUP), LDX #$00, RTS
+        Assert.Equal([0xA5, 0x01, 0xA2, 0x00, 0x60], bytes);
     }
 
     [Fact]

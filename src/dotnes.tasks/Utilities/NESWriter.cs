@@ -1,5 +1,6 @@
 ﻿using System.Buffers;
 using System.Text;
+using dotnes.ObjectModel;
 using static dotnes.NESConstants;
 
 namespace dotnes;
@@ -497,24 +498,7 @@ class NESWriter : IDisposable
                 Write(NESInstruction.RTS_impl);
                 break;
             case nameof(NESLib.pal_clear):
-                /*
-                 * 824E	A90F          	LDA #$0F                      ; _pal_clear
-                 * 8250	A200          	LDX #$00
-                 * 8252	9DC001        	STA $01C0,x
-                 * 8255	E8            	INX
-                 * 8256	E020          	CPX #$20
-                 * 8258	D0F8          	BNE $8252
-                 * 825A	8607          	STX PAL_UPDATE
-                 * 825C	60            	RTS
-                 */
-                Write(NESInstruction.LDA, 0x0F);
-                Write(NESInstruction.LDX, 0x00);
-                Write(NESInstruction.STA_abs_X, PAL_BUF);
-                Write(NESInstruction.INX_impl);
-                Write(NESInstruction.CPX, 0x20);
-                Write(NESInstruction.BNE_rel, 0xF8);
-                Write(NESInstruction.STX_zpg, PAL_UPDATE);
-                Write(NESInstruction.RTS_impl);
+                WriteBlock(BuiltInSubroutines.PalClear());
                 break;
             case nameof(NESLib.pal_spr_bright):
                 /*
@@ -648,118 +632,19 @@ class NESWriter : IDisposable
                 Write(NESInstruction.RTS_impl);
                 break;
             case nameof(NESLib.oam_clear):
-                /*
-                 * 82AE	A200          	LDX #$00                      ; _oam_clear
-                 * 82B0	A9FF          	LDA #$FF
-                 * 82B2	9D0002        	STA $0200,x
-                 * 82B5	E8            	INX
-                 * 82B6	E8            	INX
-                 * 82B7	E8            	INX
-                 * 82B8	E8            	INX
-                 * 82B9	D0F7          	BNE $82B2
-                 * 82BB	60            	RTS
-                 */
-                Write(NESInstruction.LDX, 0x00);
-                Write(NESInstruction.LDA, 0xFF);
-                Write(NESInstruction.STA_abs_X, 0x0200);
-                Write(NESInstruction.INX_impl);
-                Write(NESInstruction.INX_impl);
-                Write(NESInstruction.INX_impl);
-                Write(NESInstruction.INX_impl);
-                Write(NESInstruction.BNE_rel, 0xF7);
-                Write(NESInstruction.RTS_impl);
+                WriteBlock(BuiltInSubroutines.OamClear());
                 break;
             case nameof(NESLib.oam_size):
-                /*
-                 * 82BC	0A            	ASL                           ; _oam_size
-                 * 82BD	0A            	ASL
-                 * 82BE	0A            	ASL
-                 * 82BF	0A            	ASL
-                 * 82C0	0A            	ASL
-                 * 82C1	2920          	AND #$20
-                 * 82C3	8517          	STA TEMP
-                 * 82C5	A510          	LDA __PRG_FILEOFFS__
-                 * 82C7	29DF          	AND #$DF
-                 * 82C9	0517          	ORA TEMP
-                 * 82CB	8510          	STA __PRG_FILEOFFS__
-                 * 82CD	60            	RTS
-                 */
-                Write(NESInstruction.ASL_A);
-                Write(NESInstruction.ASL_A);
-                Write(NESInstruction.ASL_A);
-                Write(NESInstruction.ASL_A);
-                Write(NESInstruction.ASL_A);
-                Write(NESInstruction.AND, 0x20);
-                Write(NESInstruction.STA_zpg, TEMP);
-                Write(NESInstruction.LDA_zpg, PRG_FILEOFFS);
-                Write(NESInstruction.AND, 0xDF);
-                Write(NESInstruction.ORA_zpg, TEMP);
-                Write(NESInstruction.STA_zpg, PRG_FILEOFFS);
-                Write(NESInstruction.RTS_impl);
+                WriteBlock(BuiltInSubroutines.OamSize());
                 break;
             case nameof(NESLib.oam_hide_rest):
-                /*
-                 * 82CE	AA            	TAX                           ; _oam_hide_rest
-                 * 82CF	A9F0          	LDA #$F0
-                 * 82D1	9D0002        	STA $0200,x
-                 * 82D4	E8            	INX
-                 * 82D5	E8            	INX
-                 * 82D6	E8            	INX
-                 * 82D7	E8            	INX
-                 * 82D8	D0F7          	BNE $82D1
-                 * 82DA	60            	RTS
-                 */
-                Write(NESInstruction.TAX_impl);
-                Write(NESInstruction.LDA, 0xF0);
-                Write(NESInstruction.STA_abs_X, 0x0200);
-                Write(NESInstruction.INX_impl);
-                Write(NESInstruction.INX_impl);
-                Write(NESInstruction.INX_impl);
-                Write(NESInstruction.INX_impl);
-                Write(NESInstruction.BNE_rel, 0xF7);
-                Write(NESInstruction.RTS_impl);
+                WriteBlock(BuiltInSubroutines.OamHideRest());
                 break;
             case nameof(NESLib.ppu_wait_frame):
-                /*
-                 * 82DB	A901          	LDA #$01                      ; _ppu_wait_frame
-                 * 82DD	8503          	STA VRAM_UPDATE
-                 * 82DF	A501          	LDA __STARTUP__
-                 * 82E1	C501          	CMP __STARTUP__
-                 * 82E3	F0FC          	BEQ $82E1
-                 * 82E5	A500          	LDA __ZP_START__
-                 * 82E7	F006          	BEQ @3
-                 * 82E9	A502          	LDA NES_PRG_BANKS
-                 * 82EB	C905          	CMP #$05
-                 * 82ED	F0FA          	BEQ $82E9
-                 * 82EF	60            	RTS                           ; @3
-                 */
-                Write(NESInstruction.LDA, 0x01);
-                Write(NESInstruction.STA_zpg, VRAM_UPDATE);
-                Write(NESInstruction.LDA_zpg, STARTUP);
-                Write(NESInstruction.CMP_zpg, STARTUP);
-                Write(NESInstruction.BEQ_rel, 0xFC);
-                Write(NESInstruction.LDA_zpg, ZP_START);
-                Write(NESInstruction.BEQ_rel, 0x06);
-                Write(NESInstruction.LDA_zpg, NES_PRG_BANKS);
-                Write(NESInstruction.CMP, 0x05);
-                Write(NESInstruction.BEQ_rel, 0xFA);
-                Write(NESInstruction.RTS_impl);
+                WriteBlock(BuiltInSubroutines.PpuWaitFrame());
                 break;
             case nameof(NESLib.ppu_wait_nmi):
-                /*
-                 * 82F0	A901          	LDA #$01                      ; _ppu_wait_nmi
-                 * 82F2	8503          	STA VRAM_UPDATE
-                 * 82F4	A501          	LDA __STARTUP__
-                 * 82F6	C501          	CMP __STARTUP__
-                 * 82F8	F0FC          	BEQ $82F6
-                 * 82FA	60            	RTS
-                 */
-                Write(NESInstruction.LDA, 0x01);
-                Write(NESInstruction.STA_zpg, 0x03);
-                Write(NESInstruction.LDA_zpg, STARTUP);
-                Write(NESInstruction.CMP_zpg, STARTUP);
-                Write(NESInstruction.BEQ_rel, 0xFC);
-                Write(NESInstruction.RTS_impl);
+                WriteBlock(BuiltInSubroutines.PpuWaitNmi());
                 break;
             case nameof(NESLib.scroll):
                 /*
@@ -1028,22 +913,10 @@ class NESWriter : IDisposable
                 Write(NESInstruction.RTS_impl);
                 break;
             case nameof(NESLib.vram_adr):
-                /*
-                 * 83D4	8E0620        	STX $2006                     ; _vram_adr
-                 * 83D7	8D0620        	STA $2006
-                 * 83DA	60            	RTS
-                 */
-                Write(NESInstruction.STX_abs, PPU_ADDR);
-                Write(NESInstruction.STA_abs, PPU_ADDR);
-                Write(NESInstruction.RTS_impl);
+                WriteBlock(BuiltInSubroutines.VramAdr());
                 break;
             case nameof(NESLib.vram_put):
-                /*
-                 * 83DB	8D0720        	STA $2007                     ; _vram_put
-                 * 83DE	60            	RTS
-                 */
-                Write(NESInstruction.STA_abs, PPU_DATA);
-                Write(NESInstruction.RTS_impl);
+                WriteBlock(BuiltInSubroutines.VramPut());
                 break;
             case nameof(NESLib.vram_fill):
                 /*
@@ -1108,14 +981,7 @@ class NESWriter : IDisposable
                 Write(NESInstruction.RTS_impl);
                 break;
             case nameof(NESLib.nesclock):
-                /*
-                 * 8415	A501          	LDA __STARTUP__               ; _nesclock
-                 * 8417	A200          	LDX #$00
-                 * 8419	60            	RTS
-                 */
-                Write(NESInstruction.LDA_zpg, STARTUP);
-                Write(NESInstruction.LDX, 0x00);
-                Write(NESInstruction.RTS_impl);
+                WriteBlock(BuiltInSubroutines.NesClock());
                 break;
             case nameof(NESLib.delay):
                 /*
@@ -1193,100 +1059,22 @@ class NESWriter : IDisposable
 
     void Write_exit()
     {
-        /*
-        * https://github.com/clbr/neslib/blob/d061b0f7f1a449941111c31eee0fc2e85b1826d7/crt0.s#L111
-        * sei
-        * ldx #$ff
-        * txs
-        * inx
-        * stx PPU_MASK
-        * stx DMC_FREQ
-        * stx PPU_CTRL		;no NMI
-        */
-        Write(NESInstruction.SEI_impl);
-        Write(NESInstruction.LDX, 0xFF);
-        Write(NESInstruction.TXS_impl);
-        Write(NESInstruction.INX_impl);
-        Write(NESInstruction.STX_abs, PPU_MASK);
-        Write(NESInstruction.STX_abs, DMC_FREQ);
-        Write(NESInstruction.STX_abs, PPU_CTRL);
+        WriteBlock(BuiltInSubroutines.Exit());
     }
 
     void Write_initPPU()
     {
-        /*
-         * https://github.com/clbr/neslib/blob/d061b0f7f1a449941111c31eee0fc2e85b1826d7/crt0.s#L121
-         *     bit PPU_STATUS
-         * @1:
-         *     bit PPU_STATUS
-         *     bpl @1
-         * @2:
-         *     bit PPU_STATUS
-         *     bpl @2
-         *
-         * ; no APU frame counter IRQs
-         *     lda #$40
-         *     sta PPU_FRAMECNT
-         */
-        Write(NESInstruction.BIT_abs, PPU_STATUS);
-        Write(NESInstruction.BIT_abs, PPU_STATUS);
-        Write(NESInstruction.BPL, 0xFB);
-        Write(NESInstruction.BIT_abs, PPU_STATUS);
-        Write(NESInstruction.BPL, 0xFB);
-        Write(NESInstruction.LDA, 0x40);
-        Write(NESInstruction.STA_abs, PPU_FRAMECNT);
+        WriteBlock(BuiltInSubroutines.InitPPU());
     }
 
     void Write_clearPalette()
     {
-        /*
-         * https://github.com/clbr/neslib/blob/d061b0f7f1a449941111c31eee0fc2e85b1826d7/crt0.s#L135
-         *     lda #$3f
-         *     sta PPU_ADDR
-         *     stx PPU_ADDR
-         *     lda #$0f
-         *     ldx #$20
-         * @1:
-         *     sta PPU_DATA
-         *     dex
-         *     bne @1
-         */
-        Write(NESInstruction.LDA, 0x3F);
-        Write(NESInstruction.STA_abs, PPU_ADDR);
-        Write(NESInstruction.STX_abs, PPU_ADDR);
-        Write(NESInstruction.LDA, 0x0F);
-        Write(NESInstruction.LDX, 0x20);
-        Write(NESInstruction.STA_abs, PPU_DATA);
-        Write(NESInstruction.DEX_impl);
-        Write(NESInstruction.BNE_rel, 0xFA);
+        WriteBlock(BuiltInSubroutines.ClearPalette());
     }
 
     void Write_clearVRAM()
     {
-        /*
-         * https://github.com/clbr/neslib/blob/d061b0f7f1a449941111c31eee0fc2e85b1826d7/crt0.s#L147
-         *     txa
-         *     ldy #$20
-         *     sty PPU_ADDR
-         *     sta PPU_ADDR
-         *     ldy #$10
-         * @1:
-         *     sta PPU_DATA
-         *     inx
-         *     bne @1
-         *     dey
-         *     bne @1
-         */
-        Write(NESInstruction.TXA_impl);
-        Write(NESInstruction.LDY, 0x20);
-        Write(NESInstruction.STY_abs, PPU_ADDR);
-        Write(NESInstruction.STA_abs, PPU_ADDR);
-        Write(NESInstruction.LDY, 0x10);
-        Write(NESInstruction.STA_abs, PPU_DATA);
-        Write(NESInstruction.INX_impl);
-        Write(NESInstruction.BNE_rel, 0xFA);
-        Write(NESInstruction.DEY_impl);
-        Write(NESInstruction.BNE_rel, 0xF7);
+        WriteBlock(BuiltInSubroutines.ClearVRAM());
     }
 
     void Write_clearRAM(ushort sizeOfMain)
@@ -1984,6 +1772,103 @@ class NESWriter : IDisposable
         if (_hasPresetLabels)
             return;
         Labels[name] = address;
+    }
+
+    /// <summary>
+    /// Writes a Block to the stream, resolving any label references using the Labels dictionary.
+    /// </summary>
+    protected void WriteBlock(Block block)
+    {
+        ushort currentAddress = (ushort)(_writer.BaseStream.Position + BaseAddress);
+        
+        // Build a local label table for intra-block labels
+        var localLabels = new Dictionary<string, ushort>();
+        ushort addr = currentAddress;
+        
+        // First pass: calculate addresses for local labels
+        foreach (var (instruction, label) in block.InstructionsWithLabels)
+        {
+            if (label != null)
+            {
+                localLabels[label] = addr;
+            }
+            addr += (ushort)instruction.Size;
+        }
+        
+        // Second pass: emit bytes
+        addr = currentAddress;
+        foreach (var (instruction, _) in block.InstructionsWithLabels)
+        {
+            byte opcode = OpcodeTable.Encode(instruction.Opcode, instruction.Mode);
+            _writer.Write(opcode);
+            
+            if (instruction.Operand != null)
+            {
+                switch (instruction.Operand)
+                {
+                    case ImmediateOperand imm:
+                        _writer.Write(imm.Value);
+                        break;
+                        
+                    case AbsoluteOperand abs:
+                        _writer.Write(abs.Address);
+                        break;
+                        
+                    case LabelOperand labelOp:
+                        // Try local labels first, then global Labels dictionary
+                        if (localLabels.TryGetValue(labelOp.Label, out ushort labelAddr))
+                        {
+                            _writer.Write(labelAddr);
+                        }
+                        else if (Labels.TryGetValue(labelOp.Label, out labelAddr))
+                        {
+                            _writer.Write(labelAddr);
+                        }
+                        else
+                        {
+                            throw new InvalidOperationException($"Unresolved label: {labelOp.Label}");
+                        }
+                        break;
+                        
+                    case RelativeOperand relOp:
+                        // Resolve relative branch to label
+                        ushort targetAddr;
+                        if (localLabels.TryGetValue(relOp.Label, out targetAddr))
+                        {
+                            // Calculate relative offset from instruction following this one
+                            int offset = targetAddr - (addr + 2); // +2 for opcode + operand
+                            if (offset < -128 || offset > 127)
+                                throw new InvalidOperationException($"Branch to {relOp.Label} out of range: {offset}");
+                            _writer.Write((byte)(sbyte)offset);
+                        }
+                        else if (Labels.TryGetValue(relOp.Label, out targetAddr))
+                        {
+                            int offset = targetAddr - (addr + 2);
+                            if (offset < -128 || offset > 127)
+                                throw new InvalidOperationException($"Branch to {relOp.Label} out of range: {offset}");
+                            _writer.Write((byte)(sbyte)offset);
+                        }
+                        else
+                        {
+                            throw new InvalidOperationException($"Unresolved label: {relOp.Label}");
+                        }
+                        break;
+                        
+                    case RelativeByteOperand relByte:
+                        _writer.Write((byte)(sbyte)relByte.Offset);
+                        break;
+                }
+            }
+            
+            addr += (ushort)instruction.Size;
+        }
+        
+        // Track LastLDA for optimization patterns
+        if (block.Count > 0)
+        {
+            var lastInstr = block[block.Count - 1];
+            LastLDA = lastInstr.Opcode == Opcode.LDA && lastInstr.Mode == AddressMode.Immediate;
+        }
     }
 
     public void Flush() => _writer.Flush();
