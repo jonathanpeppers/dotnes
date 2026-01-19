@@ -20,16 +20,16 @@ class NESWriter : IDisposable
         _logger = logger ?? new NullLogger();
 
         // NOTE: starting values so they exist in dictionary
-        Labels[nameof(copydata)] = 0;
-        Labels[nameof(popa)] = 0;
-        Labels[nameof(popax)] = 0;
-        Labels[nameof(pusha)] = 0;
-        Labels[nameof(pushax)] = 0;
-        Labels[nameof(zerobss)] = 0;
-        Labels[nameof(rodata)] = 0;
-        Labels[nameof(donelib)] = 0;
+        Labels["copydata"] = 0;
+        Labels["popa"] = 0;
+        Labels["popax"] = 0;
+        Labels["pusha"] = 0;
+        Labels["pushax"] = 0;
+        Labels["zerobss"] = 0;
+        Labels["rodata"] = 0;
+        Labels["donelib"] = 0;
         // Fixed address labels (referenced by blocks but not dynamically positioned)
-        Labels[nameof(updName)] = NESConstants.updName;
+        Labels["updName"] = NESConstants.updName;
     }
 
     /// <summary>
@@ -40,16 +40,6 @@ class NESWriter : IDisposable
     /// CHR ROM in in 8 KB units
     /// </summary>
     public const int CHR_ROM_BLOCK_SIZE = 8192;
-
-    // Post-main functions (these depend on code layout, keep local)
-    protected const ushort copydata = 0x850C;
-    protected const ushort popa = 0x854F;
-    protected const ushort popax = 0x8539;
-    protected const ushort pusha = 0x855F;
-    protected const ushort pushax = 0x8575;
-    protected const ushort zerobss = 0x858B;
-    protected const ushort rodata = 0x85AE;
-    protected const ushort donelib = 0x84FD;
 
     protected const ushort BaseAddress = 0x8000;
 

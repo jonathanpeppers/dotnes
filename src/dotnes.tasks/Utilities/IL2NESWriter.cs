@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using System.Reflection.Metadata;
 using static NES.NESLib;
+using static dotnes.NESConstants;
 
 namespace dotnes;
 
@@ -283,7 +284,7 @@ class IL2NESWriter : NESWriter
                 //TODO: hardcoded until string table figured out
                 Write(NESInstruction.LDA, 0xF1);
                 Write(NESInstruction.LDX, 0x85);
-                Write(NESInstruction.JSR, Labels[nameof(pushax)]);
+                Write(NESInstruction.JSR, Labels["pushax"]);
                 Write(NESInstruction.LDX, 0x00);
                 if (operand.Length > ushort.MaxValue)
                 {
@@ -490,7 +491,7 @@ class IL2NESWriter : NESWriter
     {
         if (LastLDA)
         {
-            Write(NESInstruction.JSR, Labels[nameof(pusha)]);
+            Write(NESInstruction.JSR, Labels["pusha"]);
         }
         Write(NESInstruction.LDX, checked((byte)(operand >> 8)));
         Write(NESInstruction.LDA, checked((byte)(operand & 0xff)));
@@ -501,7 +502,7 @@ class IL2NESWriter : NESWriter
     {
         if (LastLDA)
         {
-            Write(NESInstruction.JSR, Labels[nameof(pusha)]);
+            Write(NESInstruction.JSR, Labels["pusha"]);
         }
         Write(NESInstruction.LDA, operand);
         Stack.Push(operand);
@@ -515,11 +516,11 @@ class IL2NESWriter : NESWriter
             if (local.Value < byte.MaxValue)
             {
                 Write(NESInstruction.LDA_abs, (ushort)local.Address);
-                Write(NESInstruction.JSR, Labels[nameof(pusha)]);
+                Write(NESInstruction.JSR, Labels["pusha"]);
             }
             else if (local.Value < ushort.MaxValue)
             {
-                Write(NESInstruction.JSR, Labels[nameof(pusha)]);
+                Write(NESInstruction.JSR, Labels["pusha"]);
                 Write(NESInstruction.LDA_abs, (ushort)local.Address);
                 Write(NESInstruction.LDX_abs, (ushort)(local.Address + 1));
             }
@@ -533,7 +534,7 @@ class IL2NESWriter : NESWriter
             // This is more like an inline constant value
             Write(NESInstruction.LDA, (byte)(local.Value & 0xff));
             Write(NESInstruction.LDX, (byte)(local.Value >> 8));
-            Write(NESInstruction.JSR, Labels[nameof(pushax)]);
+            Write(NESInstruction.JSR, Labels["pushax"]);
             Write(NESInstruction.LDX, 0x00);
             Write(NESInstruction.LDA, 0x40);
         }
