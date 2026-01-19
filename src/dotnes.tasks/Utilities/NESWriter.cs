@@ -19,16 +19,15 @@ class NESWriter : IDisposable
         _writer = new(stream, Encoding, leaveOpen);
         _logger = logger ?? new NullLogger();
 
-        // NOTE: starting values so they exist in dictionary
-        Labels["copydata"] = 0;
+        // Pre-initialize labels that are referenced before their blocks are written
+        // These are forward references used by IL2NESWriter and BuiltInSubroutines
         Labels["popa"] = 0;
         Labels["popax"] = 0;
         Labels["pusha"] = 0;
         Labels["pushax"] = 0;
         Labels["zerobss"] = 0;
-        Labels["rodata"] = 0;
-        Labels["donelib"] = 0;
-        // Fixed address labels (referenced by blocks but not dynamically positioned)
+        Labels["copydata"] = 0;
+        // Fixed address label (referenced by FlushVramUpdate)
         Labels["updName"] = NESConstants.updName;
     }
 
