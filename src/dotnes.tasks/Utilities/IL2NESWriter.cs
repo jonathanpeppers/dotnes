@@ -1,7 +1,9 @@
 using System.Collections.Immutable;
 using System.Reflection.Metadata;
+using dotnes.ObjectModel;
 using static NES.NESLib;
 using static dotnes.NESConstants;
+using static dotnes.ObjectModel.Asm;
 
 namespace dotnes;
 
@@ -24,6 +26,11 @@ class IL2NESWriter : NESWriter
     /// List of byte[] data
     /// </summary>
     readonly List<ImmutableArray<byte>> ByteArrays = new();
+    /// <summary>
+    /// Block to buffer emitted instructions (for SeekBack replacement).
+    /// When non-null, Write methods emit here instead of to stream.
+    /// </summary>
+    Block? _mainBlock;
     readonly ushort local = 0x324;
     readonly ReflectionCache _reflectionCache = new();
     ushort ByteArrayOffset = 0;
@@ -209,13 +216,17 @@ class IL2NESWriter : NESWriter
                 {
                     operand = (sbyte)(byte)operand;
                     Labels.TryGetValue($"instruction_{instruction.Offset + operand + 2:X2}", out var label);
-                    Write(NESInstruction.JMP_abs, label);
+                    Emit(NESInstruction.JMP_abs, label);
                 }
                 break;
             case ILOpCode.Newarr:
                 if (previous == ILOpCode.Ldc_i4_s)
                 {
-                    SeekBack(2);
+                    // Remove the previous LDA instruction (1 instruction = 2 bytes)
+                    if (_mainBlock != null)
+                        RemoveLastInstructions(1);
+                    else
+                        SeekBack(2);
                 }
                 break;
             case ILOpCode.Stloc_s:
@@ -225,9 +236,14 @@ class IL2NESWriter : NESWriter
                 WriteLdloc(Locals[operand], sizeOfMain);
                 break;
             case ILOpCode.Bne_un_s:
-                SeekBack(5);
-                Write(NESInstruction.CMP, checked((byte)Stack.Pop()));
-                Write(NESInstruction.BNE_rel, NumberOfInstructionsForBranch(instruction.Offset + operand + 2, sizeOfMain));
+                // Remove the previous comparison value loading
+                // This is typically JSR pusha (3 bytes) + LDA #imm (2 bytes) = 5 bytes, 2 instructions
+                if (_mainBlock != null)
+                    RemoveLastInstructions(2);
+                else
+                    SeekBack(5);
+                Emit(NESInstruction.CMP, checked((byte)Stack.Pop()));
+                Emit(NESInstruction.BNE_rel, NumberOfInstructionsForBranch(instruction.Offset + operand + 2, sizeOfMain));
                 break;
             default:
                 throw new NotImplementedException($"OpCode {instruction.OpCode} with Int32 operand is not implemented!");
@@ -246,7 +262,11 @@ class IL2NESWriter : NESWriter
         if (Instructions is null)
             throw new ArgumentNullException(nameof(Instructions));
 
+        // When in block buffering mode, use block size for measurement
+        int startSize = _mainBlock?.Size ?? 0;
         long nesPosition = _writer.BaseStream.Position;
+        int startCount = _mainBlock?.Count ?? 0;
+        
         for (int i = Index + 1; ; i++)
         {
             var instruction = Instructions[i];
@@ -269,9 +289,23 @@ class IL2NESWriter : NESWriter
             if (instruction.Offset >= stopAt)
                 break;
         }
-        byte numberOfInstructions = checked((byte)(_writer.BaseStream.Position - nesPosition));
-        SeekBack(numberOfInstructions);
-        return numberOfInstructions;
+        
+        byte numberOfBytes;
+        if (_mainBlock != null)
+        {
+            // Calculate from block size
+            numberOfBytes = checked((byte)(_mainBlock.Size - startSize));
+            // Remove the instructions we just added
+            int instructionsAdded = _mainBlock.Count - startCount;
+            RemoveLastInstructions(instructionsAdded);
+        }
+        else
+        {
+            // Original stream-based calculation
+            numberOfBytes = checked((byte)(_writer.BaseStream.Position - nesPosition));
+            SeekBack(numberOfBytes);
+        }
+        return numberOfBytes;
     }
 
     public void Write(ILInstruction instruction, string operand, ushort sizeOfMain)
@@ -282,10 +316,10 @@ class IL2NESWriter : NESWriter
                 break;
             case ILOpCode.Ldstr:
                 //TODO: hardcoded until string table figured out
-                Write(NESInstruction.LDA, 0xF1);
-                Write(NESInstruction.LDX, 0x85);
-                Write(NESInstruction.JSR, Labels["pushax"]);
-                Write(NESInstruction.LDX, 0x00);
+                Emit(NESInstruction.LDA, 0xF1);
+                Emit(NESInstruction.LDX, 0x85);
+                Emit(NESInstruction.JSR, Labels["pushax"]);
+                Emit(NESInstruction.LDX, 0x00);
                 if (operand.Length > ushort.MaxValue)
                 {
                     throw new NotImplementedException($"{instruction.OpCode} not implemented for value larger than ushort: {operand}");
@@ -318,14 +352,19 @@ class IL2NESWriter : NESWriter
                             nameof(NTADR_D) => NTADR_D(checked((byte)Stack.Pop()), checked((byte)Stack.Pop())),
                             _ => throw new InvalidOperationException($"Address lookup of {operand} not implemented!"),
                         };
-                        SeekBack(7);
+                        // Remove the two constants that were loaded
+                        // Typically: LDA #imm (2 bytes) + JSR pusha (3 bytes) + LDA #imm (2 bytes) = 7 bytes, 3 instructions
+                        if (_mainBlock != null)
+                            RemoveLastInstructions(3);
+                        else
+                            SeekBack(7);
                         //TODO: these are hardcoded until I figure this out
-                        Write(NESInstruction.LDX, 0x20);
-                        Write(NESInstruction.LDA, 0x42);
+                        Emit(NESInstruction.LDX, 0x20);
+                        Emit(NESInstruction.LDA, 0x42);
                         Stack.Push(address);
                         break;
                     default:
-                        Write(NESInstruction.JSR, GetAddress(operand));
+                        Emit(NESInstruction.JSR, GetAddress(operand));
                         break;
                 }
                 // Pop N times
@@ -363,8 +402,8 @@ class IL2NESWriter : NESWriter
                 // HACK: write these if next instruction is Call
                 if (Instructions is not null && Instructions[Index + 1].OpCode == ILOpCode.Call)
                 {
-                    Write(NESInstruction.LDA, (byte)(ByteArrayOffset & 0xff));
-                    Write(NESInstruction.LDX, (byte)(ByteArrayOffset >> 8));
+                    Emit(NESInstruction.LDA, (byte)(ByteArrayOffset & 0xff));
+                    Emit(NESInstruction.LDX, (byte)(ByteArrayOffset >> 8));
                 }
                 Stack.Push(ByteArrayOffset);
                 ByteArrayOffset = (ushort)(ByteArrayOffset + operand.Length);
@@ -464,22 +503,30 @@ class IL2NESWriter : NESWriter
         if (local.Value < byte.MaxValue)
         {
             LocalCount += 1;
-            SeekBack(2);
-            Write(NESInstruction.LDA, (byte)local.Value);
-            Write(NESInstruction.STA_abs, (ushort)local.Address);
-            Write(NESInstruction.LDA, 0x22);
-            Write(NESInstruction.LDX, 0x86);
+            // Remove the previous LDA instruction (1 instruction = 2 bytes)
+            if (_mainBlock != null)
+                RemoveLastInstructions(1);
+            else
+                SeekBack(2);
+            Emit(NESInstruction.LDA, (byte)local.Value);
+            Emit(NESInstruction.STA_abs, (ushort)local.Address);
+            Emit(NESInstruction.LDA, 0x22);
+            Emit(NESInstruction.LDX, 0x86);
         }
         else if (local.Value < ushort.MaxValue)
         {
             LocalCount += 2;
-            SeekBack(4);
-            Write(NESInstruction.LDX, 0x03);
-            Write(NESInstruction.LDA, 0xC0);
-            Write(NESInstruction.STA_abs, (ushort)local.Address);
-            Write(NESInstruction.STX_abs, (ushort)(local.Address + 1));
-            Write(NESInstruction.LDA, 0x28);
-            Write(NESInstruction.LDX, 0x86);
+            // Remove the previous LDX + LDA instructions (2 instructions = 4 bytes)
+            if (_mainBlock != null)
+                RemoveLastInstructions(2);
+            else
+                SeekBack(4);
+            Emit(NESInstruction.LDX, 0x03);
+            Emit(NESInstruction.LDA, 0xC0);
+            Emit(NESInstruction.STA_abs, (ushort)local.Address);
+            Emit(NESInstruction.STX_abs, (ushort)(local.Address + 1));
+            Emit(NESInstruction.LDA, 0x28);
+            Emit(NESInstruction.LDX, 0x86);
         }
         else
         {
@@ -491,10 +538,10 @@ class IL2NESWriter : NESWriter
     {
         if (LastLDA)
         {
-            Write(NESInstruction.JSR, Labels["pusha"]);
+            Emit(NESInstruction.JSR, Labels["pusha"]);
         }
-        Write(NESInstruction.LDX, checked((byte)(operand >> 8)));
-        Write(NESInstruction.LDA, checked((byte)(operand & 0xff)));
+        Emit(NESInstruction.LDX, checked((byte)(operand >> 8)));
+        Emit(NESInstruction.LDA, checked((byte)(operand & 0xff)));
         Stack.Push(operand);
     }
 
@@ -502,9 +549,9 @@ class IL2NESWriter : NESWriter
     {
         if (LastLDA)
         {
-            Write(NESInstruction.JSR, Labels["pusha"]);
+            Emit(NESInstruction.JSR, Labels["pusha"]);
         }
-        Write(NESInstruction.LDA, operand);
+        Emit(NESInstruction.LDA, operand);
         Stack.Push(operand);
     }
 
@@ -515,14 +562,14 @@ class IL2NESWriter : NESWriter
             // This is actually a local variable
             if (local.Value < byte.MaxValue)
             {
-                Write(NESInstruction.LDA_abs, (ushort)local.Address);
-                Write(NESInstruction.JSR, Labels["pusha"]);
+                Emit(NESInstruction.LDA_abs, (ushort)local.Address);
+                Emit(NESInstruction.JSR, Labels["pusha"]);
             }
             else if (local.Value < ushort.MaxValue)
             {
-                Write(NESInstruction.JSR, Labels["pusha"]);
-                Write(NESInstruction.LDA_abs, (ushort)local.Address);
-                Write(NESInstruction.LDX_abs, (ushort)(local.Address + 1));
+                Emit(NESInstruction.JSR, Labels["pusha"]);
+                Emit(NESInstruction.LDA_abs, (ushort)local.Address);
+                Emit(NESInstruction.LDX_abs, (ushort)(local.Address + 1));
             }
             else
             {
@@ -532,14 +579,152 @@ class IL2NESWriter : NESWriter
         else
         {
             // This is more like an inline constant value
-            Write(NESInstruction.LDA, (byte)(local.Value & 0xff));
-            Write(NESInstruction.LDX, (byte)(local.Value >> 8));
-            Write(NESInstruction.JSR, Labels["pushax"]);
-            Write(NESInstruction.LDX, 0x00);
-            Write(NESInstruction.LDA, 0x40);
+            Emit(NESInstruction.LDA, (byte)(local.Value & 0xff));
+            Emit(NESInstruction.LDX, (byte)(local.Value >> 8));
+            Emit(NESInstruction.JSR, Labels["pushax"]);
+            Emit(NESInstruction.LDX, 0x00);
+            Emit(NESInstruction.LDA, 0x40);
         }
         Stack.Push(local.Value);
     }
+
+    /// <summary>
+    /// Starts buffering instructions to a block instead of writing directly to stream.
+    /// </summary>
+    public void StartBlockBuffering()
+    {
+        _mainBlock = new Block();
+    }
+
+    /// <summary>
+    /// Removes the last N instructions from the main block.
+    /// Replaces the old SeekBack pattern when in block buffering mode.
+    /// </summary>
+    void RemoveLastInstructions(int count)
+    {
+        if (_mainBlock == null)
+            throw new InvalidOperationException("RemoveLastInstructions called but not in block buffering mode");
+        
+        LastLDA = false;
+        _logger.WriteLine($"Removing last {count} instruction(s) from block");
+        _mainBlock.RemoveLast(count);
+    }
+
+    /// <summary>
+    /// Emits an instruction to the main block (when buffering) or to stream (when not).
+    /// </summary>
+    void Emit(NESInstruction instruction)
+    {
+        if (_mainBlock != null)
+        {
+            var (opcode, mode) = ConvertNESInstruction(instruction);
+            _mainBlock.Emit(new Instruction(opcode, mode));
+            LastLDA = opcode == Opcode.LDA && mode == AddressMode.Immediate;
+        }
+        else
+        {
+            Write(instruction);
+        }
+    }
+
+    void Emit(NESInstruction instruction, byte operand)
+    {
+        if (_mainBlock != null)
+        {
+            var (opcode, mode) = ConvertNESInstruction(instruction);
+            Operand op = mode switch
+            {
+                AddressMode.Immediate => new ImmediateOperand(operand),
+                AddressMode.ZeroPage => new ImmediateOperand(operand),
+                AddressMode.ZeroPageX => new ImmediateOperand(operand),
+                AddressMode.ZeroPageY => new ImmediateOperand(operand),
+                AddressMode.Relative => new RelativeByteOperand((sbyte)operand),
+                _ => new ImmediateOperand(operand),
+            };
+            _mainBlock.Emit(new Instruction(opcode, mode, op));
+            LastLDA = opcode == Opcode.LDA && mode == AddressMode.Immediate;
+        }
+        else
+        {
+            Write(instruction, operand);
+        }
+    }
+
+    void Emit(NESInstruction instruction, ushort operand)
+    {
+        if (_mainBlock != null)
+        {
+            var (opcode, mode) = ConvertNESInstruction(instruction);
+            _mainBlock.Emit(new Instruction(opcode, mode, new AbsoluteOperand(operand)));
+            LastLDA = opcode == Opcode.LDA && mode == AddressMode.Immediate;
+        }
+        else
+        {
+            Write(instruction, operand);
+        }
+    }
+
+    static (Opcode opcode, AddressMode mode) ConvertNESInstruction(NESInstruction instruction)
+    {
+        return instruction switch
+        {
+            NESInstruction.LDA => (Opcode.LDA, AddressMode.Immediate),
+            NESInstruction.LDX => (Opcode.LDX, AddressMode.Immediate),
+            NESInstruction.LDY => (Opcode.LDY, AddressMode.Immediate),
+            NESInstruction.STA_zpg => (Opcode.STA, AddressMode.ZeroPage),
+            NESInstruction.STX_zpg => (Opcode.STX, AddressMode.ZeroPage),
+            NESInstruction.STY_zpg => (Opcode.STY, AddressMode.ZeroPage),
+            NESInstruction.STA_abs => (Opcode.STA, AddressMode.Absolute),
+            NESInstruction.STX_abs => (Opcode.STX, AddressMode.Absolute),
+            NESInstruction.LDA_abs => (Opcode.LDA, AddressMode.Absolute),
+            NESInstruction.LDX_abs => (Opcode.LDX, AddressMode.Absolute),
+            NESInstruction.LDA_zpg => (Opcode.LDA, AddressMode.ZeroPage),
+            NESInstruction.LDY_zpg => (Opcode.LDY, AddressMode.ZeroPage),
+            NESInstruction.JSR => (Opcode.JSR, AddressMode.Absolute),
+            NESInstruction.JMP_abs => (Opcode.JMP, AddressMode.Absolute),
+            NESInstruction.BNE_rel => (Opcode.BNE, AddressMode.Relative),
+            NESInstruction.BEQ_rel => (Opcode.BEQ, AddressMode.Relative),
+            NESInstruction.CMP => (Opcode.CMP, AddressMode.Immediate),
+            NESInstruction.CMP_zpg => (Opcode.CMP, AddressMode.ZeroPage),
+            NESInstruction.AND => (Opcode.AND, AddressMode.Immediate),
+            NESInstruction.ORA => (Opcode.ORA, AddressMode.Immediate),
+            NESInstruction.INC_zpg => (Opcode.INC, AddressMode.ZeroPage),
+            NESInstruction.DEC_zpg => (Opcode.DEC, AddressMode.ZeroPage),
+            NESInstruction.TAX_impl => (Opcode.TAX, AddressMode.Implied),
+            NESInstruction.TAY_impl => (Opcode.TAY, AddressMode.Implied),
+            NESInstruction.TXA_impl => (Opcode.TXA, AddressMode.Implied),
+            NESInstruction.TYA_impl => (Opcode.TYA, AddressMode.Implied),
+            NESInstruction.INX_impl => (Opcode.INX, AddressMode.Implied),
+            NESInstruction.INY_impl => (Opcode.INY, AddressMode.Implied),
+            NESInstruction.DEX_impl => (Opcode.DEX, AddressMode.Implied),
+            NESInstruction.DEY_impl => (Opcode.DEY, AddressMode.Implied),
+            NESInstruction.RTS_impl => (Opcode.RTS, AddressMode.Implied),
+            NESInstruction.PHA_impl => (Opcode.PHA, AddressMode.Implied),
+            NESInstruction.PLA_impl => (Opcode.PLA, AddressMode.Implied),
+            NESInstruction.SEC_impl => (Opcode.SEC, AddressMode.Implied),
+            NESInstruction.CLC => (Opcode.CLC, AddressMode.Implied),
+            NESInstruction.ADC => (Opcode.ADC, AddressMode.Immediate),
+            NESInstruction.SBC => (Opcode.SBC, AddressMode.Immediate),
+            _ => throw new NotImplementedException($"ConvertNESInstruction not implemented for {instruction}"),
+        };
+    }
+
+    /// <summary>
+    /// Flushes the buffered block to the stream and stops block buffering.
+    /// </summary>
+    public void FlushMainBlock()
+    {
+        if (_mainBlock == null)
+            throw new InvalidOperationException("FlushMainBlock called but not in block buffering mode");
+        
+        WriteBlock(_mainBlock);
+        _mainBlock = null;
+    }
+
+    /// <summary>
+    /// Gets the current size of the buffered block in bytes.
+    /// </summary>
+    int GetBlockSize() => _mainBlock?.Size ?? 0;
 
     void SeekBack(int length)
     {

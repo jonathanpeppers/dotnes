@@ -813,11 +813,17 @@ if (block != null)
 4. ✅ Added comprehensive unit tests in `src/dotnes.tests/BuiltInSubroutinesTests.cs` (25 tests)
 5. ✅ All 176 tests pass
 
-### Phase 4: Migrate IL Translation
+### Phase 4: Migrate IL Translation ✅ COMPLETED
 
-1. Update `IL2NESWriter` to emit to `Block` objects instead of stream
-2. Remove `SeekBack()` usage
-3. Use label-based branches instead of pre-calculated offsets
+1. ✅ Updated `IL2NESWriter` to emit to `Block` objects instead of stream:
+   - Added `_mainBlock` field for buffering instructions during IL translation
+   - Added `StartBlockBuffering()` / `FlushMainBlock()` methods to manage block mode
+   - Added `RemoveLastInstructions(int count)` to replace `SeekBack()` when in block mode
+   - Added `Emit()` overloads that route to block or stream depending on mode
+   - Added `ConvertNESInstruction()` static method mapping ~30 `NESInstruction` enum values to `(Opcode, AddressMode)` tuples
+2. ✅ Removed `SeekBack()` usage (conditionally uses `RemoveLastInstructions()` in block mode)
+3. ✅ Updated `Transpiler.SecondPass()` to enable block buffering
+4. ✅ All 188 tests pass with byte-identical ROM output
 
 ### Phase 5: Cleanup
 

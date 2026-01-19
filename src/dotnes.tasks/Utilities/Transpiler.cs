@@ -231,6 +231,9 @@ class Transpiler : IDisposable
         if (writer.Instructions is null)
             throw new ArgumentNullException(nameof(writer.Instructions));
 
+        // Enable block buffering for Phase 4 object model
+        writer.StartBlockBuffering();
+
         for (int i = 0; i < writer.Instructions.Length; i++)
         {
             writer.Index = i;
@@ -252,6 +255,9 @@ class Transpiler : IDisposable
                 writer.Write(instruction, sizeOfMain);
             }
         }
+
+        // Flush the block to the stream
+        writer.FlushMainBlock();
     }
 
     /// <summary>
