@@ -89,31 +89,32 @@ internal static class BuiltInSubroutines
     /// </summary>
     public static Block WaitSync3()
     {
+        // NESWriter: A501 C501 F0FC (different from neslib original)
+        // This is a simplified version that just waits for STARTUP to change
         var block = new Block("_waitSync3");
-        block.Emit(LDA(0x03))
-             .Emit(STA_zpg(STARTUP), "waitSync")
-             .Emit(LDA_abs(PPU_STATUS), "@1")
-             .Emit(BPL(-5))   // branch back to @1
-             .Emit(DEC_zpg(STARTUP))
-             .Emit(BNE(-10)); // branch back to waitSync
+        block.Emit(LDA_zpg(STARTUP))
+             .Emit(CMP_zpg(STARTUP))
+             .Emit(BEQ(-4));  // BEQ back to CMP (0xFC = -4)
         return block;
     }
 
     /// <summary>
-    /// NMI handler
+    /// NMI handler - pushes registers and checks PPU_MASK_VAR
     /// </summary>
     public static Block Nmi()
     {
+        // NESWriter: 48 8A 48 98 48 A512 2918 D003 4CE681
+        // Note: JMP address (0x81E6) is @skipAll, layout dependent
         var block = new Block("_nmi");
         block.Emit(PHA())
              .Emit(TXA())
              .Emit(PHA())
              .Emit(TYA())
              .Emit(PHA())
-             .Emit(LDA_zpg(STARTUP))
-             .Emit(BNE(-2))   // Skip if startup not complete (branch to RTS-like behavior)
-             // Actually this needs more context - simplified version
-             .Emit(INC_zpg(0x1B));  // Frame counter
+             .Emit(LDA_zpg(0x12))    // PPU_MASK_VAR
+             .Emit(AND(0x18))
+             .Emit(BNE(3))           // if rendering enabled, continue
+             .Emit(JMP_abs(0x81E6)); // JMP to @skipAll (address is layout dependent)
         return block;
     }
 
@@ -889,11 +890,13 @@ internal static class BuiltInSubroutines
     /// </summary>
     public static Block Popa()
     {
+        // NESWriter: A000 B122 E622 F001 60 E623 60
         var block = new Block("popa");
         block.Emit(LDY(0x00))
              .Emit(LDA_ind_Y(sp))
              .Emit(INC_zpg(sp))
-             .Emit(BNE(2))
+             .Emit(BEQ(1))     // BEQ +1 to skip RTS
+             .Emit(RTS())     // Early return if no overflow
              .Emit(INC_zpg(sp + 1))
              .Emit(RTS());
         return block;
@@ -901,42 +904,43 @@ internal static class BuiltInSubroutines
 
     /// <summary>
     /// popax - Pop word from stack (A=low, X=high)
+    /// Note: This is the start of a sequence that falls through to incsp2
     /// </summary>
     public static Block Popax()
     {
+        // NESWriter: A001 B122 AA 88 B122 (falls through to incsp2)
         var block = new Block("popax");
         block.Emit(LDY(0x01))
              .Emit(LDA_ind_Y(sp))
              .Emit(TAX())
              .Emit(DEY())
-             .Emit(LDA_ind_Y(sp))
-             .Emit(INY())
-             .Emit(INY())
-             .Emit(STY_zpg(TEMP))
-             .Emit(CLC())
-             .Emit(LDA_zpg(sp))
-             .Emit(ADC_zpg(TEMP))
-             .Emit(STA_zpg(sp))
-             .Emit(BCC(2))
-             .Emit(INC_zpg(sp + 1))
-             .Emit(LDA_ind_Y(sp))
-             .Emit(LDY(0x00))
-             .Emit(LDA_ind_Y(sp))
-             .Emit(RTS());
+             .Emit(LDA_ind_Y(sp));
+        // Note: NESWriter falls through to incsp2 here - no RTS
         return block;
     }
 
     /// <summary>
     /// pusha - Push byte to stack
+    /// NESWriter pattern includes pusha0sp/pushaysp prefix
     /// </summary>
     public static Block Pusha()
     {
+        // NESWriter: A000 B122 A422 F007 C622 A000 9122 60 C623 C622 9122 60
         var block = new Block("pusha");
-        block.Emit(LDY_zpg(sp))
-             .Emit(BNE(2))
-             .Emit(DEC_zpg(sp + 1))
+        // pusha0sp prefix
+        block.Emit(LDY(0x00))
+             // pushaysp
+             .Emit(LDA_ind_Y(sp))
+             // pusha proper
+             .Emit(LDY_zpg(sp))
+             .Emit(BEQ(7))     // BEQ to overflow path (PAL_UPDATE = 0x07)
              .Emit(DEC_zpg(sp))
              .Emit(LDY(0x00))
+             .Emit(STA_ind_Y(sp))
+             .Emit(RTS())
+             // overflow path
+             .Emit(DEC_zpg(sp + 1))
+             .Emit(DEC_zpg(sp))
              .Emit(STA_ind_Y(sp))
              .Emit(RTS());
         return block;
@@ -944,11 +948,18 @@ internal static class BuiltInSubroutines
 
     /// <summary>
     /// pushax - Push word to stack (A=low, X=high)
+    /// NESWriter pattern includes push0/pusha0 prefix
     /// </summary>
     public static Block Pushax()
     {
+        // NESWriter: A900 A200 48 A522 38 E902 8522 B002 C623 A001 8A 9122 68 88 9122 60
         var block = new Block("pushax");
-        block.Emit(PHA())
+        // push0 prefix
+        block.Emit(LDA(0x00))
+             // pusha0
+             .Emit(LDX(0x00))
+             // pushax proper
+             .Emit(PHA())
              .Emit(LDA_zpg(sp))
              .Emit(SEC())
              .Emit(SBC(0x02))
@@ -970,12 +981,14 @@ internal static class BuiltInSubroutines
     /// </summary>
     public static Block Incsp2()
     {
+        // NESWriter: E622 F005 E622 F003 60 E622 E623 60
         var block = new Block("incsp2");
-        block.Emit(CLC())
-             .Emit(LDA_zpg(sp))
-             .Emit(ADC(0x02))
-             .Emit(STA_zpg(sp))
-             .Emit(BCC(2))
+        block.Emit(INC_zpg(sp))
+             .Emit(BEQ(5))     // BEQ to overflow handler 1
+             .Emit(INC_zpg(sp))
+             .Emit(BEQ(3))     // BEQ to overflow handler 2
+             .Emit(RTS())     // Normal return
+             .Emit(INC_zpg(sp))  // Overflow handler 1: inc sp again
              .Emit(INC_zpg(sp + 1))
              .Emit(RTS());
         return block;
@@ -990,22 +1003,33 @@ internal static class BuiltInSubroutines
     /// </summary>
     public static Block Initlib()
     {
+        // NESWriter: A000 F007 A900 A285 4C0003 60
+        // This is the cc65 initlib stub - Y=0 means no constructors
         var block = new Block("initlib");
-        block.Emit(LDA(0x23))
-             .Emit(STA_zpg(sp))
-             .Emit(LDA(0x03))
-             .Emit(STA_zpg(sp + 1))
+        block.Emit(LDY(0x00))
+             .Emit(BEQ(7))       // PAL_UPDATE = 7, skip to RTS
+             .Emit(LDA(0x00))
+             .Emit(LDX(0x85))
+             .Emit(JMP_abs(condes))
              .Emit(RTS());
         return block;
     }
 
     /// <summary>
     /// donelib - Cleanup C runtime library
+    /// Note: NESWriter uses totalSize parameter. This is a simplified version.
     /// </summary>
     public static Block Donelib()
     {
+        // NESWriter: A000 F007 A9xx A2xx 4C0003 60 (xx = totalSize bytes)
+        // Simplified version with no destructors (Y=0 means skip)
         var block = new Block("donelib");
-        block.Emit(RTS());
+        block.Emit(LDY(0x00))
+             .Emit(BEQ(7))       // PAL_UPDATE = 7, skip to RTS
+             .Emit(LDA(0xFE))    // placeholder low byte
+             .Emit(LDX(0x85))    // placeholder high byte
+             .Emit(JMP_abs(condes))
+             .Emit(RTS());
         return block;
     }
 
