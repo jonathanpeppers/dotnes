@@ -26,11 +26,6 @@ class IL2NESWriter : NESWriter
     /// List of byte[] data
     /// </summary>
     readonly List<ImmutableArray<byte>> ByteArrays = new();
-    /// <summary>
-    /// Block to buffer emitted instructions (for SeekBack replacement).
-    /// When non-null, Write methods emit here instead of to stream.
-    /// </summary>
-    Block? _mainBlock;
     readonly ushort local = 0x324;
     readonly ReflectionCache _reflectionCache = new();
     ushort ByteArrayOffset = 0;
@@ -63,7 +58,7 @@ class IL2NESWriter : NESWriter
     public void RecordLabel(ILInstruction instruction)
     {
         // When in block buffering mode, include the buffered block size in the address calculation
-        var address = _writer.BaseStream.Position + BaseAddress + GetBlockSize();
+        var address = _writer.BaseStream.Position + BaseAddress + GetBufferedBlockSize();
         Labels.Add($"instruction_{instruction.Offset:X2}", (ushort)address);
     }
 
@@ -259,11 +254,11 @@ class IL2NESWriter : NESWriter
             throw new ArgumentNullException(nameof(Instructions));
 
         // Use block size for measurement
-        if (_mainBlock == null)
+        if (_bufferedBlock == null)
             throw new InvalidOperationException("NumberOfInstructionsForBranch requires block buffering mode");
         
-        int startSize = _mainBlock.Size;
-        int startCount = _mainBlock.Count;
+        int startSize = GetBufferedBlockSize();
+        int startCount = GetBufferedBlockCount();
         
         for (int i = Index + 1; ; i++)
         {
@@ -289,9 +284,9 @@ class IL2NESWriter : NESWriter
         }
         
         // Calculate from block size
-        byte numberOfBytes = checked((byte)(_mainBlock.Size - startSize));
+        byte numberOfBytes = checked((byte)(GetBufferedBlockSize() - startSize));
         // Remove the instructions we just added
-        int instructionsAdded = _mainBlock.Count - startCount;
+        int instructionsAdded = GetBufferedBlockCount() - startCount;
         RemoveLastInstructions(instructionsAdded);
         return numberOfBytes;
     }
@@ -414,70 +409,61 @@ class IL2NESWriter : NESWriter
         }
     }
 
+    /// <summary>
+    /// Gets the address of a built-in subroutine by looking up its label.
+    /// The label names match the block names in BuiltInSubroutines.
+    /// </summary>
     ushort GetAddress(string name)
     {
-        switch (name)
+        // Map NESLib method names to their block label names
+        // Most labels match the method name, but some have different casing or prefixes
+        string labelName = name switch
         {
-            case nameof(pal_col):
-                return 0x823E;
-            case nameof(pal_bg):
-                return 0x822B;
-            case nameof(pal_clear):
-                return 0x824E;
-            case nameof(pal_all):
-                return 0x8211;
-            case nameof(pal_spr):
-                return 0x8235;
-            case nameof(pal_spr_bright):
-                return 0x825D;
-            case nameof(ppu_on_all):
-                return 0x8289;
-            case nameof(vram_adr):
-                return 0x83D4;
-            case nameof(ppu_wait_frame):
-                return 0x82DB;
-            case nameof(ppu_on_bg):
-                return 0x8292;
-            case nameof(ppu_on_spr):
-                return 0x8298;
-            case nameof(rand):
-                return 0x860C;
-            case nameof(rand8):
-                return 0x860C;
-            case nameof(rand16):
-                return 0x8617;
-            case nameof(set_rand):
-                return 0x8623;
-            case nameof(delay):
-                return 0x841A;
-            case nameof(nesclock):
-                return 0x8415;
-            case nameof(oam_clear):
-                return 0x82AE;
-            case nameof(oam_hide_rest):
-                return 0x82CE;
-            case nameof(oam_size):
-                return 0x82BC;
-            case nameof(vram_fill):
-                return 0x83DF;
-            case nameof(vram_write):
-                return 0x834F;
-            case nameof(vram_put):
-                return 0x83DB;
-            case nameof(vram_inc):
-                return 0x8401;
-            case nameof(set_vram_update):
-                return 0x8376;
-            case nameof(set_ppu_ctrl_var):
-                return 0x82AB;
-            case nameof(scroll):
-                return 0x82FB;
-            case nameof(oam_spr):
-            case nameof(pad_poll):
-                return Labels.TryGetValue(name, out var address) ? address : (ushort)0;
-            default:
-                throw new NotImplementedException($"{nameof(GetAddress)} for {name} is not implemented!");
+            // These map directly (same name)
+            nameof(pal_col) => "pal_col",
+            nameof(pal_bg) => "pal_bg",
+            nameof(pal_clear) => "pal_clear",
+            nameof(pal_all) => "pal_all",
+            nameof(pal_spr) => "pal_spr",
+            nameof(pal_spr_bright) => "pal_spr_bright",
+            nameof(ppu_on_all) => "ppu_on_all",
+            nameof(vram_adr) => "vram_adr",
+            nameof(ppu_wait_frame) => "ppu_wait_frame",
+            nameof(ppu_on_bg) => "ppu_on_bg",
+            nameof(ppu_on_spr) => "ppu_on_spr",
+            nameof(delay) => "delay",
+            nameof(nesclock) => "nesclock",
+            nameof(oam_clear) => "oam_clear",
+            nameof(oam_hide_rest) => "oam_hide_rest",
+            nameof(oam_size) => "oam_size",
+            nameof(vram_fill) => "vram_fill",
+            nameof(vram_write) => "vram_write",
+            nameof(vram_put) => "vram_put",
+            nameof(vram_inc) => "vram_inc",
+            nameof(set_vram_update) => "set_vram_update",
+            nameof(set_ppu_ctrl_var) => "set_ppu_ctrl_var",
+            nameof(scroll) => "scroll",
+            // Optional methods - may not have labels until WriteFinalBuiltIns is called
+            nameof(oam_spr) or nameof(pad_poll) => name,
+            // rand functions - not yet implemented as built-ins
+            nameof(rand) or nameof(rand8) or nameof(rand16) or nameof(set_rand) => name,
+            _ => throw new NotImplementedException($"{nameof(GetAddress)} for {name} is not implemented!")
+        };
+
+        // Look up the label; return 0 for optional methods that haven't been written yet
+        if (Labels.TryGetValue(labelName, out var address))
+        {
+            return address;
         }
+        
+        // For optional methods (oam_spr, pad_poll) and unimplemented methods (rand*),
+        // return 0 as placeholder - actual address will be calculated on second pass
+        if (labelName is "oam_spr" or "pad_poll" or "rand" or "rand8" or "rand16" or "set_rand")
+        {
+            return 0;
+        }
+        
+        throw new InvalidOperationException($"Label '{labelName}' not found in Labels dictionary. Ensure WriteBuiltIns() has been called.");
     }
 
     void WriteStloc(Local local)
@@ -568,80 +554,8 @@ class IL2NESWriter : NESWriter
     }
 
     /// <summary>
-    /// Starts buffering instructions to a block instead of writing directly to stream.
-    /// </summary>
-    public void StartBlockBuffering()
-    {
-        _mainBlock = new Block();
-    }
-
-    /// <summary>
-    /// Removes the last N instructions from the main block.
-    /// Replaces the old SeekBack pattern when in block buffering mode.
-    /// </summary>
-    void RemoveLastInstructions(int count)
-    {
-        if (_mainBlock == null)
-            throw new InvalidOperationException("RemoveLastInstructions called but not in block buffering mode");
-        
-        LastLDA = false;
-        _logger.WriteLine($"Removing last {count} instruction(s) from block");
-        _mainBlock.RemoveLast(count);
-    }
-
-    /// <summary>
-    /// Emits an instruction to the main block. Requires block buffering mode.
-    /// </summary>
-    void Emit(Opcode opcode, AddressMode mode = AddressMode.Implied)
-    {
-        if (_mainBlock == null)
-            throw new InvalidOperationException("Emit requires block buffering mode. Call StartBlockBuffering() first.");
-        
-        _mainBlock.Emit(new Instruction(opcode, mode));
-        LastLDA = opcode == Opcode.LDA && mode == AddressMode.Immediate;
-    }
-
-    void Emit(Opcode opcode, AddressMode mode, byte operand)
-    {
-        if (_mainBlock == null)
-            throw new InvalidOperationException("Emit requires block buffering mode. Call StartBlockBuffering() first.");
-        
-        Operand op = mode switch
-        {
-            AddressMode.Immediate => new ImmediateOperand(operand),
-            AddressMode.ZeroPage => new ImmediateOperand(operand),
-            AddressMode.ZeroPageX => new ImmediateOperand(operand),
-            AddressMode.ZeroPageY => new ImmediateOperand(operand),
-            AddressMode.Relative => new RelativeByteOperand((sbyte)operand),
-            _ => new ImmediateOperand(operand),
-        };
-        _mainBlock.Emit(new Instruction(opcode, mode, op));
-        LastLDA = opcode == Opcode.LDA && mode == AddressMode.Immediate;
-    }
-
-    void Emit(Opcode opcode, AddressMode mode, ushort operand)
-    {
-        if (_mainBlock == null)
-            throw new InvalidOperationException("Emit requires block buffering mode. Call StartBlockBuffering() first.");
-        
-        _mainBlock.Emit(new Instruction(opcode, mode, new AbsoluteOperand(operand)));
-        LastLDA = opcode == Opcode.LDA && mode == AddressMode.Immediate;
-    }
-
-    /// <summary>
     /// Flushes the buffered block to the stream and stops block buffering.
+    /// Wrapper for FlushBufferedBlock() for backward compatibility.
     /// </summary>
-    public void FlushMainBlock()
-    {
-        if (_mainBlock == null)
-            throw new InvalidOperationException("FlushMainBlock called but not in block buffering mode");
-        
-        WriteBlock(_mainBlock);
-        _mainBlock = null;
-    }
-
-    /// <summary>
-    /// Gets the current size of the buffered block in bytes.
-    /// </summary>
-    int GetBlockSize() => _mainBlock?.Size ?? 0;
+    public void FlushMainBlock() => FlushBufferedBlock();
 }

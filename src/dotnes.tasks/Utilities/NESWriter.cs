@@ -98,6 +98,12 @@ class NESWriter : IDisposable
 
     public Dictionary<string, ushort> Labels { get; private set; } = new();
     private bool _hasPresetLabels = false;
+
+    /// <summary>
+    /// Block to buffer emitted instructions for deferred writing.
+    /// When non-null, Emit methods add instructions here instead of writing to stream.
+    /// </summary>
+    protected Block? _bufferedBlock;
     
     /// <summary>
     /// Stream offset where code begins. Used to calculate correct addresses when
@@ -459,6 +465,94 @@ class NESWriter : IDisposable
             LastLDA = lastInstr.Opcode == Opcode.LDA && lastInstr.Mode == AddressMode.Immediate;
         }
     }
+
+    /// <summary>
+    /// Starts buffering instructions to a block instead of writing directly to stream.
+    /// </summary>
+    public void StartBlockBuffering()
+    {
+        _bufferedBlock = new Block();
+    }
+
+    /// <summary>
+    /// Flushes the buffered block to the stream and stops block buffering.
+    /// </summary>
+    public void FlushBufferedBlock()
+    {
+        if (_bufferedBlock == null)
+            throw new InvalidOperationException("FlushBufferedBlock called but not in block buffering mode");
+        
+        WriteBlock(_bufferedBlock);
+        _bufferedBlock = null;
+    }
+
+    /// <summary>
+    /// Gets the current size of the buffered block in bytes.
+    /// </summary>
+    protected int GetBufferedBlockSize() => _bufferedBlock?.Size ?? 0;
+
+    /// <summary>
+    /// Removes the last N instructions from the buffered block.
+    /// </summary>
+    protected void RemoveLastInstructions(int count)
+    {
+        if (_bufferedBlock == null)
+            throw new InvalidOperationException("RemoveLastInstructions called but not in block buffering mode");
+        
+        LastLDA = false;
+        _logger.WriteLine($"Removing last {count} instruction(s) from block");
+        _bufferedBlock.RemoveLast(count);
+    }
+
+    /// <summary>
+    /// Emits an implied instruction to the buffered block.
+    /// </summary>
+    protected void Emit(Opcode opcode, AddressMode mode = AddressMode.Implied)
+    {
+        if (_bufferedBlock == null)
+            throw new InvalidOperationException("Emit requires block buffering mode. Call StartBlockBuffering() first.");
+        
+        _bufferedBlock.Emit(new Instruction(opcode, mode));
+        LastLDA = opcode == Opcode.LDA && mode == AddressMode.Immediate;
+    }
+
+    /// <summary>
+    /// Emits an instruction with a byte operand to the buffered block.
+    /// </summary>
+    protected void Emit(Opcode opcode, AddressMode mode, byte operand)
+    {
+        if (_bufferedBlock == null)
+            throw new InvalidOperationException("Emit requires block buffering mode. Call StartBlockBuffering() first.");
+        
+        Operand op = mode switch
+        {
+            AddressMode.Immediate => new ImmediateOperand(operand),
+            AddressMode.ZeroPage => new ImmediateOperand(operand),
+            AddressMode.ZeroPageX => new ImmediateOperand(operand),
+            AddressMode.ZeroPageY => new ImmediateOperand(operand),
+            AddressMode.Relative => new RelativeByteOperand((sbyte)operand),
+            _ => new ImmediateOperand(operand),
+        };
+        _bufferedBlock.Emit(new Instruction(opcode, mode, op));
+        LastLDA = opcode == Opcode.LDA && mode == AddressMode.Immediate;
+    }
+
+    /// <summary>
+    /// Emits an instruction with an address operand to the buffered block.
+    /// </summary>
+    protected void Emit(Opcode opcode, AddressMode mode, ushort operand)
+    {
+        if (_bufferedBlock == null)
+            throw new InvalidOperationException("Emit requires block buffering mode. Call StartBlockBuffering() first.");
+        
+        _bufferedBlock.Emit(new Instruction(opcode, mode, new AbsoluteOperand(operand)));
+        LastLDA = opcode == Opcode.LDA && mode == AddressMode.Immediate;
+    }
+
+    /// <summary>
+    /// Gets the current count of instructions in the buffered block.
+    /// </summary>
+    protected int GetBufferedBlockCount() => _bufferedBlock?.Count ?? 0;
 
     public void Flush() => _writer.Flush();
 
