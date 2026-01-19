@@ -257,16 +257,17 @@ class NESWriter : IDisposable
         WriteBlock(BuiltInSubroutines.VramInc());
         WriteBlock(BuiltInSubroutines.NesClock());
         WriteBlock(BuiltInSubroutines.Delay());
-        Write(NESLib.palBrightTableL);
-        Write(NESLib.palBrightTable0);
-        Write(NESLib.palBrightTable1);
-        Write(NESLib.palBrightTable2);
-        Write(NESLib.palBrightTable3);
-        Write(NESLib.palBrightTable4);
-        Write(NESLib.palBrightTable5);
-        Write(NESLib.palBrightTable6);
-        Write(NESLib.palBrightTable7);
-        Write(NESLib.palBrightTable8);
+        // Write brightness tables as data blocks
+        WriteBlock(Block.FromRawData(NESLib.palBrightTableL));
+        WriteBlock(Block.FromRawData(NESLib.palBrightTable0));
+        WriteBlock(Block.FromRawData(NESLib.palBrightTable1));
+        WriteBlock(Block.FromRawData(NESLib.palBrightTable2));
+        WriteBlock(Block.FromRawData(NESLib.palBrightTable3));
+        WriteBlock(Block.FromRawData(NESLib.palBrightTable4));
+        WriteBlock(Block.FromRawData(NESLib.palBrightTable5));
+        WriteBlock(Block.FromRawData(NESLib.palBrightTable6));
+        WriteBlock(Block.FromRawData(NESLib.palBrightTable7));
+        WriteBlock(Block.FromRawData(NESLib.palBrightTable8));
         WriteBlock(BuiltInSubroutines.Initlib());
     }
 
@@ -358,13 +359,16 @@ class NESWriter : IDisposable
 
     private void SetLabel(string name, ushort address)
     {
-        if (_hasPresetLabels)
+        // Skip setting if labels are preset AND the label already has a non-zero value
+        // (allows updating forward references that were initialized to 0)
+        if (_hasPresetLabels && Labels.TryGetValue(name, out var existing) && existing != 0)
             return;
         Labels[name] = address;
     }
 
     /// <summary>
     /// Writes a Block to the stream, resolving any label references using the Labels dictionary.
+    /// Supports both instruction blocks and data blocks.
     /// </summary>
     public void WriteBlock(Block block)
     {
@@ -374,6 +378,14 @@ class NESWriter : IDisposable
         if (block.Label != null)
         {
             SetLabel(block.Label, (ushort)(currentAddress + block.LabelOffset));
+        }
+
+        // Handle data blocks (raw bytes)
+        if (block.IsDataBlock && block.RawData != null)
+        {
+            _writer.Write(block.RawData);
+            LastLDA = false;
+            return;
         }
         
         // Build a local label table for intra-block labels
@@ -553,6 +565,43 @@ class NESWriter : IDisposable
     /// Gets the current count of instructions in the buffered block.
     /// </summary>
     protected int GetBufferedBlockCount() => _bufferedBlock?.Count ?? 0;
+
+    /// <summary>
+    /// Writes all blocks from a Program6502 to the stream.
+    /// This uses the object model's pre-resolved labels for consistent addresses.
+    /// </summary>
+    public void WriteFromProgram6502(Program6502 program)
+    {
+        // Ensure addresses are resolved
+        program.ResolveAddresses();
+        
+        // Copy labels from Program6502 to NESWriter (if not preset)
+        if (!_hasPresetLabels)
+        {
+            foreach (var kvp in program.GetLabels())
+            {
+                Labels[kvp.Key] = kvp.Value;
+            }
+        }
+        
+        // Write each block using WriteBlock (which handles instruction encoding)
+        foreach (var block in program.Blocks)
+        {
+            WriteBlock(block);
+        }
+        
+        // Write raw data (brightness tables, etc.)
+        var programBytes = program.ToBytes();
+        int blocksSize = 0;
+        foreach (var block in program.Blocks)
+            blocksSize += block.Size;
+        
+        // Only write the raw data portion (bytes after blocks)
+        if (programBytes.Length > blocksSize)
+        {
+            _writer.Write(programBytes, blocksSize, programBytes.Length - blocksSize);
+        }
+    }
 
     public void Flush() => _writer.Flush();
 

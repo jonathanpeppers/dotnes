@@ -1,7 +1,8 @@
 namespace dotnes.ObjectModel;
 
 /// <summary>
-/// Represents a contiguous sequence of instructions, typically a subroutine
+/// Represents a contiguous sequence of instructions, typically a subroutine.
+/// Can also represent raw data bytes (e.g., lookup tables).
 /// </summary>
 public class Block
 {
@@ -17,6 +18,14 @@ public class Block
     }
 
     /// <summary>
+    /// Creates a data-only block containing raw bytes
+    /// </summary>
+    public static Block FromRawData(byte[] data, string? label = null)
+    {
+        return new Block(label) { RawData = data };
+    }
+
+    /// <summary>
     /// Optional label for this block (e.g., subroutine name)
     /// </summary>
     public string? Label { get; set; }
@@ -28,14 +37,24 @@ public class Block
     public int LabelOffset { get; set; }
 
     /// <summary>
-    /// Number of instructions in this block
+    /// Raw data bytes for data-only blocks. When set, instructions are ignored.
     /// </summary>
-    public int Count => _instructions.Count;
+    public byte[]? RawData { get; set; }
+
+    /// <summary>
+    /// Returns true if this block contains raw data instead of instructions
+    /// </summary>
+    public bool IsDataBlock => RawData != null;
+
+    /// <summary>
+    /// Number of instructions in this block (0 for data blocks)
+    /// </summary>
+    public int Count => RawData != null ? 0 : _instructions.Count;
 
     /// <summary>
     /// Total size in bytes
     /// </summary>
-    public int Size => _instructions.Sum(i => i.Instruction.Size);
+    public int Size => RawData?.Length ?? _instructions.Sum(i => i.Instruction.Size);
 
     /// <summary>
     /// Gets instruction at the specified index

@@ -4,6 +4,7 @@ using System.Reflection;
 using System.Reflection.Metadata;
 using System.Reflection.Metadata.Ecma335;
 using System.Reflection.PortableExecutable;
+using dotnes.ObjectModel;
 
 namespace dotnes;
 
@@ -29,12 +30,16 @@ class Transpiler : IDisposable
 
     /// <summary>
     /// Figure out the addresses of functions so we can use to them for JMPs.
-    /// TODO: ASM-type labels would be nice...
+    /// Uses Program6502 object model for built-in labels.
     /// </summary>
-    /// <param name="sizeOfMain"></param>
-    /// <returns></returns>
     private Dictionary<string, ushort> CalculateAddressLabels(ILInstruction[] instructions)
     {
+        // Get built-in labels from Program6502 object model
+        var builtInsProgram = Program6502.CreateWithBuiltIns();
+        builtInsProgram.ResolveAddresses();
+        var labels = builtInsProgram.GetLabels();
+        int builtInsSize = builtInsProgram.TotalSize;
+
         using var ms = new MemoryStream();
         using var writer = new IL2NESWriter(ms, logger: _logger)
         {
@@ -42,13 +47,16 @@ class Transpiler : IDisposable
             Instructions = instructions,
         };
 
+        // Set pre-computed built-in labels
+        writer.SetLabels(labels);
+
+        // Advance stream position to account for built-ins
+        writer.WriteZeroes(builtInsSize);
+
         // Enable block buffering
         writer.StartBlockBuffering();
 
-        // Write built-in functions
-        writer.WriteBuiltIns();
-
-        // Write main program
+        // Write main program to calculate IL labels (branch targets, etc.)
         for (int i = 0; i < writer.Instructions.Length; i++)
         {
             writer.Index = i;

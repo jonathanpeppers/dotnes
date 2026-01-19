@@ -669,5 +669,54 @@ public class Program6502WriterTests
         Assert.True(size > 1000, $"Expected > 1000 bytes, got {size}");
     }
 
+    [Fact]
+    public void CreateWithBuiltIns_ProducesSameLabelsAsNESWriter()
+    {
+        // Build program using new object model
+        var program = Program6502.CreateWithBuiltIns();
+        program.ResolveAddresses();
+        var programLabels = program.GetLabels();
+
+        // Build using NESWriter approach
+        using var ms = new MemoryStream();
+        using var writer = new NESWriter(ms, leaveOpen: true);
+        writer.WriteBuiltIns();
+        var writerLabels = writer.Labels;
+
+        // Compare key labels that WriteBuiltIns defines
+        var labelsToCheck = new[]
+        {
+            "pal_col", "pal_bg", "pal_all", "pal_spr", "pal_clear",
+            "ppu_on_all", "ppu_on_bg", "ppu_on_spr", "ppu_off",
+            "vram_adr", "vram_write", "vram_put", "vram_fill",
+            "oam_clear", "oam_size", "oam_hide_rest",
+            "scroll", "delay", "nesclock", "initlib"
+        };
+
+        foreach (var label in labelsToCheck)
+        {
+            Assert.True(writerLabels.ContainsKey(label), $"NESWriter missing label: {label}");
+            Assert.True(programLabels.ContainsKey(label), $"Program6502 missing label: {label}");
+            Assert.Equal(writerLabels[label], programLabels[label]);
+        }
+    }
+
+    [Fact]
+    public void CreateWithBuiltIns_ProducesSameBytesAsNESWriter()
+    {
+        // Build program using new object model
+        var program = Program6502.CreateWithBuiltIns();
+        var programBytes = program.ToBytes();
+
+        // Build using NESWriter approach
+        using var ms = new MemoryStream();
+        using var writer = new NESWriter(ms, leaveOpen: true);
+        writer.WriteBuiltIns();
+        var writerBytes = ms.ToArray();
+
+        Assert.Equal(writerBytes.Length, programBytes.Length);
+        Assert.Equal(writerBytes, programBytes);
+    }
+
     #endregion
 }

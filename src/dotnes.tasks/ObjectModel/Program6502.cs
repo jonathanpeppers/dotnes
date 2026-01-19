@@ -9,7 +9,6 @@ public class Program6502
     private readonly List<Block> _blocks = new();
     private readonly LabelTable _labels = new();
     private readonly Dictionary<string, ushort> _externalLabels = new();
-    private readonly List<byte[]> _rawData = new();
     private bool _addressesValid = false;
 
     /// <summary>
@@ -38,7 +37,7 @@ public class Program6502
     }
 
     /// <summary>
-    /// Total size in bytes of all blocks
+    /// Total size in bytes of all blocks (including data blocks)
     /// </summary>
     public int TotalSize
     {
@@ -47,8 +46,6 @@ public class Program6502
             int size = 0;
             foreach (var block in _blocks)
                 size += block.Size;
-            foreach (var data in _rawData)
-                size += data.Length;
             return size;
         }
     }
@@ -116,16 +113,13 @@ public class Program6502
     }
 
     /// <summary>
-    /// Adds raw byte data to the program (e.g., lookup tables)
+    /// Adds raw byte data as an inline data block (e.g., lookup tables).
+    /// Data blocks are written in order with other blocks.
     /// </summary>
     public void AddRawData(byte[] data, string? label = null)
     {
-        if (label != null)
-        {
-            // We'll define the label when resolving addresses
-            // For now, store the intent
-        }
-        _rawData.Add(data);
+        var dataBlock = Block.FromRawData(data, label);
+        _blocks.Add(dataBlock);
         _addressesValid = false;
     }
 
@@ -149,19 +143,21 @@ public class Program6502
             if (block.Label != null)
                 _labels.DefineOrUpdate(block.Label, currentAddress);
 
-            // Define instruction labels and advance address
-            foreach (var (instruction, label) in block.InstructionsWithLabels)
+            if (block.IsDataBlock)
             {
-                if (label != null)
-                    _labels.DefineOrUpdate(label, currentAddress);
-                currentAddress += (ushort)instruction.Size;
+                // Data blocks just advance the address by their size
+                currentAddress += (ushort)block.Size;
             }
-        }
-
-        // Raw data comes after all blocks
-        foreach (var data in _rawData)
-        {
-            currentAddress += (ushort)data.Length;
+            else
+            {
+                // Define instruction labels and advance address
+                foreach (var (instruction, label) in block.InstructionsWithLabels)
+                {
+                    if (label != null)
+                        _labels.DefineOrUpdate(label, currentAddress);
+                    currentAddress += (ushort)instruction.Size;
+                }
+            }
         }
 
         _addressesValid = true;
@@ -180,17 +176,22 @@ public class Program6502
 
         foreach (var block in _blocks)
         {
-            foreach (var entry in block.InstructionsWithLabels)
+            if (block.IsDataBlock && block.RawData != null)
             {
-                var bytes = entry.Instruction.ToBytes(currentAddress, _labels);
-                ms.Write(bytes, 0, bytes.Length);
-                currentAddress += (ushort)bytes.Length;
+                // Write raw data bytes directly
+                ms.Write(block.RawData, 0, block.RawData.Length);
+                currentAddress += (ushort)block.RawData.Length;
             }
-        }
-
-        foreach (var data in _rawData)
-        {
-            ms.Write(data, 0, data.Length);
+            else
+            {
+                // Write instructions
+                foreach (var entry in block.InstructionsWithLabels)
+                {
+                    var bytes = entry.Instruction.ToBytes(currentAddress, _labels);
+                    ms.Write(bytes, 0, bytes.Length);
+                    currentAddress += (ushort)bytes.Length;
+                }
+            }
         }
 
         return ms.ToArray();
