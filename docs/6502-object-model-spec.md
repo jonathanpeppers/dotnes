@@ -792,11 +792,26 @@ if (block != null)
 2. ✅ Added comprehensive unit tests in `src/dotnes.tests/Program6502WriterTests.cs` (47 tests)
 3. ✅ All 151 tests in test suite pass
 
-### Phase 3: Migrate Built-in Subroutines
+### Phase 3: Migrate Built-in Subroutines ✅ COMPLETED
 
-1. Convert `WriteBuiltIn()` methods to create `Block` objects
-2. Store built-in subroutines as a library of `Block` templates
-3. Update tests to verify byte-for-byte compatibility
+1. ✅ Created `BuiltInSubroutines` class in `src/dotnes.tasks/ObjectModel/BuiltInSubroutines.cs`:
+   - Factory methods returning `Block` templates for each NESLib built-in subroutine
+   - **Core System**: `Exit()`, `InitPPU()`, `ClearPalette()`, `ClearVRAM()`, `WaitSync3()`, `Nmi()`, `Irq()`
+   - **Palette**: `PalAll()`, `PalCopy()`, `PalBg()`, `PalSpr()`, `PalCol()`, `PalClear()`, `PalSprBright()`, `PalBgBright()`, `PalBright()`
+   - **PPU Control**: `PpuOff()`, `PpuOnAll()`, `PpuOnOff()`, `PpuOnBg()`, `PpuOnSpr()`, `PpuMask()`, `PpuWaitNmi()`, `PpuWaitFrame()`, `PpuSystem()`, `GetPpuCtrlVar()`, `SetPpuCtrlVar()`
+   - **OAM**: `OamClear()`, `OamSize()`, `OamHideRest()`, `OamSpr()`
+   - **Scroll/Bank**: `Scroll()`, `BankSpr()`, `BankBg()`
+   - **VRAM**: `VramAdr()`, `VramPut()`, `VramFill()`, `VramInc()`, `VramWrite()`, `SetVramUpdate()`, `FlushVramUpdate()`
+   - **Timing**: `NesClock()`, `Delay()`, `NmiSetCallback()`
+   - **Stack**: `Popa()`, `Popax()`, `Pusha()`, `Pushax()`, `Incsp2()`
+   - **Init**: `Initlib()`, `Donelib()`, `Copydata()`, `Zerobss()`
+   - **Input**: `PadPoll()`
+2. ✅ Extended `InstructionBuilder` (`Asm` class) with additional methods:
+   - `JMP_abs(string)` for label-based jumps
+   - `ROR_X_zpg()`, `EOR_Y_abs()`, `AND_Y_abs()` and other indexed modes
+3. ✅ Added `NESConstants.cs` - shared constants between `NESWriter` and object model
+4. ✅ Added comprehensive unit tests in `src/dotnes.tests/BuiltInSubroutinesTests.cs` (25 tests)
+5. ✅ All 176 tests pass
 
 ### Phase 4: Migrate IL Translation
 

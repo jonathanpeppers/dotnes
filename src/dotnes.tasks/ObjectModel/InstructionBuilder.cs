@@ -160,6 +160,42 @@ public static class Asm
     public static Instruction STY_zpg_X(byte address) =>
         new(Opcode.STY, AddressMode.ZeroPageX, new ImmediateOperand(address));
 
+    public static Instruction INC_zpg_X(byte address) =>
+        new(Opcode.INC, AddressMode.ZeroPageX, new ImmediateOperand(address));
+
+    public static Instruction DEC_zpg_X(byte address) =>
+        new(Opcode.DEC, AddressMode.ZeroPageX, new ImmediateOperand(address));
+
+    public static Instruction ASL_zpg_X(byte address) =>
+        new(Opcode.ASL, AddressMode.ZeroPageX, new ImmediateOperand(address));
+
+    public static Instruction LSR_zpg_X(byte address) =>
+        new(Opcode.LSR, AddressMode.ZeroPageX, new ImmediateOperand(address));
+
+    public static Instruction ROL_zpg_X(byte address) =>
+        new(Opcode.ROL, AddressMode.ZeroPageX, new ImmediateOperand(address));
+
+    public static Instruction ROR_X_zpg(byte address) =>
+        new(Opcode.ROR, AddressMode.ZeroPageX, new ImmediateOperand(address));
+
+    public static Instruction ADC_zpg_X(byte address) =>
+        new(Opcode.ADC, AddressMode.ZeroPageX, new ImmediateOperand(address));
+
+    public static Instruction SBC_zpg_X(byte address) =>
+        new(Opcode.SBC, AddressMode.ZeroPageX, new ImmediateOperand(address));
+
+    public static Instruction AND_zpg_X(byte address) =>
+        new(Opcode.AND, AddressMode.ZeroPageX, new ImmediateOperand(address));
+
+    public static Instruction ORA_zpg_X(byte address) =>
+        new(Opcode.ORA, AddressMode.ZeroPageX, new ImmediateOperand(address));
+
+    public static Instruction EOR_zpg_X(byte address) =>
+        new(Opcode.EOR, AddressMode.ZeroPageX, new ImmediateOperand(address));
+
+    public static Instruction CMP_zpg_X(byte address) =>
+        new(Opcode.CMP, AddressMode.ZeroPageX, new ImmediateOperand(address));
+
     #endregion
 
     #region Zero Page,Y Mode ($XX,Y)
@@ -233,6 +269,24 @@ public static class Asm
     public static Instruction STA_abs_Y(ushort address) =>
         new(Opcode.STA, AddressMode.AbsoluteY, new AbsoluteOperand(address));
 
+    public static Instruction ADC_abs_Y(ushort address) =>
+        new(Opcode.ADC, AddressMode.AbsoluteY, new AbsoluteOperand(address));
+
+    public static Instruction SBC_abs_Y(ushort address) =>
+        new(Opcode.SBC, AddressMode.AbsoluteY, new AbsoluteOperand(address));
+
+    public static Instruction AND_Y_abs(ushort address) =>
+        new(Opcode.AND, AddressMode.AbsoluteY, new AbsoluteOperand(address));
+
+    public static Instruction ORA_abs_Y(ushort address) =>
+        new(Opcode.ORA, AddressMode.AbsoluteY, new AbsoluteOperand(address));
+
+    public static Instruction EOR_Y_abs(ushort address) =>
+        new(Opcode.EOR, AddressMode.AbsoluteY, new AbsoluteOperand(address));
+
+    public static Instruction CMP_abs_Y(ushort address) =>
+        new(Opcode.CMP, AddressMode.AbsoluteY, new AbsoluteOperand(address));
+
     #endregion
 
     #region Indirect Mode (JMP only)
@@ -265,6 +319,9 @@ public static class Asm
     #region Label-Based Absolute Addressing
 
     public static Instruction JMP(string label) =>
+        new(Opcode.JMP, AddressMode.Absolute, new LabelOperand(label, OperandSize.Word));
+
+    public static Instruction JMP_abs(string label) =>
         new(Opcode.JMP, AddressMode.Absolute, new LabelOperand(label, OperandSize.Word));
 
     public static Instruction JSR(string label) =>
