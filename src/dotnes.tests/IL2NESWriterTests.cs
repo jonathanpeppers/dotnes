@@ -26,11 +26,18 @@ public class IL2NESWriterTests
         };
     }
 
-    [Fact(Skip = "Ignore since adding Labels w/ addresses")]
+    [Fact]
     public Task Write_static_void_Main()
     {
         const ushort sizeOfMain = 0x43;
         using var writer = GetWriter();
+        // Set up Labels needed by WriteBuiltIns
+        writer.Labels["popa"] = 0x8592;
+        writer.Labels["popax"] = 0x857C;
+        writer.Labels["zerobss"] = 0x85C7;
+        writer.Labels["copydata"] = 0x85EA;
+        writer.Labels["pusha"] = 0x85A2;
+        writer.Labels["pushax"] = 0x85B8;
         writer.WriteHeader(PRG_ROM_SIZE: 2, CHR_ROM_SIZE: 1);
         writer.WriteBuiltIns(sizeOfMain);
 
@@ -90,11 +97,18 @@ public class IL2NESWriterTests
         return Verify(_stream.ToArray());
     }
 
-    [Fact(Skip = "Ignore since adding Labels w/ addresses")]
-    public void Write_Main_hello()
+    [Fact]
+    public Task Write_Main_hello()
     {
         const ushort sizeOfMain = 0x43;
         using var writer = GetWriter();
+        // Set up Labels needed for IL->NES translation
+        writer.Labels["pusha"] = 0x85A2;
+        writer.Labels["pushax"] = 0x85B8;
+        writer.Labels["pal_col"] = 0x823E;
+        writer.Labels["vram_adr"] = 0x83D4;
+        writer.Labels["vram_write"] = 0x834F;
+        writer.Labels["ppu_on_all"] = 0x8289;
 
         // pal_col(0, 0x02);
         writer.Write(new ILInstruction(ILOpCode.Ldc_i4_0), sizeOfMain);
@@ -133,15 +147,23 @@ public class IL2NESWriterTests
         // while (true) ;
         writer.Write(new ILInstruction(ILOpCode.Br_s), 254, sizeOfMain);
 
-        var expected = Utilities.ToByteArray("A900 20A285 A902 203E82 A901 20A285 A914 203E82 A902 20A285 A920 203E82 A903 20A285 A930 203E82 A220 A942 20D483 A9F1 A285 20B885 A200 A90C 204F83 208982 4C4085");
-        AssertEx.Equal(expected, writer);
+        return Verify(_stream.ToArray());
     }
 
-    [Fact(Skip = "Ignore since adding Labels w/ addresses")]
-    public void Write_Main_attributetable()
+    [Fact]
+    public Task Write_Main_attributetable()
     {
         const ushort sizeOfMain = 0x2E;
         using var writer = GetWriter();
+        // Set up Labels needed for IL->NES translation
+        writer.Labels["pusha"] = 0x85A2;
+        writer.Labels["pushax"] = 0x85B8;
+        writer.Labels["pal_bg"] = 0x822B;
+        writer.Labels["vram_adr"] = 0x83D4;
+        writer.Labels["vram_fill"] = 0x83DF;
+        writer.Labels["vram_write"] = 0x834F;
+        writer.Labels["ppu_on_all"] = 0x8289;
+        writer.Labels["pushax"] = 0x8D85;
         writer.Write(new ILInstruction(ILOpCode.Ldc_i4_s), 64, sizeOfMain);
         writer.Write(new ILInstruction(ILOpCode.Newarr), 16777235, sizeOfMain);
         writer.Write(new ILInstruction(ILOpCode.Dup), sizeOfMain);
@@ -178,7 +200,6 @@ public class IL2NESWriterTests
         writer.Write(new ILInstruction(ILOpCode.Call), nameof(NESLib.ppu_on_all), sizeOfMain);
         writer.Write(new ILInstruction(ILOpCode.Br_s), 254, sizeOfMain);
 
-        var expected = Utilities.ToByteArray("A91C A286 202B82 A220 A900 20D483 A916 208D85 A203 A9C0 20DF83 A9DC A285 20A385 A200 A940 204F83 208982 4C2B85");
-        AssertEx.Equal(expected, writer);
+        return Verify(_stream.ToArray());
     }
 }

@@ -127,10 +127,12 @@ public class NESWriterTests
         AssertInstructions("8E0620 8D0620 60");
     }
 
-    [Fact(Skip = "Ignore since adding Labels w/ addresses")]
+    [Fact]
     public void Write_vram_write()
     {
         using var writer = GetWriter();
+        // vram_write needs popax label - address derived from expected output "207C85" = JSR $857C
+        writer.Labels["popax"] = 0x857C;
         writer.WriteBuiltIn(nameof(NESLib.vram_write), SizeOfMain);
         writer.Flush();
         AssertInstructions("8517 8618 207C85 8519 861A A000 B119 8D0720 E619 D002 E61A A517 D002 C618 C617 A517 0518 D0E7 60");
@@ -172,10 +174,19 @@ public class NESWriterTests
         AssertInstructions("A901 8503 A501 C501 F0FC 60");
     }
 
-    [Fact(Skip = "Ignore since adding Labels w/ addresses")]
+    [Fact]
     public Task Write_Main()
     {
         using var writer = GetWriter();
+        // Set up Labels needed by WriteBuiltIns - these are calculated based on expected addresses
+        // popa is used by pal_col, pad_trigger, delay
+        // popax is used by scroll, vram_write  
+        // zerobss/copydata are used by Write_initlib
+        writer.Labels["popa"] = 0x8592;
+        writer.Labels["popax"] = 0x857C;
+        writer.Labels["zerobss"] = 0x85C7;
+        writer.Labels["copydata"] = 0x85EA;
+        
         writer.WriteHeader(PRG_ROM_SIZE: 2, CHR_ROM_SIZE: 1);
         writer.WriteBuiltIns(SizeOfMain);
 
