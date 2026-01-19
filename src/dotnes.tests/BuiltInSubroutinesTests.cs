@@ -464,8 +464,56 @@ public class BuiltInSubroutinesTests
 
         var bytes = program.ToBytes();
 
-        // STA $16, STX $17, RTS
-        Assert.Equal([0x85, 0x16, 0x86, 0x17, 0x60], bytes);
+        // STA $15, STX $16, RTS
+        Assert.Equal([0x85, 0x15, 0x86, 0x16, 0x60], bytes);
+    }
+
+    [Fact]
+    public void PadPoll_ProducesCorrectBytes()
+    {
+        var block = BuiltInSubroutines.PadPoll();
+        var program = new Program6502 { BaseAddress = 0x8000 };
+        program.AddBlock(block);
+        program.ResolveAddresses();
+
+        var bytes = program.ToBytes();
+
+        // Expected bytes from NESWriter.Write_pad_poll()
+        byte[] expected = [
+            0xA8,                   // TAY
+            0xA2, 0x00,             // LDX #$00
+            0xA9, 0x01,             // LDA #$01
+            0x8D, 0x16, 0x40,       // STA $4016
+            0xA9, 0x00,             // LDA #$00
+            0x8D, 0x16, 0x40,       // STA $4016
+            0xA9, 0x08,             // LDA #$08
+            0x85, 0x17,             // STA TEMP
+            0xB9, 0x16, 0x40,       // LDA $4016,y
+            0x4A,                   // LSR
+            0x76, 0x18,             // ROR $18,x (TEMP+1)
+            0xC6, 0x17,             // DEC TEMP
+            0xD0, 0xF6,             // BNE -10
+            0xE8,                   // INX
+            0xE0, 0x03,             // CPX #$03
+            0xD0, 0xE3,             // BNE -29
+            0xA5, 0x18,             // LDA $18 (TEMP+1)
+            0xC5, 0x19,             // CMP $19
+            0xF0, 0x06,             // BEQ +6
+            0xC5, 0x1A,             // CMP $1A
+            0xF0, 0x02,             // BEQ +2
+            0xA5, 0x19,             // LDA $19
+            0x99, 0x3C, 0x00,       // STA $003C,y
+            0xAA,                   // TAX
+            0x59, 0x3E, 0x00,       // EOR $003E,y
+            0x39, 0x3C, 0x00,       // AND $003C,y
+            0x99, 0x40, 0x00,       // STA $0040,y
+            0x8A,                   // TXA
+            0x99, 0x3E, 0x00,       // STA $003E,y
+            0xA2, 0x00,             // LDX #$00
+            0x60                    // RTS
+        ];
+
+        Assert.Equal(expected, bytes);
     }
 
     #endregion

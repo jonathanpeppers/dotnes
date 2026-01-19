@@ -874,8 +874,8 @@ internal static class BuiltInSubroutines
     public static Block NmiSetCallback()
     {
         var block = new Block("_nmi_set_callback");
-        block.Emit(STA_zpg(0x16))  // NMI_CALLBACK
-             .Emit(STX_zpg(0x16 + 1))
+        block.Emit(STA_zpg(0x15))  // NMI_CALLBACK+1
+             .Emit(STX_zpg(0x16))
              .Emit(RTS());
         return block;
     }
