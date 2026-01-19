@@ -546,7 +546,7 @@ public class AssemblyReaderTests
 
         using var s = Utilities.GetResource("CHR_ROM.nes");
         var expected = new byte[s.Length];
-        s.Read(expected, 0, expected.Length);
+        s.ReadExactly(expected, 0, expected.Length);
         AssertEx.Equal(expected, actual.Bytes);
     }
 }
