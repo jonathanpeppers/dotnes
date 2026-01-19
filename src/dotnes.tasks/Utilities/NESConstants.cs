@@ -58,4 +58,6 @@ internal static class NESConstants
     public const ushort updName = 0x8385;
     public const ushort palBrightTableL = 0x8422;
     public const ushort palBrightTableH = 0x842B;
+    public const ushort popax = 0x8539;
+    public const ushort popa = 0x854F;
 }

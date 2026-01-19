@@ -319,13 +319,46 @@ public class BuiltInSubroutinesTests
     {
         var block = BuiltInSubroutines.Scroll();
         var program = new Program6502 { BaseAddress = 0x8000 };
+        // Scroll uses JSR("popax") which needs external label resolution
+        program.DefineExternalLabel("popax", 0x8539);
         program.AddBlock(block);
         program.ResolveAddresses();
 
         var bytes = program.ToBytes();
 
-        // STA $0C, STX $0D, RTS
-        Assert.Equal([0x85, 0x0C, 0x86, 0x0D, 0x60], bytes);
+        // Full scroll implementation matching NESWriter:
+        // 85 17 8A D0 0E A5 17 C9 F0 B0 08 85 0D A9 00 85 17 F0 0B
+        // 38 A5 17 E9 F0 85 0D A9 02 85 17 20 39 85 85 0C 8A 29 01
+        // 05 17 85 17 A5 10 29 FC 05 17 85 10 60
+        Assert.Equal([
+            0x85, 0x17,             // STA TEMP
+            0x8A,                   // TXA
+            0xD0, 0x0E,             // BNE +14
+            0xA5, 0x17,             // LDA TEMP
+            0xC9, 0xF0,             // CMP #$F0
+            0xB0, 0x08,             // BCS +8
+            0x85, 0x0D,             // STA SCROLL_Y
+            0xA9, 0x00,             // LDA #$00
+            0x85, 0x17,             // STA TEMP
+            0xF0, 0x0B,             // BEQ +11
+            0x38,                   // SEC
+            0xA5, 0x17,             // LDA TEMP
+            0xE9, 0xF0,             // SBC #$F0
+            0x85, 0x0D,             // STA SCROLL_Y
+            0xA9, 0x02,             // LDA #$02
+            0x85, 0x17,             // STA TEMP
+            0x20, 0x39, 0x85,       // JSR popax
+            0x85, 0x0C,             // STA SCROLL_X
+            0x8A,                   // TXA
+            0x29, 0x01,             // AND #$01
+            0x05, 0x17,             // ORA TEMP
+            0x85, 0x17,             // STA TEMP
+            0xA5, 0x10,             // LDA PRG_FILEOFFS
+            0x29, 0xFC,             // AND #$FC
+            0x05, 0x17,             // ORA TEMP
+            0x85, 0x10,             // STA PRG_FILEOFFS
+            0x60                    // RTS
+        ], bytes);
     }
 
     #endregion
