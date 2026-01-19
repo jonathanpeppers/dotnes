@@ -62,7 +62,9 @@ class IL2NESWriter : NESWriter
 
     public void RecordLabel(ILInstruction instruction)
     {
-        Labels.Add($"instruction_{instruction.Offset:X2}", (ushort)(_writer.BaseStream.Position + BaseAddress));
+        // When in block buffering mode, include the buffered block size in the address calculation
+        var address = _writer.BaseStream.Position + BaseAddress + GetBlockSize();
+        Labels.Add($"instruction_{instruction.Offset:X2}", (ushort)address);
     }
 
     public void Write(ILInstruction instruction, ushort sizeOfMain)
@@ -223,10 +225,7 @@ class IL2NESWriter : NESWriter
                 if (previous == ILOpCode.Ldc_i4_s)
                 {
                     // Remove the previous LDA instruction (1 instruction = 2 bytes)
-                    if (_mainBlock != null)
-                        RemoveLastInstructions(1);
-                    else
-                        SeekBack(2);
+                    RemoveLastInstructions(1);
                 }
                 break;
             case ILOpCode.Stloc_s:
@@ -238,10 +237,7 @@ class IL2NESWriter : NESWriter
             case ILOpCode.Bne_un_s:
                 // Remove the previous comparison value loading
                 // This is typically JSR pusha (3 bytes) + LDA #imm (2 bytes) = 5 bytes, 2 instructions
-                if (_mainBlock != null)
-                    RemoveLastInstructions(2);
-                else
-                    SeekBack(5);
+                RemoveLastInstructions(2);
                 Emit(Opcode.CMP, AddressMode.Immediate, checked((byte)Stack.Pop()));
                 Emit(Opcode.BNE, AddressMode.Relative, NumberOfInstructionsForBranch(instruction.Offset + operand + 2, sizeOfMain));
                 break;
@@ -262,10 +258,12 @@ class IL2NESWriter : NESWriter
         if (Instructions is null)
             throw new ArgumentNullException(nameof(Instructions));
 
-        // When in block buffering mode, use block size for measurement
-        int startSize = _mainBlock?.Size ?? 0;
-        long nesPosition = _writer.BaseStream.Position;
-        int startCount = _mainBlock?.Count ?? 0;
+        // Use block size for measurement
+        if (_mainBlock == null)
+            throw new InvalidOperationException("NumberOfInstructionsForBranch requires block buffering mode");
+        
+        int startSize = _mainBlock.Size;
+        int startCount = _mainBlock.Count;
         
         for (int i = Index + 1; ; i++)
         {
@@ -290,21 +288,11 @@ class IL2NESWriter : NESWriter
                 break;
         }
         
-        byte numberOfBytes;
-        if (_mainBlock != null)
-        {
-            // Calculate from block size
-            numberOfBytes = checked((byte)(_mainBlock.Size - startSize));
-            // Remove the instructions we just added
-            int instructionsAdded = _mainBlock.Count - startCount;
-            RemoveLastInstructions(instructionsAdded);
-        }
-        else
-        {
-            // Original stream-based calculation
-            numberOfBytes = checked((byte)(_writer.BaseStream.Position - nesPosition));
-            SeekBack(numberOfBytes);
-        }
+        // Calculate from block size
+        byte numberOfBytes = checked((byte)(_mainBlock.Size - startSize));
+        // Remove the instructions we just added
+        int instructionsAdded = _mainBlock.Count - startCount;
+        RemoveLastInstructions(instructionsAdded);
         return numberOfBytes;
     }
 
@@ -354,10 +342,7 @@ class IL2NESWriter : NESWriter
                         };
                         // Remove the two constants that were loaded
                         // Typically: LDA #imm (2 bytes) + JSR pusha (3 bytes) + LDA #imm (2 bytes) = 7 bytes, 3 instructions
-                        if (_mainBlock != null)
-                            RemoveLastInstructions(3);
-                        else
-                            SeekBack(7);
+                        RemoveLastInstructions(3);
                         //TODO: these are hardcoded until I figure this out
                         Emit(Opcode.LDX, AddressMode.Immediate, 0x20);
                         Emit(Opcode.LDA, AddressMode.Immediate, 0x42);
@@ -504,10 +489,7 @@ class IL2NESWriter : NESWriter
         {
             LocalCount += 1;
             // Remove the previous LDA instruction (1 instruction = 2 bytes)
-            if (_mainBlock != null)
-                RemoveLastInstructions(1);
-            else
-                SeekBack(2);
+            RemoveLastInstructions(1);
             Emit(Opcode.LDA, AddressMode.Immediate, (byte)local.Value);
             Emit(Opcode.STA, AddressMode.Absolute, (ushort)local.Address);
             Emit(Opcode.LDA, AddressMode.Immediate, 0x22);
@@ -517,10 +499,7 @@ class IL2NESWriter : NESWriter
         {
             LocalCount += 2;
             // Remove the previous LDX + LDA instructions (2 instructions = 4 bytes)
-            if (_mainBlock != null)
-                RemoveLastInstructions(2);
-            else
-                SeekBack(4);
+            RemoveLastInstructions(2);
             Emit(Opcode.LDX, AddressMode.Immediate, 0x03);
             Emit(Opcode.LDA, AddressMode.Immediate, 0xC0);
             Emit(Opcode.STA, AddressMode.Absolute, (ushort)local.Address);
@@ -611,54 +590,42 @@ class IL2NESWriter : NESWriter
     }
 
     /// <summary>
-    /// Emits an instruction to the main block (when buffering) or to stream (when not).
+    /// Emits an instruction to the main block. Requires block buffering mode.
     /// </summary>
     void Emit(Opcode opcode, AddressMode mode = AddressMode.Implied)
     {
-        if (_mainBlock != null)
-        {
-            _mainBlock.Emit(new Instruction(opcode, mode));
-            LastLDA = opcode == Opcode.LDA && mode == AddressMode.Immediate;
-        }
-        else
-        {
-            Write(opcode);
-        }
+        if (_mainBlock == null)
+            throw new InvalidOperationException("Emit requires block buffering mode. Call StartBlockBuffering() first.");
+        
+        _mainBlock.Emit(new Instruction(opcode, mode));
+        LastLDA = opcode == Opcode.LDA && mode == AddressMode.Immediate;
     }
 
     void Emit(Opcode opcode, AddressMode mode, byte operand)
     {
-        if (_mainBlock != null)
+        if (_mainBlock == null)
+            throw new InvalidOperationException("Emit requires block buffering mode. Call StartBlockBuffering() first.");
+        
+        Operand op = mode switch
         {
-            Operand op = mode switch
-            {
-                AddressMode.Immediate => new ImmediateOperand(operand),
-                AddressMode.ZeroPage => new ImmediateOperand(operand),
-                AddressMode.ZeroPageX => new ImmediateOperand(operand),
-                AddressMode.ZeroPageY => new ImmediateOperand(operand),
-                AddressMode.Relative => new RelativeByteOperand((sbyte)operand),
-                _ => new ImmediateOperand(operand),
-            };
-            _mainBlock.Emit(new Instruction(opcode, mode, op));
-            LastLDA = opcode == Opcode.LDA && mode == AddressMode.Immediate;
-        }
-        else
-        {
-            Write(opcode, mode, operand);
-        }
+            AddressMode.Immediate => new ImmediateOperand(operand),
+            AddressMode.ZeroPage => new ImmediateOperand(operand),
+            AddressMode.ZeroPageX => new ImmediateOperand(operand),
+            AddressMode.ZeroPageY => new ImmediateOperand(operand),
+            AddressMode.Relative => new RelativeByteOperand((sbyte)operand),
+            _ => new ImmediateOperand(operand),
+        };
+        _mainBlock.Emit(new Instruction(opcode, mode, op));
+        LastLDA = opcode == Opcode.LDA && mode == AddressMode.Immediate;
     }
 
     void Emit(Opcode opcode, AddressMode mode, ushort operand)
     {
-        if (_mainBlock != null)
-        {
-            _mainBlock.Emit(new Instruction(opcode, mode, new AbsoluteOperand(operand)));
-            LastLDA = opcode == Opcode.LDA && mode == AddressMode.Immediate;
-        }
-        else
-        {
-            Write(opcode, mode, operand);
-        }
+        if (_mainBlock == null)
+            throw new InvalidOperationException("Emit requires block buffering mode. Call StartBlockBuffering() first.");
+        
+        _mainBlock.Emit(new Instruction(opcode, mode, new AbsoluteOperand(operand)));
+        LastLDA = opcode == Opcode.LDA && mode == AddressMode.Immediate;
     }
 
     /// <summary>
@@ -677,18 +644,4 @@ class IL2NESWriter : NESWriter
     /// Gets the current size of the buffered block in bytes.
     /// </summary>
     int GetBlockSize() => _mainBlock?.Size ?? 0;
-
-    void SeekBack(int length)
-    {
-        LastLDA = false;
-        _logger.WriteLine($"Seek back {length} bytes");
-        if (_writer.BaseStream.Length < length)
-        {
-            _writer.BaseStream.SetLength(0);
-        }
-        else
-        {
-            _writer.BaseStream.SetLength(_writer.BaseStream.Length - length);
-        }
-    }
 }

@@ -19,11 +19,13 @@ public class IL2NESWriterTests
     {
         _stream.SetLength(0);
 
-        return new IL2NESWriter(_stream, leaveOpen: true, logger: _logger)
+        var writer = new IL2NESWriter(_stream, leaveOpen: true, logger: _logger)
         {
             PRG_ROM = PRG_ROM,
             CHR_ROM = CHR_ROM,
         };
+        writer.StartBlockBuffering();
+        return writer;
     }
 
     [Fact]
@@ -77,6 +79,9 @@ public class IL2NESWriterTests
 
         // while (true) ;
         writer.Write(new ILInstruction(ILOpCode.Br_s), 254, sizeOfMain);
+
+        // Flush main block before writing final built-ins
+        writer.FlushMainBlock();
 
         writer.WriteFinalBuiltIns(0x85FE, locals: 0);
         writer.WriteString(text);
@@ -147,6 +152,7 @@ public class IL2NESWriterTests
         // while (true) ;
         writer.Write(new ILInstruction(ILOpCode.Br_s), 254, sizeOfMain);
 
+        writer.FlushMainBlock();
         return Verify(_stream.ToArray());
     }
 
@@ -200,6 +206,7 @@ public class IL2NESWriterTests
         writer.Write(new ILInstruction(ILOpCode.Call), nameof(NESLib.ppu_on_all), sizeOfMain);
         writer.Write(new ILInstruction(ILOpCode.Br_s), 254, sizeOfMain);
 
+        writer.FlushMainBlock();
         return Verify(_stream.ToArray());
     }
 }

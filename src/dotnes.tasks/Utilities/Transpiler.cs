@@ -42,6 +42,9 @@ class Transpiler : IDisposable
             Instructions = instructions,
         };
 
+        // Enable block buffering
+        writer.StartBlockBuffering();
+
         // Write built-in functions
         writer.WriteBuiltIns();
 
@@ -69,6 +72,8 @@ class Transpiler : IDisposable
             }
         }
 
+        // Flush main block BEFORE WriteFinalBuiltIns so CurrentAddress includes main program size
+        writer.FlushMainBlock();
         writer.WriteFinalBuiltIns(0, 0);
 
         return writer.Labels;
@@ -195,6 +200,10 @@ class Transpiler : IDisposable
             Instructions = instructions,
         };
         writer.SetLabels(labels);
+
+        // Enable block buffering
+        writer.StartBlockBuffering();
+
         for (int i = 0; i < writer.Instructions.Length; i++)
         {
             writer.Index = i;
@@ -217,6 +226,7 @@ class Transpiler : IDisposable
                 writer.Write(instruction, sizeOfMain: 0);
             }
         }
+        writer.FlushMainBlock();
         writer.Flush();
         sizeOfMain = checked((ushort)writer.BaseStream.Length);
         locals = checked((byte)writer.LocalCount);

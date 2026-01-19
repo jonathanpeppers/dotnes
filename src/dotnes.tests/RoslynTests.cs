@@ -73,6 +73,7 @@ public class RoslynTests
 
             _writer.SetLabels(parent.Labels);
             _writer.Instructions = parent.Instructions!;
+            _writer.StartBlockBuffering();
             for (int i = 0; i < _writer.Instructions.Length; i++)
             {
                 _writer.Index = i;
@@ -97,6 +98,7 @@ public class RoslynTests
                 }
             }
 
+            _writer.FlushMainBlock();
             _writer.Flush();
         }
 
