@@ -39,7 +39,7 @@ public class IL2NESWriterTests
         writer.Labels["pusha"] = 0x85A2;
         writer.Labels["pushax"] = 0x85B8;
         writer.WriteHeader(PRG_ROM_SIZE: 2, CHR_ROM_SIZE: 1);
-        writer.WriteBuiltIns(sizeOfMain);
+        writer.WriteBuiltIns();
 
         // pal_col(0, 0x02);
         writer.Write(new ILInstruction(ILOpCode.Ldc_i4_0), sizeOfMain);

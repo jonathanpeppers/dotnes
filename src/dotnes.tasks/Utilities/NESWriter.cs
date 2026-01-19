@@ -209,7 +209,7 @@ class NESWriter : IDisposable
     /// <summary>
     /// Writes all the built-in methods from NESLib
     /// </summary>
-    public void WriteBuiltIns(ushort sizeOfMain)
+    public void WriteBuiltIns()
     {
         WriteBlock(BuiltInSubroutines.Exit());
         WriteBlock(BuiltInSubroutines.InitPPU());

@@ -199,7 +199,7 @@ public class NESWriterTests
         writer.Labels["copydata"] = 0x85EA;
         
         writer.WriteHeader(PRG_ROM_SIZE: 2, CHR_ROM_SIZE: 1);
-        writer.WriteBuiltIns(SizeOfMain);
+        writer.WriteBuiltIns();
 
         /*
         * 8500	A900          	LDA #$00                      ; _main

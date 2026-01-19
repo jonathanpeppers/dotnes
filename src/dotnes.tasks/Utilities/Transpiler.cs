@@ -43,7 +43,7 @@ class Transpiler : IDisposable
         };
 
         // Write built-in functions
-        writer.WriteBuiltIns(sizeOfMain: 0);
+        writer.WriteBuiltIns();
 
         // Write main program
         for (int i = 0; i < writer.Instructions.Length; i++)
@@ -107,7 +107,7 @@ class Transpiler : IDisposable
         // (Labels were computed in first pass without header, so we need to account for it)
         writer.CodeBaseOffset = writer.BaseStream.Position;
         _logger.WriteLine($"Writing built-ins...");
-        writer.WriteBuiltIns(sizeOfMain);
+        writer.WriteBuiltIns();
 
         _logger.WriteLine($"Second pass...");
 
