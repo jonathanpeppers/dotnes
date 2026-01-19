@@ -324,6 +324,9 @@ public static class Asm
     public static Instruction JMP_abs(string label) =>
         new(Opcode.JMP, AddressMode.Absolute, new LabelOperand(label, OperandSize.Word));
 
+    public static Instruction JMP_abs(ushort address) =>
+        new(Opcode.JMP, AddressMode.Absolute, new AbsoluteOperand(address));
+
     public static Instruction JSR(string label) =>
         new(Opcode.JSR, AddressMode.Absolute, new LabelOperand(label, OperandSize.Word));
 

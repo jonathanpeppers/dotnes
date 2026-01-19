@@ -81,16 +81,12 @@ public class BuiltInSubroutinesTests
         var block = BuiltInSubroutines.Irq();
         var program = new Program6502 { BaseAddress = 0x8000 };
         program.AddBlock(block);
-        // Add skipNtsc label for the JMP target
-        var skipNtscBlock = new Block("_skipNtsc");
-        skipNtscBlock.Emit(NOP());
-        program.AddBlock(skipNtscBlock);
         program.ResolveAddresses();
 
         var bytes = program.ToBytes();
 
-        // PHA, TXA, PHA, TYA, PHA, LDA #$FF, JMP to _skipNtsc (0x800A)
-        Assert.Equal([0x48, 0x8A, 0x48, 0x98, 0x48, 0xA9, 0xFF, 0x4C, 0x0A, 0x80, 0xEA], bytes);
+        // PHA, TXA, PHA, TYA, PHA, LDA #$FF, JMP $81F9 (skipNtsc constant)
+        Assert.Equal([0x48, 0x8A, 0x48, 0x98, 0x48, 0xA9, 0xFF, 0x4C, 0xF9, 0x81], bytes);
     }
 
     #endregion

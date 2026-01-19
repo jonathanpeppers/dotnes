@@ -129,7 +129,7 @@ internal static class BuiltInSubroutines
              .Emit(TYA())
              .Emit(PHA())
              .Emit(LDA(0xFF))
-             .Emit(JMP_abs("_skipNtsc"));
+             .Emit(JMP_abs(skipNtsc));  // Use constant address
         return block;
     }
 
