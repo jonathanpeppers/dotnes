@@ -12,24 +12,26 @@ This document proposes an in-memory object model for 6502 assembly programs that
 
 ## Problem Statement
 
-### Current Architecture Issues
+### Original Architecture Issues (Now Resolved)
 
-The existing `NESWriter` and `IL2NESWriter` classes write 6502 instructions directly to a `BinaryWriter`. This leads to several problems:
+The original `NESWriter` and `IL2NESWriter` classes wrote 6502 instructions directly to a `BinaryWriter`. This led to several problems that have now been addressed:
 
-1. **`SeekBack()` Hack**: When the transpiler needs to modify previously-written code (e.g., removing setup instructions after discovering optimizations), it truncates the stream:
+1. **~~`SeekBack()` Hack~~** ✅ RESOLVED: The transpiler used to truncate the stream when modifying previously-written code:
 
    ```csharp
+   // OLD CODE - NOW REMOVED
    void SeekBack(int length)
    {
        _writer.BaseStream.SetLength(_writer.BaseStream.Length - length);
    }
    ```
 
-   This is fragile and only works for removing bytes from the end.
+   **Solution**: Instructions are now buffered in `Block` objects, allowing `RemoveLastInstructions()` to cleanly remove instructions without stream manipulation.
 
-2. **Branch Offset Calculation**: `NumberOfInstructionsForBranch()` must write instructions to a temporary location, measure the result, then seek back—effectively doing the work twice:
+2. **~~Branch Offset Calculation~~** ✅ RESOLVED: `NumberOfInstructionsForBranch()` used to write instructions temporarily then seek back:
 
    ```csharp
+   // OLD CODE - NOW SIMPLIFIED
    byte NumberOfInstructionsForBranch(int stopAt, ushort sizeOfMain)
    {
        long nesPosition = _writer.BaseStream.Position;
@@ -40,9 +42,11 @@ The existing `NESWriter` and `IL2NESWriter` classes write 6502 instructions dire
    }
    ```
 
-3. **Hardcoded Addresses**: Labels and addresses like `pal_col = 0x823E` must be pre-computed, making it difficult to insert or reorganize code.
+   **Solution**: Now calculates block size directly without temporary writes.
 
-4. **No Insertion Support**: There's no way to insert instructions in the middle of a program without rewriting everything after.
+3. **Hardcoded Addresses**: Labels and addresses like `pal_col = 0x823E` must be pre-computed, making it difficult to insert or reorganize code. *(Partially addressed - labels are now computed dynamically via `CalculateAddressLabels()`)*
+
+4. **No Insertion Support**: There's no way to insert instructions in the middle of a program without rewriting everything after. *(Partially addressed - `Block` supports insertion but full program insertion not yet implemented)*
 
 ## Proposed Architecture
 
@@ -692,8 +696,27 @@ _currentBlock
 
 ### Example 3: Writing `pal_col` Subroutine
 
-**Before (current code):**
+**Implementation using object model (current code):**
 ```csharp
+// From BuiltInSubroutines.cs
+public static Block PalCol()
+{
+    var block = new Block("_pal_col");
+    block.Emit(STA_zpg(TEMP))
+         .Emit(JSR(popa))        // Label reference
+         .Emit(AND(0x1F))
+         .Emit(TAX())
+         .Emit(LDA_zpg(TEMP))
+         .Emit(STA_abs_X(PAL_BUF))
+         .Emit(INC_zpg(PAL_UPDATE))
+         .Emit(RTS());
+    return block;
+}
+```
+
+**Old code using direct stream writes (removed):**
+```csharp
+// This approach required SeekBack() for modifications
 case nameof(NESLib.pal_col):
     Write(NESInstruction.STA_zpg, TEMP);
     Write(NESInstruction.JSR, popa.GetAddressAfterMain(sizeOfMain));
@@ -706,7 +729,7 @@ case nameof(NESLib.pal_col):
     break;
 ```
 
-**After (with object model):**
+**Benefits of the object model approach:**
 ```csharp
 var palCol = program.CreateBlock("pal_col");
 palCol
@@ -779,7 +802,7 @@ if (block != null)
 
 1. ✅ Created `Program6502Writer` in `src/dotnes.tasks/ObjectModel/Program6502Writer.cs`:
    - Wraps `Program6502` and provides `NESWriter`-compatible API
-   - `Write(NESInstruction)` / `Write(NESInstruction, byte)` / `Write(NESInstruction, ushort)` for legacy compatibility
+   - `Write(Opcode, AddressMode)` / `Write(Opcode, AddressMode, byte)` / `Write(Opcode, AddressMode, ushort)` for instruction emission
    - `WriteWithLabel()` for label-based addressing (replaces pre-computed offsets)
    - `DefineLabel()` / `DefineExternalLabel()` for label management
    - `RemoveLastInstructions()` replaces `SeekBack()` pattern
@@ -788,7 +811,6 @@ if (block != null)
    - `ToBytes()` converts object model to binary output
    - `Disassemble()` for debugging
    - `Validate()` returns list of unresolved labels
-   - `ConvertNESInstruction()` maps all ~70 existing `NESInstruction` enum values to `Opcode`/`AddressMode` pairs
 2. ✅ Added comprehensive unit tests in `src/dotnes.tests/Program6502WriterTests.cs` (47 tests)
 3. ✅ All 151 tests in test suite pass
 
@@ -820,17 +842,28 @@ if (block != null)
    - Added `StartBlockBuffering()` / `FlushMainBlock()` methods to manage block mode
    - Added `RemoveLastInstructions(int count)` to replace `SeekBack()` when in block mode
    - Added `Emit()` overloads that route to block or stream depending on mode
-   - Added `ConvertNESInstruction()` static method mapping ~30 `NESInstruction` enum values to `(Opcode, AddressMode)` tuples
+   - Added `Emit()` overloads using `Opcode`/`AddressMode` pairs for object model integration
 2. ✅ Removed `SeekBack()` usage (conditionally uses `RemoveLastInstructions()` in block mode)
 3. ✅ Updated `Transpiler.SecondPass()` to enable block buffering
 4. ✅ All 188 tests pass with byte-identical ROM output
 
-### Phase 5: Cleanup ✅ COMPLETED
+### Phase 5: Intermediate Cleanup ✅ COMPLETED
 
-1. ✅ Created `NESInstructionConverter` class to consolidate conversion logic between `NESInstruction` and `Opcode`/`AddressMode`
-2. ✅ Marked `NESInstruction` enum as `[Obsolete]` to signal migration to `Opcode`/`AddressMode`
-3. ✅ Updated `IL2NESWriter` and `Program6502Writer` to use shared `NESInstructionConverter`
-4. ✅ All 188 tests pass
+1. ✅ Migrated all `IL2NESWriter` code from `NESInstruction` enum to `Opcode`/`AddressMode` pairs
+2. ✅ Updated `Program6502Writer` to use `Opcode`/`AddressMode` directly
+3. ✅ All 188 tests pass
+
+### Phase 6: Remove Legacy Code ✅ COMPLETED
+
+1. ✅ Removed `NESInstruction` enum entirely:
+   - Deleted `NESInstruction.cs` file
+   - All code now uses `Opcode`/`AddressMode` tuples directly
+2. ✅ Removed `SeekBack()` method entirely from `IL2NESWriter`:
+   - All instruction modification now uses `RemoveLastInstructions()` in block buffering mode
+   - `Emit()` methods now require block buffering mode (throw if not active)
+   - Fixed `CalculateAddressLabels()` to flush main block before `WriteFinalBuiltIns()`
+   - Fixed `RecordLabel()` to account for buffered block size in address calculation
+3. ✅ All 188 tests pass with byte-identical ROM output
 
 ## Benefits
 
