@@ -211,22 +211,22 @@ class NESWriter : IDisposable
     /// </summary>
     public void WriteBuiltIns(ushort sizeOfMain)
     {
-        Write_exit();
-        Write_initPPU();
-        Write_clearPalette();
-        Write_clearVRAM();
-        Write_clearRAM(sizeOfMain);
-        Write_waitSync3();
-        Write_detectNTSC();
-        Write_nmi();
-        Write_doUpdate();
-        Write_updPal();
-        Write_updVRAM();
-        Write_skipUpd();
-        Write_skipAll();
-        Write_skipNtsc();
-        Write_irq();
-        Write_nmi_set_callback();
+        WriteBlock(BuiltInSubroutines.Exit());
+        WriteBlock(BuiltInSubroutines.InitPPU());
+        WriteBlock(BuiltInSubroutines.ClearPalette());
+        WriteBlock(BuiltInSubroutines.ClearVRAM());
+        WriteBlock(BuiltInSubroutines.ClearRAM());
+        WriteBlock(BuiltInSubroutines.WaitSync3());
+        WriteBlock(BuiltInSubroutines.DetectNTSC());
+        WriteBlock(BuiltInSubroutines.Nmi());
+        WriteBlock(BuiltInSubroutines.DoUpdate());
+        WriteBlock(BuiltInSubroutines.UpdPal());
+        WriteBlock(BuiltInSubroutines.UpdVRAM());
+        WriteBlock(BuiltInSubroutines.SkipUpd());
+        WriteBlock(BuiltInSubroutines.SkipAll());
+        WriteBlock(BuiltInSubroutines.SkipNtsc());
+        WriteBlock(BuiltInSubroutines.Irq());
+        WriteBlock(BuiltInSubroutines.NmiSetCallback());
         WriteBuiltIn(nameof(NESLib.pal_all), sizeOfMain);
         WriteBuiltIn(nameof(NESLib.pal_copy), sizeOfMain);
         WriteBuiltIn(nameof(NESLib.pal_bg), sizeOfMain);
@@ -272,7 +272,7 @@ class NESWriter : IDisposable
         Write(NESLib.palBrightTable6);
         Write(NESLib.palBrightTable7);
         Write(NESLib.palBrightTable8);
-        Write_initlib();
+        WriteBlock(BuiltInSubroutines.Initlib());
     }
 
     public void WriteDestructorTable()
@@ -285,14 +285,30 @@ class NESWriter : IDisposable
     /// </summary>
     public void WriteFinalBuiltIns(ushort totalSize, byte locals)
     {
-        Write_donelib(totalSize);
-        Write_copydata(totalSize);
-        Write_popax();
-        Write_incsp2();
-        Write_popa();
-        Write_pusha();
-        Write_pushax();
-        Write_zerobss(locals);
+        SetLabel(nameof(donelib), CurrentAddress);
+        WriteBlock(BuiltInSubroutines.Donelib(totalSize));
+
+        SetLabel(nameof(copydata), CurrentAddress);
+        WriteBlock(BuiltInSubroutines.Copydata(totalSize));
+
+        SetLabel(nameof(popax), CurrentAddress);
+        WriteBlock(BuiltInSubroutines.Popax());
+
+        WriteBlock(BuiltInSubroutines.Incsp2());
+
+        SetLabel(nameof(popa), CurrentAddress);
+        WriteBlock(BuiltInSubroutines.Popa());
+
+        // pusha label is at offset +4 (after pusha0sp and pushaysp prefixes)
+        SetLabel(nameof(pusha), (ushort)(CurrentAddress + 4));
+        WriteBlock(BuiltInSubroutines.Pusha());
+
+        // pushax label is at offset +4 (after push0 and pusha0 prefixes)
+        SetLabel(nameof(pushax), (ushort)(CurrentAddress + 4));
+        WriteBlock(BuiltInSubroutines.Pushax());
+
+        SetLabel(nameof(zerobss), CurrentAddress);
+        WriteBlock(BuiltInSubroutines.Zerobss(locals));
 
         // List of optional methods at the end
         if (UsedMethods is not null)
@@ -303,15 +319,10 @@ class NESWriter : IDisposable
             }
             if (UsedMethods.Contains(nameof(NESLib.pad_poll)))
             {
-                Write_pad_poll();
+                SetLabel(nameof(NESLib.pad_poll), CurrentAddress);
+                WriteBlock(BuiltInSubroutines.PadPoll());
             }
         }
-    }
-
-    void Write_pad_poll()
-    {
-        SetLabel(nameof(NESLib.pad_poll), CurrentAddress);
-        WriteBlock(BuiltInSubroutines.PadPoll());
     }
 
     /// <summary>
@@ -438,140 +449,6 @@ class NESWriter : IDisposable
             default:
                 throw new NotImplementedException($"{name} is not implemented!");
         }
-    }
-
-    void Write_exit()
-    {
-        WriteBlock(BuiltInSubroutines.Exit());
-    }
-
-    void Write_initPPU()
-    {
-        WriteBlock(BuiltInSubroutines.InitPPU());
-    }
-
-    void Write_clearPalette()
-    {
-        WriteBlock(BuiltInSubroutines.ClearPalette());
-    }
-
-    void Write_clearVRAM()
-    {
-        WriteBlock(BuiltInSubroutines.ClearVRAM());
-    }
-
-    void Write_clearRAM(ushort sizeOfMain)
-    {
-        WriteBlock(BuiltInSubroutines.ClearRAM());
-    }
-
-    void Write_waitSync3()
-    {
-        WriteBlock(BuiltInSubroutines.WaitSync3());
-    }
-
-    void Write_detectNTSC()
-    {
-        WriteBlock(BuiltInSubroutines.DetectNTSC());
-    }
-
-    void Write_nmi()
-    {
-        WriteBlock(BuiltInSubroutines.Nmi());
-    }
-
-    void Write_doUpdate()
-    {
-        WriteBlock(BuiltInSubroutines.DoUpdate());
-    }
-
-    void Write_updPal()
-    {
-        WriteBlock(BuiltInSubroutines.UpdPal());
-    }
-
-    void Write_updVRAM()
-    {
-        WriteBlock(BuiltInSubroutines.UpdVRAM());
-    }
-
-    void Write_skipUpd()
-    {
-        WriteBlock(BuiltInSubroutines.SkipUpd());
-    }
-
-    void Write_skipAll()
-    {
-        WriteBlock(BuiltInSubroutines.SkipAll());
-    }
-
-    void Write_skipNtsc()
-    {
-        WriteBlock(BuiltInSubroutines.SkipNtsc());
-    }
-
-    void Write_irq()
-    {
-        WriteBlock(BuiltInSubroutines.Irq());
-    }
-
-    void Write_nmi_set_callback()
-    {
-        WriteBlock(BuiltInSubroutines.NmiSetCallback());
-    }
-
-    void Write_initlib()
-    {
-        WriteBlock(BuiltInSubroutines.Initlib());
-    }
-
-    void Write_donelib(ushort totalSize)
-    {
-        SetLabel(nameof(donelib), CurrentAddress);
-        WriteBlock(BuiltInSubroutines.Donelib(totalSize));
-    }
-
-    void Write_copydata(ushort totalSize)
-    {
-        SetLabel(nameof(copydata), CurrentAddress);
-        WriteBlock(BuiltInSubroutines.Copydata(totalSize));
-    }
-
-    void Write_popax()
-    {
-        SetLabel(nameof(popax), CurrentAddress);
-        WriteBlock(BuiltInSubroutines.Popax());
-    }
-
-    void Write_incsp2()
-    {
-        WriteBlock(BuiltInSubroutines.Incsp2());
-    }
-
-    void Write_popa()
-    {
-        SetLabel(nameof(popa), CurrentAddress);
-        WriteBlock(BuiltInSubroutines.Popa());
-    }
-
-    void Write_pusha()
-    {
-        // pusha label is at offset +4 (after pusha0sp and pushaysp prefixes)
-        SetLabel(nameof(pusha), (ushort)(CurrentAddress + 4));
-        WriteBlock(BuiltInSubroutines.Pusha());
-    }
-
-    void Write_pushax()
-    {
-        // pushax label is at offset +4 (after push0 and pusha0 prefixes)
-        SetLabel(nameof(pushax), (ushort)(CurrentAddress + 4));
-        WriteBlock(BuiltInSubroutines.Pushax());
-    }
-
-    void Write_zerobss(byte locals)
-    {
-        SetLabel(nameof(zerobss), CurrentAddress);
-        WriteBlock(BuiltInSubroutines.Zerobss(locals));
     }
 
     /// <summary>
