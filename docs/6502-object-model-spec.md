@@ -775,10 +775,22 @@ if (block != null)
 2. ✅ Added comprehensive unit tests in `src/dotnes.tests/ObjectModelTests.cs` (42 tests)
 3. ✅ Kept existing `NESWriter` and `IL2NESWriter` unchanged
 
-### Phase 2: Add Adapter Layer
+### Phase 2: Add Adapter Layer ✅ COMPLETED
 
-1. Create `Program6502Writer` that wraps `Program6502` and implements similar API to `NESWriter`
-2. Add method to convert `Program6502` to byte array compatible with existing flow
+1. ✅ Created `Program6502Writer` in `src/dotnes.tasks/ObjectModel/Program6502Writer.cs`:
+   - Wraps `Program6502` and provides `NESWriter`-compatible API
+   - `Write(NESInstruction)` / `Write(NESInstruction, byte)` / `Write(NESInstruction, ushort)` for legacy compatibility
+   - `WriteWithLabel()` for label-based addressing (replaces pre-computed offsets)
+   - `DefineLabel()` / `DefineExternalLabel()` for label management
+   - `RemoveLastInstructions()` replaces `SeekBack()` pattern
+   - `Emit()` fluent API for new code using `Asm` builder
+   - `CreateBlock()` for subroutine organization
+   - `ToBytes()` converts object model to binary output
+   - `Disassemble()` for debugging
+   - `Validate()` returns list of unresolved labels
+   - `ConvertNESInstruction()` maps all ~70 existing `NESInstruction` enum values to `Opcode`/`AddressMode` pairs
+2. ✅ Added comprehensive unit tests in `src/dotnes.tests/Program6502WriterTests.cs` (47 tests)
+3. ✅ All 151 tests in test suite pass
 
 ### Phase 3: Migrate Built-in Subroutines
 
