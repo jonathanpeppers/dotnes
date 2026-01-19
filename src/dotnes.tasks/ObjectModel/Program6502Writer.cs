@@ -1,5 +1,6 @@
 using dotnes.ObjectModel;
 using static dotnes.ObjectModel.Asm;
+using static dotnes.NESConstants;
 
 namespace dotnes;
 
@@ -16,44 +17,7 @@ class Program6502Writer : IDisposable
     // Track the last instruction for optimization patterns (like consecutive LDA)
     private bool _lastLDA;
 
-    #region NES Constants (copied from NESWriter for compatibility)
-
-    protected const int ZP_START = 0x00;
-    protected const int STARTUP = 0x01;
-    protected const int NES_PRG_BANKS = 0x02;
-    protected const int VRAM_UPDATE = 0x03;
-    protected const int NAME_UPD_ADR = 0x04;
-    protected const int NAME_UPD_ENABLE = 0x06;
-    protected const int PAL_UPDATE = 0x07;
-    protected const int PAL_BG_PTR = 0x08;
-    protected const int PAL_SPR_PTR = 0x0A;
-    protected const int SCROLL_X = 0x0C;
-    protected const int SCROLL_Y = 0x0D;
-    protected const int TEMP = 0x17;
-    protected const int sp = 0x22;
-    protected const int ptr1 = 0x2A;
-    protected const int ptr2 = 0x2C;
-    protected const int tmp1 = 0x32;
-    protected const int PRG_FILEOFFS = 0x10;
-    protected const int PPU_MASK_VAR = 0x12;
-    protected const ushort OAM_BUF = 0x0200;
-    protected const ushort PAL_BUF = 0x01C0;
-    protected const ushort condes = 0x0300;
-    protected const ushort PPU_CTRL = 0x2000;
-    protected const ushort PPU_MASK = 0x2001;
-    protected const ushort PPU_STATUS = 0x2002;
-    protected const ushort PPU_OAM_ADDR = 0x2003;
-    protected const ushort PPU_OAM_DATA = 0x2004;
-    protected const ushort PPU_SCROLL = 0x2005;
-    protected const ushort PPU_ADDR = 0x2006;
-    protected const ushort PPU_DATA = 0x2007;
-    protected const ushort DMC_FREQ = 0x4010;
-    protected const ushort PPU_OAM_DMA = 0x4014;
-    protected const ushort PPU_FRAMECNT = 0x4017;
-
     protected const ushort BaseAddress = 0x8000;
-
-    #endregion
 
     public Program6502Writer(ushort baseAddress = 0x8000, ILogger? logger = null)
     {

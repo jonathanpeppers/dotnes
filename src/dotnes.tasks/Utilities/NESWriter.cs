@@ -1,5 +1,6 @@
 ﻿using System.Buffers;
 using System.Text;
+using static dotnes.NESConstants;
 
 namespace dotnes;
 
@@ -37,49 +38,7 @@ class NESWriter : IDisposable
     /// </summary>
     public const int CHR_ROM_BLOCK_SIZE = 8192;
 
-    protected const int ZP_START = 0x00;
-    protected const int STARTUP = 0x01;
-    protected const int NES_PRG_BANKS = 0x02;
-    protected const int VRAM_UPDATE = 0x03;
-    protected const int NAME_UPD_ADR = 0x04;
-    protected const int NAME_UPD_ENABLE = 0x06;
-    protected const int PAL_UPDATE = 0x07;
-    protected const int PAL_BG_PTR = 0x08;
-    protected const int PAL_SPR_PTR = 0x0A;
-    protected const int SCROLL_X = 0x0C;
-    protected const int SCROLL_Y = 0x0D;
-    protected const int TEMP = 0x17;
-    protected const int sp = 0x22;
-    protected const int ptr1 = 0x2A;
-    protected const int ptr2 = 0x2C;
-    protected const int tmp1 = 0x32;
-    protected const int PRG_FILEOFFS = 0x10;
-    protected const int PPU_MASK_VAR = 0x12;
-    protected const ushort OAM_BUF = 0x0200;
-    protected const ushort PAL_BUF = 0x01C0;
-    protected const ushort condes = 0x0300;
-    protected const ushort PPU_CTRL = 0x2000;
-    protected const ushort PPU_MASK = 0x2001;
-    protected const ushort PPU_STATUS = 0x2002;
-    protected const ushort PPU_OAM_ADDR = 0x2003;
-    protected const ushort PPU_OAM_DATA = 0x2004;
-    protected const ushort PPU_SCROLL = 0x2005;
-    protected const ushort PPU_ADDR = 0x2006;
-    protected const ushort PPU_DATA = 0x2007;
-    protected const ushort DMC_FREQ = 0x4010;
-    protected const ushort PPU_OAM_DMA = 0x4014;
-    protected const ushort PPU_FRAMECNT = 0x4017;
-    protected const ushort skipNtsc = 0x81F9;
-    protected const ushort pal_col = 0x823E;
-    protected const ushort vram_adr = 0x83D4;
-    protected const ushort vram_write = 0x834F;
-    protected const ushort ppu_on_all = 0x8289;
-    protected const ushort ppu_wait_nmi = 0x82F0;
-    protected const ushort updName = 0x8385;
-    protected const ushort palBrightTableL = 0x8422;
-    protected const ushort palBrightTableH = 0x842B;
-
-    // Post-main functions
+    // Post-main functions (these depend on code layout, keep local)
     protected const ushort copydata = 0x850C;
     protected const ushort popa = 0x854F;
     protected const ushort popax = 0x8539;
