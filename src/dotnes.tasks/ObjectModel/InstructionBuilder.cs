@@ -368,29 +368,53 @@ public static class Asm
 
     #region Relative Addressing (Branches) - Byte Offset
 
-    public static Instruction BCC(sbyte offset) =>
-        new(Opcode.BCC, AddressMode.Relative, new RelativeByteOperand(offset));
+    /// <summary>
+    /// Branch if carry clear. Offset can be -128 to 127, or hex like 0xFA (interpreted as signed).
+    /// </summary>
+    public static Instruction BCC(int offset) =>
+        new(Opcode.BCC, AddressMode.Relative, new RelativeByteOperand((sbyte)offset));
 
-    public static Instruction BCS(sbyte offset) =>
-        new(Opcode.BCS, AddressMode.Relative, new RelativeByteOperand(offset));
+    /// <summary>
+    /// Branch if carry set. Offset can be -128 to 127, or hex like 0xFA (interpreted as signed).
+    /// </summary>
+    public static Instruction BCS(int offset) =>
+        new(Opcode.BCS, AddressMode.Relative, new RelativeByteOperand((sbyte)offset));
 
-    public static Instruction BEQ(sbyte offset) =>
-        new(Opcode.BEQ, AddressMode.Relative, new RelativeByteOperand(offset));
+    /// <summary>
+    /// Branch if equal (zero flag set). Offset can be -128 to 127, or hex like 0xFA (interpreted as signed).
+    /// </summary>
+    public static Instruction BEQ(int offset) =>
+        new(Opcode.BEQ, AddressMode.Relative, new RelativeByteOperand((sbyte)offset));
 
-    public static Instruction BMI(sbyte offset) =>
-        new(Opcode.BMI, AddressMode.Relative, new RelativeByteOperand(offset));
+    /// <summary>
+    /// Branch if minus (negative flag set). Offset can be -128 to 127, or hex like 0xFA (interpreted as signed).
+    /// </summary>
+    public static Instruction BMI(int offset) =>
+        new(Opcode.BMI, AddressMode.Relative, new RelativeByteOperand((sbyte)offset));
 
-    public static Instruction BNE(sbyte offset) =>
-        new(Opcode.BNE, AddressMode.Relative, new RelativeByteOperand(offset));
+    /// <summary>
+    /// Branch if not equal (zero flag clear). Offset can be -128 to 127, or hex like 0xFA (interpreted as signed).
+    /// </summary>
+    public static Instruction BNE(int offset) =>
+        new(Opcode.BNE, AddressMode.Relative, new RelativeByteOperand((sbyte)offset));
 
-    public static Instruction BPL(sbyte offset) =>
-        new(Opcode.BPL, AddressMode.Relative, new RelativeByteOperand(offset));
+    /// <summary>
+    /// Branch if plus (negative flag clear). Offset can be -128 to 127, or hex like 0xFA (interpreted as signed).
+    /// </summary>
+    public static Instruction BPL(int offset) =>
+        new(Opcode.BPL, AddressMode.Relative, new RelativeByteOperand((sbyte)offset));
 
-    public static Instruction BVC(sbyte offset) =>
-        new(Opcode.BVC, AddressMode.Relative, new RelativeByteOperand(offset));
+    /// <summary>
+    /// Branch if overflow clear. Offset can be -128 to 127, or hex like 0xFA (interpreted as signed).
+    /// </summary>
+    public static Instruction BVC(int offset) =>
+        new(Opcode.BVC, AddressMode.Relative, new RelativeByteOperand((sbyte)offset));
 
-    public static Instruction BVS(sbyte offset) =>
-        new(Opcode.BVS, AddressMode.Relative, new RelativeByteOperand(offset));
+    /// <summary>
+    /// Branch if overflow set. Offset can be -128 to 127, or hex like 0xFA (interpreted as signed).
+    /// </summary>
+    public static Instruction BVS(int offset) =>
+        new(Opcode.BVS, AddressMode.Relative, new RelativeByteOperand((sbyte)offset));
 
     #endregion
 

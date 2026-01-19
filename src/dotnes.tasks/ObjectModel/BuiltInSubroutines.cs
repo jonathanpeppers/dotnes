@@ -537,7 +537,7 @@ internal static class BuiltInSubroutines
              .Emit(CLC())
              .Emit(ADC(0x04))
              .Emit(STA_zpg(sp))
-             .Emit(BCC((sbyte)0x02))  // skip next instruction
+             .Emit(BCC(0x02))  // skip next instruction
              .Emit(INC_zpg(sp + 1))
              .Emit(TXA(), "@1")
              .Emit(CLC())
@@ -586,14 +586,14 @@ internal static class BuiltInSubroutines
         var block = new Block("_scroll");
         block.Emit(STA_zpg(TEMP))
              .Emit(TXA())
-             .Emit(BNE((sbyte)0x0E))    // to @1
+             .Emit(BNE(0x0E))    // to @1
              .Emit(LDA_zpg(TEMP))
              .Emit(CMP(0xF0))
-             .Emit(BCS((sbyte)0x08))    // to @1
+             .Emit(BCS(0x08))    // to @1
              .Emit(STA_zpg(SCROLL_Y))
              .Emit(LDA(0x00))
              .Emit(STA_zpg(TEMP))
-             .Emit(BEQ((sbyte)0x0B))    // to @2
+             .Emit(BEQ(0x0B))    // to @2
              .Emit(SEC(), "@1")
              .Emit(LDA_zpg(TEMP))
              .Emit(SBC(0xF0))
@@ -707,18 +707,18 @@ internal static class BuiltInSubroutines
              .Emit(STX_zpg(0x1A))
              .Emit(JSR("popa"))
              .Emit(LDX_zpg(0x1A))
-             .Emit(BEQ((sbyte)0x0C))  // branch to @3
+             .Emit(BEQ(0x0C))  // branch to @3
              .Emit(LDX(0x00), "@1")
              .Emit(STA_abs(PPU_DATA), "@2")
              .Emit(DEX())
-             .Emit(BNE((sbyte)unchecked((sbyte)0xFA)))  // branch back to @2 (-6)
+             .Emit(BNE(-6))  // branch back to @2
              .Emit(DEC_zpg(0x1A))
-             .Emit(BNE((sbyte)unchecked((sbyte)0xF6)))  // branch back to @2 (-10)
+             .Emit(BNE(-10))  // branch back to @2
              .Emit(LDX_zpg(0x19), "@3")
-             .Emit(BEQ((sbyte)0x06))  // branch to @4
+             .Emit(BEQ(0x06))  // branch to @4
              .Emit(STA_abs(PPU_DATA))
              .Emit(DEX())
-             .Emit(BNE((sbyte)unchecked((sbyte)0xFA)))  // branch back (-6)
+             .Emit(BNE(-6))  // branch back
              .Emit(RTS(), "@4");
         return block;
     }
@@ -740,7 +740,7 @@ internal static class BuiltInSubroutines
         // 8414 RTS
         var block = new Block("_vram_inc");
         block.Emit(ORA(0x00))
-             .Emit(BEQ((sbyte)0x02))
+             .Emit(BEQ(0x02))
              .Emit(LDA(0x04))
              .Emit(STA_zpg(TEMP))
              .Emit(LDA_zpg(PRG_FILEOFFS))
@@ -786,15 +786,15 @@ internal static class BuiltInSubroutines
              .Emit(LDA_ind_Y(0x19), "@1")
              .Emit(STA_abs(PPU_DATA))
              .Emit(INC_zpg(0x19))
-             .Emit(BNE((sbyte)0x02))
+             .Emit(BNE(0x02))
              .Emit(INC_zpg(0x1A))
              .Emit(LDA_zpg(TEMP))
-             .Emit(BNE((sbyte)0x02))
+             .Emit(BNE(0x02))
              .Emit(DEC_zpg(TEMP + 1))
              .Emit(DEC_zpg(TEMP))
              .Emit(LDA_zpg(TEMP))
              .Emit(ORA_zpg(TEMP + 1))
-             .Emit(BNE((sbyte)unchecked((sbyte)0xE7)))  // branch back to @1 (-25)
+             .Emit(BNE(-25))  // branch back to @1
              .Emit(RTS());
         return block;
     }
@@ -857,7 +857,7 @@ internal static class BuiltInSubroutines
         block.Emit(TAX())
              .Emit(JSR(ppu_wait_nmi), "@1")
              .Emit(DEX())
-             .Emit(BNE((sbyte)unchecked((sbyte)0xFA)))  // branch back to @1 (-6)
+             .Emit(BNE(-6))  // branch back to @1
              .Emit(RTS());
         return block;
     }
