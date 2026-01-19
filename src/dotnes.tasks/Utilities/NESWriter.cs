@@ -300,32 +300,35 @@ class NESWriter : IDisposable
     /// <summary>
     /// Writes an "implied" instruction that has no argument
     /// </summary>
-    public void Write(NESInstruction i)
+    public void Write(Opcode opcode)
     {
-        LastLDA = i == NESInstruction.LDA;
-        _logger.WriteLine($"{i}({(int)i:X})");
-        _writer.Write((byte)i);
+        byte encoded = OpcodeTable.Encode(opcode, AddressMode.Implied);
+        LastLDA = opcode == Opcode.LDA;
+        _logger.WriteLine($"{opcode}({encoded:X})");
+        _writer.Write(encoded);
     }
 
     /// <summary>
-    /// Writes an instruction with a single byte argument
+    /// Writes an instruction with a single byte argument (immediate or zero page)
     /// </summary>
-    public void Write (NESInstruction i, byte @byte)
+    public void Write(Opcode opcode, AddressMode mode, byte value)
     {
-        LastLDA = i == NESInstruction.LDA;
-        _logger.WriteLine($"{i}({(int)i:X}) {@byte:X}");
-        _writer.Write((byte)i);
-        _writer.Write(@byte);
+        byte encoded = OpcodeTable.Encode(opcode, mode);
+        LastLDA = opcode == Opcode.LDA;
+        _logger.WriteLine($"{opcode}({encoded:X}) {value:X}");
+        _writer.Write(encoded);
+        _writer.Write(value);
     }
 
     /// <summary>
     /// Writes an instruction with an address argument (2 bytes)
     /// </summary>
-    public void Write(NESInstruction i, ushort address)
+    public void Write(Opcode opcode, AddressMode mode, ushort address)
     {
-        LastLDA = i == NESInstruction.LDA;
-        _logger.WriteLine($"{i}({(int)i:X}) {address:X}");
-        _writer.Write((byte)i);
+        byte encoded = OpcodeTable.Encode(opcode, mode);
+        LastLDA = opcode == Opcode.LDA;
+        _logger.WriteLine($"{opcode}({encoded:X}) {address:X}");
+        _writer.Write(encoded);
         _writer.Write(address);
     }
 

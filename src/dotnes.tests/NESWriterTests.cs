@@ -46,7 +46,7 @@ public class NESWriterTests
     public void WriteLDA()
     {
         using var writer = GetWriter();
-        writer.Write(NESInstruction.LDA, 0x08);
+        writer.Write(Opcode.LDA, AddressMode.Immediate, 0x08);
         writer.Flush();
 
         // 8076	A908          	LDA #$08  
@@ -57,7 +57,7 @@ public class NESWriterTests
     public void WriteJSR()
     {
         using var writer = GetWriter();
-        writer.Write(NESInstruction.JSR, 0x84F4);
+        writer.Write(Opcode.JSR, AddressMode.Absolute, 0x84F4);
         writer.Flush();
 
         // 807A	20F484        	JSR initlib
@@ -239,47 +239,47 @@ public class NESWriterTests
         ushort ppu_on_all = 0x8289;
 
         // pal_col(0, 0x02);
-        writer.Write(NESInstruction.LDA, 0x00);
-        writer.Write(NESInstruction.JSR, pusha);
-        writer.Write(NESInstruction.LDA, 0x02);
-        writer.Write(NESInstruction.JSR, pal_col);
+        writer.Write(Opcode.LDA, AddressMode.Immediate, 0x00);
+        writer.Write(Opcode.JSR, AddressMode.Absolute, pusha);
+        writer.Write(Opcode.LDA, AddressMode.Immediate, 0x02);
+        writer.Write(Opcode.JSR, AddressMode.Absolute, pal_col);
 
         // pal_col(1, 0x14);
-        writer.Write(NESInstruction.LDA, 0x01);
-        writer.Write(NESInstruction.JSR, pusha);
-        writer.Write(NESInstruction.LDA, 0x14);
-        writer.Write(NESInstruction.JSR, pal_col);
+        writer.Write(Opcode.LDA, AddressMode.Immediate, 0x01);
+        writer.Write(Opcode.JSR, AddressMode.Absolute, pusha);
+        writer.Write(Opcode.LDA, AddressMode.Immediate, 0x14);
+        writer.Write(Opcode.JSR, AddressMode.Absolute, pal_col);
 
         // pal_col(2, 0x20);
-        writer.Write(NESInstruction.LDA, 0x02);
-        writer.Write(NESInstruction.JSR, pusha);
-        writer.Write(NESInstruction.LDA, 0x20);
-        writer.Write(NESInstruction.JSR, pal_col);
+        writer.Write(Opcode.LDA, AddressMode.Immediate, 0x02);
+        writer.Write(Opcode.JSR, AddressMode.Absolute, pusha);
+        writer.Write(Opcode.LDA, AddressMode.Immediate, 0x20);
+        writer.Write(Opcode.JSR, AddressMode.Absolute, pal_col);
 
         // pal_col(3, 0x30);
-        writer.Write(NESInstruction.LDA, 0x03);
-        writer.Write(NESInstruction.JSR, pusha);
-        writer.Write(NESInstruction.LDA, 0x30);
-        writer.Write(NESInstruction.JSR, pal_col);
+        writer.Write(Opcode.LDA, AddressMode.Immediate, 0x03);
+        writer.Write(Opcode.JSR, AddressMode.Absolute, pusha);
+        writer.Write(Opcode.LDA, AddressMode.Immediate, 0x30);
+        writer.Write(Opcode.JSR, AddressMode.Absolute, pal_col);
 
         // vram_adr(NTADR_A(2, 2));
-        writer.Write(NESInstruction.LDX, 0x20);
-        writer.Write(NESInstruction.LDA, 0x42);
-        writer.Write(NESInstruction.JSR, vram_adr);
+        writer.Write(Opcode.LDX, AddressMode.Immediate, 0x20);
+        writer.Write(Opcode.LDA, AddressMode.Immediate, 0x42);
+        writer.Write(Opcode.JSR, AddressMode.Absolute, vram_adr);
 
         // vram_write("HELLO, .NET!", 12);
-        writer.Write(NESInstruction.LDA, 0xF1);
-        writer.Write(NESInstruction.LDX, 0x85);
-        writer.Write(NESInstruction.JSR, pushax);
-        writer.Write(NESInstruction.LDX, 0x00);
-        writer.Write(NESInstruction.LDA, 0x0C);
-        writer.Write(NESInstruction.JSR, vram_write);
+        writer.Write(Opcode.LDA, AddressMode.Immediate, 0xF1);
+        writer.Write(Opcode.LDX, AddressMode.Immediate, 0x85);
+        writer.Write(Opcode.JSR, AddressMode.Absolute, pushax);
+        writer.Write(Opcode.LDX, AddressMode.Immediate, 0x00);
+        writer.Write(Opcode.LDA, AddressMode.Immediate, 0x0C);
+        writer.Write(Opcode.JSR, AddressMode.Absolute, vram_write);
 
         // ppu_on_all();
-        writer.Write(NESInstruction.JSR, ppu_on_all);
+        writer.Write(Opcode.JSR, AddressMode.Absolute, ppu_on_all);
 
         // while (true) ;
-        writer.Write(NESInstruction.JMP_abs, 0x8540); // Jump to self
+        writer.Write(Opcode.JMP, AddressMode.Absolute, 0x8540); // Jump to self
 
         writer.WriteFinalBuiltIns(0x85FE, locals: 0);
         writer.WriteString("HELLO, .NET!");

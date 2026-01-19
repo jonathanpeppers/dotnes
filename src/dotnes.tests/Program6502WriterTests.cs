@@ -4,18 +4,18 @@ using static dotnes.ObjectModel.Asm;
 namespace dotnes.tests;
 
 /// <summary>
-/// Tests for Program6502Writer - the adapter layer between old NESWriter API and new object model
+/// Tests for Program6502Writer - the adapter layer that emits 6502 code using the new object model
 /// </summary>
 public class Program6502WriterTests
 {
-    #region Basic Write Tests (NESInstruction compatibility)
+    #region Basic Write Tests
 
     [Fact]
     public void Write_ImpliedInstruction_EmitsCorrectly()
     {
         using var writer = new Program6502Writer();
 
-        writer.Write(NESInstruction.RTS_impl);
+        writer.Write(Opcode.RTS);
 
         var bytes = writer.ToBytes();
         Assert.Equal([0x60], bytes);
@@ -26,7 +26,7 @@ public class Program6502WriterTests
     {
         using var writer = new Program6502Writer();
 
-        writer.Write(NESInstruction.LDA, 0x42);
+        writer.Write(Opcode.LDA, AddressMode.Immediate, 0x42);
 
         var bytes = writer.ToBytes();
         Assert.Equal([0xA9, 0x42], bytes);
@@ -37,7 +37,7 @@ public class Program6502WriterTests
     {
         using var writer = new Program6502Writer();
 
-        writer.Write(NESInstruction.STA_zpg, 0x17);
+        writer.Write(Opcode.STA, AddressMode.ZeroPage, 0x17);
 
         var bytes = writer.ToBytes();
         Assert.Equal([0x85, 0x17], bytes);
@@ -48,7 +48,7 @@ public class Program6502WriterTests
     {
         using var writer = new Program6502Writer();
 
-        writer.Write(NESInstruction.JMP_abs, 0x823E);
+        writer.Write(Opcode.JMP, AddressMode.Absolute, (ushort)0x823E);
 
         var bytes = writer.ToBytes();
         Assert.Equal([0x4C, 0x3E, 0x82], bytes);
@@ -59,7 +59,7 @@ public class Program6502WriterTests
     {
         using var writer = new Program6502Writer();
 
-        writer.Write(NESInstruction.JSR, 0x823E);
+        writer.Write(Opcode.JSR, AddressMode.Absolute, (ushort)0x823E);
 
         var bytes = writer.ToBytes();
         Assert.Equal([0x20, 0x3E, 0x82], bytes);
@@ -70,9 +70,9 @@ public class Program6502WriterTests
     {
         using var writer = new Program6502Writer();
 
-        writer.Write(NESInstruction.LDA, 0x02);
-        writer.Write(NESInstruction.STA_zpg, 0x17);
-        writer.Write(NESInstruction.RTS_impl);
+        writer.Write(Opcode.LDA, AddressMode.Immediate, 0x02);
+        writer.Write(Opcode.STA, AddressMode.ZeroPage, 0x17);
+        writer.Write(Opcode.RTS);
 
         var bytes = writer.ToBytes();
         Assert.Equal([0xA9, 0x02, 0x85, 0x17, 0x60], bytes);
@@ -87,7 +87,7 @@ public class Program6502WriterTests
     {
         using var writer = new Program6502Writer();
 
-        writer.Write(NESInstruction.BNE_rel, 0xFB); // -5 as signed byte
+        writer.Write(Opcode.BNE, AddressMode.Relative, 0xFB); // -5 as signed byte
 
         var bytes = writer.ToBytes();
         Assert.Equal([0xD0, 0xFB], bytes);
@@ -98,7 +98,7 @@ public class Program6502WriterTests
     {
         using var writer = new Program6502Writer();
 
-        writer.Write(NESInstruction.BEQ_rel, 0x05);
+        writer.Write(Opcode.BEQ, AddressMode.Relative, 0x05);
 
         var bytes = writer.ToBytes();
         Assert.Equal([0xF0, 0x05], bytes);
@@ -114,7 +114,7 @@ public class Program6502WriterTests
         using var writer = new Program6502Writer();
 
         writer.DefineExternalLabel("_pal_col", 0x823E);
-        writer.WriteWithLabel(NESInstruction.JSR, "_pal_col");
+        writer.WriteWithLabel(Opcode.JSR, AddressMode.Absolute, "_pal_col");
 
         var bytes = writer.ToBytes();
         Assert.Equal([0x20, 0x3E, 0x82], bytes);
@@ -126,7 +126,7 @@ public class Program6502WriterTests
         using var writer = new Program6502Writer();
 
         writer.DefineExternalLabel("forever", 0x8005);
-        writer.WriteWithLabel(NESInstruction.JMP_abs, "forever");
+        writer.WriteWithLabel(Opcode.JMP, AddressMode.Absolute, "forever");
 
         var bytes = writer.ToBytes();
         Assert.Equal([0x4C, 0x05, 0x80], bytes);
@@ -141,9 +141,9 @@ public class Program6502WriterTests
     {
         using var writer = new Program6502Writer();
 
-        writer.Write(NESInstruction.LDA, 0x00);
-        writer.Write(NESInstruction.STA_zpg, 0x17);
-        writer.Write(NESInstruction.RTS_impl);
+        writer.Write(Opcode.LDA, AddressMode.Immediate, 0x00);
+        writer.Write(Opcode.STA, AddressMode.ZeroPage, 0x17);
+        writer.Write(Opcode.RTS);
 
         writer.RemoveLastInstructions();
 
@@ -156,9 +156,9 @@ public class Program6502WriterTests
     {
         using var writer = new Program6502Writer();
 
-        writer.Write(NESInstruction.LDA, 0x00);
-        writer.Write(NESInstruction.STA_zpg, 0x17);
-        writer.Write(NESInstruction.RTS_impl);
+        writer.Write(Opcode.LDA, AddressMode.Immediate, 0x00);
+        writer.Write(Opcode.STA, AddressMode.ZeroPage, 0x17);
+        writer.Write(Opcode.RTS);
 
         writer.RemoveLastInstructions(2);
 
@@ -171,9 +171,9 @@ public class Program6502WriterTests
     {
         using var writer = new Program6502Writer();
 
-        writer.Write(NESInstruction.LDA, 0x00);     // 2 bytes
-        writer.Write(NESInstruction.JSR, 0x8000);   // 3 bytes
-        writer.Write(NESInstruction.RTS_impl);      // 1 byte
+        writer.Write(Opcode.LDA, AddressMode.Immediate, 0x00);     // 2 bytes
+        writer.Write(Opcode.JSR, AddressMode.Absolute, (ushort)0x8000);   // 3 bytes
+        writer.Write(Opcode.RTS);      // 1 byte
 
         Assert.Equal(4, writer.GetSizeOfLastInstructions(2)); // JSR + RTS = 3 + 1
         Assert.Equal(6, writer.GetSizeOfLastInstructions(3)); // LDA + JSR + RTS = 2 + 3 + 1
@@ -188,11 +188,11 @@ public class Program6502WriterTests
     {
         using var writer = new Program6502Writer();
 
-        writer.Write(NESInstruction.LDA, 0x00);
+        writer.Write(Opcode.LDA, AddressMode.Immediate, 0x00);
 
         var block = writer.CreateBlock("subroutine");
-        writer.Write(NESInstruction.INX_impl);
-        writer.Write(NESInstruction.RTS_impl);
+        writer.Write(Opcode.INX);
+        writer.Write(Opcode.RTS);
 
         Assert.Equal(2, writer.Program.BlockCount);
     }
@@ -202,10 +202,10 @@ public class Program6502WriterTests
     {
         using var writer = new Program6502Writer();
 
-        writer.Write(NESInstruction.LDA, 0x00);     // $8000 - 2 bytes
+        writer.Write(Opcode.LDA, AddressMode.Immediate, 0x00);     // $8000 - 2 bytes
         writer.DefineLabel("loop");
-        writer.Write(NESInstruction.INX_impl);      // $8002 - label points here
-        writer.Write(NESInstruction.RTS_impl);
+        writer.Write(Opcode.INX);      // $8002 - label points here
+        writer.Write(Opcode.RTS);
 
         // Force resolve
         _ = writer.ToBytes();
@@ -256,13 +256,13 @@ public class Program6502WriterTests
 
         Assert.Equal(0, writer.CurrentSize);
 
-        writer.Write(NESInstruction.LDA, 0x00); // 2 bytes
+        writer.Write(Opcode.LDA, AddressMode.Immediate, 0x00); // 2 bytes
         Assert.Equal(2, writer.CurrentSize);
 
-        writer.Write(NESInstruction.JSR, 0x8000); // 3 bytes
+        writer.Write(Opcode.JSR, AddressMode.Absolute, (ushort)0x8000); // 3 bytes
         Assert.Equal(5, writer.CurrentSize);
 
-        writer.Write(NESInstruction.RTS_impl); // 1 byte
+        writer.Write(Opcode.RTS); // 1 byte
         Assert.Equal(6, writer.CurrentSize);
     }
 
@@ -277,10 +277,10 @@ public class Program6502WriterTests
 
         Assert.False(writer.LastLDA);
 
-        writer.Write(NESInstruction.LDA, 0x42);
+        writer.Write(Opcode.LDA, AddressMode.Immediate, 0x42);
         Assert.True(writer.LastLDA);
 
-        writer.Write(NESInstruction.STA_zpg, 0x17);
+        writer.Write(Opcode.STA, AddressMode.ZeroPage, 0x17);
         Assert.False(writer.LastLDA);
     }
 
@@ -293,7 +293,7 @@ public class Program6502WriterTests
     {
         using var writer = new Program6502Writer();
 
-        writer.WriteWithLabel(NESInstruction.JSR, "undefined_sub");
+        writer.WriteWithLabel(Opcode.JSR, AddressMode.Absolute, "undefined_sub");
 
         var unresolved = writer.Validate();
 
@@ -306,7 +306,7 @@ public class Program6502WriterTests
         using var writer = new Program6502Writer();
 
         writer.DefineExternalLabel("my_sub", 0x8100);
-        writer.WriteWithLabel(NESInstruction.JSR, "my_sub");
+        writer.WriteWithLabel(Opcode.JSR, AddressMode.Absolute, "my_sub");
 
         var unresolved = writer.Validate();
 
@@ -325,12 +325,12 @@ public class Program6502WriterTests
 
         writer.DefineExternalLabel("_pal_col", 0x823E);
 
-        writer.Write(NESInstruction.LDA, 0x02);           // palette index
-        writer.WriteWithLabel(NESInstruction.JSR, "_pal_col");
+        writer.Write(Opcode.LDA, AddressMode.Immediate, 0x02);           // palette index
+        writer.WriteWithLabel(Opcode.JSR, AddressMode.Absolute, "_pal_col");
         
         // Infinite loop
         writer.DefineLabel("forever");
-        writer.Write(NESInstruction.JMP_abs, 0x8005);     // JMP to self (at $8005)
+        writer.Write(Opcode.JMP, AddressMode.Absolute, (ushort)0x8005);     // JMP to self (at $8005)
 
         var bytes = writer.ToBytes();
 
@@ -340,14 +340,14 @@ public class Program6502WriterTests
     }
 
     [Fact]
-    public void Integration_MixedFluentAndLegacy_WorksTogether()
+    public void Integration_MixedFluentAndWrite_WorksTogether()
     {
         using var writer = new Program6502Writer();
 
-        // Mix legacy NESInstruction API with new fluent API
-        writer.Write(NESInstruction.LDA, 0x00);
+        // Mix Write API with fluent API
+        writer.Write(Opcode.LDA, AddressMode.Immediate, 0x00);
         writer.Emit(STA_zpg(0x17));
-        writer.Write(NESInstruction.INX_impl);
+        writer.Write(Opcode.INX);
         writer.Emit(RTS());
 
         var bytes = writer.ToBytes();
@@ -359,8 +359,8 @@ public class Program6502WriterTests
     {
         using var writer = new Program6502Writer();
 
-        writer.Write(NESInstruction.LDA, 0x42);
-        writer.Write(NESInstruction.RTS_impl);
+        writer.Write(Opcode.LDA, AddressMode.Immediate, 0x42);
+        writer.Write(Opcode.RTS);
 
         var disasm = writer.Disassemble();
 
@@ -371,16 +371,13 @@ public class Program6502WriterTests
 
     #endregion
 
-    #region All NESInstruction Conversion Tests
-
-    // These tests verify that NESInstruction enum values convert correctly to opcodes
-    // We use individual facts instead of Theory/InlineData because NESInstruction is internal
+    #region All Opcode/AddressMode Tests
 
     [Fact]
     public void Write_ADC_ImmediateMode_EmitsCorrectly()
     {
         using var writer = new Program6502Writer();
-        writer.Write(NESInstruction.ADC, 0x42);
+        writer.Write(Opcode.ADC, AddressMode.Immediate, 0x42);
         Assert.Equal([0x69, 0x42], writer.ToBytes());
     }
 
@@ -388,7 +385,7 @@ public class Program6502WriterTests
     public void Write_AND_ImmediateMode_EmitsCorrectly()
     {
         using var writer = new Program6502Writer();
-        writer.Write(NESInstruction.AND, 0x1F);
+        writer.Write(Opcode.AND, AddressMode.Immediate, 0x1F);
         Assert.Equal([0x29, 0x1F], writer.ToBytes());
     }
 
@@ -396,7 +393,7 @@ public class Program6502WriterTests
     public void Write_EOR_ImmediateMode_EmitsCorrectly()
     {
         using var writer = new Program6502Writer();
-        writer.Write(NESInstruction.EOR_imm, 0xFF);
+        writer.Write(Opcode.EOR, AddressMode.Immediate, 0xFF);
         Assert.Equal([0x49, 0xFF], writer.ToBytes());
     }
 
@@ -404,7 +401,7 @@ public class Program6502WriterTests
     public void Write_ORA_ImmediateMode_EmitsCorrectly()
     {
         using var writer = new Program6502Writer();
-        writer.Write(NESInstruction.ORA, 0x80);
+        writer.Write(Opcode.ORA, AddressMode.Immediate, 0x80);
         Assert.Equal([0x09, 0x80], writer.ToBytes());
     }
 
@@ -412,7 +409,7 @@ public class Program6502WriterTests
     public void Write_CMP_ZeroPage_EmitsCorrectly()
     {
         using var writer = new Program6502Writer();
-        writer.Write(NESInstruction.CMP_zpg, 0x17);
+        writer.Write(Opcode.CMP, AddressMode.ZeroPage, 0x17);
         Assert.Equal([0xC5, 0x17], writer.ToBytes());
     }
 
@@ -420,7 +417,7 @@ public class Program6502WriterTests
     public void Write_DEC_ZeroPage_EmitsCorrectly()
     {
         using var writer = new Program6502Writer();
-        writer.Write(NESInstruction.DEC_zpg, 0x17);
+        writer.Write(Opcode.DEC, AddressMode.ZeroPage, 0x17);
         Assert.Equal([0xC6, 0x17], writer.ToBytes());
     }
 
@@ -428,7 +425,7 @@ public class Program6502WriterTests
     public void Write_INC_ZeroPage_EmitsCorrectly()
     {
         using var writer = new Program6502Writer();
-        writer.Write(NESInstruction.INC_zpg, 0x17);
+        writer.Write(Opcode.INC, AddressMode.ZeroPage, 0x17);
         Assert.Equal([0xE6, 0x17], writer.ToBytes());
     }
 
@@ -436,7 +433,7 @@ public class Program6502WriterTests
     public void Write_CLC_Implied_EmitsCorrectly()
     {
         using var writer = new Program6502Writer();
-        writer.Write(NESInstruction.CLC);
+        writer.Write(Opcode.CLC);
         Assert.Equal([0x18], writer.ToBytes());
     }
 
@@ -444,7 +441,7 @@ public class Program6502WriterTests
     public void Write_CLD_Implied_EmitsCorrectly()
     {
         using var writer = new Program6502Writer();
-        writer.Write(NESInstruction.CLD_impl);
+        writer.Write(Opcode.CLD);
         Assert.Equal([0xD8], writer.ToBytes());
     }
 
@@ -452,7 +449,7 @@ public class Program6502WriterTests
     public void Write_DEX_Implied_EmitsCorrectly()
     {
         using var writer = new Program6502Writer();
-        writer.Write(NESInstruction.DEX_impl);
+        writer.Write(Opcode.DEX);
         Assert.Equal([0xCA], writer.ToBytes());
     }
 
@@ -460,7 +457,7 @@ public class Program6502WriterTests
     public void Write_DEY_Implied_EmitsCorrectly()
     {
         using var writer = new Program6502Writer();
-        writer.Write(NESInstruction.DEY_impl);
+        writer.Write(Opcode.DEY);
         Assert.Equal([0x88], writer.ToBytes());
     }
 
@@ -468,7 +465,7 @@ public class Program6502WriterTests
     public void Write_SEC_Implied_EmitsCorrectly()
     {
         using var writer = new Program6502Writer();
-        writer.Write(NESInstruction.SEC_impl);
+        writer.Write(Opcode.SEC);
         Assert.Equal([0x38], writer.ToBytes());
     }
 
@@ -476,7 +473,7 @@ public class Program6502WriterTests
     public void Write_SEI_Implied_EmitsCorrectly()
     {
         using var writer = new Program6502Writer();
-        writer.Write(NESInstruction.SEI_impl);
+        writer.Write(Opcode.SEI);
         Assert.Equal([0x78], writer.ToBytes());
     }
 
@@ -484,7 +481,7 @@ public class Program6502WriterTests
     public void Write_TAX_Implied_EmitsCorrectly()
     {
         using var writer = new Program6502Writer();
-        writer.Write(NESInstruction.TAX_impl);
+        writer.Write(Opcode.TAX);
         Assert.Equal([0xAA], writer.ToBytes());
     }
 
@@ -492,7 +489,7 @@ public class Program6502WriterTests
     public void Write_TAY_Implied_EmitsCorrectly()
     {
         using var writer = new Program6502Writer();
-        writer.Write(NESInstruction.TAY_impl);
+        writer.Write(Opcode.TAY);
         Assert.Equal([0xA8], writer.ToBytes());
     }
 
@@ -500,7 +497,7 @@ public class Program6502WriterTests
     public void Write_TXA_Implied_EmitsCorrectly()
     {
         using var writer = new Program6502Writer();
-        writer.Write(NESInstruction.TXA_impl);
+        writer.Write(Opcode.TXA);
         Assert.Equal([0x8A], writer.ToBytes());
     }
 
@@ -508,7 +505,7 @@ public class Program6502WriterTests
     public void Write_TXS_Implied_EmitsCorrectly()
     {
         using var writer = new Program6502Writer();
-        writer.Write(NESInstruction.TXS_impl);
+        writer.Write(Opcode.TXS);
         Assert.Equal([0x9A], writer.ToBytes());
     }
 
@@ -516,7 +513,7 @@ public class Program6502WriterTests
     public void Write_TYA_Implied_EmitsCorrectly()
     {
         using var writer = new Program6502Writer();
-        writer.Write(NESInstruction.TYA_impl);
+        writer.Write(Opcode.TYA);
         Assert.Equal([0x98], writer.ToBytes());
     }
 
@@ -524,7 +521,7 @@ public class Program6502WriterTests
     public void Write_PHA_Implied_EmitsCorrectly()
     {
         using var writer = new Program6502Writer();
-        writer.Write(NESInstruction.PHA_impl);
+        writer.Write(Opcode.PHA);
         Assert.Equal([0x48], writer.ToBytes());
     }
 
@@ -532,7 +529,7 @@ public class Program6502WriterTests
     public void Write_PHP_Implied_EmitsCorrectly()
     {
         using var writer = new Program6502Writer();
-        writer.Write(NESInstruction.PHP_impl);
+        writer.Write(Opcode.PHP);
         Assert.Equal([0x08], writer.ToBytes());
     }
 
@@ -540,7 +537,7 @@ public class Program6502WriterTests
     public void Write_PLA_Implied_EmitsCorrectly()
     {
         using var writer = new Program6502Writer();
-        writer.Write(NESInstruction.PLA_impl);
+        writer.Write(Opcode.PLA);
         Assert.Equal([0x68], writer.ToBytes());
     }
 
@@ -548,7 +545,7 @@ public class Program6502WriterTests
     public void Write_PLP_Implied_EmitsCorrectly()
     {
         using var writer = new Program6502Writer();
-        writer.Write(NESInstruction.PLP_impl);
+        writer.Write(Opcode.PLP);
         Assert.Equal([0x28], writer.ToBytes());
     }
 
@@ -556,7 +553,7 @@ public class Program6502WriterTests
     public void Write_RTI_Implied_EmitsCorrectly()
     {
         using var writer = new Program6502Writer();
-        writer.Write(NESInstruction.RTI_impl);
+        writer.Write(Opcode.RTI);
         Assert.Equal([0x40], writer.ToBytes());
     }
 

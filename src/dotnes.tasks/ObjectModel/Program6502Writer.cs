@@ -92,55 +92,51 @@ class Program6502Writer : IDisposable
 
     #endregion
 
-    #region NESInstruction-Compatible Write Methods
+    #region Write Methods
 
     /// <summary>
     /// Writes an implied instruction (no operand)
     /// </summary>
-    public void Write(NESInstruction i)
+    public void Write(Opcode opcode, AddressMode mode = AddressMode.Implied)
     {
-        var (opcode, mode) = ConvertNESInstruction(i);
         var instruction = new Instruction(opcode, mode);
         EmitInstruction(instruction);
         
-        _lastLDA = i == NESInstruction.LDA;
-        _logger.WriteLine($"{i}({(int)i:X})");
+        _lastLDA = opcode == Opcode.LDA;
+        _logger.WriteLine($"{opcode}({(int)opcode:X}) [{mode}]");
     }
 
     /// <summary>
     /// Writes an instruction with a single byte operand
     /// </summary>
-    public void Write(NESInstruction i, byte value)
+    public void Write(Opcode opcode, AddressMode mode, byte value)
     {
-        var (opcode, mode) = ConvertNESInstruction(i);
         var operand = new ImmediateOperand(value);
         var instruction = new Instruction(opcode, mode, operand);
         EmitInstruction(instruction);
 
-        _lastLDA = i == NESInstruction.LDA;
-        _logger.WriteLine($"{i}({(int)i:X}) {value:X}");
+        _lastLDA = opcode == Opcode.LDA;
+        _logger.WriteLine($"{opcode}({(int)opcode:X}) [{mode}] {value:X}");
     }
 
     /// <summary>
     /// Writes an instruction with an address operand (2 bytes)
     /// </summary>
-    public void Write(NESInstruction i, ushort address)
+    public void Write(Opcode opcode, AddressMode mode, ushort address)
     {
-        var (opcode, mode) = ConvertNESInstruction(i);
         var operand = new AbsoluteOperand(address);
         var instruction = new Instruction(opcode, mode, operand);
         EmitInstruction(instruction);
 
-        _lastLDA = i == NESInstruction.LDA;
-        _logger.WriteLine($"{i}({(int)i:X}) {address:X}");
+        _lastLDA = opcode == Opcode.LDA;
+        _logger.WriteLine($"{opcode}({(int)opcode:X}) [{mode}] {address:X}");
     }
 
     /// <summary>
     /// Writes an instruction with a label reference
     /// </summary>
-    public void WriteWithLabel(NESInstruction i, string label)
+    public void WriteWithLabel(Opcode opcode, AddressMode mode, string label)
     {
-        var (opcode, mode) = ConvertNESInstruction(i);
         Operand operand;
         
         if (mode == AddressMode.Relative)
@@ -155,8 +151,8 @@ class Program6502Writer : IDisposable
         var instruction = new Instruction(opcode, mode, operand);
         EmitInstruction(instruction);
 
-        _lastLDA = i == NESInstruction.LDA;
-        _logger.WriteLine($"{i}({(int)i:X}) {label}");
+        _lastLDA = opcode == Opcode.LDA;
+        _logger.WriteLine($"{opcode}({(int)opcode:X}) [{mode}] {label}");
     }
 
     private void EmitInstruction(Instruction instruction)
@@ -263,19 +259,6 @@ class Program6502Writer : IDisposable
     public void WriteRawData(byte[] data, string? label = null)
     {
         _program.AddRawData(data, label);
-    }
-
-    #endregion
-
-    #region NESInstruction to Opcode/AddressMode Conversion
-
-    /// <summary>
-    /// Converts the legacy NESInstruction enum to the new Opcode + AddressMode.
-    /// Uses the shared NESInstructionConverter.
-    /// </summary>
-    private static (Opcode opcode, AddressMode mode) ConvertNESInstruction(NESInstruction i)
-    {
-        return NESInstructionConverter.Convert(i);
     }
 
     #endregion

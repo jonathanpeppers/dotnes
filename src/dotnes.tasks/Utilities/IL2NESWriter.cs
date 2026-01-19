@@ -216,7 +216,7 @@ class IL2NESWriter : NESWriter
                 {
                     operand = (sbyte)(byte)operand;
                     Labels.TryGetValue($"instruction_{instruction.Offset + operand + 2:X2}", out var label);
-                    Emit(NESInstruction.JMP_abs, label);
+                    Emit(Opcode.JMP, AddressMode.Absolute, label);
                 }
                 break;
             case ILOpCode.Newarr:
@@ -242,8 +242,8 @@ class IL2NESWriter : NESWriter
                     RemoveLastInstructions(2);
                 else
                     SeekBack(5);
-                Emit(NESInstruction.CMP, checked((byte)Stack.Pop()));
-                Emit(NESInstruction.BNE_rel, NumberOfInstructionsForBranch(instruction.Offset + operand + 2, sizeOfMain));
+                Emit(Opcode.CMP, AddressMode.Immediate, checked((byte)Stack.Pop()));
+                Emit(Opcode.BNE, AddressMode.Relative, NumberOfInstructionsForBranch(instruction.Offset + operand + 2, sizeOfMain));
                 break;
             default:
                 throw new NotImplementedException($"OpCode {instruction.OpCode} with Int32 operand is not implemented!");
@@ -316,10 +316,10 @@ class IL2NESWriter : NESWriter
                 break;
             case ILOpCode.Ldstr:
                 //TODO: hardcoded until string table figured out
-                Emit(NESInstruction.LDA, 0xF1);
-                Emit(NESInstruction.LDX, 0x85);
-                Emit(NESInstruction.JSR, Labels["pushax"]);
-                Emit(NESInstruction.LDX, 0x00);
+                Emit(Opcode.LDA, AddressMode.Immediate, 0xF1);
+                Emit(Opcode.LDX, AddressMode.Immediate, 0x85);
+                Emit(Opcode.JSR, AddressMode.Absolute, Labels["pushax"]);
+                Emit(Opcode.LDX, AddressMode.Immediate, 0x00);
                 if (operand.Length > ushort.MaxValue)
                 {
                     throw new NotImplementedException($"{instruction.OpCode} not implemented for value larger than ushort: {operand}");
@@ -359,12 +359,12 @@ class IL2NESWriter : NESWriter
                         else
                             SeekBack(7);
                         //TODO: these are hardcoded until I figure this out
-                        Emit(NESInstruction.LDX, 0x20);
-                        Emit(NESInstruction.LDA, 0x42);
+                        Emit(Opcode.LDX, AddressMode.Immediate, 0x20);
+                        Emit(Opcode.LDA, AddressMode.Immediate, 0x42);
                         Stack.Push(address);
                         break;
                     default:
-                        Emit(NESInstruction.JSR, GetAddress(operand));
+                        Emit(Opcode.JSR, AddressMode.Absolute, GetAddress(operand));
                         break;
                 }
                 // Pop N times
@@ -402,8 +402,8 @@ class IL2NESWriter : NESWriter
                 // HACK: write these if next instruction is Call
                 if (Instructions is not null && Instructions[Index + 1].OpCode == ILOpCode.Call)
                 {
-                    Emit(NESInstruction.LDA, (byte)(ByteArrayOffset & 0xff));
-                    Emit(NESInstruction.LDX, (byte)(ByteArrayOffset >> 8));
+                    Emit(Opcode.LDA, AddressMode.Immediate, (byte)(ByteArrayOffset & 0xff));
+                    Emit(Opcode.LDX, AddressMode.Immediate, (byte)(ByteArrayOffset >> 8));
                 }
                 Stack.Push(ByteArrayOffset);
                 ByteArrayOffset = (ushort)(ByteArrayOffset + operand.Length);
@@ -508,10 +508,10 @@ class IL2NESWriter : NESWriter
                 RemoveLastInstructions(1);
             else
                 SeekBack(2);
-            Emit(NESInstruction.LDA, (byte)local.Value);
-            Emit(NESInstruction.STA_abs, (ushort)local.Address);
-            Emit(NESInstruction.LDA, 0x22);
-            Emit(NESInstruction.LDX, 0x86);
+            Emit(Opcode.LDA, AddressMode.Immediate, (byte)local.Value);
+            Emit(Opcode.STA, AddressMode.Absolute, (ushort)local.Address);
+            Emit(Opcode.LDA, AddressMode.Immediate, 0x22);
+            Emit(Opcode.LDX, AddressMode.Immediate, 0x86);
         }
         else if (local.Value < ushort.MaxValue)
         {
@@ -521,12 +521,12 @@ class IL2NESWriter : NESWriter
                 RemoveLastInstructions(2);
             else
                 SeekBack(4);
-            Emit(NESInstruction.LDX, 0x03);
-            Emit(NESInstruction.LDA, 0xC0);
-            Emit(NESInstruction.STA_abs, (ushort)local.Address);
-            Emit(NESInstruction.STX_abs, (ushort)(local.Address + 1));
-            Emit(NESInstruction.LDA, 0x28);
-            Emit(NESInstruction.LDX, 0x86);
+            Emit(Opcode.LDX, AddressMode.Immediate, 0x03);
+            Emit(Opcode.LDA, AddressMode.Immediate, 0xC0);
+            Emit(Opcode.STA, AddressMode.Absolute, (ushort)local.Address);
+            Emit(Opcode.STX, AddressMode.Absolute, (ushort)(local.Address + 1));
+            Emit(Opcode.LDA, AddressMode.Immediate, 0x28);
+            Emit(Opcode.LDX, AddressMode.Immediate, 0x86);
         }
         else
         {
@@ -538,10 +538,10 @@ class IL2NESWriter : NESWriter
     {
         if (LastLDA)
         {
-            Emit(NESInstruction.JSR, Labels["pusha"]);
+            Emit(Opcode.JSR, AddressMode.Absolute, Labels["pusha"]);
         }
-        Emit(NESInstruction.LDX, checked((byte)(operand >> 8)));
-        Emit(NESInstruction.LDA, checked((byte)(operand & 0xff)));
+        Emit(Opcode.LDX, AddressMode.Immediate, checked((byte)(operand >> 8)));
+        Emit(Opcode.LDA, AddressMode.Immediate, checked((byte)(operand & 0xff)));
         Stack.Push(operand);
     }
 
@@ -549,9 +549,9 @@ class IL2NESWriter : NESWriter
     {
         if (LastLDA)
         {
-            Emit(NESInstruction.JSR, Labels["pusha"]);
+            Emit(Opcode.JSR, AddressMode.Absolute, Labels["pusha"]);
         }
-        Emit(NESInstruction.LDA, operand);
+        Emit(Opcode.LDA, AddressMode.Immediate, operand);
         Stack.Push(operand);
     }
 
@@ -562,14 +562,14 @@ class IL2NESWriter : NESWriter
             // This is actually a local variable
             if (local.Value < byte.MaxValue)
             {
-                Emit(NESInstruction.LDA_abs, (ushort)local.Address);
-                Emit(NESInstruction.JSR, Labels["pusha"]);
+                Emit(Opcode.LDA, AddressMode.Absolute, (ushort)local.Address);
+                Emit(Opcode.JSR, AddressMode.Absolute, Labels["pusha"]);
             }
             else if (local.Value < ushort.MaxValue)
             {
-                Emit(NESInstruction.JSR, Labels["pusha"]);
-                Emit(NESInstruction.LDA_abs, (ushort)local.Address);
-                Emit(NESInstruction.LDX_abs, (ushort)(local.Address + 1));
+                Emit(Opcode.JSR, AddressMode.Absolute, Labels["pusha"]);
+                Emit(Opcode.LDA, AddressMode.Absolute, (ushort)local.Address);
+                Emit(Opcode.LDX, AddressMode.Absolute, (ushort)(local.Address + 1));
             }
             else
             {
@@ -579,11 +579,11 @@ class IL2NESWriter : NESWriter
         else
         {
             // This is more like an inline constant value
-            Emit(NESInstruction.LDA, (byte)(local.Value & 0xff));
-            Emit(NESInstruction.LDX, (byte)(local.Value >> 8));
-            Emit(NESInstruction.JSR, Labels["pushax"]);
-            Emit(NESInstruction.LDX, 0x00);
-            Emit(NESInstruction.LDA, 0x40);
+            Emit(Opcode.LDA, AddressMode.Immediate, (byte)(local.Value & 0xff));
+            Emit(Opcode.LDX, AddressMode.Immediate, (byte)(local.Value >> 8));
+            Emit(Opcode.JSR, AddressMode.Absolute, Labels["pushax"]);
+            Emit(Opcode.LDX, AddressMode.Immediate, 0x00);
+            Emit(Opcode.LDA, AddressMode.Immediate, 0x40);
         }
         Stack.Push(local.Value);
     }
@@ -613,25 +613,23 @@ class IL2NESWriter : NESWriter
     /// <summary>
     /// Emits an instruction to the main block (when buffering) or to stream (when not).
     /// </summary>
-    void Emit(NESInstruction instruction)
+    void Emit(Opcode opcode, AddressMode mode = AddressMode.Implied)
     {
         if (_mainBlock != null)
         {
-            var (opcode, mode) = ConvertNESInstruction(instruction);
             _mainBlock.Emit(new Instruction(opcode, mode));
             LastLDA = opcode == Opcode.LDA && mode == AddressMode.Immediate;
         }
         else
         {
-            Write(instruction);
+            Write(opcode);
         }
     }
 
-    void Emit(NESInstruction instruction, byte operand)
+    void Emit(Opcode opcode, AddressMode mode, byte operand)
     {
         if (_mainBlock != null)
         {
-            var (opcode, mode) = ConvertNESInstruction(instruction);
             Operand op = mode switch
             {
                 AddressMode.Immediate => new ImmediateOperand(operand),
@@ -646,27 +644,21 @@ class IL2NESWriter : NESWriter
         }
         else
         {
-            Write(instruction, operand);
+            Write(opcode, mode, operand);
         }
     }
 
-    void Emit(NESInstruction instruction, ushort operand)
+    void Emit(Opcode opcode, AddressMode mode, ushort operand)
     {
         if (_mainBlock != null)
         {
-            var (opcode, mode) = ConvertNESInstruction(instruction);
             _mainBlock.Emit(new Instruction(opcode, mode, new AbsoluteOperand(operand)));
             LastLDA = opcode == Opcode.LDA && mode == AddressMode.Immediate;
         }
         else
         {
-            Write(instruction, operand);
+            Write(opcode, mode, operand);
         }
-    }
-
-    static (Opcode opcode, AddressMode mode) ConvertNESInstruction(NESInstruction instruction)
-    {
-        return NESInstructionConverter.Convert(instruction);
     }
 
     /// <summary>
