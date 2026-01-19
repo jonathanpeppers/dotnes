@@ -729,7 +729,7 @@ public class BuiltInSubroutinesTests
         Assert.Equal("donelib", BuiltInSubroutines.Donelib().Label);
         Assert.Equal("copydata", BuiltInSubroutines.Copydata().Label);
         Assert.Equal("zerobss", BuiltInSubroutines.Zerobss().Label);
-        Assert.Equal("_pad_poll", BuiltInSubroutines.PadPoll().Label);
+        Assert.Equal("pad_poll", BuiltInSubroutines.PadPoll().Label);
     }
 
     #endregion

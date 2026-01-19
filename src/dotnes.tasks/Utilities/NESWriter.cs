@@ -285,29 +285,13 @@ class NESWriter : IDisposable
     /// </summary>
     public void WriteFinalBuiltIns(ushort totalSize, byte locals)
     {
-        SetLabel(nameof(donelib), CurrentAddress);
         WriteBlock(BuiltInSubroutines.Donelib(totalSize));
-
-        SetLabel(nameof(copydata), CurrentAddress);
         WriteBlock(BuiltInSubroutines.Copydata(totalSize));
-
-        SetLabel(nameof(popax), CurrentAddress);
         WriteBlock(BuiltInSubroutines.Popax());
-
         WriteBlock(BuiltInSubroutines.Incsp2());
-
-        SetLabel(nameof(popa), CurrentAddress);
         WriteBlock(BuiltInSubroutines.Popa());
-
-        // pusha label is at offset +4 (after pusha0sp and pushaysp prefixes)
-        SetLabel(nameof(pusha), (ushort)(CurrentAddress + 4));
         WriteBlock(BuiltInSubroutines.Pusha());
-
-        // pushax label is at offset +4 (after push0 and pusha0 prefixes)
-        SetLabel(nameof(pushax), (ushort)(CurrentAddress + 4));
         WriteBlock(BuiltInSubroutines.Pushax());
-
-        SetLabel(nameof(zerobss), CurrentAddress);
         WriteBlock(BuiltInSubroutines.Zerobss(locals));
 
         // List of optional methods at the end
@@ -319,7 +303,6 @@ class NESWriter : IDisposable
             }
             if (UsedMethods.Contains(nameof(NESLib.pad_poll)))
             {
-                SetLabel(nameof(NESLib.pad_poll), CurrentAddress);
                 WriteBlock(BuiltInSubroutines.PadPoll());
             }
         }
@@ -514,6 +497,12 @@ class NESWriter : IDisposable
     protected void WriteBlock(Block block)
     {
         ushort currentAddress = CurrentAddress;
+        
+        // Set label for this block if it has one (with optional offset for prefix instructions)
+        if (block.Label != null)
+        {
+            SetLabel(block.Label, (ushort)(currentAddress + block.LabelOffset));
+        }
         
         // Build a local label table for intra-block labels
         var localLabels = new Dictionary<string, ushort>();

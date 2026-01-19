@@ -10,15 +10,22 @@ public class Block
     /// <summary>
     /// Creates a new block with an optional label
     /// </summary>
-    public Block(string? label = null)
+    public Block(string? label = null, int labelOffset = 0)
     {
         Label = label;
+        LabelOffset = labelOffset;
     }
 
     /// <summary>
     /// Optional label for this block (e.g., subroutine name)
     /// </summary>
     public string? Label { get; set; }
+
+    /// <summary>
+    /// Offset in bytes from start of block where the label should point.
+    /// Used when blocks have prefix instructions before the main entry point.
+    /// </summary>
+    public int LabelOffset { get; set; }
 
     /// <summary>
     /// Number of instructions in this block

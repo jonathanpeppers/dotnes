@@ -984,7 +984,8 @@ internal static class BuiltInSubroutines
     public static Block Pusha()
     {
         // NESWriter: A000 B122 A422 F007 C622 A000 9122 60 C623 C622 9122 60
-        var block = new Block("pusha");
+        // Label at +4 (after pusha0sp/pushaysp prefix)
+        var block = new Block("pusha", labelOffset: 4);
         // pusha0sp prefix
         block.Emit(LDY(0x00))
              // pushaysp
@@ -1011,7 +1012,8 @@ internal static class BuiltInSubroutines
     public static Block Pushax()
     {
         // NESWriter: A900 A200 48 A522 38 E902 8522 B002 C623 A001 8A 9122 68 88 9122 60
-        var block = new Block("pushax");
+        // Label at +4 (after push0/pusha0 prefix)
+        var block = new Block("pushax", labelOffset: 4);
         // push0 prefix
         block.Emit(LDA(0x00))
              // pusha0
@@ -1417,7 +1419,7 @@ internal static class BuiltInSubroutines
     /// </summary>
     public static Block PadPoll()
     {
-        var block = new Block("_pad_poll");
+        var block = new Block("pad_poll");
         block.Emit(TAY())
              .Emit(LDX(0x00))
              // Pad poll port
