@@ -504,7 +504,6 @@ class NESWriter : IDisposable
                 Write(NESInstruction.ORA, 0x18);
                 break;
             case nameof(NESLib.ppu_onoff):
-                //TODO: not sure if we should emit ppu_onoff at the same place
                 /*
                  * 828D	8512          	STA PPU_MASK_VAR              ; ppu_onoff
                  * 828F	4CF082        	JMP _ppu_wait_nmi

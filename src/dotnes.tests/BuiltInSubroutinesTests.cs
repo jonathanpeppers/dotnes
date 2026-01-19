@@ -140,6 +140,49 @@ public class BuiltInSubroutinesTests
     }
 
     [Fact]
+    public void PalBg_WithPalCopy_ProducesCorrectBranch()
+    {
+        // Test that PalBg correctly branches to pal_copy
+        var program = new Program6502 { BaseAddress = 0x8211 };
+        program.AddBlock(BuiltInSubroutines.PalAll());  // 8 bytes at 0x8211
+        program.AddBlock(BuiltInSubroutines.PalCopy()); // 18 bytes at 0x8219
+        program.AddBlock(BuiltInSubroutines.PalBg());   // 9 bytes at 0x822B (branches back to 0x8219)
+        program.ResolveAddresses();
+
+        var bytes = program.ToBytes();
+        
+        // PalBg should be: STA $17, STX $18, LDX #$00, LDA #$10, BNE offset_to_pal_copy
+        // At 0x822B: bytes [0..3] are 85 17 86 18, [4..5] A2 00, [6..7] A9 10, [8..9] D0 xx
+        // The BNE at 0x8233 needs to branch back to 0x8219 (pal_copy)
+        // Offset = 0x8219 - 0x8235 = -28 = 0xE4
+        var palBgStart = 8 + 18; // after PalAll and PalCopy
+        Assert.Equal(0xD0, bytes[palBgStart + 8]); // BNE opcode
+        Assert.Equal(0xE4, bytes[palBgStart + 9]); // Branch offset -28
+    }
+
+    [Fact]
+    public void PpuOnBg_WithPpuOnOff_ProducesCorrectBranch()
+    {
+        // Test that PpuOnBg correctly branches to ppu_onoff
+        var program = new Program6502 { BaseAddress = 0x8289 };
+        program.DefineExternalLabel("ppu_wait_nmi", 0x82F0);
+        program.AddBlock(BuiltInSubroutines.PpuOnAll());  // 4 bytes at 0x8289
+        program.AddBlock(BuiltInSubroutines.PpuOnOff()); // 5 bytes at 0x828D
+        program.AddBlock(BuiltInSubroutines.PpuOnBg());  // 5 bytes at 0x8292 (branches back to 0x828D)
+        program.ResolveAddresses();
+
+        var bytes = program.ToBytes();
+        
+        // PpuOnBg: LDA $12, ORA #$08, BNE offset_to_ppu_onoff
+        // At 0x8292: [0..1] A5 12, [2..3] 09 08, [4..5] D0 xx
+        // BNE at 0x8296 branches to 0x828D
+        // Offset = 0x828D - 0x8298 = -11 = 0xF5
+        var ppuOnBgStart = 4 + 5; // after PpuOnAll and PpuOnOff
+        Assert.Equal(0xD0, bytes[ppuOnBgStart + 4]); // BNE opcode
+        Assert.Equal(0xF5, bytes[ppuOnBgStart + 5]); // Branch offset -11
+    }
+
+    [Fact]
     public void PalSprBright_ProducesCorrectBytes()
     {
         var block = BuiltInSubroutines.PalSprBright();
@@ -536,7 +579,7 @@ public class BuiltInSubroutinesTests
         Assert.Equal("_ppu_on_bg", BuiltInSubroutines.PpuOnBg().Label);
         Assert.Equal("_ppu_on_spr", BuiltInSubroutines.PpuOnSpr().Label);
         Assert.Equal("_ppu_mask", BuiltInSubroutines.PpuMask().Label);
-        Assert.Equal("_ppu_wait_nmi", BuiltInSubroutines.PpuWaitNmi().Label);
+        Assert.Equal("ppu_wait_nmi", BuiltInSubroutines.PpuWaitNmi().Label);
         Assert.Equal("_ppu_wait_frame", BuiltInSubroutines.PpuWaitFrame().Label);
         Assert.Equal("_ppu_system", BuiltInSubroutines.PpuSystem().Label);
         Assert.Equal("_get_ppu_ctrl_var", BuiltInSubroutines.GetPpuCtrlVar().Label);

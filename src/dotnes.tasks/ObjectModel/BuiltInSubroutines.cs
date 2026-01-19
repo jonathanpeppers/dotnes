@@ -139,6 +139,7 @@ internal static class BuiltInSubroutines
 
     /// <summary>
     /// _pal_all - Set all 32 colors at once
+    /// Note: Must be emitted immediately before pal_copy (falls through)
     /// </summary>
     public static Block PalAll()
     {
@@ -147,12 +148,12 @@ internal static class BuiltInSubroutines
              .Emit(STX_zpg(TEMP + 1))
              .Emit(LDX(0x00))
              .Emit(LDA(0x20));
-        // Note: Falls through to pal_copy
+        // Falls through to pal_copy
         return block;
     }
 
     /// <summary>
-    /// pal_copy - Copy palette data
+    /// pal_copy - Copy palette data (shared tail for pal_all, pal_bg, pal_spr)
     /// </summary>
     public static Block PalCopy()
     {
@@ -172,6 +173,7 @@ internal static class BuiltInSubroutines
 
     /// <summary>
     /// _pal_bg - Set background palette (16 colors)
+    /// Uses label-based branch to pal_copy
     /// </summary>
     public static Block PalBg()
     {
@@ -180,12 +182,13 @@ internal static class BuiltInSubroutines
              .Emit(STX_zpg(TEMP + 1))
              .Emit(LDX(0x00))
              .Emit(LDA(0x10))
-             .Emit(BNE(-28));  // Branch to pal_copy (relative offset depends on layout)
+             .Emit(BNE("pal_copy"));  // Branch to pal_copy
         return block;
     }
 
     /// <summary>
     /// _pal_spr - Set sprite palette (16 colors)
+    /// Uses label-based branch to pal_copy
     /// </summary>
     public static Block PalSpr()
     {
@@ -194,7 +197,7 @@ internal static class BuiltInSubroutines
              .Emit(STX_zpg(TEMP + 1))
              .Emit(LDX(0x10))
              .Emit(TXA())
-             .Emit(BNE(-37));  // Branch to pal_copy
+             .Emit(BNE("pal_copy"));  // Branch to pal_copy
         return block;
     }
 
@@ -295,6 +298,7 @@ internal static class BuiltInSubroutines
 
     /// <summary>
     /// _ppu_on_all - Enable background and sprite rendering
+    /// Note: Must be emitted immediately before ppu_onoff (falls through)
     /// </summary>
     public static Block PpuOnAll()
     {
@@ -312,31 +316,33 @@ internal static class BuiltInSubroutines
     {
         var block = new Block("ppu_onoff");
         block.Emit(STA_zpg(PPU_MASK_VAR))
-             .Emit(JMP_abs(ppu_wait_nmi));
+             .Emit(JMP_abs(ppu_wait_nmi));  // Uses constant since ppu_wait_nmi is emitted later
         return block;
     }
 
     /// <summary>
     /// _ppu_on_bg - Enable background rendering only
+    /// Uses label-based branch to ppu_onoff
     /// </summary>
     public static Block PpuOnBg()
     {
         var block = new Block("_ppu_on_bg");
         block.Emit(LDA_zpg(PPU_MASK_VAR))
              .Emit(ORA(0x08))
-             .Emit(BNE(-11));  // Branch to ppu_onoff
+             .Emit(BNE("ppu_onoff"));
         return block;
     }
 
     /// <summary>
     /// _ppu_on_spr - Enable sprite rendering only
+    /// Uses label-based branch to ppu_onoff
     /// </summary>
     public static Block PpuOnSpr()
     {
         var block = new Block("_ppu_on_spr");
         block.Emit(LDA_zpg(PPU_MASK_VAR))
              .Emit(ORA(0x10))
-             .Emit(BNE(-16));  // Branch to ppu_onoff
+             .Emit(BNE("ppu_onoff"));
         return block;
     }
 
@@ -352,12 +358,12 @@ internal static class BuiltInSubroutines
     }
 
     /// <summary>
-    /// _ppu_wait_nmi - Wait for next NMI
+    /// ppu_wait_nmi - Wait for next NMI
     /// </summary>
     public static Block PpuWaitNmi()
     {
         // NESWriter: LDA #$01, STA VRAM_UPDATE, LDA STARTUP, CMP STARTUP, BEQ -4, RTS
-        var block = new Block("_ppu_wait_nmi");
+        var block = new Block("ppu_wait_nmi");
         block.Emit(LDA(0x01))
              .Emit(STA_zpg(VRAM_UPDATE))
              .Emit(LDA_zpg(STARTUP))

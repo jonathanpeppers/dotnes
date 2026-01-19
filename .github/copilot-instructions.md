@@ -45,6 +45,8 @@ Tests in [src/dotnes.tests/](src/dotnes.tests/) use **Verify snapshots**:
 - `TranspilerTests.Write` verifies entire ROM output byte-for-byte
 - `TranspilerTests.ReadStaticVoidMain` verifies IL parsing
 
+**⚠️ CRITICAL: The `.verified.bin` files are the absolute source of truth. Any code change that causes `TranspilerTests.Write` to produce different bytes is WRONG. The ROM output must be byte-for-byte identical. Never update verified files to match changed output—fix the code instead.**
+
 **Adding new test cases:** Compile sample code, copy `.dll` to `Data/`, add `[InlineData("name", true/false)]`.
 
 ## NES Program Constraints
