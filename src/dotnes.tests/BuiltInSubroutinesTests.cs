@@ -213,8 +213,8 @@ public class BuiltInSubroutinesTests
 
         var bytes = program.ToBytes();
 
-        // LDA $13, RTS
-        Assert.Equal([0xA5, 0x13, 0x60], bytes);
+        // NESWriter: LDA $10, LDX #$00, RTS
+        Assert.Equal([0xA5, 0x10, 0xA2, 0x00, 0x60], bytes);
     }
 
     [Fact]
@@ -227,8 +227,8 @@ public class BuiltInSubroutinesTests
 
         var bytes = program.ToBytes();
 
-        // STA $13, RTS
-        Assert.Equal([0x85, 0x13, 0x60], bytes);
+        // NESWriter: STA $10, RTS
+        Assert.Equal([0x85, 0x10, 0x60], bytes);
     }
 
     [Fact]
@@ -241,8 +241,8 @@ public class BuiltInSubroutinesTests
 
         var bytes = program.ToBytes();
 
-        // LDA $15, RTS
-        Assert.Equal([0xA5, 0x15, 0x60], bytes);
+        // NESWriter: LDA $00, LDX #$00, RTS
+        Assert.Equal([0xA5, 0x00, 0xA2, 0x00, 0x60], bytes);
     }
 
     [Fact]

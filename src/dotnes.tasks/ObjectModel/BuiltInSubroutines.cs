@@ -289,7 +289,7 @@ internal static class BuiltInSubroutines
         block.Emit(LDA_zpg(PPU_MASK_VAR))
              .Emit(AND(0xE7))
              .Emit(STA_zpg(PPU_MASK_VAR))
-             .Emit(JMP_abs("_ppu_wait_nmi"));
+             .Emit(JMP_abs(ppu_wait_nmi));
         return block;
     }
 
@@ -312,7 +312,7 @@ internal static class BuiltInSubroutines
     {
         var block = new Block("ppu_onoff");
         block.Emit(STA_zpg(PPU_MASK_VAR))
-             .Emit(JMP_abs("_ppu_wait_nmi"));
+             .Emit(JMP_abs(ppu_wait_nmi));
         return block;
     }
 
@@ -393,8 +393,10 @@ internal static class BuiltInSubroutines
     /// </summary>
     public static Block PpuSystem()
     {
+        // NESWriter: LDA ZP_START ($00), LDX #$00, RTS
         var block = new Block("_ppu_system");
-        block.Emit(LDA_zpg(0x15))  // NTSC_MODE
+        block.Emit(LDA_zpg(ZP_START))
+             .Emit(LDX(0x00))
              .Emit(RTS());
         return block;
     }
@@ -404,8 +406,10 @@ internal static class BuiltInSubroutines
     /// </summary>
     public static Block GetPpuCtrlVar()
     {
+        // NESWriter: LDA PRG_FILEOFFS ($10), LDX #$00, RTS
         var block = new Block("_get_ppu_ctrl_var");
-        block.Emit(LDA_zpg(0x13))  // PPU_CTRL_VAR
+        block.Emit(LDA_zpg(PRG_FILEOFFS))
+             .Emit(LDX(0x00))
              .Emit(RTS());
         return block;
     }
@@ -415,8 +419,9 @@ internal static class BuiltInSubroutines
     /// </summary>
     public static Block SetPpuCtrlVar()
     {
+        // NESWriter: STA PRG_FILEOFFS ($10), RTS
         var block = new Block("_set_ppu_ctrl_var");
-        block.Emit(STA_zpg(0x13))  // PPU_CTRL_VAR
+        block.Emit(STA_zpg(PRG_FILEOFFS))
              .Emit(RTS());
         return block;
     }

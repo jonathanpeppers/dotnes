@@ -547,16 +547,7 @@ class NESWriter : IDisposable
                 Write(NESInstruction.JMP_abs, 0x826B);
                 break;
             case nameof(NESLib.ppu_off):
-                /*
-                 * 8280	A512          	LDA PPU_MASK_VAR              ; _ppu_off
-                 * 8282	29E7          	AND #$E7
-                 * 8284	8512          	STA PPU_MASK_VAR
-                 * 8286	4CF082        	JMP _ppu_wait_nmi
-                 */
-                Write(NESInstruction.LDA_zpg, PPU_MASK_VAR);
-                Write(NESInstruction.AND, 0xE7);
-                Write(NESInstruction.STA_zpg, PPU_MASK_VAR);
-                Write(NESInstruction.JMP_abs, ppu_wait_nmi);
+                WriteBlock(BuiltInSubroutines.PpuOff());
                 break;
             case nameof(NESLib.ppu_on_all):
                 /*
@@ -596,40 +587,16 @@ class NESWriter : IDisposable
                 Write(NESInstruction.BNE_rel, 0xEF);
                 break;
             case nameof(NESLib.ppu_mask):
-                /*
-                 * 829E	8512          	STA PPU_MASK_VAR              ; _ppu_mask
-                 * 82A0	60            	RTS
-                 */
-                Write(NESInstruction.STA_zpg, PPU_MASK_VAR);
-                Write(NESInstruction.RTS_impl);
+                WriteBlock(BuiltInSubroutines.PpuMask());
                 break;
             case nameof(NESLib.ppu_system):
-                /*
-                 * 82A1	A500          	LDA __ZP_START__              ; _ppu_system
-                 * 82A3	A200          	LDX #$00
-                 * 82A5	60            	RTS
-                 */
-                Write(NESInstruction.LDA_zpg, ZP_START);
-                Write(NESInstruction.LDX, 0x00);
-                Write(NESInstruction.RTS_impl);
+                WriteBlock(BuiltInSubroutines.PpuSystem());
                 break;
             case nameof(NESLib.get_ppu_ctrl_var):
-                /*
-                 * 82A6	A510          	LDA __PRG_FILEOFFS__          ; _get_ppu_ctrl_var
-                 * 82A8	A200          	LDX #$00
-                 * 82AA	60            	RTS
-                 */
-                Write(NESInstruction.LDA_zpg, PRG_FILEOFFS);
-                Write(NESInstruction.LDX, 0x00);
-                Write(NESInstruction.RTS_impl);
+                WriteBlock(BuiltInSubroutines.GetPpuCtrlVar());
                 break;
             case nameof(NESLib.set_ppu_ctrl_var):
-                /*
-                 * 82AB	8510          	STA __PRG_FILEOFFS__          ; _set_ppu_ctrl_var
-                 * 82AD	60            	RTS
-                 */
-                Write(NESInstruction.STA_zpg, PRG_FILEOFFS);
-                Write(NESInstruction.RTS_impl);
+                WriteBlock(BuiltInSubroutines.SetPpuCtrlVar());
                 break;
             case nameof(NESLib.oam_clear):
                 WriteBlock(BuiltInSubroutines.OamClear());
