@@ -112,7 +112,7 @@ internal static class BuiltInSubroutines
              .Emit(PHA())
              .Emit(TYA())
              .Emit(PHA())
-             .Emit(LDA_zpg(0x12))    // PPU_MASK_VAR
+             .Emit(LDA_zpg(PPU_MASK_VAR))
              .Emit(AND(0x18))
              .Emit(BNE(3))           // if rendering enabled, continue
              .Emit(JMP_abs(0x81E6)); // JMP to @skipAll (address is layout dependent)
@@ -160,13 +160,13 @@ internal static class BuiltInSubroutines
     public static Block PalCopy()
     {
         var block = new Block(nameof(NESLib.pal_copy));
-        block.Emit(STA_zpg(0x19))
+        block.Emit(STA_zpg(TEMP2))
              .Emit(LDY(0x00))
              .Emit(LDA_ind_Y(TEMP), "@0")
              .Emit(STA_abs_X(PAL_BUF))
              .Emit(INX())
              .Emit(INY())
-             .Emit(DEC_zpg(0x19))
+             .Emit(DEC_zpg(TEMP2))
              .Emit(BNE(-11))  // branch back to @0
              .Emit(INC_zpg(PAL_UPDATE))
              .Emit(RTS());
@@ -711,18 +711,18 @@ internal static class BuiltInSubroutines
         // 83FE BNE -$06      ; to 83FA
         // 8400 RTS           ; @4
         var block = new Block(nameof(NESLib.vram_fill));
-        block.Emit(STA_zpg(0x19))
-             .Emit(STX_zpg(0x1A))
+        block.Emit(STA_zpg(TEMP2))
+             .Emit(STX_zpg(TEMP3))
              .Emit(JSR(nameof(NESConstants.popa)))
-             .Emit(LDX_zpg(0x1A))
+             .Emit(LDX_zpg(TEMP3))
              .Emit(BEQ(0x0C))  // branch to @3
              .Emit(LDX(0x00), "@1")
              .Emit(STA_abs(PPU_DATA), "@2")
              .Emit(DEX())
              .Emit(BNE(-6))  // branch back to @2
-             .Emit(DEC_zpg(0x1A))
+             .Emit(DEC_zpg(TEMP3))
              .Emit(BNE(-10))  // branch back to @2
-             .Emit(LDX_zpg(0x19), "@3")
+             .Emit(LDX_zpg(TEMP2), "@3")
              .Emit(BEQ(0x06))  // branch to @4
              .Emit(STA_abs(PPU_DATA))
              .Emit(DEX())
@@ -788,14 +788,14 @@ internal static class BuiltInSubroutines
         block.Emit(STA_zpg(TEMP))
              .Emit(STX_zpg(TEMP + 1))
              .Emit(JSR(nameof(NESConstants.popax)))
-             .Emit(STA_zpg(0x19))
-             .Emit(STX_zpg(0x1A))
+             .Emit(STA_zpg(TEMP2))
+             .Emit(STX_zpg(TEMP3))
              .Emit(LDY(0x00))
-             .Emit(LDA_ind_Y(0x19), "@1")
+             .Emit(LDA_ind_Y(TEMP2), "@1")
              .Emit(STA_abs(PPU_DATA))
-             .Emit(INC_zpg(0x19))
+             .Emit(INC_zpg(TEMP2))
              .Emit(BNE(0x02))
-             .Emit(INC_zpg(0x1A))
+             .Emit(INC_zpg(TEMP3))
              .Emit(LDA_zpg(TEMP))
              .Emit(BNE(0x02))
              .Emit(DEC_zpg(TEMP + 1))
@@ -934,8 +934,8 @@ internal static class BuiltInSubroutines
     public static Block NmiSetCallback()
     {
         var block = new Block(nameof(nmi_set_callback));
-        block.Emit(STA_zpg(0x15))  // NMI_CALLBACK+1
-             .Emit(STX_zpg(0x16))
+        block.Emit(STA_zpg(NMI_CALLBACK + 1))  // Low byte of callback address
+             .Emit(STX_zpg(NMI_CALLBACK + 2))  // High byte of callback address
              .Emit(RTS());
         return block;
     }
@@ -1398,16 +1398,16 @@ internal static class BuiltInSubroutines
              .Emit(STA_zpg(sp + 1))
              .Emit(JSR(0x84F4))    // initlib
              .Emit(LDA(0x4C))      // JMP opcode
-             .Emit(STA_zpg(0x14))
+             .Emit(STA_zpg(NMI_CALLBACK))
              .Emit(LDA(0x10))      // low byte of callback
-             .Emit(STA_zpg(0x15))
+             .Emit(STA_zpg(NMI_CALLBACK + 1))
              .Emit(LDA(0x82))      // high byte of callback
-             .Emit(STA_zpg(0x16))
+             .Emit(STA_zpg(NMI_CALLBACK + 2))
              .Emit(LDA(0x80))      // PPU_CTRL setting
-             .Emit(STA_zpg(0x10))
+             .Emit(STA_zpg(PRG_FILEOFFS))
              .Emit(STA_abs(PPU_CTRL))
              .Emit(LDA(0x06))      // PPU_MASK setting
-             .Emit(STA_zpg(0x12));
+             .Emit(STA_zpg(PPU_MASK_VAR));
         return block;
     }
 
@@ -1440,11 +1440,11 @@ internal static class BuiltInSubroutines
              .Emit(CPX(0x03))
              .Emit(BNE(-29)) // branch to @padPollPort
              .Emit(LDA_zpg(TEMP + 1))
-             .Emit(CMP_zpg(0x19))
+             .Emit(CMP_zpg(TEMP2))
              .Emit(BEQ(6))   // branch to @done
-             .Emit(CMP_zpg(0x1A))
+             .Emit(CMP_zpg(TEMP3))
              .Emit(BEQ(2))   // branch to @done
-             .Emit(LDA_zpg(0x19))
+             .Emit(LDA_zpg(TEMP2))
              // @done
              .Emit(STA_abs_Y(0x003C), "@done")
              .Emit(TAX())
