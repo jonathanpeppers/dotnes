@@ -385,10 +385,9 @@ class IL2NESWriter : NESWriter
                         break;
                     default:
                         // Emit JSR to built-in method
-                        string builtInLabel = GetLabelName(operand);
                         if (UseLabelReferences)
                         {
-                            EmitWithLabel(Opcode.JSR, AddressMode.Absolute, builtInLabel);
+                            EmitWithLabel(Opcode.JSR, AddressMode.Absolute, operand);
                         }
                         else
                         {
@@ -459,65 +458,25 @@ class IL2NESWriter : NESWriter
     }
 
     /// <summary>
-    /// Gets the label name for a built-in subroutine from the NESLib method name.
-    /// </summary>
-    string GetLabelName(string name) => name switch
-    {
-        // These map directly (same name)
-        nameof(pal_col) => "pal_col",
-        nameof(pal_bg) => "pal_bg",
-        nameof(pal_clear) => "pal_clear",
-        nameof(pal_all) => "pal_all",
-        nameof(pal_spr) => "pal_spr",
-        nameof(pal_spr_bright) => "pal_spr_bright",
-        nameof(ppu_on_all) => "ppu_on_all",
-        nameof(vram_adr) => "vram_adr",
-        nameof(ppu_wait_frame) => "ppu_wait_frame",
-        nameof(ppu_on_bg) => "ppu_on_bg",
-        nameof(ppu_on_spr) => "ppu_on_spr",
-        nameof(delay) => "delay",
-        nameof(nesclock) => "nesclock",
-        nameof(oam_clear) => "oam_clear",
-        nameof(oam_hide_rest) => "oam_hide_rest",
-        nameof(oam_size) => "oam_size",
-        nameof(vram_fill) => "vram_fill",
-        nameof(vram_write) => "vram_write",
-        nameof(vram_put) => "vram_put",
-        nameof(vram_inc) => "vram_inc",
-        nameof(set_vram_update) => "set_vram_update",
-        nameof(set_ppu_ctrl_var) => "set_ppu_ctrl_var",
-        nameof(scroll) => "scroll",
-        nameof(oam_spr) => "oam_spr",
-        nameof(pad_poll) => "pad_poll",
-        nameof(rand) => "rand",
-        nameof(rand8) => "rand8",
-        nameof(rand16) => "rand16",
-        nameof(set_rand) => "set_rand",
-        _ => throw new NotImplementedException($"{nameof(GetLabelName)} for {name} is not implemented!")
-    };
-
-    /// <summary>
     /// Gets the address of a built-in subroutine by looking up its label.
     /// The label names match the block names in BuiltInSubroutines.
     /// </summary>
     ushort GetAddress(string name)
     {
-        string labelName = GetLabelName(name);
-
         // Look up the label; return 0 for optional methods that haven't been written yet
-        if (Labels.TryGetValue(labelName, out var address))
+        if (Labels.TryGetValue(name, out var address))
         {
             return address;
         }
         
         // For optional methods (oam_spr, pad_poll) and unimplemented methods (rand*),
         // return 0 as placeholder - actual address will be calculated on second pass
-        if (labelName is "oam_spr" or "pad_poll" or "rand" or "rand8" or "rand16" or "set_rand")
+        if (name is "oam_spr" or "pad_poll" or "rand" or "rand8" or "rand16" or "set_rand")
         {
             return 0;
         }
         
-        throw new InvalidOperationException($"Label '{labelName}' not found in Labels dictionary. Ensure WriteBuiltIns() has been called.");
+        throw new InvalidOperationException($"Label '{name}' not found in Labels dictionary. Ensure WriteBuiltIns() has been called.");
     }
 
     void WriteStloc(Local local)
