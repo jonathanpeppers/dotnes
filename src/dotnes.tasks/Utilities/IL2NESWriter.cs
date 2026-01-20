@@ -29,14 +29,7 @@ class IL2NESWriter : NESWriter
     readonly List<ImmutableArray<byte>> _byteArrays = new();
     readonly ushort local = 0x324;
     readonly ReflectionCache _reflectionCache = new();
-    ushort ByteArrayOffset = 0;
     ILOpCode previous;
-
-    /// <summary>
-    /// When true, emit label references instead of resolved addresses.
-    /// This enables single-pass transpilation where addresses are resolved later.
-    /// </summary>
-    public bool UseLabelReferences { get; set; } = false;
 
     /// <summary>
     /// NOTE: may not be exactly correct, this is the instructions inside zerobss:
@@ -63,37 +56,14 @@ class IL2NESWriter : NESWriter
     record Local(int Value, int? Address = null, string? LabelName = null);
 
     /// <summary>
-    /// Emits a JSR to a label, using either resolved address or label reference
-    /// based on the UseLabelReferences setting.
+    /// Emits a JSR to a label reference.
     /// </summary>
-    void EmitJSR(string labelName)
-    {
-        if (UseLabelReferences)
-        {
-            EmitWithLabel(Opcode.JSR, AddressMode.Absolute, labelName);
-        }
-        else
-        {
-            Emit(Opcode.JSR, AddressMode.Absolute, Labels[labelName]);
-        }
-    }
+    void EmitJSR(string labelName) => EmitWithLabel(Opcode.JSR, AddressMode.Absolute, labelName);
 
     /// <summary>
-    /// Emits a JMP to a label, using either resolved address or label reference
-    /// based on the UseLabelReferences setting.
+    /// Emits a JMP to a label reference.
     /// </summary>
-    void EmitJMP(string labelName)
-    {
-        if (UseLabelReferences)
-        {
-            EmitWithLabel(Opcode.JMP, AddressMode.Absolute, labelName);
-        }
-        else
-        {
-            Labels.TryGetValue(labelName, out var address);
-            Emit(Opcode.JMP, AddressMode.Absolute, address);
-        }
-    }
+    void EmitJMP(string labelName) => EmitWithLabel(Opcode.JMP, AddressMode.Absolute, labelName);
 
     public void RecordLabel(ILInstruction instruction)
     {
@@ -394,14 +364,7 @@ class IL2NESWriter : NESWriter
                         break;
                     default:
                         // Emit JSR to built-in method
-                        if (UseLabelReferences)
-                        {
-                            EmitWithLabel(Opcode.JSR, AddressMode.Absolute, operand);
-                        }
-                        else
-                        {
-                            Emit(Opcode.JSR, AddressMode.Absolute, GetAddress(operand));
-                        }
+                        EmitWithLabel(Opcode.JSR, AddressMode.Absolute, operand);
                         break;
                 }
                 // Pop N times
@@ -437,49 +400,23 @@ class IL2NESWriter : NESWriter
         switch (instruction.OpCode)
         {
             case ILOpCode.Ldtoken:
-                if (UseLabelReferences)
+                // Use labels for byte arrays (resolved during address resolution)
+                string byteArrayLabel = $"bytearray_{_byteArrayLabelIndex}";
+                _byteArrayLabelIndex++;
+                
+                // HACK: write these if next instruction is Call
+                if (Instructions is not null && Instructions[Index + 1].OpCode == ILOpCode.Call)
                 {
-                    // In single-pass mode, use labels for byte arrays
-                    string byteArrayLabel = $"bytearray_{_byteArrayLabelIndex}";
-                    _byteArrayLabelIndex++;
-                    
-                    // HACK: write these if next instruction is Call
-                    if (Instructions is not null && Instructions[Index + 1].OpCode == ILOpCode.Call)
-                    {
-                        EmitWithLabel(Opcode.LDA, AddressMode.Immediate_LowByte, byteArrayLabel);
-                        EmitWithLabel(Opcode.LDX, AddressMode.Immediate_HighByte, byteArrayLabel);
-                    }
-                    _byteArrays.Add(operand);
-                    
-                    // Push a marker value and track the label for later Stloc
-                    // Use negative value as marker that this is a label reference
-                    _lastByteArrayLabel = byteArrayLabel;
-                    _lastByteArraySize = operand.Length;
-                    Stack.Push(-(_byteArrayLabelIndex)); // Negative marker
+                    EmitWithLabel(Opcode.LDA, AddressMode.Immediate_LowByte, byteArrayLabel);
+                    EmitWithLabel(Opcode.LDX, AddressMode.Immediate_HighByte, byteArrayLabel);
                 }
-                else
-                {
-                    // Legacy mode: calculate absolute addresses
-                    if (ByteArrayOffset == 0)
-                    {
-                        ByteArrayOffset = rodata.GetAddressAfterMain(sizeOfMain);
-
-                        // HACK: adjust ByteArrayOffset based on length of oam_spr
-                        if (UsedMethods is not null && UsedMethods.Contains(nameof(oam_spr)))
-                        {
-                            ByteArrayOffset += 44;
-                        }
-                    }
-                    // HACK: write these if next instruction is Call
-                    if (Instructions is not null && Instructions[Index + 1].OpCode == ILOpCode.Call)
-                    {
-                        Emit(Opcode.LDA, AddressMode.Immediate, (byte)(ByteArrayOffset & 0xff));
-                        Emit(Opcode.LDX, AddressMode.Immediate, (byte)(ByteArrayOffset >> 8));
-                    }
-                    Stack.Push(ByteArrayOffset);
-                    ByteArrayOffset = (ushort)(ByteArrayOffset + operand.Length);
-                    _byteArrays.Add(operand);
-                }
+                _byteArrays.Add(operand);
+                
+                // Push a marker value and track the label for later Stloc
+                // Use negative value as marker that this is a label reference
+                _lastByteArrayLabel = byteArrayLabel;
+                _lastByteArraySize = operand.Length;
+                Stack.Push(-(_byteArrayLabelIndex)); // Negative marker
                 break;
             default:
                 throw new NotImplementedException($"OpCode {instruction.OpCode} with byte[] operand is not implemented!");
@@ -499,28 +436,6 @@ class IL2NESWriter : NESWriter
                 _writer.Write(b);
             }
         }
-    }
-
-    /// <summary>
-    /// Gets the address of a built-in subroutine by looking up its label.
-    /// The label names match the block names in BuiltInSubroutines.
-    /// </summary>
-    ushort GetAddress(string name)
-    {
-        // Look up the label; return 0 for optional methods that haven't been written yet
-        if (Labels.TryGetValue(name, out var address))
-        {
-            return address;
-        }
-        
-        // For optional methods (oam_spr, pad_poll) and unimplemented methods (rand*),
-        // return 0 as placeholder - actual address will be calculated on second pass
-        if (name is "oam_spr" or "pad_poll" or "rand" or "rand8" or "rand16" or "set_rand")
-        {
-            return 0;
-        }
-        
-        throw new InvalidOperationException($"Label '{name}' not found in Labels dictionary. Ensure WriteBuiltIns() has been called.");
     }
 
     void WriteStloc(Local local)

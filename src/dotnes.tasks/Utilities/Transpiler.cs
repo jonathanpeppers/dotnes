@@ -129,12 +129,11 @@ class Transpiler : IDisposable
         // Create the base program with built-ins
         var program = Program6502.CreateWithBuiltIns();
 
-        // Build main program block using label references (no pre-computed addresses needed)
+        // Build main program block using label references (addresses resolved later)
         using var writer = new IL2NESWriter(new MemoryStream(), logger: _logger)
         {
             Instructions = instructions,
             UsedMethods = UsedMethods,
-            UseLabelReferences = true, // Use label references instead of resolved addresses
         };
 
         writer.StartBlockBuffering();
@@ -212,25 +211,17 @@ class Transpiler : IDisposable
             while (!handle.IsNil);
         }
 
-        // Add final built-ins FIRST (before data tables)
-        // Legacy order: built-ins -> main -> final built-ins -> string/byte tables -> destructor
-        // Note: totalSize is used for donelib/copydata - it needs to be the end of data tables
+        // Add final built-ins (before data tables)
+        // Program layout: built-ins -> main -> final built-ins -> byte/string tables -> destructor
         program.ResolveAddresses(); // Resolve to get current size
-        ushort afterMainEnd = (ushort)(program.BaseAddress + program.TotalSize);
         
-        // totalSize should account for final built-ins + data tables
-        // In legacy: PRG_LAST + sizeOfMain + memoryStream.Length
-        // PRG_LAST is a constant that gets + sizeOfMain to give address after main
-        // Actually, looking at legacy, totalSize is used in donelib and copydata
-        // donelib uses it as the end address for clearing BSS
-        // We need to match the legacy calculation: PRG_LAST (0x85AE) + sizeOfMain + dataTableSize
+        // totalSize is used for donelib/copydata - points to end of data tables (BSS clearing end)
         const ushort PRG_LAST = 0x85AE;
         ushort totalSize = (ushort)(PRG_LAST.GetAddressAfterMain(sizeOfMain) + byteArrayTableSize + stringTableSize);
         
         program.AddFinalBuiltIns(totalSize, locals, UsedMethods);
 
-        // Now add byte array data AFTER final built-ins (matching legacy order)
-        // Add labels for each byte array so they can be referenced by the main program
+        // Add byte array data after final built-ins
         int byteArrayIndex = 0;
         foreach (var bytes in writer.ByteArrays)
         {
@@ -239,7 +230,7 @@ class Transpiler : IDisposable
             byteArrayIndex++;
         }
         
-        // Add string table (matching legacy order)
+        // Add string table
         if (stringHeapSize > 0)
         {
             var handle = MetadataTokens.UserStringHandle(0);
