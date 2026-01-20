@@ -72,7 +72,7 @@ class IL2NESWriter : NESWriter
         Labels.Add($"instruction_{instruction.Offset:X2}", (ushort)address);
     }
 
-    public void Write(ILInstruction instruction, ushort sizeOfMain)
+    public void Write(ILInstruction instruction)
     {
         switch (instruction.OpCode)
         {
@@ -87,31 +87,31 @@ class IL2NESWriter : NESWriter
                     Stack.Pop();
                 break;
             case ILOpCode.Ldc_i4_0:
-                WriteLdc(0, sizeOfMain);
+                WriteLdc(0);
                 break;
             case ILOpCode.Ldc_i4_1:
-                WriteLdc(1, sizeOfMain);
+                WriteLdc(1);
                 break;
             case ILOpCode.Ldc_i4_2:
-                WriteLdc(2, sizeOfMain);
+                WriteLdc(2);
                 break;
             case ILOpCode.Ldc_i4_3:
-                WriteLdc(3, sizeOfMain);
+                WriteLdc(3);
                 break;
             case ILOpCode.Ldc_i4_4:
-                WriteLdc(4, sizeOfMain);
+                WriteLdc(4);
                 break;
             case ILOpCode.Ldc_i4_5:
-                WriteLdc(5, sizeOfMain);
+                WriteLdc(5);
                 break;
             case ILOpCode.Ldc_i4_6:
-                WriteLdc(6, sizeOfMain);
+                WriteLdc(6);
                 break;
             case ILOpCode.Ldc_i4_7:
-                WriteLdc(7, sizeOfMain);
+                WriteLdc(7);
                 break;
             case ILOpCode.Ldc_i4_8:
-                WriteLdc(8, sizeOfMain);
+                WriteLdc(8);
                 break;
             case ILOpCode.Stloc_0:
                 if (previous == ILOpCode.Ldtoken)
@@ -163,16 +163,16 @@ class IL2NESWriter : NESWriter
                 }
                 break;
             case ILOpCode.Ldloc_0:
-                WriteLdloc(Locals[0], sizeOfMain);
+                WriteLdloc(Locals[0]);
                 break;
             case ILOpCode.Ldloc_1:
-                WriteLdloc(Locals[1], sizeOfMain);
+                WriteLdloc(Locals[1]);
                 break;
             case ILOpCode.Ldloc_2:
-                WriteLdloc(Locals[2], sizeOfMain);
+                WriteLdloc(Locals[2]);
                 break;
             case ILOpCode.Ldloc_3:
-                WriteLdloc(Locals[3], sizeOfMain);
+                WriteLdloc(Locals[3]);
                 break;
             case ILOpCode.Conv_u1:
             case ILOpCode.Conv_u2:
@@ -207,7 +207,7 @@ class IL2NESWriter : NESWriter
         previous = instruction.OpCode;
     }
 
-    public void Write(ILInstruction instruction, int operand, ushort sizeOfMain)
+    public void Write(ILInstruction instruction, int operand)
     {
         switch (instruction.OpCode)
         {
@@ -221,11 +221,11 @@ class IL2NESWriter : NESWriter
                 }
                 else if (operand > byte.MaxValue)
                 {
-                    WriteLdc(checked((ushort)operand), sizeOfMain);
+                    WriteLdc(checked((ushort)operand));
                 }
                 else
                 {
-                    WriteLdc((byte)operand, sizeOfMain);
+                    WriteLdc((byte)operand);
                 }
                 break;
             case ILOpCode.Br_s:
@@ -246,14 +246,14 @@ class IL2NESWriter : NESWriter
                 Locals[operand] = new Local(Stack.Pop());
                 break;
             case ILOpCode.Ldloc_s:
-                WriteLdloc(Locals[operand], sizeOfMain);
+                WriteLdloc(Locals[operand]);
                 break;
             case ILOpCode.Bne_un_s:
                 // Remove the previous comparison value loading
                 // This is typically JSR pusha (3 bytes) + LDA #imm (2 bytes) = 5 bytes, 2 instructions
                 RemoveLastInstructions(2);
                 Emit(Opcode.CMP, AddressMode.Immediate, checked((byte)Stack.Pop()));
-                Emit(Opcode.BNE, AddressMode.Relative, NumberOfInstructionsForBranch(instruction.Offset + operand + 2, sizeOfMain));
+                Emit(Opcode.BNE, AddressMode.Relative, NumberOfInstructionsForBranch(instruction.Offset + operand + 2));
                 break;
             default:
                 throw new NotImplementedException($"OpCode {instruction.OpCode} with Int32 operand is not implemented!");
@@ -265,7 +265,7 @@ class IL2NESWriter : NESWriter
 
     public int Index { get; set; }
 
-    byte NumberOfInstructionsForBranch(int stopAt, ushort sizeOfMain)
+    byte NumberOfInstructionsForBranch(int stopAt)
     {
         _logger.WriteLine($"Reading forward until IL_{stopAt:x4}...");
 
@@ -284,19 +284,19 @@ class IL2NESWriter : NESWriter
             var instruction = Instructions[i];
             if (instruction.Integer != null)
             {
-                Write(instruction, instruction.Integer.Value, sizeOfMain);
+                Write(instruction, instruction.Integer.Value);
             }
             else if (instruction.String != null)
             {
-                Write(instruction, instruction.String, sizeOfMain);
+                Write(instruction, instruction.String);
             }
             else if (instruction.Bytes != null)
             {
-                Write(instruction, instruction.Bytes.Value, sizeOfMain);
+                Write(instruction, instruction.Bytes.Value);
             }
             else
             {
-                Write(instruction, sizeOfMain);
+                Write(instruction);
             }
             if (instruction.Offset >= stopAt)
                 break;
@@ -310,7 +310,7 @@ class IL2NESWriter : NESWriter
         return numberOfBytes;
     }
 
-    public void Write(ILInstruction instruction, string operand, ushort sizeOfMain)
+    public void Write(ILInstruction instruction, string operand)
     {
         switch (instruction.OpCode)
         {
@@ -328,11 +328,11 @@ class IL2NESWriter : NESWriter
                 }
                 else if (operand.Length > byte.MaxValue)
                 {
-                    WriteLdc(checked((ushort)operand.Length), sizeOfMain);
+                    WriteLdc(checked((ushort)operand.Length));
                 }
                 else
                 {
-                    WriteLdc((byte)operand.Length, sizeOfMain);
+                    WriteLdc((byte)operand.Length);
                 }
                 break;
             case ILOpCode.Call:
@@ -395,7 +395,7 @@ class IL2NESWriter : NESWriter
     string? _lastByteArrayLabel = null;
     int _lastByteArraySize = 0;
 
-    public void Write(ILInstruction instruction, ImmutableArray<byte> operand, ushort sizeOfMain)
+    public void Write(ILInstruction instruction, ImmutableArray<byte> operand)
     {
         switch (instruction.OpCode)
         {
@@ -471,7 +471,7 @@ class IL2NESWriter : NESWriter
         }
     }
 
-    void WriteLdc(ushort operand, ushort sizeOfMain)
+    void WriteLdc(ushort operand)
     {
         if (LastLDA)
         {
@@ -482,7 +482,7 @@ class IL2NESWriter : NESWriter
         Stack.Push(operand);
     }
 
-    void WriteLdc(byte operand, ushort sizeOfMain)
+    void WriteLdc(byte operand)
     {
         if (LastLDA)
         {
@@ -492,7 +492,7 @@ class IL2NESWriter : NESWriter
         Stack.Push(operand);
     }
 
-    void WriteLdloc(Local local, ushort sizeOfMain)
+    void WriteLdloc(Local local)
     {
         if (local.LabelName is not null)
         {

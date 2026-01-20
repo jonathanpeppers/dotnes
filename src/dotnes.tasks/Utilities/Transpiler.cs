@@ -155,19 +155,19 @@ class Transpiler : IDisposable
             
             if (instruction.Integer != null)
             {
-                writer.Write(instruction, instruction.Integer.Value, sizeOfMain: 0);
+                writer.Write(instruction, instruction.Integer.Value);
             }
             else if (instruction.String != null)
             {
-                writer.Write(instruction, instruction.String, sizeOfMain: 0);
+                writer.Write(instruction, instruction.String);
             }
             else if (instruction.Bytes != null)
             {
-                writer.Write(instruction, instruction.Bytes.Value, sizeOfMain: 0);
+                writer.Write(instruction, instruction.Bytes.Value);
             }
             else
             {
-                writer.Write(instruction, sizeOfMain: 0);
+                writer.Write(instruction);
             }
         }
 

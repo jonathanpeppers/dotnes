@@ -31,7 +31,6 @@ public class IL2NESWriterTests
     [Fact]
     public Task Write_static_void_Main()
     {
-        const ushort sizeOfMain = 0x43;
         using var writer = GetWriter();
         // Set up Labels needed by WriteBuiltIns
         writer.Labels["popa"] = 0x8592;
@@ -46,41 +45,41 @@ public class IL2NESWriterTests
         writer.WriteBuiltIns();
 
         // pal_col(0, 0x02);
-        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_0), sizeOfMain);
-        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_2), sizeOfMain);
-        writer.Write(new ILInstruction(ILOpCode.Call), nameof(pal_col), sizeOfMain);
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_0));
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_2));
+        writer.Write(new ILInstruction(ILOpCode.Call), nameof(pal_col));
 
         // pal_col(1, 0x14);
-        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_1), sizeOfMain);
-        writer.Write(new ILInstruction(ILOpCode.Ldc_i4), 0x14, sizeOfMain);
-        writer.Write(new ILInstruction(ILOpCode.Call), nameof(pal_col), sizeOfMain);
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_1));
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4), 0x14);
+        writer.Write(new ILInstruction(ILOpCode.Call), nameof(pal_col));
 
         // pal_col(2, 0x20);
-        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_2), sizeOfMain);
-        writer.Write(new ILInstruction(ILOpCode.Ldc_i4), 0x20, sizeOfMain);
-        writer.Write(new ILInstruction(ILOpCode.Call), nameof(pal_col), sizeOfMain);
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_2));
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4), 0x20);
+        writer.Write(new ILInstruction(ILOpCode.Call), nameof(pal_col));
 
         // pal_col(3, 0x30);
-        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_3), sizeOfMain);
-        writer.Write(new ILInstruction(ILOpCode.Ldc_i4), 0x30, sizeOfMain);
-        writer.Write(new ILInstruction(ILOpCode.Call), nameof(pal_col), sizeOfMain);
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_3));
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4), 0x30);
+        writer.Write(new ILInstruction(ILOpCode.Call), nameof(pal_col));
 
         // vram_adr(NTADR_A(2, 2));
-        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_2), sizeOfMain);
-        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_2), sizeOfMain);
-        writer.Write(new ILInstruction(ILOpCode.Call), nameof(NTADR_A), sizeOfMain);
-        writer.Write(new ILInstruction(ILOpCode.Call), nameof(vram_adr), sizeOfMain);
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_2));
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_2));
+        writer.Write(new ILInstruction(ILOpCode.Call), nameof(NTADR_A));
+        writer.Write(new ILInstruction(ILOpCode.Call), nameof(vram_adr));
 
         // vram_write("HELLO, .NET!");
         var text = "HELLO, .NET!";
-        writer.Write(new ILInstruction(ILOpCode.Ldstr), text, sizeOfMain);
-        writer.Write(new ILInstruction(ILOpCode.Call), nameof(vram_write), sizeOfMain);
+        writer.Write(new ILInstruction(ILOpCode.Ldstr), text);
+        writer.Write(new ILInstruction(ILOpCode.Call), nameof(vram_write));
 
         // ppu_on_all();
-        writer.Write(new ILInstruction(ILOpCode.Call), nameof(ppu_on_all), sizeOfMain);
+        writer.Write(new ILInstruction(ILOpCode.Call), nameof(ppu_on_all));
 
         // while (true) ;
-        writer.Write(new ILInstruction(ILOpCode.Br_s), 254, sizeOfMain);
+        writer.Write(new ILInstruction(ILOpCode.Br_s), 254);
 
         // Flush main block before writing final built-ins
         writer.FlushMainBlock();
@@ -107,7 +106,6 @@ public class IL2NESWriterTests
     [Fact]
     public Task Write_Main_hello()
     {
-        const ushort sizeOfMain = 0x43;
         using var writer = GetWriter();
         // Set up Labels needed for IL->NES translation
         writer.Labels["pusha"] = 0x85A2;
@@ -120,41 +118,41 @@ public class IL2NESWriterTests
         writer.Labels["instruction_00"] = 0x0000;
 
         // pal_col(0, 0x02);
-        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_0), sizeOfMain);
-        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_2), sizeOfMain);
-        writer.Write(new ILInstruction(ILOpCode.Call), nameof(pal_col), sizeOfMain);
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_0));
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_2));
+        writer.Write(new ILInstruction(ILOpCode.Call), nameof(pal_col));
 
         // pal_col(1, 0x14);
-        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_1), sizeOfMain);
-        writer.Write(new ILInstruction(ILOpCode.Ldc_i4), 0x14, sizeOfMain);
-        writer.Write(new ILInstruction(ILOpCode.Call), nameof(pal_col), sizeOfMain);
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_1));
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4), 0x14);
+        writer.Write(new ILInstruction(ILOpCode.Call), nameof(pal_col));
 
         // pal_col(2, 0x20);
-        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_2), sizeOfMain);
-        writer.Write(new ILInstruction(ILOpCode.Ldc_i4), 0x20, sizeOfMain);
-        writer.Write(new ILInstruction(ILOpCode.Call), nameof(pal_col), sizeOfMain);
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_2));
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4), 0x20);
+        writer.Write(new ILInstruction(ILOpCode.Call), nameof(pal_col));
 
         // pal_col(3, 0x30);
-        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_3), sizeOfMain);
-        writer.Write(new ILInstruction(ILOpCode.Ldc_i4), 0x30, sizeOfMain);
-        writer.Write(new ILInstruction(ILOpCode.Call), nameof(pal_col), sizeOfMain);
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_3));
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4), 0x30);
+        writer.Write(new ILInstruction(ILOpCode.Call), nameof(pal_col));
 
         // vram_adr(NTADR_A(2, 2));
-        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_2), sizeOfMain);
-        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_2), sizeOfMain);
-        writer.Write(new ILInstruction(ILOpCode.Call), nameof(NTADR_A), sizeOfMain);
-        writer.Write(new ILInstruction(ILOpCode.Call), nameof(vram_adr), sizeOfMain);
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_2));
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_2));
+        writer.Write(new ILInstruction(ILOpCode.Call), nameof(NTADR_A));
+        writer.Write(new ILInstruction(ILOpCode.Call), nameof(vram_adr));
 
         // vram_write("HELLO, .NET!");
         var text = "HELLO, .NET!";
-        writer.Write(new ILInstruction(ILOpCode.Ldstr), text, sizeOfMain);
-        writer.Write(new ILInstruction(ILOpCode.Call), nameof(vram_write), sizeOfMain);
+        writer.Write(new ILInstruction(ILOpCode.Ldstr), text);
+        writer.Write(new ILInstruction(ILOpCode.Call), nameof(vram_write));
 
         // ppu_on_all();
-        writer.Write(new ILInstruction(ILOpCode.Call), nameof(ppu_on_all), sizeOfMain);
+        writer.Write(new ILInstruction(ILOpCode.Call), nameof(ppu_on_all));
 
         // while (true) ;
-        writer.Write(new ILInstruction(ILOpCode.Br_s), 254, sizeOfMain);
+        writer.Write(new ILInstruction(ILOpCode.Br_s), 254);
 
         writer.FlushMainBlock();
         return Verify(_stream.ToArray());
@@ -163,7 +161,6 @@ public class IL2NESWriterTests
     [Fact]
     public Task Write_Main_attributetable()
     {
-        const ushort sizeOfMain = 0x2E;
         using var writer = GetWriter();
         // Set up Labels needed for IL->NES translation
         writer.Labels["pusha"] = 0x85A2;
@@ -179,9 +176,9 @@ public class IL2NESWriterTests
         writer.Labels["bytearray_1"] = 0x861C; // PALETTE (16 bytes)
         // Set up instruction label for Br_s target (while(true) infinite loop)
         writer.Labels["instruction_00"] = 0x0000;
-        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_s), 64, sizeOfMain);
-        writer.Write(new ILInstruction(ILOpCode.Newarr), 16777235, sizeOfMain);
-        writer.Write(new ILInstruction(ILOpCode.Dup), sizeOfMain);
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_s), 64);
+        writer.Write(new ILInstruction(ILOpCode.Newarr), 16777235);
+        writer.Write(new ILInstruction(ILOpCode.Dup));
         writer.Write(new ILInstruction(ILOpCode.Ldtoken), [
           0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // rows 0-3
           0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55, // rows 4-7
@@ -191,11 +188,11 @@ public class IL2NESWriterTests
           0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, // rows 20-23
           0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, // rows 24-27
           0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f  // rows 28-29
-        ], sizeOfMain);
-        writer.Write(new ILInstruction(ILOpCode.Stloc_0), sizeOfMain);
-        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_s), 16, sizeOfMain);
-        writer.Write(new ILInstruction(ILOpCode.Newarr), 16777235, sizeOfMain);
-        writer.Write(new ILInstruction(ILOpCode.Dup), sizeOfMain);
+        ]);
+        writer.Write(new ILInstruction(ILOpCode.Stloc_0));
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_s), 16);
+        writer.Write(new ILInstruction(ILOpCode.Newarr), 16777235);
+        writer.Write(new ILInstruction(ILOpCode.Dup));
         writer.Write(new ILInstruction(ILOpCode.Ldtoken), [
           0x03,			// screen color
 
@@ -203,17 +200,17 @@ public class IL2NESWriterTests
           0x1c,0x20,0x2c,0x0,	// background palette 1
           0x00,0x10,0x20,0x0,	// background palette 2
           0x06,0x16,0x26        // background palette 3
-        ], sizeOfMain);
-        writer.Write(new ILInstruction(ILOpCode.Call), nameof(NESLib.pal_bg), sizeOfMain);
-        writer.Write(new ILInstruction(ILOpCode.Ldc_i4), 0x2000, sizeOfMain);
-        writer.Write(new ILInstruction(ILOpCode.Call), nameof(NESLib.vram_adr), sizeOfMain);
-        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_s), 22, sizeOfMain);
-        writer.Write(new ILInstruction(ILOpCode.Ldc_i4), 960, sizeOfMain);
-        writer.Write(new ILInstruction(ILOpCode.Call), nameof(NESLib.vram_fill), sizeOfMain);
-        writer.Write(new ILInstruction(ILOpCode.Ldloc_0), sizeOfMain);
-        writer.Write(new ILInstruction(ILOpCode.Call), nameof(NESLib.vram_write), sizeOfMain);
-        writer.Write(new ILInstruction(ILOpCode.Call), nameof(NESLib.ppu_on_all), sizeOfMain);
-        writer.Write(new ILInstruction(ILOpCode.Br_s), 254, sizeOfMain);
+        ]);
+        writer.Write(new ILInstruction(ILOpCode.Call), nameof(NESLib.pal_bg));
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4), 0x2000);
+        writer.Write(new ILInstruction(ILOpCode.Call), nameof(NESLib.vram_adr));
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_s), 22);
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4), 960);
+        writer.Write(new ILInstruction(ILOpCode.Call), nameof(NESLib.vram_fill));
+        writer.Write(new ILInstruction(ILOpCode.Ldloc_0));
+        writer.Write(new ILInstruction(ILOpCode.Call), nameof(NESLib.vram_write));
+        writer.Write(new ILInstruction(ILOpCode.Call), nameof(NESLib.ppu_on_all));
+        writer.Write(new ILInstruction(ILOpCode.Br_s), 254);
 
         writer.FlushMainBlock();
         return Verify(_stream.ToArray());
