@@ -1,3 +1,4 @@
+using NES;
 using static dotnes.NESConstants;
 using static dotnes.ObjectModel.Asm;
 
@@ -18,7 +19,7 @@ internal static class BuiltInSubroutines
     public static Block Exit()
     {
         // https://github.com/clbr/neslib/blob/d061b0f7f1a449941111c31eee0fc2e85b1826d7/crt0.s#L111
-        var block = new Block("_exit");
+        var block = new Block(nameof(_exit));
         block.Emit(SEI())
              .Emit(LDX(0xFF))
              .Emit(TXS())
@@ -35,7 +36,7 @@ internal static class BuiltInSubroutines
     public static Block InitPPU()
     {
         // https://github.com/clbr/neslib/blob/d061b0f7f1a449941111c31eee0fc2e85b1826d7/crt0.s#L121
-        var block = new Block("_initPPU");
+        var block = new Block(nameof(_initPPU));
         block.Emit(BIT_abs(PPU_STATUS))
              .Emit(BIT_abs(PPU_STATUS), "@1")
              .Emit(BPL(-5))   // branch back to @1
@@ -52,7 +53,7 @@ internal static class BuiltInSubroutines
     public static Block ClearPalette()
     {
         // https://github.com/clbr/neslib/blob/d061b0f7f1a449941111c31eee0fc2e85b1826d7/crt0.s#L135
-        var block = new Block("_clearPalette");
+        var block = new Block(nameof(_clearPalette));
         block.Emit(LDA(0x3F))
              .Emit(STA_abs(PPU_ADDR))
              .Emit(STX_abs(PPU_ADDR))
@@ -70,7 +71,7 @@ internal static class BuiltInSubroutines
     public static Block ClearVRAM()
     {
         // https://github.com/clbr/neslib/blob/d061b0f7f1a449941111c31eee0fc2e85b1826d7/crt0.s#L148
-        var block = new Block("_clearVRAM");
+        var block = new Block(nameof(_clearVRAM));
         block.Emit(TXA())
              .Emit(LDY(0x20))
              .Emit(STY_abs(PPU_ADDR))
@@ -91,7 +92,7 @@ internal static class BuiltInSubroutines
     {
         // NESWriter: A501 C501 F0FC (different from neslib original)
         // This is a simplified version that just waits for STARTUP to change
-        var block = new Block("_waitSync3");
+        var block = new Block(nameof(_waitSync3));
         block.Emit(LDA_zpg(STARTUP))
              .Emit(CMP_zpg(STARTUP))
              .Emit(BEQ(-4));  // BEQ back to CMP (0xFC = -4)
@@ -105,7 +106,7 @@ internal static class BuiltInSubroutines
     {
         // NESWriter: 48 8A 48 98 48 A512 2918 D003 4CE681
         // Note: JMP address (0x81E6) is @skipAll, layout dependent
-        var block = new Block("_nmi");
+        var block = new Block(nameof(_nmi));
         block.Emit(PHA())
              .Emit(TXA())
              .Emit(PHA())
@@ -123,7 +124,7 @@ internal static class BuiltInSubroutines
     /// </summary>
     public static Block Irq()
     {
-        var block = new Block("_irq");
+        var block = new Block(nameof(_irq));
         block.Emit(PHA())
              .Emit(TXA())
              .Emit(PHA())
@@ -144,7 +145,7 @@ internal static class BuiltInSubroutines
     /// </summary>
     public static Block PalAll()
     {
-        var block = new Block("pal_all");
+        var block = new Block(nameof(NESLib.pal_all));
         block.Emit(STA_zpg(TEMP))
              .Emit(STX_zpg(TEMP + 1))
              .Emit(LDX(0x00))
@@ -158,7 +159,7 @@ internal static class BuiltInSubroutines
     /// </summary>
     public static Block PalCopy()
     {
-        var block = new Block("pal_copy");
+        var block = new Block(nameof(NESLib.pal_copy));
         block.Emit(STA_zpg(0x19))
              .Emit(LDY(0x00))
              .Emit(LDA_ind_Y(TEMP), "@0")
@@ -178,12 +179,12 @@ internal static class BuiltInSubroutines
     /// </summary>
     public static Block PalBg()
     {
-        var block = new Block("pal_bg");
+        var block = new Block(nameof(NESLib.pal_bg));
         block.Emit(STA_zpg(TEMP))
              .Emit(STX_zpg(TEMP + 1))
              .Emit(LDX(0x00))
              .Emit(LDA(0x10))
-             .Emit(BNE("pal_copy"));  // Branch to pal_copy
+             .Emit(BNE(nameof(NESLib.pal_copy)));  // Branch to pal_copy
         return block;
     }
 
@@ -193,12 +194,12 @@ internal static class BuiltInSubroutines
     /// </summary>
     public static Block PalSpr()
     {
-        var block = new Block("pal_spr");
+        var block = new Block(nameof(NESLib.pal_spr));
         block.Emit(STA_zpg(TEMP))
              .Emit(STX_zpg(TEMP + 1))
              .Emit(LDX(0x10))
              .Emit(TXA())
-             .Emit(BNE("pal_copy"));  // Branch to pal_copy
+             .Emit(BNE(nameof(NESLib.pal_copy)));  // Branch to pal_copy
         return block;
     }
 
@@ -207,9 +208,9 @@ internal static class BuiltInSubroutines
     /// </summary>
     public static Block PalCol()
     {
-        var block = new Block("pal_col");
+        var block = new Block(nameof(NESLib.pal_col));
         block.Emit(STA_zpg(TEMP))
-             .Emit(JSR("popa"))
+             .Emit(JSR(nameof(NESConstants.popa)))
              .Emit(AND(0x1F))
              .Emit(TAX())
              .Emit(LDA_zpg(TEMP))
@@ -224,7 +225,7 @@ internal static class BuiltInSubroutines
     /// </summary>
     public static Block PalClear()
     {
-        var block = new Block("pal_clear");
+        var block = new Block(nameof(NESLib.pal_clear));
         block.Emit(LDA(0x0F))
              .Emit(LDX(0x00))
              .Emit(STA_abs_X(PAL_BUF), "@1")
@@ -241,7 +242,7 @@ internal static class BuiltInSubroutines
     /// </summary>
     public static Block PalSprBright()
     {
-        var block = new Block("pal_spr_bright");
+        var block = new Block(nameof(NESLib.pal_spr_bright));
         block.Emit(TAX())
              .Emit(LDA_abs_X(palBrightTableL))
              .Emit(STA_zpg(PAL_SPR_PTR))
@@ -257,7 +258,7 @@ internal static class BuiltInSubroutines
     /// </summary>
     public static Block PalBgBright()
     {
-        var block = new Block("pal_bg_bright");
+        var block = new Block(nameof(NESLib.pal_bg_bright));
         block.Emit(TAX())
              .Emit(LDA_abs_X(palBrightTableL))
              .Emit(STA_zpg(PAL_BG_PTR))
@@ -273,7 +274,7 @@ internal static class BuiltInSubroutines
     /// </summary>
     public static Block PalBright()
     {
-        var block = new Block("pal_bright");
+        var block = new Block(nameof(NESLib.pal_bright));
         block.Emit(JSR(pal_spr_bright))
              .Emit(TXA())
              .Emit(JMP_abs(pal_bg_bright));
@@ -289,7 +290,7 @@ internal static class BuiltInSubroutines
     /// </summary>
     public static Block PpuOff()
     {
-        var block = new Block("ppu_off");
+        var block = new Block(nameof(NESLib.ppu_off));
         block.Emit(LDA_zpg(PPU_MASK_VAR))
              .Emit(AND(0xE7))
              .Emit(STA_zpg(PPU_MASK_VAR))
@@ -303,7 +304,7 @@ internal static class BuiltInSubroutines
     /// </summary>
     public static Block PpuOnAll()
     {
-        var block = new Block("ppu_on_all");
+        var block = new Block(nameof(NESLib.ppu_on_all));
         block.Emit(LDA_zpg(PPU_MASK_VAR))
              .Emit(ORA(0x18));
         // Falls through to ppu_onoff
@@ -315,7 +316,7 @@ internal static class BuiltInSubroutines
     /// </summary>
     public static Block PpuOnOff()
     {
-        var block = new Block("ppu_onoff");
+        var block = new Block(nameof(NESLib.ppu_onoff));
         block.Emit(STA_zpg(PPU_MASK_VAR))
              .Emit(JMP_abs(ppu_wait_nmi));  // Uses constant since ppu_wait_nmi is emitted later
         return block;
@@ -327,10 +328,10 @@ internal static class BuiltInSubroutines
     /// </summary>
     public static Block PpuOnBg()
     {
-        var block = new Block("ppu_on_bg");
+        var block = new Block(nameof(NESLib.ppu_on_bg));
         block.Emit(LDA_zpg(PPU_MASK_VAR))
              .Emit(ORA(0x08))
-             .Emit(BNE("ppu_onoff"));
+             .Emit(BNE(nameof(NESLib.ppu_onoff)));
         return block;
     }
 
@@ -340,10 +341,10 @@ internal static class BuiltInSubroutines
     /// </summary>
     public static Block PpuOnSpr()
     {
-        var block = new Block("ppu_on_spr");
+        var block = new Block(nameof(NESLib.ppu_on_spr));
         block.Emit(LDA_zpg(PPU_MASK_VAR))
              .Emit(ORA(0x10))
-             .Emit(BNE("ppu_onoff"));
+             .Emit(BNE(nameof(NESLib.ppu_onoff)));
         return block;
     }
 
@@ -352,7 +353,7 @@ internal static class BuiltInSubroutines
     /// </summary>
     public static Block PpuMask()
     {
-        var block = new Block("ppu_mask");
+        var block = new Block(nameof(NESLib.ppu_mask));
         block.Emit(STA_zpg(PPU_MASK_VAR))
              .Emit(RTS());
         return block;
@@ -364,7 +365,7 @@ internal static class BuiltInSubroutines
     public static Block PpuWaitNmi()
     {
         // NESWriter: LDA #$01, STA VRAM_UPDATE, LDA STARTUP, CMP STARTUP, BEQ -4, RTS
-        var block = new Block("ppu_wait_nmi");
+        var block = new Block(nameof(NESLib.ppu_wait_nmi));
         block.Emit(LDA(0x01))
              .Emit(STA_zpg(VRAM_UPDATE))
              .Emit(LDA_zpg(STARTUP))
@@ -380,7 +381,7 @@ internal static class BuiltInSubroutines
     public static Block PpuWaitFrame()
     {
         // NESWriter has more complex logic with ZP_START and NES_PRG_BANKS checks
-        var block = new Block("ppu_wait_frame");
+        var block = new Block(nameof(NESLib.ppu_wait_frame));
         block.Emit(LDA(0x01))
              .Emit(STA_zpg(VRAM_UPDATE))
              .Emit(LDA_zpg(STARTUP))
@@ -401,7 +402,7 @@ internal static class BuiltInSubroutines
     public static Block PpuSystem()
     {
         // NESWriter: LDA ZP_START ($00), LDX #$00, RTS
-        var block = new Block("ppu_system");
+        var block = new Block(nameof(NESLib.ppu_system));
         block.Emit(LDA_zpg(ZP_START))
              .Emit(LDX(0x00))
              .Emit(RTS());
@@ -414,7 +415,7 @@ internal static class BuiltInSubroutines
     public static Block GetPpuCtrlVar()
     {
         // NESWriter: LDA PRG_FILEOFFS ($10), LDX #$00, RTS
-        var block = new Block("get_ppu_ctrl_var");
+        var block = new Block(nameof(NESLib.get_ppu_ctrl_var));
         block.Emit(LDA_zpg(PRG_FILEOFFS))
              .Emit(LDX(0x00))
              .Emit(RTS());
@@ -427,7 +428,7 @@ internal static class BuiltInSubroutines
     public static Block SetPpuCtrlVar()
     {
         // NESWriter: STA PRG_FILEOFFS ($10), RTS
-        var block = new Block("set_ppu_ctrl_var");
+        var block = new Block(nameof(NESLib.set_ppu_ctrl_var));
         block.Emit(STA_zpg(PRG_FILEOFFS))
              .Emit(RTS());
         return block;
@@ -443,7 +444,7 @@ internal static class BuiltInSubroutines
     public static Block OamClear()
     {
         // NESWriter: LDX #$00, LDA #$FF, STA $0200,X, INX x4, BNE -9, RTS
-        var block = new Block("oam_clear");
+        var block = new Block(nameof(NESLib.oam_clear));
         block.Emit(LDX(0x00))
              .Emit(LDA(0xFF))
              .Emit(STA_abs_X(OAM_BUF), "@1")
@@ -462,7 +463,7 @@ internal static class BuiltInSubroutines
     public static Block OamSize()
     {
         // NESWriter uses PRG_FILEOFFS ($10), not PPU_CTRL_VAR ($13)
-        var block = new Block("oam_size");
+        var block = new Block(nameof(NESLib.oam_size));
         block.Emit(ASL_A())
              .Emit(ASL_A())
              .Emit(ASL_A())
@@ -484,7 +485,7 @@ internal static class BuiltInSubroutines
     public static Block OamHideRest()
     {
         // NESWriter: TAX, LDA #$F0, STA $0200,X, INX x4, BNE -9, RTS
-        var block = new Block("oam_hide_rest");
+        var block = new Block(nameof(NESLib.oam_hide_rest));
         block.Emit(TAX())
              .Emit(LDA(0xF0))
              .Emit(STA_abs_X(OAM_BUF), "@1")
@@ -526,7 +527,7 @@ internal static class BuiltInSubroutines
         // 85DE ADC #$04
         // 85E0 LDX #$00
         // 85E2 RTS
-        var block = new Block("oam_spr");
+        var block = new Block(nameof(NESLib.oam_spr));
         block.Emit(TAX())
              .Emit(LDY(0x00))
              .Emit(LDA_ind_Y(sp))
@@ -590,7 +591,7 @@ internal static class BuiltInSubroutines
         // 8329 ORA TEMP
         // 832B STA PRG_FILEOFFS
         // 832D RTS
-        var block = new Block("scroll");
+        var block = new Block(nameof(NESLib.scroll));
         block.Emit(STA_zpg(TEMP))
              .Emit(TXA())
              .Emit(BNE(0x0E))    // to @1
@@ -607,7 +608,7 @@ internal static class BuiltInSubroutines
              .Emit(STA_zpg(SCROLL_Y))
              .Emit(LDA(0x02))
              .Emit(STA_zpg(TEMP))
-             .Emit(JSR("popax"), "@2")
+             .Emit(JSR(nameof(NESConstants.popax)), "@2")
              .Emit(STA_zpg(SCROLL_X))
              .Emit(TXA())
              .Emit(AND(0x01))
@@ -626,7 +627,7 @@ internal static class BuiltInSubroutines
     /// </summary>
     public static Block BankSpr()
     {
-        var block = new Block("bank_spr");
+        var block = new Block(nameof(NESLib.bank_spr));
         block.Emit(AND(0x01))
              .Emit(ASL_A())
              .Emit(ASL_A())
@@ -645,7 +646,7 @@ internal static class BuiltInSubroutines
     /// </summary>
     public static Block BankBg()
     {
-        var block = new Block("bank_bg");
+        var block = new Block(nameof(NESLib.bank_bg));
         block.Emit(AND(0x01))
              .Emit(ASL_A())
              .Emit(ASL_A())
@@ -669,7 +670,7 @@ internal static class BuiltInSubroutines
     /// </summary>
     public static Block VramAdr()
     {
-        var block = new Block("vram_adr");
+        var block = new Block(nameof(NESLib.vram_adr));
         block.Emit(STX_abs(PPU_ADDR))
              .Emit(STA_abs(PPU_ADDR))
              .Emit(RTS());
@@ -681,7 +682,7 @@ internal static class BuiltInSubroutines
     /// </summary>
     public static Block VramPut()
     {
-        var block = new Block("vram_put");
+        var block = new Block(nameof(NESLib.vram_put));
         block.Emit(STA_abs(PPU_DATA))
              .Emit(RTS());
         return block;
@@ -709,10 +710,10 @@ internal static class BuiltInSubroutines
         // 83FD DEX
         // 83FE BNE -$06      ; to 83FA
         // 8400 RTS           ; @4
-        var block = new Block("vram_fill");
+        var block = new Block(nameof(NESLib.vram_fill));
         block.Emit(STA_zpg(0x19))
              .Emit(STX_zpg(0x1A))
-             .Emit(JSR("popa"))
+             .Emit(JSR(nameof(NESConstants.popa)))
              .Emit(LDX_zpg(0x1A))
              .Emit(BEQ(0x0C))  // branch to @3
              .Emit(LDX(0x00), "@1")
@@ -745,7 +746,7 @@ internal static class BuiltInSubroutines
         // 840F STA PRG_FILEOFFS
         // 8411 STA $2000
         // 8414 RTS
-        var block = new Block("vram_inc");
+        var block = new Block(nameof(NESLib.vram_inc));
         block.Emit(ORA(0x00))
              .Emit(BEQ(0x02))
              .Emit(LDA(0x04))
@@ -783,10 +784,10 @@ internal static class BuiltInSubroutines
         // 8371 ORA TEMP+1
         // 8373 BNE -$19      ; to @1
         // 8375 RTS
-        var block = new Block("vram_write");
+        var block = new Block(nameof(NESLib.vram_write));
         block.Emit(STA_zpg(TEMP))
              .Emit(STX_zpg(TEMP + 1))
-             .Emit(JSR("popax"))
+             .Emit(JSR(nameof(NESConstants.popax)))
              .Emit(STA_zpg(0x19))
              .Emit(STX_zpg(0x1A))
              .Emit(LDY(0x00))
@@ -811,7 +812,7 @@ internal static class BuiltInSubroutines
     /// </summary>
     public static Block SetVramUpdate()
     {
-        var block = new Block("set_vram_update");
+        var block = new Block(nameof(NESLib.set_vram_update));
         block.Emit(STA_zpg(NAME_UPD_ADR))
              .Emit(STX_zpg(NAME_UPD_ADR + 1))
              .Emit(ORA_zpg(NAME_UPD_ADR + 1))
@@ -826,7 +827,7 @@ internal static class BuiltInSubroutines
     /// </summary>
     public static Block FlushVramUpdate()
     {
-        var block = new Block("flush_vram_update");
+        var block = new Block(nameof(NESLib.flush_vram_update));
         
         // 837F: STA NAME_UPD_ADR, STX NAME_UPD_ADR+1, LDY #$00
         block.Emit(STA_zpg(NAME_UPD_ADR))
@@ -845,7 +846,7 @@ internal static class BuiltInSubroutines
              .Emit(LDA_ind_Y(NAME_UPD_ADR))
              .Emit(INY())
              .Emit(STA_abs(PPU_DATA))
-             .Emit(JMP("updName"));  // JMP @updName - uses global label
+             .Emit(JMP(nameof(NESConstants.updName)));  // JMP @updName - uses global label
         
         // @updNotSeq (839E)
         block.Emit(TAX())
@@ -883,7 +884,7 @@ internal static class BuiltInSubroutines
         
         block.Emit(LDA_zpg(PRG_FILEOFFS))
              .Emit(STA_abs(PPU_CTRL))
-             .Emit(JMP("updName"));  // JMP @updName - uses global label
+             .Emit(JMP(nameof(NESConstants.updName)));  // JMP @updName - uses global label
         
         // @updDone (83D3)
         block.Emit(RTS());
@@ -901,7 +902,7 @@ internal static class BuiltInSubroutines
     public static Block NesClock()
     {
         // NESWriter: LDA __STARTUP__ ($01), LDX #$00, RTS
-        var block = new Block("nesclock");
+        var block = new Block(nameof(NESLib.nesclock));
         block.Emit(LDA_zpg(STARTUP))
              .Emit(LDX(0x00))
              .Emit(RTS());
@@ -918,7 +919,7 @@ internal static class BuiltInSubroutines
         // 841C DEX
         // 841D BNE @1
         // 8420 RTS
-        var block = new Block("delay");
+        var block = new Block(nameof(NESLib.delay));
         block.Emit(TAX())
              .Emit(JSR(ppu_wait_nmi), "@1")
              .Emit(DEX())
@@ -932,7 +933,7 @@ internal static class BuiltInSubroutines
     /// </summary>
     public static Block NmiSetCallback()
     {
-        var block = new Block("nmi_set_callback");
+        var block = new Block(nameof(nmi_set_callback));
         block.Emit(STA_zpg(0x15))  // NMI_CALLBACK+1
              .Emit(STX_zpg(0x16))
              .Emit(RTS());
@@ -949,7 +950,7 @@ internal static class BuiltInSubroutines
     public static Block Popa()
     {
         // NESWriter: A000 B122 E622 F001 60 E623 60
-        var block = new Block("popa");
+        var block = new Block(nameof(NESConstants.popa));
         block.Emit(LDY(0x00))
              .Emit(LDA_ind_Y(sp))
              .Emit(INC_zpg(sp))
@@ -967,7 +968,7 @@ internal static class BuiltInSubroutines
     public static Block Popax()
     {
         // NESWriter: A001 B122 AA 88 B122 (falls through to incsp2)
-        var block = new Block("popax");
+        var block = new Block(nameof(NESConstants.popax));
         block.Emit(LDY(0x01))
              .Emit(LDA_ind_Y(sp))
              .Emit(TAX())
@@ -985,7 +986,7 @@ internal static class BuiltInSubroutines
     {
         // NESWriter: A000 B122 A422 F007 C622 A000 9122 60 C623 C622 9122 60
         // Label at +4 (after pusha0sp/pushaysp prefix)
-        var block = new Block("pusha", labelOffset: 4);
+        var block = new Block(nameof(pusha), labelOffset: 4);
         // pusha0sp prefix
         block.Emit(LDY(0x00))
              // pushaysp
@@ -1013,7 +1014,7 @@ internal static class BuiltInSubroutines
     {
         // NESWriter: A900 A200 48 A522 38 E902 8522 B002 C623 A001 8A 9122 68 88 9122 60
         // Label at +4 (after push0/pusha0 prefix)
-        var block = new Block("pushax", labelOffset: 4);
+        var block = new Block(nameof(pushax), labelOffset: 4);
         // push0 prefix
         block.Emit(LDA(0x00))
              // pusha0
@@ -1042,7 +1043,7 @@ internal static class BuiltInSubroutines
     public static Block Incsp2()
     {
         // NESWriter: E622 F005 E622 F003 60 E622 E623 60
-        var block = new Block("incsp2");
+        var block = new Block(nameof(incsp2));
         block.Emit(INC_zpg(sp))
              .Emit(BEQ(5))     // BEQ to overflow handler 1
              .Emit(INC_zpg(sp))
@@ -1065,7 +1066,7 @@ internal static class BuiltInSubroutines
     {
         // NESWriter: A000 F007 A900 A285 4C0003 60
         // This is the cc65 initlib stub - Y=0 means no constructors
-        var block = new Block("initlib");
+        var block = new Block(nameof(initlib));
         block.Emit(LDY(0x00))
              .Emit(BEQ(7))       // PAL_UPDATE = 7, skip to RTS
              .Emit(LDA(0x00))
@@ -1086,7 +1087,7 @@ internal static class BuiltInSubroutines
     /// </summary>
     public static Block Donelib(ushort totalSize)
     {
-        var block = new Block("donelib");
+        var block = new Block(nameof(donelib));
         block.Emit(LDY(0x00))
              .Emit(BEQ(7))       // PAL_UPDATE = 7, skip to RTS
              .Emit(LDA((byte)(totalSize & 0xff)))
@@ -1118,7 +1119,7 @@ internal static class BuiltInSubroutines
          * 8624	D0E8          	BNE $860E
          * 8626	60            	RTS
          */
-        var block = new Block("__DESTRUCTOR_TABLE__");
+        var block = new Block(nameof(__DESTRUCTOR_TABLE__));
         block.Emit(STA_abs(0x030E))
              .Emit(STX_abs(0x030F))
              .Emit(STA_abs(0x0315))
@@ -1147,7 +1148,7 @@ internal static class BuiltInSubroutines
     /// </summary>
     public static Block Copydata(ushort totalSize)
     {
-        var block = new Block("copydata");
+        var block = new Block(nameof(copydata));
         block.Emit(LDA((byte)(totalSize & 0xff)))
              .Emit(STA_zpg(ptr1))
              .Emit(LDA((byte)(totalSize >> 8)))
@@ -1185,7 +1186,7 @@ internal static class BuiltInSubroutines
     /// </summary>
     public static Block Zerobss(byte locals)
     {
-        var block = new Block("zerobss");
+        var block = new Block(nameof(zerobss));
         block.Emit(LDA(0x25))
              .Emit(STA_zpg(ptr1))
              .Emit(LDA(0x03))
@@ -1218,7 +1219,7 @@ internal static class BuiltInSubroutines
     /// </summary>
     public static Block DetectNTSC()
     {
-        var block = new Block("detectNTSC");
+        var block = new Block(nameof(detectNTSC));
         block.Emit(LDX(0x34))
              .Emit(LDY(0x18))
              .Emit(DEX(), "@loop")
@@ -1242,7 +1243,7 @@ internal static class BuiltInSubroutines
     /// </summary>
     public static Block DoUpdate()
     {
-        var block = new Block("doUpdate");
+        var block = new Block(nameof(doUpdate));
         block.Emit(LDA(0x02))          // >OAM_BUF
              .Emit(STA_abs(PPU_OAM_DMA))
              .Emit(LDA_zpg(PAL_UPDATE))
@@ -1256,7 +1257,7 @@ internal static class BuiltInSubroutines
     /// </summary>
     public static Block UpdPal()
     {
-        var block = new Block("updPal");
+        var block = new Block(nameof(updPal));
         block.Emit(LDX(0x00))
              .Emit(STX_zpg(PAL_UPDATE))
              .Emit(LDA(0x3F))
@@ -1304,7 +1305,7 @@ internal static class BuiltInSubroutines
     /// </summary>
     public static Block UpdVRAM()
     {
-        var block = new Block("updVRAM");
+        var block = new Block(nameof(updVRAM));
         block.Emit(LDA_zpg(VRAM_UPDATE))
              .Emit(BEQ(11))        // 0x0B - skip to skipUpd
              .Emit(LDA(0x00))
@@ -1320,7 +1321,7 @@ internal static class BuiltInSubroutines
     /// </summary>
     public static Block SkipUpd()
     {
-        var block = new Block("skipUpd");
+        var block = new Block(nameof(skipUpd));
         block.Emit(LDA(0x00))
              .Emit(STA_abs(PPU_ADDR))
              .Emit(STA_abs(PPU_ADDR))
@@ -1338,7 +1339,7 @@ internal static class BuiltInSubroutines
     /// </summary>
     public static Block SkipAll()
     {
-        var block = new Block("skipAll");
+        var block = new Block(nameof(skipAll));
         block.Emit(LDA_zpg(PPU_MASK_VAR))
              .Emit(STA_abs(PPU_MASK))
              .Emit(INC_zpg(STARTUP))
@@ -1356,7 +1357,7 @@ internal static class BuiltInSubroutines
     /// </summary>
     public static Block SkipNtsc()
     {
-        var block = new Block("skipNtsc");
+        var block = new Block(nameof(NESConstants.skipNtsc));
         block.Emit(JSR(0x0014))    // NMICallback (at $0014)
              .Emit(PLA())
              .Emit(TAY())
@@ -1373,7 +1374,7 @@ internal static class BuiltInSubroutines
     /// </summary>
     public static Block ClearRAM()
     {
-        var block = new Block("clearRAM");
+        var block = new Block(nameof(clearRAM));
         block.Emit(TXA())
              .Emit(STA_zpg_X(0x00), "@loop")
              .Emit(STA_abs_X(0x0100))
@@ -1419,7 +1420,7 @@ internal static class BuiltInSubroutines
     /// </summary>
     public static Block PadPoll()
     {
-        var block = new Block("pad_poll");
+        var block = new Block(nameof(NESLib.pad_poll));
         block.Emit(TAY())
              .Emit(LDX(0x00))
              // Pad poll port

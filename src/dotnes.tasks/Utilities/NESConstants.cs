@@ -61,4 +61,39 @@ internal static class NESConstants
     public const ushort popax = 0x8539;
     public const ushort popa = 0x854F;
     public const ushort rodata = 0x85AE;
+
+    #region Label name constants (for nameof() usage in code generation)
+    // cc65 runtime - use nameof(pusha) etc.
+    public const string pusha = nameof(pusha);
+    public const string pushax = nameof(pushax);
+    public const string incsp2 = nameof(incsp2);
+    
+    // NMI/Update labels
+    public const string updPal = nameof(updPal);
+    public const string updVRAM = nameof(updVRAM);
+    public const string doUpdate = nameof(doUpdate);
+    public const string skipUpd = nameof(skipUpd);
+    public const string skipAll = nameof(skipAll);
+    
+    // Initialization labels
+    public const string clearRAM = nameof(clearRAM);
+    public const string zerobss = nameof(zerobss);
+    public const string copydata = nameof(copydata);
+    public const string initlib = nameof(initlib);
+    public const string donelib = nameof(donelib);
+    public const string detectNTSC = nameof(detectNTSC);
+    
+    // System/CRT labels
+    public const string _exit = nameof(_exit);
+    public const string _initPPU = nameof(_initPPU);
+    public const string _clearPalette = nameof(_clearPalette);
+    public const string _clearVRAM = nameof(_clearVRAM);
+    public const string _waitSync3 = nameof(_waitSync3);
+    public const string _nmi = nameof(_nmi);
+    public const string _irq = nameof(_irq);
+    
+    // Special labels
+    public const string nmi_set_callback = nameof(nmi_set_callback);
+    public const string __DESTRUCTOR_TABLE__ = nameof(__DESTRUCTOR_TABLE__);
+    #endregion
 }
