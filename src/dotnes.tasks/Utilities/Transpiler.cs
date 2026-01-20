@@ -4,6 +4,7 @@ using System.Reflection;
 using System.Reflection.Metadata;
 using System.Reflection.Metadata.Ecma335;
 using System.Reflection.PortableExecutable;
+using System.Text;
 using dotnes.ObjectModel;
 
 namespace dotnes;
@@ -272,21 +273,75 @@ class Transpiler : IDisposable
         // Get local count from writer
         locals = checked((byte)writer.LocalCount);
 
-        // Add byte array data from the writer
+        // Calculate byte array table size
+        int byteArrayTableSize = 0;
+        foreach (var bytes in writer.ByteArrays)
+        {
+            byteArrayTableSize += bytes.ToArray().Length;
+        }
+        
+        // Calculate string table size  
+        int stringTableSize = 0;
+        int stringHeapSize = _reader.GetHeapSize(HeapIndex.UserString);
+        if (stringHeapSize > 0)
+        {
+            var handle = MetadataTokens.UserStringHandle(0);
+            do
+            {
+                string value = _reader.GetUserString(handle);
+                if (!string.IsNullOrEmpty(value))
+                {
+                    stringTableSize += Encoding.ASCII.GetByteCount(value) + 1; // +1 for null terminator
+                }
+                handle = _reader.GetNextHandle(handle);
+            }
+            while (!handle.IsNil);
+        }
+
+        // Add final built-ins FIRST (before data tables)
+        // Legacy order: built-ins -> main -> final built-ins -> string/byte tables -> destructor
+        // Note: totalSize is used for donelib/copydata - it needs to be the end of data tables
+        program.ResolveAddresses(); // Resolve to get current size
+        ushort afterMainEnd = (ushort)(program.BaseAddress + program.TotalSize);
+        
+        // totalSize should account for final built-ins + data tables
+        // In legacy: PRG_LAST + sizeOfMain + memoryStream.Length
+        // PRG_LAST is a constant that gets + sizeOfMain to give address after main
+        // Actually, looking at legacy, totalSize is used in donelib and copydata
+        // donelib uses it as the end address for clearing BSS
+        // We need to match the legacy calculation: PRG_LAST (0x85AE) + sizeOfMain + dataTableSize
+        const ushort PRG_LAST = 0x85AE;
+        ushort totalSize = (ushort)(PRG_LAST.GetAddressAfterMain(sizeOfMain) + byteArrayTableSize + stringTableSize);
+        
+        program.AddFinalBuiltIns(totalSize, locals, UsedMethods);
+
+        // Now add byte array data AFTER final built-ins (matching legacy order)
         foreach (var bytes in writer.ByteArrays)
         {
             program.AddProgramData(bytes.ToArray());
         }
-
-        // Add final built-ins (with correct total size calculated from program)
-        // Note: totalSize parameter is used for donelib/copydata - we need to calculate this
-        program.ResolveAddresses(); // Resolve to get current size
-        ushort currentEnd = (ushort)(program.BaseAddress + program.TotalSize);
         
-        // Create a separate program for final built-ins to get their addresses
-        program.AddFinalBuiltIns(currentEnd, locals, UsedMethods);
+        // Add string table (matching legacy order)
+        if (stringHeapSize > 0)
+        {
+            var handle = MetadataTokens.UserStringHandle(0);
+            do
+            {
+                string value = _reader.GetUserString(handle);
+                if (!string.IsNullOrEmpty(value))
+                {
+                    // Convert string to ASCII bytes with null terminator
+                    byte[] stringBytes = new byte[Encoding.ASCII.GetByteCount(value) + 1];
+                    Encoding.ASCII.GetBytes(value, 0, value.Length, stringBytes, 0);
+                    stringBytes[stringBytes.Length - 1] = 0; // null terminator
+                    program.AddProgramData(stringBytes);
+                }
+                handle = _reader.GetNextHandle(handle);
+            }
+            while (!handle.IsNil);
+        }
 
-        // Add destructor table
+        // Add destructor table LAST
         program.AddDestructorTable();
 
         // Final address resolution

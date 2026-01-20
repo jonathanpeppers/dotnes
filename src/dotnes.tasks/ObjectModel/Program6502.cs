@@ -139,9 +139,9 @@ public class Program6502
 
         foreach (var block in _blocks)
         {
-            // Define block label
+            // Define block label (accounting for any label offset)
             if (block.Label != null)
-                _labels.DefineOrUpdate(block.Label, currentAddress);
+                _labels.DefineOrUpdate(block.Label, (ushort)(currentAddress + block.LabelOffset));
 
             if (block.IsDataBlock)
             {

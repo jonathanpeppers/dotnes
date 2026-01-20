@@ -99,4 +99,48 @@ public class TranspilerTests
         Assert.NotEqual(0, labels["pusha"]);
         Assert.NotEqual(0, labels["pushax"]);
     }
+
+    [Fact]
+    public void CompareWriteAndBuildProgram6502()
+    {
+        var chr_generic = new StreamReader(Utilities.GetResource("chr_generic.s"));
+
+        // Get legacy output
+        using var dll = Utilities.GetResource("hello.release.dll");
+        using var legacyTranspiler = new Transpiler(dll, [new AssemblyReader(chr_generic)], _logger);
+        using var legacyMs = new MemoryStream();
+        legacyTranspiler.Write(legacyMs);
+        var legacyBytes = legacyMs.ToArray();
+
+        // Get new output (just the program part, not full ROM)
+        dll.Position = 0;
+        chr_generic.BaseStream.Position = 0;
+        using var newTranspiler = new Transpiler(dll, [new AssemblyReader(chr_generic)], _logger);
+        var program = newTranspiler.BuildProgram6502(out var sizeOfMain, out var locals);
+        var programBytes = program.ToBytes();
+
+        // Compare the PRG section (after 16-byte header) with program bytes
+        var legacyPrg = legacyBytes.AsSpan(16, programBytes.Length);
+        
+        // Find differences
+        var differences = new List<(int offset, byte legacy, byte program)>();
+        for (int i = 0; i < Math.Min(legacyPrg.Length, programBytes.Length); i++)
+        {
+            if (legacyPrg[i] != programBytes[i])
+            {
+                differences.Add((i, legacyPrg[i], programBytes[i]));
+            }
+        }
+
+        if (differences.Count > 0)
+        {
+            _logger.WriteLine($"Found {differences.Count} differences:");
+            foreach (var (offset, legacy, prog) in differences.Take(20))
+            {
+                _logger.WriteLine($"  0x{offset:X4}: legacy=0x{legacy:X2}, program=0x{prog:X2}");
+            }
+        }
+
+        Assert.Empty(differences);
+    }
 }
