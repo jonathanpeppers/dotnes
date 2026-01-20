@@ -272,6 +272,103 @@ class Transpiler : IDisposable
     }
 
     /// <summary>
+    /// Single-pass transpilation using the Program6502 object model.
+    /// Builds the entire program as blocks with label references, resolves addresses once,
+    /// then emits bytes in a single pass.
+    /// </summary>
+    public Program6502 BuildProgram6502SinglePass(out ushort sizeOfMain, out byte locals)
+    {
+        _logger.WriteLine($"Single-pass transpilation...");
+        
+        var instructions = ReadStaticVoidMain().ToArray();
+
+        // Create the base program with built-ins
+        var program = Program6502.CreateWithBuiltIns();
+
+        // Build main program block using label references (no pre-computed addresses needed)
+        using var writer = new IL2NESWriter(new MemoryStream(), logger: _logger)
+        {
+            Instructions = instructions,
+            UsedMethods = UsedMethods,
+            UseLabelReferences = true, // Use label references instead of resolved addresses
+        };
+
+        writer.StartBlockBuffering();
+
+        // Translate IL to 6502 (single pass - sizeOfMain = 0 since we'll calculate later)
+        for (int i = 0; i < writer.Instructions.Length; i++)
+        {
+            writer.Index = i;
+            var instruction = writer.Instructions[i];
+            
+            // Record IL instruction labels for branch targets
+            // In single-pass mode, we add labels to the block instead of global dictionary
+            var labelName = $"instruction_{instruction.Offset:X2}";
+            if (writer.CurrentBlock != null)
+            {
+                // Add label to next instruction
+                writer.CurrentBlock.SetNextLabel(labelName);
+            }
+            
+            if (instruction.Integer != null)
+            {
+                writer.Write(instruction, instruction.Integer.Value, sizeOfMain: 0);
+            }
+            else if (instruction.String != null)
+            {
+                writer.Write(instruction, instruction.String, sizeOfMain: 0);
+            }
+            else if (instruction.Bytes != null)
+            {
+                writer.Write(instruction, instruction.Bytes.Value, sizeOfMain: 0);
+            }
+            else
+            {
+                writer.Write(instruction, sizeOfMain: 0);
+            }
+        }
+
+        // Get main program as a Block
+        var mainBlock = writer.GetMainBlock("main");
+        if (mainBlock != null)
+        {
+            program.AddMainProgram(mainBlock);
+            sizeOfMain = (ushort)mainBlock.Size;
+        }
+        else
+        {
+            sizeOfMain = 0;
+        }
+
+        // Get local count from writer
+        locals = checked((byte)writer.LocalCount);
+
+        // Add byte array data from the writer
+        foreach (var bytes in writer.ByteArrays)
+        {
+            program.AddProgramData(bytes.ToArray());
+        }
+
+        // Add final built-ins (with correct total size calculated from program)
+        // Note: totalSize parameter is used for donelib/copydata - we need to calculate this
+        program.ResolveAddresses(); // Resolve to get current size
+        ushort currentEnd = (ushort)(program.BaseAddress + program.TotalSize);
+        
+        // Create a separate program for final built-ins to get their addresses
+        program.AddFinalBuiltIns(currentEnd, locals, UsedMethods);
+
+        // Add destructor table
+        program.AddDestructorTable();
+
+        // Final address resolution
+        program.ResolveAddresses();
+
+        _logger.WriteLine($"Single-pass complete. Size of main: {sizeOfMain}, locals: {locals}");
+
+        return program;
+    }
+
+    /// <summary>
     /// Generate static void main in a first pass, so we know the size of the program
     /// </summary>
     protected virtual void FirstPass(Dictionary<string, ushort> labels, ILInstruction[] instructions, out ushort sizeOfMain, out byte locals)

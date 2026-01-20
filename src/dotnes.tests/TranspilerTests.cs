@@ -98,4 +98,50 @@ public class TranspilerTests
         Assert.NotEqual(0, labels["pusha"]);
         Assert.NotEqual(0, labels["pushax"]);
     }
+
+    [Theory]
+    [InlineData("hello", true)]
+    [InlineData("hello", false)]
+    public void BuildProgram6502SinglePass(string name, bool debug)
+    {
+        var configuration = debug ? "debug" : "release";
+
+        using var dll = Utilities.GetResource($"{name}.{configuration}.dll");
+        using var transpiler = new Transpiler(dll, [], _logger);
+        
+        // Build using single-pass transpilation
+        var program = transpiler.BuildProgram6502SinglePass(out ushort sizeOfMain, out byte locals);
+
+        // Verify the program has blocks
+        Assert.True(program.BlockCount > 0, "Program should have blocks");
+        Assert.True(program.TotalSize > 0, "Program should have non-zero size");
+
+        // Verify main block exists with correct size
+        var mainBlock = program.GetBlock("main");
+        Assert.NotNull(mainBlock);
+        Assert.True(mainBlock.Count > 0, "Main block should have instructions");
+        Assert.Equal(sizeOfMain, mainBlock.Size);
+
+        // Verify built-in labels are defined
+        var labels = program.GetLabels();
+        Assert.True(labels.ContainsKey("popa"), "popa label should be defined");
+        Assert.True(labels.ContainsKey("popax"), "popax label should be defined");
+        Assert.True(labels.ContainsKey("pusha"), "pusha label should be defined");
+        Assert.True(labels.ContainsKey("pushax"), "pushax label should be defined");
+        Assert.True(labels.ContainsKey("main"), "main label should be defined");
+
+        // Verify forward reference labels have non-zero addresses
+        Assert.NotEqual(0, labels["popa"]);
+        Assert.NotEqual(0, labels["popax"]);
+        Assert.NotEqual(0, labels["pusha"]);
+        Assert.NotEqual(0, labels["pushax"]);
+
+        // Compare with two-pass method - sizes should match
+        using var dll2 = Utilities.GetResource($"{name}.{configuration}.dll");
+        using var transpiler2 = new Transpiler(dll2, [], _logger);
+        var twoPassProgram = transpiler2.BuildProgram6502(out ushort twoPassSizeOfMain, out byte twoPassLocals);
+
+        Assert.Equal(twoPassSizeOfMain, sizeOfMain);
+        Assert.Equal(twoPassLocals, locals);
+    }
 }

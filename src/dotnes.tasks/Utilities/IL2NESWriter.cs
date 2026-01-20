@@ -33,6 +33,12 @@ class IL2NESWriter : NESWriter
     ILOpCode previous;
 
     /// <summary>
+    /// When true, emit label references instead of resolved addresses.
+    /// This enables single-pass transpilation where addresses are resolved later.
+    /// </summary>
+    public bool UseLabelReferences { get; set; } = false;
+
+    /// <summary>
     /// NOTE: may not be exactly correct, this is the instructions inside zerobss:
     /// A925           LDA #$25                      ; zerobss
     /// 852A STA ptr1                      
@@ -55,6 +61,39 @@ class IL2NESWriter : NESWriter
     public int LocalCount { get; private set; }
 
     record Local(int Value, int? Address = null);
+
+    /// <summary>
+    /// Emits a JSR to a label, using either resolved address or label reference
+    /// based on the UseLabelReferences setting.
+    /// </summary>
+    void EmitJSR(string labelName)
+    {
+        if (UseLabelReferences)
+        {
+            EmitWithLabel(Opcode.JSR, AddressMode.Absolute, labelName);
+        }
+        else
+        {
+            Emit(Opcode.JSR, AddressMode.Absolute, Labels[labelName]);
+        }
+    }
+
+    /// <summary>
+    /// Emits a JMP to a label, using either resolved address or label reference
+    /// based on the UseLabelReferences setting.
+    /// </summary>
+    void EmitJMP(string labelName)
+    {
+        if (UseLabelReferences)
+        {
+            EmitWithLabel(Opcode.JMP, AddressMode.Absolute, labelName);
+        }
+        else
+        {
+            Labels.TryGetValue(labelName, out var address);
+            Emit(Opcode.JMP, AddressMode.Absolute, address);
+        }
+    }
 
     public void RecordLabel(ILInstruction instruction)
     {
@@ -213,8 +252,8 @@ class IL2NESWriter : NESWriter
             case ILOpCode.Br_s:
                 {
                     operand = (sbyte)(byte)operand;
-                    Labels.TryGetValue($"instruction_{instruction.Offset + operand + 2:X2}", out var label);
-                    Emit(Opcode.JMP, AddressMode.Absolute, label);
+                    var labelName = $"instruction_{instruction.Offset + operand + 2:X2}";
+                    EmitJMP(labelName);
                 }
                 break;
             case ILOpCode.Newarr:
@@ -302,7 +341,7 @@ class IL2NESWriter : NESWriter
                 //TODO: hardcoded until string table figured out
                 Emit(Opcode.LDA, AddressMode.Immediate, 0xF1);
                 Emit(Opcode.LDX, AddressMode.Immediate, 0x85);
-                Emit(Opcode.JSR, AddressMode.Absolute, Labels["pushax"]);
+                EmitJSR("pushax");
                 Emit(Opcode.LDX, AddressMode.Immediate, 0x00);
                 if (operand.Length > ushort.MaxValue)
                 {
@@ -345,7 +384,16 @@ class IL2NESWriter : NESWriter
                         Stack.Push(address);
                         break;
                     default:
-                        Emit(Opcode.JSR, AddressMode.Absolute, GetAddress(operand));
+                        // Emit JSR to built-in method
+                        string builtInLabel = GetLabelName(operand);
+                        if (UseLabelReferences)
+                        {
+                            EmitWithLabel(Opcode.JSR, AddressMode.Absolute, builtInLabel);
+                        }
+                        else
+                        {
+                            Emit(Opcode.JSR, AddressMode.Absolute, GetAddress(operand));
+                        }
                         break;
                 }
                 // Pop N times
@@ -411,45 +459,50 @@ class IL2NESWriter : NESWriter
     }
 
     /// <summary>
+    /// Gets the label name for a built-in subroutine from the NESLib method name.
+    /// </summary>
+    string GetLabelName(string name) => name switch
+    {
+        // These map directly (same name)
+        nameof(pal_col) => "pal_col",
+        nameof(pal_bg) => "pal_bg",
+        nameof(pal_clear) => "pal_clear",
+        nameof(pal_all) => "pal_all",
+        nameof(pal_spr) => "pal_spr",
+        nameof(pal_spr_bright) => "pal_spr_bright",
+        nameof(ppu_on_all) => "ppu_on_all",
+        nameof(vram_adr) => "vram_adr",
+        nameof(ppu_wait_frame) => "ppu_wait_frame",
+        nameof(ppu_on_bg) => "ppu_on_bg",
+        nameof(ppu_on_spr) => "ppu_on_spr",
+        nameof(delay) => "delay",
+        nameof(nesclock) => "nesclock",
+        nameof(oam_clear) => "oam_clear",
+        nameof(oam_hide_rest) => "oam_hide_rest",
+        nameof(oam_size) => "oam_size",
+        nameof(vram_fill) => "vram_fill",
+        nameof(vram_write) => "vram_write",
+        nameof(vram_put) => "vram_put",
+        nameof(vram_inc) => "vram_inc",
+        nameof(set_vram_update) => "set_vram_update",
+        nameof(set_ppu_ctrl_var) => "set_ppu_ctrl_var",
+        nameof(scroll) => "scroll",
+        nameof(oam_spr) => "oam_spr",
+        nameof(pad_poll) => "pad_poll",
+        nameof(rand) => "rand",
+        nameof(rand8) => "rand8",
+        nameof(rand16) => "rand16",
+        nameof(set_rand) => "set_rand",
+        _ => throw new NotImplementedException($"{nameof(GetLabelName)} for {name} is not implemented!")
+    };
+
+    /// <summary>
     /// Gets the address of a built-in subroutine by looking up its label.
     /// The label names match the block names in BuiltInSubroutines.
     /// </summary>
     ushort GetAddress(string name)
     {
-        // Map NESLib method names to their block label names
-        // Most labels match the method name, but some have different casing or prefixes
-        string labelName = name switch
-        {
-            // These map directly (same name)
-            nameof(pal_col) => "pal_col",
-            nameof(pal_bg) => "pal_bg",
-            nameof(pal_clear) => "pal_clear",
-            nameof(pal_all) => "pal_all",
-            nameof(pal_spr) => "pal_spr",
-            nameof(pal_spr_bright) => "pal_spr_bright",
-            nameof(ppu_on_all) => "ppu_on_all",
-            nameof(vram_adr) => "vram_adr",
-            nameof(ppu_wait_frame) => "ppu_wait_frame",
-            nameof(ppu_on_bg) => "ppu_on_bg",
-            nameof(ppu_on_spr) => "ppu_on_spr",
-            nameof(delay) => "delay",
-            nameof(nesclock) => "nesclock",
-            nameof(oam_clear) => "oam_clear",
-            nameof(oam_hide_rest) => "oam_hide_rest",
-            nameof(oam_size) => "oam_size",
-            nameof(vram_fill) => "vram_fill",
-            nameof(vram_write) => "vram_write",
-            nameof(vram_put) => "vram_put",
-            nameof(vram_inc) => "vram_inc",
-            nameof(set_vram_update) => "set_vram_update",
-            nameof(set_ppu_ctrl_var) => "set_ppu_ctrl_var",
-            nameof(scroll) => "scroll",
-            // Optional methods - may not have labels until WriteFinalBuiltIns is called
-            nameof(oam_spr) or nameof(pad_poll) => name,
-            // rand functions - not yet implemented as built-ins
-            nameof(rand) or nameof(rand8) or nameof(rand16) or nameof(set_rand) => name,
-            _ => throw new NotImplementedException($"{nameof(GetAddress)} for {name} is not implemented!")
-        };
+        string labelName = GetLabelName(name);
 
         // Look up the label; return 0 for optional methods that haven't been written yet
         if (Labels.TryGetValue(labelName, out var address))
@@ -504,7 +557,7 @@ class IL2NESWriter : NESWriter
     {
         if (LastLDA)
         {
-            Emit(Opcode.JSR, AddressMode.Absolute, Labels["pusha"]);
+            EmitJSR("pusha");
         }
         Emit(Opcode.LDX, AddressMode.Immediate, checked((byte)(operand >> 8)));
         Emit(Opcode.LDA, AddressMode.Immediate, checked((byte)(operand & 0xff)));
@@ -515,7 +568,7 @@ class IL2NESWriter : NESWriter
     {
         if (LastLDA)
         {
-            Emit(Opcode.JSR, AddressMode.Absolute, Labels["pusha"]);
+            EmitJSR("pusha");
         }
         Emit(Opcode.LDA, AddressMode.Immediate, operand);
         Stack.Push(operand);
@@ -529,11 +582,11 @@ class IL2NESWriter : NESWriter
             if (local.Value < byte.MaxValue)
             {
                 Emit(Opcode.LDA, AddressMode.Absolute, (ushort)local.Address);
-                Emit(Opcode.JSR, AddressMode.Absolute, Labels["pusha"]);
+                EmitJSR("pusha");
             }
             else if (local.Value < ushort.MaxValue)
             {
-                Emit(Opcode.JSR, AddressMode.Absolute, Labels["pusha"]);
+                EmitJSR("pusha");
                 Emit(Opcode.LDA, AddressMode.Absolute, (ushort)local.Address);
                 Emit(Opcode.LDX, AddressMode.Absolute, (ushort)(local.Address + 1));
             }
@@ -547,7 +600,7 @@ class IL2NESWriter : NESWriter
             // This is more like an inline constant value
             Emit(Opcode.LDA, AddressMode.Immediate, (byte)(local.Value & 0xff));
             Emit(Opcode.LDX, AddressMode.Immediate, (byte)(local.Value >> 8));
-            Emit(Opcode.JSR, AddressMode.Absolute, Labels["pushax"]);
+            EmitJSR("pushax");
             Emit(Opcode.LDX, AddressMode.Immediate, 0x00);
             Emit(Opcode.LDA, AddressMode.Immediate, 0x40);
         }

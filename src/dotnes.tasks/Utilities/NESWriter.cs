@@ -551,6 +551,19 @@ class NESWriter : IDisposable
     }
 
     /// <summary>
+    /// Emits an instruction with a label reference operand to the buffered block.
+    /// The label will be resolved to an address when the block is written.
+    /// </summary>
+    protected void EmitWithLabel(Opcode opcode, AddressMode mode, string label)
+    {
+        if (_bufferedBlock == null)
+            throw new InvalidOperationException("EmitWithLabel requires block buffering mode. Call StartBlockBuffering() first.");
+        
+        _bufferedBlock.Emit(new Instruction(opcode, mode, new LabelOperand(label, OperandSize.Word)));
+        LastLDA = opcode == Opcode.LDA && mode == AddressMode.Immediate;
+    }
+
+    /// <summary>
     /// Gets the current count of instructions in the buffered block.
     /// </summary>
     protected int GetBufferedBlockCount() => _bufferedBlock?.Count ?? 0;

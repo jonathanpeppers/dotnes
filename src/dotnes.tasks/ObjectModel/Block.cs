@@ -76,11 +76,14 @@ public class Block
     /// Adds an instruction at the end of the block
     /// </summary>
     /// <param name="instruction">The instruction to add</param>
-    /// <param name="label">Optional label for this instruction</param>
+    /// <param name="label">Optional label for this instruction (overrides pending label)</param>
     /// <returns>This block for fluent chaining</returns>
     public Block Emit(Instruction instruction, string? label = null)
     {
-        _instructions.Add((instruction, label));
+        // Use pending label if no explicit label provided
+        var effectiveLabel = label ?? _pendingLabel;
+        _pendingLabel = null; // Clear pending label after use
+        _instructions.Add((instruction, effectiveLabel));
         return this;
     }
 
@@ -91,7 +94,10 @@ public class Block
     {
         foreach (var instruction in instructions)
         {
-            _instructions.Add((instruction, null));
+            // Use pending label for first instruction only
+            var effectiveLabel = _pendingLabel;
+            _pendingLabel = null;
+            _instructions.Add((instruction, effectiveLabel));
         }
         return this;
     }
@@ -140,6 +146,20 @@ public class Block
     {
         var (instruction, _) = _instructions[index];
         _instructions[index] = (instruction, label);
+    }
+
+    /// <summary>
+    /// Pending label to be applied to the next emitted instruction
+    /// </summary>
+    private string? _pendingLabel;
+
+    /// <summary>
+    /// Sets a label to be applied to the next emitted instruction.
+    /// Used for single-pass transpilation where labels are added as instructions are emitted.
+    /// </summary>
+    public void SetNextLabel(string label)
+    {
+        _pendingLabel = label;
     }
 
     /// <summary>
