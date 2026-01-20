@@ -293,41 +293,6 @@ class NESWriter : IDisposable
         }
     }
 
-    /// <summary>
-    /// Writes an "implied" instruction that has no argument
-    /// </summary>
-    public void Write(Opcode opcode)
-    {
-        byte encoded = OpcodeTable.Encode(opcode, AddressMode.Implied);
-        LastLDA = opcode == Opcode.LDA;
-        _logger.WriteLine($"{opcode}({encoded:X})");
-        _writer.Write(encoded);
-    }
-
-    /// <summary>
-    /// Writes an instruction with a single byte argument (immediate or zero page)
-    /// </summary>
-    public void Write(Opcode opcode, AddressMode mode, byte value)
-    {
-        byte encoded = OpcodeTable.Encode(opcode, mode);
-        LastLDA = opcode == Opcode.LDA;
-        _logger.WriteLine($"{opcode}({encoded:X}) {value:X}");
-        _writer.Write(encoded);
-        _writer.Write(value);
-    }
-
-    /// <summary>
-    /// Writes an instruction with an address argument (2 bytes)
-    /// </summary>
-    public void Write(Opcode opcode, AddressMode mode, ushort address)
-    {
-        byte encoded = OpcodeTable.Encode(opcode, mode);
-        LastLDA = opcode == Opcode.LDA;
-        _logger.WriteLine($"{opcode}({encoded:X}) {address:X}");
-        _writer.Write(encoded);
-        _writer.Write(address);
-    }
-
     public void Write()
     {
         WriteHeader();
