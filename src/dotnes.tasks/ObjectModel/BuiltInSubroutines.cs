@@ -1390,8 +1390,8 @@ internal static class BuiltInSubroutines
              .Emit(JSR(0x8279))    // pal_bright
              .Emit(JSR(0x824E))    // pal_clear
              .Emit(JSR(0x82AE))    // oam_clear
-             .Emit(JSR("zerobss"))
-             .Emit(JSR("copydata"))
+             .Emit(JSR(nameof(zerobss)))
+             .Emit(JSR(nameof(copydata)))
              .Emit(LDA(0x00))
              .Emit(STA_zpg(sp))
              .Emit(LDA(PAL_BG_PTR))  // 0x08 = stack high byte
