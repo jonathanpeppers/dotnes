@@ -38,6 +38,8 @@ public class TranspilerTests
     [InlineData("attributetable", false)]
     [InlineData("hello", true)]
     [InlineData("hello", false)]
+    [InlineData("lols", true)]
+    [InlineData("lols", false)]
     [InlineData("onelocal", true)]
     [InlineData("onelocal", false)]
     [InlineData("onelocalbyte", true)]
