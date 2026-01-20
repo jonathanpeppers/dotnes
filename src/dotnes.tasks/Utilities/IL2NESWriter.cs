@@ -23,9 +23,10 @@ class IL2NESWriter : NESWriter
     /// </summary>
     readonly Dictionary<int, Local> Locals = new();
     /// <summary>
-    /// List of byte[] data
+    /// List of byte[] data (accessible for Program6502 building)
     /// </summary>
-    readonly List<ImmutableArray<byte>> ByteArrays = new();
+    public IReadOnlyList<ImmutableArray<byte>> ByteArrays => _byteArrays;
+    readonly List<ImmutableArray<byte>> _byteArrays = new();
     readonly ushort local = 0x324;
     readonly ReflectionCache _reflectionCache = new();
     ushort ByteArrayOffset = 0;
@@ -387,7 +388,7 @@ class IL2NESWriter : NESWriter
                 }
                 Stack.Push(ByteArrayOffset);
                 ByteArrayOffset = (ushort)(ByteArrayOffset + operand.Length);
-                ByteArrays.Add(operand);
+                _byteArrays.Add(operand);
                 break;
             default:
                 throw new NotImplementedException($"OpCode {instruction.OpCode} with byte[] operand is not implemented!");
@@ -558,4 +559,28 @@ class IL2NESWriter : NESWriter
     /// Wrapper for FlushBufferedBlock() for backward compatibility.
     /// </summary>
     public void FlushMainBlock() => FlushBufferedBlock();
+
+    /// <summary>
+    /// Gets the main program as a Block without flushing it to the stream.
+    /// The block can then be added to a Program6502 for analysis or manipulation.
+    /// Call this INSTEAD OF FlushMainBlock() when building a full Program6502.
+    /// </summary>
+    /// <param name="label">Optional label for the main block (e.g., "main")</param>
+    /// <returns>The main program block, or null if not in block buffering mode</returns>
+    public Block? GetMainBlock(string? label = "main")
+    {
+        if (_bufferedBlock == null)
+            return null;
+
+        var block = _bufferedBlock;
+        block.Label = label;
+        _bufferedBlock = null;
+        return block;
+    }
+
+    /// <summary>
+    /// Gets the current block being buffered (read-only access).
+    /// Returns null if not in block buffering mode.
+    /// </summary>
+    public Block? CurrentBlock => _bufferedBlock;
 }

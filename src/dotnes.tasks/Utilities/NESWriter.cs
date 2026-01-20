@@ -277,30 +277,19 @@ class NESWriter : IDisposable
     }
 
     /// <summary>
-    /// These are any subroutines after our `static void main()` method
+    /// These are any subroutines after our `static void main()` method.
+    /// Uses Program6502.AddFinalBuiltIns to centralize the block definitions.
     /// </summary>
     public void WriteFinalBuiltIns(ushort totalSize, byte locals)
     {
-        WriteBlock(BuiltInSubroutines.Donelib(totalSize));
-        WriteBlock(BuiltInSubroutines.Copydata(totalSize));
-        WriteBlock(BuiltInSubroutines.Popax());
-        WriteBlock(BuiltInSubroutines.Incsp2());
-        WriteBlock(BuiltInSubroutines.Popa());
-        WriteBlock(BuiltInSubroutines.Pusha());
-        WriteBlock(BuiltInSubroutines.Pushax());
-        WriteBlock(BuiltInSubroutines.Zerobss(locals));
+        // Create a temporary Program6502 with final built-ins
+        var finalBuiltIns = new Program6502();
+        finalBuiltIns.AddFinalBuiltIns(totalSize, locals, UsedMethods);
 
-        // List of optional methods at the end
-        if (UsedMethods is not null)
+        // Write each block using WriteBlock (which handles label resolution)
+        foreach (var block in finalBuiltIns.Blocks)
         {
-            if (UsedMethods.Contains(nameof(NESLib.oam_spr)))
-            {
-                WriteBlock(BuiltInSubroutines.OamSpr());
-            }
-            if (UsedMethods.Contains(nameof(NESLib.pad_poll)))
-            {
-                WriteBlock(BuiltInSubroutines.PadPoll());
-            }
+            WriteBlock(block);
         }
     }
 

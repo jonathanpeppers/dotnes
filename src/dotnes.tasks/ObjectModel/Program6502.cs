@@ -472,6 +472,27 @@ public class Program6502
     }
 
     /// <summary>
+    /// Adds the main program block (user's transpiled code).
+    /// Should be called after CreateWithBuiltIns() and before AddFinalBuiltIns().
+    /// </summary>
+    /// <param name="mainBlock">The block containing the transpiled main() function</param>
+    public void AddMainProgram(Block mainBlock)
+    {
+        AddBlock(mainBlock);
+    }
+
+    /// <summary>
+    /// Adds raw data (byte arrays from the program, string tables, etc.).
+    /// Should be called after AddMainProgram() and before AddFinalBuiltIns().
+    /// </summary>
+    /// <param name="data">The raw data bytes</param>
+    /// <param name="label">Optional label for the data</param>
+    public void AddProgramData(byte[] data, string? label = null)
+    {
+        AddRawData(data, label);
+    }
+
+    /// <summary>
     /// Adds the destructor table block.
     /// </summary>
     public void AddDestructorTable()
