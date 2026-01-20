@@ -199,84 +199,13 @@ class Transpiler : IDisposable
 
     /// <summary>
     /// Builds a full Program6502 object model representation of the transpiled program.
-    /// This is useful for analysis, debugging, or alternative output formats.
+    /// Uses single-pass transpilation with label references, resolves addresses once,
+    /// then the program can emit bytes in a single pass.
     /// </summary>
     /// <param name="sizeOfMain">Output: size of the main program in bytes</param>
     /// <param name="locals">Output: number of local variables</param>
     /// <returns>A Program6502 containing built-ins, main program, and final built-ins</returns>
     public Program6502 BuildProgram6502(out ushort sizeOfMain, out byte locals)
-    {
-        var instructions = ReadStaticVoidMain().ToArray();
-        var labels = CalculateAddressLabels(instructions);
-
-        // First pass to determine size
-        FirstPass(labels, instructions, out sizeOfMain, out locals);
-
-        // Create built-ins program
-        var program = Program6502.CreateWithBuiltIns();
-
-        // Build main program block using second pass
-        using var writer = new IL2NESWriter(new MemoryStream(), logger: _logger)
-        {
-            Instructions = instructions,
-            UsedMethods = UsedMethods,
-        };
-        writer.SetLabels(labels);
-        writer.StartBlockBuffering();
-
-        for (int i = 0; i < writer.Instructions.Length; i++)
-        {
-            writer.Index = i;
-            var instruction = writer.Instructions[i];
-            if (instruction.Integer != null)
-            {
-                writer.Write(instruction, instruction.Integer.Value, sizeOfMain);
-            }
-            else if (instruction.String != null)
-            {
-                writer.Write(instruction, instruction.String, sizeOfMain);
-            }
-            else if (instruction.Bytes != null)
-            {
-                writer.Write(instruction, instruction.Bytes.Value, sizeOfMain);
-            }
-            else
-            {
-                writer.Write(instruction, sizeOfMain);
-            }
-        }
-
-        // Get main program as a Block (instead of flushing to stream)
-        var mainBlock = writer.GetMainBlock("main");
-        if (mainBlock != null)
-        {
-            program.AddMainProgram(mainBlock);
-        }
-
-        // Add byte array data from the writer
-        foreach (var bytes in writer.ByteArrays)
-        {
-            program.AddProgramData(bytes.ToArray());
-        }
-
-        // Add final built-ins
-        program.AddFinalBuiltIns(0, locals, UsedMethods);
-
-        // Add destructor table
-        program.AddDestructorTable();
-
-        // Resolve all addresses
-        program.ResolveAddresses();
-
-        return program;
-    }
-
-    /// <summary>
-    /// Single-pass transpilation using the Program6502 object model.
-    /// Builds the entire program as blocks with label references, resolves addresses once,
-    /// then emits bytes in a single pass.
-    /// </summary>
-    public Program6502 BuildProgram6502SinglePass(out ushort sizeOfMain, out byte locals)
     {
         _logger.WriteLine($"Single-pass transpilation...");
         

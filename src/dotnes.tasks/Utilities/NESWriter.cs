@@ -568,43 +568,6 @@ class NESWriter : IDisposable
     /// </summary>
     protected int GetBufferedBlockCount() => _bufferedBlock?.Count ?? 0;
 
-    /// <summary>
-    /// Writes all blocks from a Program6502 to the stream.
-    /// This uses the object model's pre-resolved labels for consistent addresses.
-    /// </summary>
-    public void WriteFromProgram6502(Program6502 program)
-    {
-        // Ensure addresses are resolved
-        program.ResolveAddresses();
-        
-        // Copy labels from Program6502 to NESWriter (if not preset)
-        if (!_hasPresetLabels)
-        {
-            foreach (var kvp in program.GetLabels())
-            {
-                Labels[kvp.Key] = kvp.Value;
-            }
-        }
-        
-        // Write each block using WriteBlock (which handles instruction encoding)
-        foreach (var block in program.Blocks)
-        {
-            WriteBlock(block);
-        }
-        
-        // Write raw data (brightness tables, etc.)
-        var programBytes = program.ToBytes();
-        int blocksSize = 0;
-        foreach (var block in program.Blocks)
-            blocksSize += block.Size;
-        
-        // Only write the raw data portion (bytes after blocks)
-        if (programBytes.Length > blocksSize)
-        {
-            _writer.Write(programBytes, blocksSize, programBytes.Length - blocksSize);
-        }
-    }
-
     public void Flush() => _writer.Flush();
 
     public void Dispose() => _writer.Dispose();
