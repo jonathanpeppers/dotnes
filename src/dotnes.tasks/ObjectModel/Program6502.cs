@@ -113,6 +113,47 @@ public class Program6502
     }
 
     /// <summary>
+    /// Gets the bytes for a specific block (e.g., "main").
+    /// Requires that addresses have been resolved via ResolveAddresses().
+    /// </summary>
+    public byte[] GetMainBlock(string label = "main")
+    {
+        if (!_addressesValid)
+            ResolveAddresses();
+
+        var block = GetBlock(label);
+        if (block == null)
+            return Array.Empty<byte>();
+
+        // Calculate the starting address for this block
+        ushort currentAddress = BaseAddress;
+        foreach (var b in _blocks)
+        {
+            if (b == block)
+                break;
+            currentAddress += (ushort)b.Size;
+        }
+
+        // Emit the block's instructions
+        var ms = new MemoryStream(block.Size);
+        if (block.IsDataBlock && block.RawData != null)
+        {
+            ms.Write(block.RawData, 0, block.RawData.Length);
+        }
+        else
+        {
+            foreach (var entry in block.InstructionsWithLabels)
+            {
+                var bytes = entry.Instruction.ToBytes(currentAddress, _labels);
+                ms.Write(bytes, 0, bytes.Length);
+                currentAddress += (ushort)bytes.Length;
+            }
+        }
+
+        return ms.ToArray();
+    }
+
+    /// <summary>
     /// Adds raw byte data as an inline data block (e.g., lookup tables).
     /// Data blocks are written in order with other blocks.
     /// </summary>

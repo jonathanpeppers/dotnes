@@ -280,7 +280,15 @@ public static class OpcodeTable
     /// </summary>
     public static byte Encode(Opcode opcode, AddressMode mode)
     {
-        if (_encodings.TryGetValue((opcode, mode), out byte encoding))
+        // Map label-based immediate modes to standard Immediate for encoding
+        var effectiveMode = mode switch
+        {
+            AddressMode.Immediate_LowByte => AddressMode.Immediate,
+            AddressMode.Immediate_HighByte => AddressMode.Immediate,
+            _ => mode
+        };
+        
+        if (_encodings.TryGetValue((opcode, effectiveMode), out byte encoding))
             return encoding;
         throw new InvalidOpcodeAddressModeException(opcode, mode);
     }

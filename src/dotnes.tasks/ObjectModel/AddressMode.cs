@@ -70,4 +70,16 @@ public enum AddressMode
     /// Relative: OPC $BB (2 bytes) - signed offset for branch instructions (-128 to +127)
     /// </summary>
     Relative,
+
+    /// <summary>
+    /// Immediate with low byte of label: OPC #&lt;label (2 bytes) - operand is low byte of a 16-bit label address
+    /// Used internally for single-pass transpilation with byte array addresses.
+    /// </summary>
+    Immediate_LowByte,
+
+    /// <summary>
+    /// Immediate with high byte of label: OPC #&gt;label (2 bytes) - operand is high byte of a 16-bit label address
+    /// Used internally for single-pass transpilation with byte array addresses.
+    /// </summary>
+    Immediate_HighByte,
 }

@@ -29,65 +29,6 @@ class Transpiler : IDisposable
         _logger = logger ?? new NullLogger();
     }
 
-    /// <summary>
-    /// Figure out the addresses of functions so we can use to them for JMPs.
-    /// Uses Program6502 object model for built-in labels.
-    /// </summary>
-    private Dictionary<string, ushort> CalculateAddressLabels(ILInstruction[] instructions)
-    {
-        // Get built-in labels from Program6502 object model
-        var builtInsProgram = Program6502.CreateWithBuiltIns();
-        builtInsProgram.ResolveAddresses();
-        var labels = builtInsProgram.GetLabels();
-        int builtInsSize = builtInsProgram.TotalSize;
-
-        using var ms = new MemoryStream();
-        using var writer = new IL2NESWriter(ms, logger: _logger)
-        {
-            UsedMethods = UsedMethods,
-            Instructions = instructions,
-        };
-
-        // Set pre-computed built-in labels
-        writer.SetLabels(labels);
-
-        // Advance stream position to account for built-ins
-        writer.WriteZeroes(builtInsSize);
-
-        // Enable block buffering
-        writer.StartBlockBuffering();
-
-        // Write main program to calculate IL labels (branch targets, etc.)
-        for (int i = 0; i < writer.Instructions.Length; i++)
-        {
-            writer.Index = i;
-            var instruction = writer.Instructions[i];
-            writer.RecordLabel(instruction);
-            if (instruction.Integer != null)
-            {
-                writer.Write(instruction, instruction.Integer.Value, sizeOfMain: 0);
-            }
-            else if (instruction.String != null)
-            {
-                writer.Write(instruction, instruction.String, sizeOfMain: 0);
-            }
-            else if (instruction.Bytes != null)
-            {
-                writer.Write(instruction, instruction.Bytes.Value, sizeOfMain: 0);
-            }
-            else
-            {
-                writer.Write(instruction, sizeOfMain: 0);
-            }
-        }
-
-        // Flush main block BEFORE WriteFinalBuiltIns so CurrentAddress includes main program size
-        writer.FlushMainBlock();
-        writer.WriteFinalBuiltIns(0, 0);
-
-        return writer.Labels;
-    }
-
     public void Write(Stream stream)
     {
         if (_assemblyFiles.Count == 0)
@@ -96,106 +37,79 @@ class Transpiler : IDisposable
         var assemblyReader = _assemblyFiles.FirstOrDefault(a => Path.GetFileName(a.Path) == "chr_generic.s") ?? _assemblyFiles[0];
         var chr_rom = assemblyReader.GetSegments().FirstOrDefault(s => s.Name == "CHARS") ??
             throw new InvalidOperationException($"At least one 'CHARS' segment must be present in: {assemblyReader.Path}");
-        int CHR_ROM_SIZE = (int)(chr_rom.Bytes.Length / NESWriter.CHR_ROM_BLOCK_SIZE);
 
-        _logger.WriteLine($"First pass...");
+        _logger.WriteLine($"Building program...");
 
-        var instructions = ReadStaticVoidMain().ToArray();
-        var labels = CalculateAddressLabels(instructions);
+        // Build the complete program using single-pass transpilation
+        var program = BuildProgram6502(out ushort sizeOfMain, out byte locals);
+        var programBytes = program.ToBytes();
 
-        // Generate static void main in a first pass, so we know the size of the program
-        FirstPass(labels, instructions, out ushort sizeOfMain, out byte locals);
+        _logger.WriteLine($"Size of main: {sizeOfMain}, locals: {locals}");
 
-        _logger.WriteLine($"Size of main: {sizeOfMain}");
-
-        using var writer = new IL2NESWriter(stream, logger: _logger)
-        {
-            Instructions = instructions,
-            UsedMethods = UsedMethods,
-        };
-        writer.SetLabels(labels);
-
+        // Write the NES ROM
+        using var writer = new BinaryWriter(stream, Encoding.ASCII, leaveOpen: true);
+        
+        // Write NES header (16 bytes)
         _logger.WriteLine($"Writing header...");
-        writer.WriteHeader(PRG_ROM_SIZE: 2, CHR_ROM_SIZE: 1);
-        // Set the code base offset so WriteBlock calculates addresses correctly
-        // (Labels were computed in first pass without header, so we need to account for it)
-        writer.CodeBaseOffset = writer.BaseStream.Position;
-        _logger.WriteLine($"Writing built-ins...");
-        writer.WriteBuiltIns();
+        writer.Write('N');
+        writer.Write('E');
+        writer.Write('S');
+        writer.Write((byte)0x1A);
+        writer.Write((byte)2); // PRG_ROM_SIZE (2 * 16KB = 32KB)
+        writer.Write((byte)1); // CHR_ROM_SIZE (1 * 8KB)
+        writer.Write((byte)0); // Flags6
+        writer.Write((byte)0); // Flags7
+        writer.Write((byte)0); // Flags8
+        writer.Write((byte)0); // Flags9
+        writer.Write((byte)0); // Flags10
+        // Pad header to 16 bytes
+        for (int i = 0; i < 5; i++)
+            writer.Write((byte)0);
 
-        _logger.WriteLine($"Second pass...");
+        // Write PRG ROM
+        _logger.WriteLine($"Writing PRG ROM ({programBytes.Length} bytes)...");
+        writer.Write(programBytes);
 
-        // Write static void main *again*, second pass
-        // With a known value for sizeOfMain
-        SecondPass(sizeOfMain, writer);
-
-        // NOTE: not sure if string or byte[] is first
-        _logger.WriteLine($"Writing string/byte[] table...");
-        using (var memoryStream = new MemoryStream())
+        // Pad first PRG ROM bank to 16KB
+        int firstBankPadding = NESWriter.PRG_ROM_BLOCK_SIZE - (programBytes.Length % NESWriter.PRG_ROM_BLOCK_SIZE);
+        if (firstBankPadding < NESWriter.PRG_ROM_BLOCK_SIZE)
         {
-            using (var tableWriter = new IL2NESWriter(memoryStream, leaveOpen: true, logger: _logger))
-            {
-                // Write byte[] table
-                tableWriter.WriteByteArrays(writer);
-
-                // Write C# string table
-                int stringHeapSize = _reader.GetHeapSize(HeapIndex.UserString);
-                if (stringHeapSize > 0)
-                {
-                    var handle = MetadataTokens.UserStringHandle(0);
-                    do
-                    {
-                        string value = _reader.GetUserString(handle);
-                        if (!string.IsNullOrEmpty(value))
-                        {
-                            tableWriter.WriteString(value);
-                        }
-                        handle = _reader.GetNextHandle(handle);
-                    }
-                    while (!handle.IsNil);
-                }
-            }
-
-            const ushort PRG_LAST = 0x85AE;
-            writer.WriteFinalBuiltIns((ushort)(PRG_LAST.GetAddressAfterMain(sizeOfMain) + memoryStream.Length), locals);
-            memoryStream.Position = 0;
-            memoryStream.CopyTo(writer.BaseStream);
+            for (int i = 0; i < firstBankPadding; i++)
+                writer.Write((byte)0);
         }
 
-        _logger.WriteLine($"Destructor table...");
-        writer.WriteDestructorTable();
-
-        // Pad 0s
-        int PRG_ROM_SIZE = (int)writer.Length - 16;
-        writer.WriteZeroes(NESWriter.PRG_ROM_BLOCK_SIZE - (PRG_ROM_SIZE % NESWriter.PRG_ROM_BLOCK_SIZE));
-
-        // Write interrupt vectors
+        // Write second PRG ROM bank (16KB), with interrupt vectors at the end
         const int VECTOR_ADDRESSES_SIZE = 6;
-        writer.WriteZeroes(NESWriter.PRG_ROM_BLOCK_SIZE - VECTOR_ADDRESSES_SIZE);
+        int secondBankPadding = NESWriter.PRG_ROM_BLOCK_SIZE - VECTOR_ADDRESSES_SIZE;
+        for (int i = 0; i < secondBankPadding; i++)
+            writer.Write((byte)0);
+
+        // Write vectors: NMI, RESET, IRQ (little-endian)
         ushort nmi_data = 0x80BC;
         ushort reset_data = 0x8000;
         ushort irq_data = 0x8202;
-        writer.Write([nmi_data, reset_data, irq_data]);
+        writer.Write((byte)(nmi_data & 0xFF));
+        writer.Write((byte)(nmi_data >> 8));
+        writer.Write((byte)(reset_data & 0xFF));
+        writer.Write((byte)(reset_data >> 8));
+        writer.Write((byte)(irq_data & 0xFF));
+        writer.Write((byte)(irq_data >> 8));
 
-        _logger.WriteLine($"Writing chr_rom...");
+        // Write CHR ROM
+        _logger.WriteLine($"Writing CHR ROM...");
         writer.Write(chr_rom.Bytes);
-        // Pad remaining zeros
-        int padLength = chr_rom.Bytes.Length % NESWriter.CHR_ROM_BLOCK_SIZE;
-        if (padLength != 0)
+        
+        // Pad CHR ROM to 8KB boundary
+        int chrPadding = chr_rom.Bytes.Length % NESWriter.CHR_ROM_BLOCK_SIZE;
+        if (chrPadding != 0)
         {
-            var buffer = ArrayPool<byte>.Shared.Rent(padLength);
-            try
-            {
-                //NOTE: this byte[] can contain non-zero values!
-                buffer.AsSpan().Fill(0);
-                writer.Write(buffer, 0, padLength);
-            }
-            finally
-            {
-                ArrayPool<byte>.Shared.Return(buffer);
-            }
+            chrPadding = NESWriter.CHR_ROM_BLOCK_SIZE - chrPadding;
+            for (int i = 0; i < chrPadding; i++)
+                writer.Write((byte)0);
         }
+
         writer.Flush();
+        _logger.WriteLine($"ROM complete. Total size: {stream.Length} bytes");
     }
 
     /// <summary>
@@ -316,9 +230,13 @@ class Transpiler : IDisposable
         program.AddFinalBuiltIns(totalSize, locals, UsedMethods);
 
         // Now add byte array data AFTER final built-ins (matching legacy order)
+        // Add labels for each byte array so they can be referenced by the main program
+        int byteArrayIndex = 0;
         foreach (var bytes in writer.ByteArrays)
         {
-            program.AddProgramData(bytes.ToArray());
+            string label = $"bytearray_{byteArrayIndex}";
+            program.AddProgramData(bytes.ToArray(), label);
+            byteArrayIndex++;
         }
         
         // Add string table (matching legacy order)
@@ -350,87 +268,6 @@ class Transpiler : IDisposable
         _logger.WriteLine($"Single-pass complete. Size of main: {sizeOfMain}, locals: {locals}");
 
         return program;
-    }
-
-    /// <summary>
-    /// Generate static void main in a first pass, so we know the size of the program
-    /// </summary>
-    protected virtual void FirstPass(Dictionary<string, ushort> labels, ILInstruction[] instructions, out ushort sizeOfMain, out byte locals)
-    {
-        using var writer = new IL2NESWriter(new MemoryStream(), logger: _logger)
-        {
-            UsedMethods = UsedMethods,
-            Instructions = instructions,
-        };
-        writer.SetLabels(labels);
-
-        // Enable block buffering
-        writer.StartBlockBuffering();
-
-        for (int i = 0; i < writer.Instructions.Length; i++)
-        {
-            writer.Index = i;
-            var instruction = writer.Instructions[i];
-            _logger.WriteLine($"{instruction}");
-            if (instruction.Integer != null)
-            {
-                writer.Write(instruction, instruction.Integer.Value, sizeOfMain: 0);
-            }
-            else if (instruction.String != null)
-            {
-                writer.Write(instruction, instruction.String, sizeOfMain: 0);
-            }
-            else if (instruction.Bytes != null)
-            {
-                writer.Write(instruction, instruction.Bytes.Value, sizeOfMain: 0);
-            }
-            else
-            {
-                writer.Write(instruction, sizeOfMain: 0);
-            }
-        }
-        writer.FlushMainBlock();
-        writer.Flush();
-        sizeOfMain = checked((ushort)writer.BaseStream.Length);
-        locals = checked((byte)writer.LocalCount);
-    }
-
-    /// <summary>
-    /// Write static void main *again*, second pass
-    /// With a known value for sizeOfMain
-    /// </summary>
-    protected virtual void SecondPass(ushort sizeOfMain, IL2NESWriter writer)
-    {
-        if (writer.Instructions is null)
-            throw new ArgumentNullException(nameof(writer.Instructions));
-
-        // Enable block buffering for Phase 4 object model
-        writer.StartBlockBuffering();
-
-        for (int i = 0; i < writer.Instructions.Length; i++)
-        {
-            writer.Index = i;
-            var instruction = writer.Instructions[i];
-            if (instruction.Integer != null)
-            {
-                writer.Write(instruction, instruction.Integer.Value, sizeOfMain);
-            }
-            else if (instruction.String != null)
-            {
-                writer.Write(instruction, instruction.String, sizeOfMain);
-            }
-            else if (instruction.Bytes != null)
-            {
-                writer.Write(instruction, instruction.Bytes.Value, sizeOfMain);
-            }
-            else
-            {
-                writer.Write(instruction, sizeOfMain);
-            }
-        }
-
-        // Flush the block to the stream
-        writer.FlushMainBlock();
     }
 
     /// <summary>

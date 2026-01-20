@@ -45,64 +45,10 @@ public class RoslynTests
 
         _stream.Seek(0, SeekOrigin.Begin);
 
-        using var il = new RoslynTranspiler(_stream, _logger);
-        il.Write(new MemoryStream());
-        AssertEx.Equal(Utilities.ToByteArray(expectedAssembly), il.ToArray());
-    }
-
-    /// <summary>
-    /// Class for overriding SecondPass()
-    /// </summary>
-    class RoslynTranspiler : Transpiler
-    {
-        readonly ILogger _logger;
-        readonly MemoryStream _stream = new();
-        readonly IL2NESWriter _writer;
-
-        public RoslynTranspiler(Stream stream, ILogger logger)
-            : base(stream, [new AssemblyReader(new StreamReader(Utilities.GetResource("chr_generic.s")))])
-        {
-            _logger = logger;
-            _writer = new(_stream, leaveOpen: true, logger);
-        }
-
-        protected override void SecondPass(ushort sizeOfMain, IL2NESWriter parent)
-        {
-            // Still call base if we ever want to check binary at the end
-            base.SecondPass(sizeOfMain, parent);
-
-            _writer.SetLabels(parent.Labels);
-            _writer.Instructions = parent.Instructions!;
-            _writer.StartBlockBuffering();
-            for (int i = 0; i < _writer.Instructions.Length; i++)
-            {
-                _writer.Index = i;
-                var instruction = _writer.Instructions[i];
-                _logger.WriteLine($"{instruction}");
-
-                if (instruction.Integer != null)
-                {
-                    _writer.Write(instruction, instruction.Integer.Value, sizeOfMain);
-                }
-                else if (instruction.String != null)
-                {
-                    _writer.Write(instruction, instruction.String, sizeOfMain);
-                }
-                else if (instruction.Bytes != null)
-                {
-                    _writer.Write(instruction, instruction.Bytes.Value, sizeOfMain);
-                }
-                else
-                {
-                    _writer.Write(instruction, sizeOfMain);
-                }
-            }
-
-            _writer.FlushMainBlock();
-            _writer.Flush();
-        }
-
-        public byte[] ToArray() => _stream.ToArray();
+        using var transpiler = new Transpiler(_stream, [new AssemblyReader(new StreamReader(Utilities.GetResource("chr_generic.s")))], _logger);
+        var program = transpiler.BuildProgram6502(out _, out _);
+        var mainBlock = program.GetMainBlock();
+        AssertEx.Equal(Utilities.ToByteArray(expectedAssembly), mainBlock);
     }
 
     [Fact]
@@ -346,8 +292,8 @@ public class RoslynTests
                 """,
             expectedAssembly:
                 """
-                A9D4
-                A285
+                A900
+                A286
                 201182  ; JSR pal_all
                 A928
                 208585  ; JSR popa
@@ -360,7 +306,7 @@ public class RoslynTests
                 A900
                 20D485  ; JSR oam_spr
                 208982  ; JSR ppu_on_all
-                4C2385  ; JMP $8527
+                4C2385  ; JMP $8523
                 """);
     }
 
@@ -390,8 +336,8 @@ public class RoslynTests
                 """,
             expectedAssembly:
                 """
-                A9E5
-                A285
+                A911
+                A286
                 201182  ; JSR pal_all
                 A928
                 8D2403  ; STA M0001

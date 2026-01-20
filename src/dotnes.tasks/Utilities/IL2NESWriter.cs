@@ -60,7 +60,7 @@ class IL2NESWriter : NESWriter
     /// </summary>
     public int LocalCount { get; private set; }
 
-    record Local(int Value, int? Address = null);
+    record Local(int Value, int? Address = null, string? LabelName = null);
 
     /// <summary>
     /// Emits a JSR to a label, using either resolved address or label reference
@@ -146,7 +146,10 @@ class IL2NESWriter : NESWriter
             case ILOpCode.Stloc_0:
                 if (previous == ILOpCode.Ldtoken)
                 {
-                    Locals[0] = new Local(Stack.Pop());
+                    // Capture label for byte array reference
+                    Locals[0] = new Local(_lastByteArraySize, LabelName: _lastByteArrayLabel);
+                    _lastByteArrayLabel = null;
+                    Stack.Pop(); // Discard marker
                 }
                 else
                 {
@@ -156,7 +159,9 @@ class IL2NESWriter : NESWriter
             case ILOpCode.Stloc_1:
                 if (previous == ILOpCode.Ldtoken)
                 {
-                    Locals[1] = new Local(Stack.Pop());
+                    Locals[1] = new Local(_lastByteArraySize, LabelName: _lastByteArrayLabel);
+                    _lastByteArrayLabel = null;
+                    Stack.Pop();
                 }
                 else
                 {
@@ -166,7 +171,9 @@ class IL2NESWriter : NESWriter
             case ILOpCode.Stloc_2:
                 if (previous == ILOpCode.Ldtoken)
                 {
-                    Locals[2] = new Local(Stack.Pop());
+                    Locals[2] = new Local(_lastByteArraySize, LabelName: _lastByteArrayLabel);
+                    _lastByteArrayLabel = null;
+                    Stack.Pop();
                 }
                 else
                 {
@@ -176,7 +183,9 @@ class IL2NESWriter : NESWriter
             case ILOpCode.Stloc_3:
                 if (previous == ILOpCode.Ldtoken)
                 {
-                    Locals[3] = new Local(Stack.Pop());
+                    Locals[3] = new Local(_lastByteArraySize, LabelName: _lastByteArrayLabel);
+                    _lastByteArrayLabel = null;
+                    Stack.Pop();
                 }
                 else
                 {
@@ -412,30 +421,65 @@ class IL2NESWriter : NESWriter
         previous = instruction.OpCode;
     }
 
+    /// <summary>
+    /// Counter for generating unique byte array labels
+    /// </summary>
+    int _byteArrayLabelIndex = 0;
+    
+    /// <summary>
+    /// Track the last byte array label for Stloc handling
+    /// </summary>
+    string? _lastByteArrayLabel = null;
+    int _lastByteArraySize = 0;
+
     public void Write(ILInstruction instruction, ImmutableArray<byte> operand, ushort sizeOfMain)
     {
         switch (instruction.OpCode)
         {
             case ILOpCode.Ldtoken:
-                if (ByteArrayOffset == 0)
+                if (UseLabelReferences)
                 {
-                    ByteArrayOffset = rodata.GetAddressAfterMain(sizeOfMain);
-
-                    // HACK: adjust ByteArrayOffset based on length of oam_spr
-                    if (UsedMethods is not null && UsedMethods.Contains(nameof(oam_spr)))
+                    // In single-pass mode, use labels for byte arrays
+                    string byteArrayLabel = $"bytearray_{_byteArrayLabelIndex}";
+                    _byteArrayLabelIndex++;
+                    
+                    // HACK: write these if next instruction is Call
+                    if (Instructions is not null && Instructions[Index + 1].OpCode == ILOpCode.Call)
                     {
-                        ByteArrayOffset += 44;
+                        EmitWithLabel(Opcode.LDA, AddressMode.Immediate_LowByte, byteArrayLabel);
+                        EmitWithLabel(Opcode.LDX, AddressMode.Immediate_HighByte, byteArrayLabel);
                     }
+                    _byteArrays.Add(operand);
+                    
+                    // Push a marker value and track the label for later Stloc
+                    // Use negative value as marker that this is a label reference
+                    _lastByteArrayLabel = byteArrayLabel;
+                    _lastByteArraySize = operand.Length;
+                    Stack.Push(-(_byteArrayLabelIndex)); // Negative marker
                 }
-                // HACK: write these if next instruction is Call
-                if (Instructions is not null && Instructions[Index + 1].OpCode == ILOpCode.Call)
+                else
                 {
-                    Emit(Opcode.LDA, AddressMode.Immediate, (byte)(ByteArrayOffset & 0xff));
-                    Emit(Opcode.LDX, AddressMode.Immediate, (byte)(ByteArrayOffset >> 8));
+                    // Legacy mode: calculate absolute addresses
+                    if (ByteArrayOffset == 0)
+                    {
+                        ByteArrayOffset = rodata.GetAddressAfterMain(sizeOfMain);
+
+                        // HACK: adjust ByteArrayOffset based on length of oam_spr
+                        if (UsedMethods is not null && UsedMethods.Contains(nameof(oam_spr)))
+                        {
+                            ByteArrayOffset += 44;
+                        }
+                    }
+                    // HACK: write these if next instruction is Call
+                    if (Instructions is not null && Instructions[Index + 1].OpCode == ILOpCode.Call)
+                    {
+                        Emit(Opcode.LDA, AddressMode.Immediate, (byte)(ByteArrayOffset & 0xff));
+                        Emit(Opcode.LDX, AddressMode.Immediate, (byte)(ByteArrayOffset >> 8));
+                    }
+                    Stack.Push(ByteArrayOffset);
+                    ByteArrayOffset = (ushort)(ByteArrayOffset + operand.Length);
+                    _byteArrays.Add(operand);
                 }
-                Stack.Push(ByteArrayOffset);
-                ByteArrayOffset = (ushort)(ByteArrayOffset + operand.Length);
-                _byteArrays.Add(operand);
                 break;
             default:
                 throw new NotImplementedException($"OpCode {instruction.OpCode} with byte[] operand is not implemented!");
@@ -535,7 +579,16 @@ class IL2NESWriter : NESWriter
 
     void WriteLdloc(Local local, ushort sizeOfMain)
     {
-        if (local.Address is not null)
+        if (local.LabelName is not null)
+        {
+            // This local holds a byte array label reference
+            EmitWithLabel(Opcode.LDA, AddressMode.Immediate_LowByte, local.LabelName);
+            EmitWithLabel(Opcode.LDX, AddressMode.Immediate_HighByte, local.LabelName);
+            EmitJSR("pushax");
+            Emit(Opcode.LDX, AddressMode.Immediate, 0x00);
+            Emit(Opcode.LDA, AddressMode.Immediate, (byte)local.Value); // Size of array
+        }
+        else if (local.Address is not null)
         {
             // This is actually a local variable
             if (local.Value < byte.MaxValue)

@@ -161,6 +161,8 @@ public class IL2NESWriterTests
     {
         const ushort sizeOfMain = 0x2E;
         using var writer = GetWriter();
+        // Enable single-pass label-based mode
+        writer.UseLabelReferences = true;
         // Set up Labels needed for IL->NES translation
         writer.Labels["pusha"] = 0x85A2;
         writer.Labels["pushax"] = 0x85B8;
@@ -170,6 +172,11 @@ public class IL2NESWriterTests
         writer.Labels["vram_write"] = 0x834F;
         writer.Labels["ppu_on_all"] = 0x8289;
         writer.Labels["pushax"] = 0x8D85;
+        // Set up byte array labels for single-pass mode
+        writer.Labels["bytearray_0"] = 0x85DC; // ATTRIBUTE_TABLE (64 bytes)
+        writer.Labels["bytearray_1"] = 0x861C; // PALETTE (16 bytes)
+        // Set up instruction label for Br_s target (while(true) infinite loop)
+        writer.Labels["instruction_00"] = 0x0000;
         writer.Write(new ILInstruction(ILOpCode.Ldc_i4_s), 64, sizeOfMain);
         writer.Write(new ILInstruction(ILOpCode.Newarr), 16777235, sizeOfMain);
         writer.Write(new ILInstruction(ILOpCode.Dup), sizeOfMain);

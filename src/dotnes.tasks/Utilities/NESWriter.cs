@@ -390,6 +390,38 @@ class NESWriter : IDisposable
                             throw new InvalidOperationException($"Unresolved label: {labelOp.Label}");
                         }
                         break;
+                    
+                    case LowByteOperand lowOp:
+                        // Resolve to low byte of label address
+                        if (localLabels.TryGetValue(lowOp.Label, out ushort lowAddr))
+                        {
+                            _writer.Write((byte)(lowAddr & 0xFF));
+                        }
+                        else if (Labels.TryGetValue(lowOp.Label, out lowAddr))
+                        {
+                            _writer.Write((byte)(lowAddr & 0xFF));
+                        }
+                        else
+                        {
+                            throw new InvalidOperationException($"Unresolved label for low byte: {lowOp.Label}");
+                        }
+                        break;
+                    
+                    case HighByteOperand highOp:
+                        // Resolve to high byte of label address
+                        if (localLabels.TryGetValue(highOp.Label, out ushort highAddr))
+                        {
+                            _writer.Write((byte)(highAddr >> 8));
+                        }
+                        else if (Labels.TryGetValue(highOp.Label, out highAddr))
+                        {
+                            _writer.Write((byte)(highAddr >> 8));
+                        }
+                        else
+                        {
+                            throw new InvalidOperationException($"Unresolved label for high byte: {highOp.Label}");
+                        }
+                        break;
                         
                     case RelativeOperand relOp:
                         // Resolve relative branch to label
@@ -524,8 +556,16 @@ class NESWriter : IDisposable
         if (_bufferedBlock == null)
             throw new InvalidOperationException("EmitWithLabel requires block buffering mode. Call StartBlockBuffering() first.");
         
-        _bufferedBlock.Emit(new Instruction(opcode, mode, new LabelOperand(label, OperandSize.Word)));
-        LastLDA = opcode == Opcode.LDA && mode == AddressMode.Immediate;
+        Operand operand = mode switch
+        {
+            AddressMode.Immediate_LowByte => new LowByteOperand(label),
+            AddressMode.Immediate_HighByte => new HighByteOperand(label),
+            AddressMode.Relative => new RelativeOperand(label),
+            _ => new LabelOperand(label, OperandSize.Word),
+        };
+        
+        _bufferedBlock.Emit(new Instruction(opcode, mode, operand));
+        LastLDA = opcode == Opcode.LDA && (mode == AddressMode.Immediate || mode == AddressMode.Immediate_LowByte || mode == AddressMode.Immediate_HighByte);
     }
 
     /// <summary>

@@ -111,3 +111,39 @@ public record RelativeByteOperand(sbyte Offset) : Operand
 
     public override string ToString() => Offset >= 0 ? $"+{Offset}" : $"{Offset}";
 }
+
+/// <summary>
+/// A label reference operand that resolves to the LOW byte of a 16-bit address
+/// </summary>
+public record LowByteOperand(string Label) : Operand
+{
+    public override int Size => 1;
+
+    public override byte[] ToBytes(ushort currentAddress, LabelTable labels)
+    {
+        if (!labels.TryResolve(Label, out ushort address))
+            throw new UnresolvedLabelException(Label);
+
+        return [(byte)(address & 0xFF)];
+    }
+
+    public override string ToString() => $"#<{Label}";
+}
+
+/// <summary>
+/// A label reference operand that resolves to the HIGH byte of a 16-bit address
+/// </summary>
+public record HighByteOperand(string Label) : Operand
+{
+    public override int Size => 1;
+
+    public override byte[] ToBytes(ushort currentAddress, LabelTable labels)
+    {
+        if (!labels.TryResolve(Label, out ushort address))
+            throw new UnresolvedLabelException(Label);
+
+        return [(byte)(address >> 8)];
+    }
+
+    public override string ToString() => $"#>{Label}";
+}
