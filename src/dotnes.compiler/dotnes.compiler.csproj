@@ -17,6 +17,7 @@
   <ItemGroup>
     <Using Include="NES" />
     <None Include="../../LICENSE" Pack="true" PackagePath="" />
+    <Compile Include="../dotnes.tasks/ObjectModel/*.cs" Link="ObjectModel/%(FileName)%(Extension)" />
     <Compile Include="../dotnes.tasks/Utilities/*.cs" Link="Utilities/%(FileName)%(Extension)" />
   </ItemGroup>
   <ItemGroup>

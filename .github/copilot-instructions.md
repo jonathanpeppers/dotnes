@@ -21,15 +21,17 @@ Program.cs → dotnet build → .dll (MSIL) → Transpiler → .nes ROM
 ### Reference Assembly Pattern
 `neslib` has **no implementations**—methods provide compile-time API only. The transpiler looks up method names to emit corresponding 6502 subroutine calls. Adding new NES APIs requires:
 1. Add method stub in `NESLib.cs` with `throw null!`
-2. Implement 6502 equivalent in `IL2NESWriter.WriteBuiltIns()`
+2. Implement 6502 equivalent in `BuiltInSubroutines.cs`
 
 ## Build & Test
 
 ```bash
 dotnet build                    # Build entire solution
-dotnet test src/dotnes.tests/   # Run tests with Verify snapshots
+dotnet test                     # Run tests (ALWAYS rebuilds, NEVER use --no-build)
 cd samples/hello && dotnet run  # Build + run in emulator
 ```
+
+**⚠️ IMPORTANT:** Always run `dotnet test` without `--no-build`. The test project depends on build outputs that must be fresh.
 
 **Diagnostic logging:** Add `<NESDiagnosticLogging>true</NESDiagnosticLogging>` to project.
 
@@ -44,6 +46,8 @@ Tests in [src/dotnes.tests/](src/dotnes.tests/) use **Verify snapshots**:
 - Test data DLLs live in `Data/` folder (pre-compiled debug/release)
 - `TranspilerTests.Write` verifies entire ROM output byte-for-byte
 - `TranspilerTests.ReadStaticVoidMain` verifies IL parsing
+
+**⚠️ CRITICAL: The `.verified.bin` files are the absolute source of truth. Any code change that causes `TranspilerTests.Write` to produce different bytes is WRONG. The ROM output must be byte-for-byte identical. Never update verified files to match changed output—fix the code instead.**
 
 **Adding new test cases:** Compile sample code, copy `.dll` to `Data/`, add `[InlineData("name", true/false)]`.
 
