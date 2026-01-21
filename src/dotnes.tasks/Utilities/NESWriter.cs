@@ -48,114 +48,25 @@ class NESWriter : IDisposable
 
     public Stream BaseStream => _writer.BaseStream;
 
-    /// <summary>
-    /// Trainer, if present (0 or 512 bytes)
-    /// </summary>
-    public byte[]? Trainer { get; set; }
-
-    /// <summary>
-    /// PRG ROM data (16384 * x bytes)
-    /// </summary>
-    public byte[]? PRG_ROM { get; set; }
-
-    /// <summary>
-    /// CHR ROM data, if present (8192 * y bytes)
-    /// </summary>
-    public byte[]? CHR_ROM { get; set; }
-
-    /// <summary>
-    /// PlayChoice INST-ROM, if present (0 or 8192 bytes)
-    /// </summary>
-    public byte[]? INST_ROM { get; set; }
-
-    /// <summary>
-    /// Mapper, mirroring, battery, trainer
-    /// </summary>
-    public byte Flags6 { get; set; }
-
-    /// <summary>
-    /// Mapper, VS/Playchoice, NES 2.0
-    /// </summary>
-    public byte Flags7 { get; set; }
-
-    /// <summary>
-    /// PRG-RAM size (rarely used extension)
-    /// </summary>
-    public byte Flags8 { get; set; }
-
-    /// <summary>
-    /// TV system (rarely used extension)
-    /// </summary>
-    public byte Flags9 { get; set; }
-
-    /// <summary>
-    /// TV system, PRG-RAM presence (unofficial, rarely used extension)
-    /// </summary>
-    public byte Flags10 { get; set; }
-
     public long Length => _writer.BaseStream.Length;
 
-    public Dictionary<string, ushort> Labels { get; private set; } = new();
-    private bool _hasPresetLabels = false;
+    public Dictionary<string, ushort> Labels { get; } = new();
 
     /// <summary>
     /// Block to buffer emitted instructions for deferred writing.
     /// When non-null, Emit methods add instructions here instead of writing to stream.
     /// </summary>
     protected Block? _bufferedBlock;
-    
-    /// <summary>
-    /// Stream offset where code begins. Used to calculate correct addresses when
-    /// a header has been written before code. In the first pass (no header), this is 0.
-    /// In the second pass (after header), this should be set to the header size (16).
-    /// </summary>
-    public long CodeBaseOffset { get; set; } = 0;
-
-    public void SetLabels(Dictionary<string, ushort> labels)
-    {
-        Labels = labels;
-        _hasPresetLabels = true;
-    }
 
     /// <summary>
     /// A list of methods that were found to be used in the IL code
     /// </summary>
     public HashSet<string>? UsedMethods { get; set; }
 
-    public void Write(byte[] buffer)
-    {
-        LastLDA = false;
-        _writer.Write(buffer);
-    }
-
-    public void Write(ushort[] buffer)
-    {
-        LastLDA = false;
-        for (int i = 0; i < buffer.Length; i++)
-        {
-            _writer.Write(buffer[i]);
-        }
-    }
-
-    public void Write(byte[] buffer, int index, int count)
-    {
-        LastLDA = false;
-        _writer.Write(buffer, index, count);
-    }
-
     /// <summary>
-    /// Calculates the current ROM address accounting for any header offset.
+    /// Calculates the current ROM address.
     /// </summary>
-    private ushort CurrentAddress => (ushort)(_writer.BaseStream.Position - CodeBaseOffset + BaseAddress);
-
-    private void SetLabel(string name, ushort address)
-    {
-        // Skip setting if labels are preset AND the label already has a non-zero value
-        // (allows updating forward references that were initialized to 0)
-        if (_hasPresetLabels && Labels.TryGetValue(name, out var existing) && existing != 0)
-            return;
-        Labels[name] = address;
-    }
+    private ushort CurrentAddress => (ushort)(_writer.BaseStream.Position + BaseAddress);
 
     /// <summary>
     /// Writes a Block to the stream, resolving any label references using the Labels dictionary.
@@ -168,7 +79,7 @@ class NESWriter : IDisposable
         // Set label for this block if it has one (with optional offset for prefix instructions)
         if (block.Label != null)
         {
-            SetLabel(block.Label, (ushort)(currentAddress + block.LabelOffset));
+            Labels[block.Label] = (ushort)(currentAddress + block.LabelOffset);
         }
 
         // Handle data blocks (raw bytes)

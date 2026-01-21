@@ -13,15 +13,11 @@ public class NESWriterTests
         _logger = new XUnitLogger(output);
     }
 
-    NESWriter GetWriter(byte[]? PRG_ROM = null, byte[]? CHR_ROM = null)
+    NESWriter GetWriter()
     {
         _stream.SetLength(0);
 
-        return new NESWriter(_stream, leaveOpen: true, logger: _logger)
-        {
-            PRG_ROM = PRG_ROM,
-            CHR_ROM = CHR_ROM,
-        };
+        return new NESWriter(_stream, leaveOpen: true, logger: _logger);
     }
 
     void AssertInstructions(string assembly)

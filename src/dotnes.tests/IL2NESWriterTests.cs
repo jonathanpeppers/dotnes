@@ -15,15 +15,11 @@ public class IL2NESWriterTests
         _logger = new XUnitLogger(output);
     }
 
-    IL2NESWriter GetWriter(byte[]? PRG_ROM = null, byte[]? CHR_ROM = null)
+    IL2NESWriter GetWriter()
     {
         _stream.SetLength(0);
 
-        var writer = new IL2NESWriter(_stream, leaveOpen: true, logger: _logger)
-        {
-            PRG_ROM = PRG_ROM,
-            CHR_ROM = CHR_ROM,
-        };
+        var writer = new IL2NESWriter(_stream, leaveOpen: true, logger: _logger);
         writer.StartBlockBuffering();
         return writer;
     }
