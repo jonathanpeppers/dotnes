@@ -65,13 +65,6 @@ class IL2NESWriter : NESWriter
     /// </summary>
     void EmitJMP(string labelName) => EmitWithLabel(Opcode.JMP, AddressMode.Absolute, labelName);
 
-    public void RecordLabel(ILInstruction instruction)
-    {
-        // When in block buffering mode, include the buffered block size in the address calculation
-        var address = _writer.BaseStream.Position + BaseAddress + GetBufferedBlockSize();
-        Labels.Add($"instruction_{instruction.Offset:X2}", (ushort)address);
-    }
-
     public void Write(ILInstruction instruction)
     {
         switch (instruction.OpCode)
@@ -422,20 +415,6 @@ class IL2NESWriter : NESWriter
                 throw new NotImplementedException($"OpCode {instruction.OpCode} with byte[] operand is not implemented!");
         }
         previous = instruction.OpCode;
-    }
-
-    /// <summary>
-    /// Write all the byte[] values
-    /// </summary>
-    public void WriteByteArrays(IL2NESWriter parent)
-    {
-        foreach (var bytes in parent.ByteArrays)
-        {
-            foreach (var b in bytes)
-            {
-                _writer.Write(b);
-            }
-        }
     }
 
     void WriteStloc(Local local)

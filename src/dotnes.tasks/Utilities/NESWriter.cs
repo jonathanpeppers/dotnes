@@ -293,19 +293,6 @@ class NESWriter : IDisposable
         }
     }
 
-    public void Write()
-    {
-        WriteHeader();
-        if (PRG_ROM != null)
-            _writer.Write(PRG_ROM);
-        if (CHR_ROM != null)
-            _writer.Write(CHR_ROM);
-        if (Trainer != null)
-            _writer.Write(Trainer);
-        if (INST_ROM != null)
-            _writer.Write(INST_ROM);
-    }
-
     /// <summary>
     /// Calculates the current ROM address accounting for any header offset.
     /// </summary>

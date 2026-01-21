@@ -21,7 +21,7 @@ Program.cs → dotnet build → .dll (MSIL) → Transpiler → .nes ROM
 ### Reference Assembly Pattern
 `neslib` has **no implementations**—methods provide compile-time API only. The transpiler looks up method names to emit corresponding 6502 subroutine calls. Adding new NES APIs requires:
 1. Add method stub in `NESLib.cs` with `throw null!`
-2. Implement 6502 equivalent in `IL2NESWriter.WriteBuiltIns()`
+2. Implement 6502 equivalent in `BuiltInSubroutines.cs`
 
 ## Build & Test
 
