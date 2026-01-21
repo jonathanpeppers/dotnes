@@ -5,13 +5,12 @@ using static dotnes.NESConstants;
 namespace dotnes;
 
 /// <summary>
-/// Writes .nes files
-/// * https://wiki.nesdev.org/w/index.php/INES
-/// * https://bheisler.github.io/post/nes-rom-parser-with-nom/
+/// Base class for 6502 code generation. Provides block buffering, label resolution,
+/// and instruction emission capabilities.
 /// </summary>
 class NESWriter : IDisposable
 {
-    public static readonly Encoding Encoding = Encoding.ASCII;
+    static readonly Encoding Encoding = Encoding.ASCII;
 
     public NESWriter(Stream stream, bool leaveOpen = false, ILogger? logger = null)
     {
@@ -47,8 +46,6 @@ class NESWriter : IDisposable
     public bool LastLDA { get; protected set; }
 
     public Stream BaseStream => _writer.BaseStream;
-
-    public long Length => _writer.BaseStream.Length;
 
     public Dictionary<string, ushort> Labels { get; } = new();
 
