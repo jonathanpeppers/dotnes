@@ -5,7 +5,6 @@ namespace dotnes.tests;
 
 public class NESWriterTests
 {
-    const ushort SizeOfMain = 67;
     readonly MemoryStream _stream = new();
     readonly ILogger _logger;
 
@@ -30,16 +29,6 @@ public class NESWriterTests
         var expected = Utilities.ToByteArray(assembly);
         var actual = _stream.ToArray();
         Assert.Equal(expected, actual);
-    }
-
-    [Fact]
-    public Task WriteHeader()
-    {
-        using var writer = GetWriter(new byte[2 * NESWriter.PRG_ROM_BLOCK_SIZE], new byte[NESWriter.CHR_ROM_BLOCK_SIZE]);
-        writer.WriteHeader();
-        writer.Flush();
-
-        return Verify(_stream.ToArray());
     }
 
     [Fact]
@@ -161,18 +150,5 @@ public class NESWriterTests
         writer.WriteBlock(BuiltInSubroutines.PpuWaitNmi());
         writer.Flush();
         AssertInstructions("A901 8503 A501 C501 F0FC 60");
-    }
-
-    [Fact]
-    public Task WriteUsedMethods()
-    {
-        using var writer = GetWriter();
-        writer.UsedMethods = new HashSet<string>(StringComparer.Ordinal)
-        {
-            nameof(NESLib.oam_spr),
-        };
-        writer.WriteHeader(PRG_ROM_SIZE: 2, CHR_ROM_SIZE: 1);
-        writer.WriteFinalBuiltIns(SizeOfMain, locals: 4);
-        return Verify(_stream.ToArray());
     }
 }

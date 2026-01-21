@@ -1,4 +1,3 @@
-using System.Buffers;
 using System.Text;
 using dotnes.ObjectModel;
 using static dotnes.NESConstants;
@@ -123,42 +122,6 @@ class NESWriter : IDisposable
     /// </summary>
     public HashSet<string>? UsedMethods { get; set; }
 
-    public void WriteHeader(byte PRG_ROM_SIZE = 0, byte CHR_ROM_SIZE = 0)
-    {
-        _writer.Write('N');
-        _writer.Write('E');
-        _writer.Write('S');
-        _writer.Write('\x1A');
-        // Size of PRG ROM in 16 KB units
-        if (PRG_ROM != null)
-            _writer.Write(checked ((byte)(PRG_ROM.Length / PRG_ROM_BLOCK_SIZE)));
-        else
-            _writer.Write(PRG_ROM_SIZE);
-        // Size of CHR ROM in 8 KB units (Value 0 means the board uses CHR RAM)
-        if (CHR_ROM != null)
-            _writer.Write(checked((byte)(CHR_ROM.Length / CHR_ROM_BLOCK_SIZE)));
-        else
-            _writer.Write(CHR_ROM_SIZE);
-        _writer.Write(Flags6);
-        _writer.Write(Flags7);
-        _writer.Write(Flags8);
-        _writer.Write(Flags9);
-        _writer.Write(Flags10);
-        // 5 bytes of padding
-        WriteZeroes(5);
-    }
-
-    /// <summary>
-    /// Writes N zero-d bytes
-    /// </summary>
-    public void WriteZeroes(long length)
-    {
-        for (long i = 0; i < length; i++)
-        {
-            _writer.Write((byte)0);
-        }
-    }
-
     public void Write(byte[] buffer)
     {
         LastLDA = false;
@@ -178,119 +141,6 @@ class NESWriter : IDisposable
     {
         LastLDA = false;
         _writer.Write(buffer, index, count);
-    }
-
-    /// <summary>
-    /// Writes a string in ASCI form, including a trailing \0
-    /// </summary>
-    public void WriteString(string text)
-    {
-        LastLDA = false;
-        int length = Encoding.GetByteCount(text);
-        var bytes = ArrayPool<byte>.Shared.Rent(length);
-        try
-        {
-            length = Encoding.GetBytes(text, 0, text.Length, bytes, 0);
-            _writer.Write(bytes, 0, length);
-        }
-        finally
-        {
-            ArrayPool<byte>.Shared.Return(bytes);
-        }
-        //TODO: I don't know if there is a 0 between each string, or if this denotes the end of the table
-        _writer.Write((byte)0);
-    }
-
-    /// <summary>
-    /// Writes all the built-in methods from NESLib
-    /// </summary>
-    public void WriteBuiltIns()
-    {
-        WriteBlock(BuiltInSubroutines.Exit());
-        WriteBlock(BuiltInSubroutines.InitPPU());
-        WriteBlock(BuiltInSubroutines.ClearPalette());
-        WriteBlock(BuiltInSubroutines.ClearVRAM());
-        WriteBlock(BuiltInSubroutines.ClearRAM());
-        WriteBlock(BuiltInSubroutines.WaitSync3());
-        WriteBlock(BuiltInSubroutines.DetectNTSC());
-        WriteBlock(BuiltInSubroutines.Nmi());
-        WriteBlock(BuiltInSubroutines.DoUpdate());
-        WriteBlock(BuiltInSubroutines.UpdPal());
-        WriteBlock(BuiltInSubroutines.UpdVRAM());
-        WriteBlock(BuiltInSubroutines.SkipUpd());
-        WriteBlock(BuiltInSubroutines.SkipAll());
-        WriteBlock(BuiltInSubroutines.SkipNtsc());
-        WriteBlock(BuiltInSubroutines.Irq());
-        WriteBlock(BuiltInSubroutines.NmiSetCallback());
-        WriteBlock(BuiltInSubroutines.PalAll());
-        WriteBlock(BuiltInSubroutines.PalCopy());
-        WriteBlock(BuiltInSubroutines.PalBg());
-        WriteBlock(BuiltInSubroutines.PalSpr());
-        WriteBlock(BuiltInSubroutines.PalCol());
-        WriteBlock(BuiltInSubroutines.PalClear());
-        WriteBlock(BuiltInSubroutines.PalSprBright());
-        WriteBlock(BuiltInSubroutines.PalBgBright());
-        WriteBlock(BuiltInSubroutines.PalBright());
-        WriteBlock(BuiltInSubroutines.PpuOff());
-        WriteBlock(BuiltInSubroutines.PpuOnAll());
-        WriteBlock(BuiltInSubroutines.PpuOnOff());
-        WriteBlock(BuiltInSubroutines.PpuOnBg());
-        WriteBlock(BuiltInSubroutines.PpuOnSpr());
-        WriteBlock(BuiltInSubroutines.PpuMask());
-        WriteBlock(BuiltInSubroutines.PpuSystem());
-        WriteBlock(BuiltInSubroutines.GetPpuCtrlVar());
-        WriteBlock(BuiltInSubroutines.SetPpuCtrlVar());
-        WriteBlock(BuiltInSubroutines.OamClear());
-        WriteBlock(BuiltInSubroutines.OamSize());
-        WriteBlock(BuiltInSubroutines.OamHideRest());
-        WriteBlock(BuiltInSubroutines.PpuWaitFrame());
-        WriteBlock(BuiltInSubroutines.PpuWaitNmi());
-        WriteBlock(BuiltInSubroutines.Scroll());
-        WriteBlock(BuiltInSubroutines.BankSpr());
-        WriteBlock(BuiltInSubroutines.BankBg());
-        WriteBlock(BuiltInSubroutines.VramWrite());
-        WriteBlock(BuiltInSubroutines.SetVramUpdate());
-        WriteBlock(BuiltInSubroutines.FlushVramUpdate());
-        WriteBlock(BuiltInSubroutines.VramAdr());
-        WriteBlock(BuiltInSubroutines.VramPut());
-        WriteBlock(BuiltInSubroutines.VramFill());
-        WriteBlock(BuiltInSubroutines.VramInc());
-        WriteBlock(BuiltInSubroutines.NesClock());
-        WriteBlock(BuiltInSubroutines.Delay());
-        // Write brightness tables as data blocks
-        WriteBlock(Block.FromRawData(NESLib.palBrightTableL));
-        WriteBlock(Block.FromRawData(NESLib.palBrightTable0));
-        WriteBlock(Block.FromRawData(NESLib.palBrightTable1));
-        WriteBlock(Block.FromRawData(NESLib.palBrightTable2));
-        WriteBlock(Block.FromRawData(NESLib.palBrightTable3));
-        WriteBlock(Block.FromRawData(NESLib.palBrightTable4));
-        WriteBlock(Block.FromRawData(NESLib.palBrightTable5));
-        WriteBlock(Block.FromRawData(NESLib.palBrightTable6));
-        WriteBlock(Block.FromRawData(NESLib.palBrightTable7));
-        WriteBlock(Block.FromRawData(NESLib.palBrightTable8));
-        WriteBlock(BuiltInSubroutines.Initlib());
-    }
-
-    public void WriteDestructorTable()
-    {
-        WriteBlock(BuiltInSubroutines.DestructorTable());
-    }
-
-    /// <summary>
-    /// These are any subroutines after our `static void main()` method.
-    /// Uses Program6502.AddFinalBuiltIns to centralize the block definitions.
-    /// </summary>
-    public void WriteFinalBuiltIns(ushort totalSize, byte locals)
-    {
-        // Create a temporary Program6502 with final built-ins
-        var finalBuiltIns = new Program6502();
-        finalBuiltIns.AddFinalBuiltIns(totalSize, locals, UsedMethods);
-
-        // Write each block using WriteBlock (which handles label resolution)
-        foreach (var block in finalBuiltIns.Blocks)
-        {
-            WriteBlock(block);
-        }
     }
 
     /// <summary>
