@@ -398,33 +398,23 @@ public class RoslynTests
             expectedAssembly:
                 """
                 A928        ; LDA #$28 (x = 40)
-                8D2403      ; STA $0324 (store x to local)
-                A922        ; LDA #$22 (low byte of PALETTE)
-                A286        ; LDX #$86 (high byte of PALETTE)
+                8D2503      ; STA $0325 (store x to local)
                 201182      ; JSR pal_all
                 208982      ; JSR ppu_on_all
-                20F082      ; JSR ppu_wait_nmi (loop start at $850D)
+                20F082      ; JSR ppu_wait_nmi (loop start)
                 A900        ; LDA #$00 (pad_poll argument)
                 202186      ; JSR pad_poll
-                2940        ; AND #$40 (bitwise AND with PAD.LEFT - result in A)
-                F00F        ; BEQ +15 (skip decrement body if zero)
-                AD2403      ; LDA $0324 (load x)
-                20A685      ; JSR pusha
-                A9D9        ; LDA #$D9
-                8D2403      ; STA $0324
-                A922        ; LDA #$22
-                A286        ; LDX #$86
-                AD2403      ; LDA $0324 (load x for oam_spr)
-                20A685      ; JSR pusha
-                A928        ; LDA #$28 (40)
-                20A685      ; JSR pusha
+                8D2703      ; STA $0327 (store pad for reuse)
+                2940        ; AND #$40 (PAD.LEFT)
+                F003        ; BEQ +3 (skip DEC if zero)
+                CE2503      ; DEC $0325 (x--)
                 A9D8        ; LDA #$D8 (tile)
                 20A685      ; JSR pusha
                 A900        ; LDA #$00 (attr)
                 20A685      ; JSR pusha
                 A900        ; LDA #$00 (id)
                 20F585      ; JSR oam_spr
-                4C0F85      ; JMP $850F (back to loop)
+                4C0D85      ; JMP loop
                 """);
     }
 
@@ -464,61 +454,37 @@ public class RoslynTests
             expectedAssembly:
                 """
                 A928        ; LDA #$28 (x = 40)
-                8D2403      ; STA $0324
-                A922        ; LDA #$22
-                A286        ; LDX #$86
-                A928        ; LDA #$28 (y = 40)
                 8D2503      ; STA $0325
-                A922        ; LDA #$22
-                A286        ; LDX #$86
+                A928        ; LDA #$28 (y = 40)
+                8D2603      ; STA $0326
                 201182      ; JSR pal_all
                 208982      ; JSR ppu_on_all
                 20F082      ; JSR ppu_wait_nmi (loop start)
                 A900        ; LDA #$00
                 206486      ; JSR pad_poll
-                2940        ; AND #$40 (bitwise AND with PAD.LEFT - no LDA needed, pad result in A)
-                F00F        ; BEQ +15
-                AD2403      ; LDA x
-                20E985      ; JSR pusha
-                A9D9        ; LDA #$D9 (x-1)
-                8D2403      ; STA x
-                A922        ; LDA #$22
-                A286        ; LDX #$86
+                8D2703      ; STA $0327 (store pad for reuse)
+                2940        ; AND #$40 (PAD.LEFT)
+                F003        ; BEQ +3
+                CE2503      ; DEC $0325 (x--)
+                AD2703      ; LDA $0327 (reload pad)
                 2980        ; AND #$80 (PAD.RIGHT)
-                F00F        ; BEQ +15
-                AD2403      ; LDA x
-                20E985      ; JSR pusha
-                A9DA        ; LDA #$DA (x+1)
-                8D2403      ; STA x
-                A922        ; LDA #$22
-                A286        ; LDX #$86
+                F003        ; BEQ +3
+                EE2503      ; INC $0325 (x++)
+                AD2703      ; LDA $0327 (reload pad)
                 2910        ; AND #$10 (PAD.UP)
-                F00F        ; BEQ +15
-                AD2503      ; LDA y
-                20E985      ; JSR pusha
-                A9D9        ; LDA #$D9 (y-1)
-                8D2503      ; STA y
-                A922        ; LDA #$22
-                A286        ; LDX #$86
+                F003        ; BEQ +3
+                CE2603      ; DEC $0326 (y--)
+                AD2703      ; LDA $0327 (reload pad)
                 2920        ; AND #$20 (PAD.DOWN)
-                F00F        ; BEQ +15
-                AD2503      ; LDA y
-                20E985      ; JSR pusha
-                A9DA        ; LDA #$DA (y+1)
-                8D2503      ; STA y
-                A922        ; LDA #$22
-                A286        ; LDX #$86
-                AD2403      ; LDA x
-                20E985      ; JSR pusha
-                AD2503      ; LDA y
-                20E985      ; JSR pusha
+                F003        ; BEQ +3
+                EE2603      ; INC $0326 (y++)
                 A9D8        ; LDA #$D8 (tile)
                 20E985      ; JSR pusha
                 A900        ; LDA #$00 (attr)
                 20E985      ; JSR pusha
                 A900        ; LDA #$00 (id)
                 203886      ; JSR oam_spr
-                4C1885      ; JMP loop
+                4C1085      ; JMP loop
                 """);
     }
 }
