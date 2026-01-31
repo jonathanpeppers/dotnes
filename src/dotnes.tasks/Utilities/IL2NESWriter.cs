@@ -186,7 +186,13 @@ class IL2NESWriter : NESWriter
                 Stack.Push(Stack.Pop() / Stack.Pop());
                 break;
             case ILOpCode.And:
-                Stack.Push(Stack.Pop() & Stack.Pop());
+                {
+                    // AND the value in A with the constant from the stack
+                    int mask = Stack.Pop();
+                    int value = Stack.Count > 0 ? Stack.Pop() : 0;
+                    Emit(Opcode.AND, AddressMode.Immediate, checked((byte)mask));
+                    Stack.Push(value & mask);
+                }
                 break;
             case ILOpCode.Or:
                 Stack.Push(Stack.Pop() | Stack.Pop());
@@ -228,6 +234,13 @@ class IL2NESWriter : NESWriter
                     EmitJMP(labelName);
                 }
                 break;
+            case ILOpCode.Br:
+                // Long form unconditional branch (32-bit offset)
+                {
+                    var labelName = $"instruction_{instruction.Offset + operand + 5:X2}";
+                    EmitJMP(labelName);
+                }
+                break;
             case ILOpCode.Newarr:
                 if (previous == ILOpCode.Ldc_i4_s)
                 {
@@ -247,6 +260,30 @@ class IL2NESWriter : NESWriter
                 RemoveLastInstructions(2);
                 Emit(Opcode.CMP, AddressMode.Immediate, checked((byte)Stack.Pop()));
                 Emit(Opcode.BNE, AddressMode.Relative, NumberOfInstructionsForBranch(instruction.Offset + operand + 2));
+                break;
+            case ILOpCode.Brfalse_s:
+                // Branch if value is zero/false
+                // The previous AND/comparison result is in A register
+                // Use BEQ (branch if equal/zero) to jump if result is 0
+                {
+                    operand = (sbyte)(byte)operand;
+                    var labelName = $"instruction_{instruction.Offset + operand + 2:X2}";
+                    EmitWithLabel(Opcode.BEQ, AddressMode.Relative, labelName);
+                    if (Stack.Count > 0)
+                        Stack.Pop();
+                }
+                break;
+            case ILOpCode.Brtrue_s:
+                // Branch if value is non-zero/true
+                // The previous AND/comparison result is in A register
+                // Use BNE (branch if not equal/not zero) to jump if result is non-0
+                {
+                    operand = (sbyte)(byte)operand;
+                    var labelName = $"instruction_{instruction.Offset + operand + 2:X2}";
+                    EmitWithLabel(Opcode.BNE, AddressMode.Relative, labelName);
+                    if (Stack.Count > 0)
+                        Stack.Pop();
+                }
                 break;
             default:
                 throw new NotImplementedException($"OpCode {instruction.OpCode} with Int32 operand is not implemented!");
