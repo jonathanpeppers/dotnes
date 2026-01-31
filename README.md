@@ -162,8 +162,8 @@ public static void pal_col(byte index, byte color) => throw null;
 When generating `*.nes` binaries, .NES simply does a lookup for `pal_col` to
 "jump" to the appropriate subroutine to call it.
 
-.NES also emits the assembly instructions for the actual `pal_col` subroutine, a
-code snippet of the implementation:
+.NES also emits the assembly instructions for the actual `pal_col` subroutine. 
+The implementation uses an object model that represents 6502 instructions:
 
 ```csharp
 /*
@@ -176,14 +176,16 @@ code snippet of the implementation:
 * 824B	E607          	INC PAL_UPDATE                
 * 824D	60            	RTS
 */
-Write(NESInstruction.STA_zpg, TEMP);
-Write(NESInstruction.JSR, popa.GetAddressAfterMain(sizeOfMain));
-Write(NESInstruction.AND, 0x1F);
-Write(NESInstruction.TAX_impl);
-Write(NESInstruction.LDA_zpg, TEMP);
-Write(NESInstruction.STA_abs_X, PAL_BUF);
-Write(NESInstruction.INC_zpg, PAL_UPDATE);
-Write(NESInstruction.RTS_impl);
+// Uses Block and Instruction objects from the 6502 object model:
+var block = new Block("_pal_col");
+block.Emit(STA_zpg(TEMP))
+     .Emit(JSR(popa))
+     .Emit(AND(0x1F))
+     .Emit(TAX())
+     .Emit(LDA_zpg(TEMP))
+     .Emit(STA_abs_X(PAL_BUF))
+     .Emit(INC_zpg(PAL_UPDATE))
+     .Emit(RTS());
 ```
 
 [srm]: https://learn.microsoft.com/dotnet/api/system.reflection.metadata
