@@ -22,9 +22,12 @@ public class RoslynTests
         csharpSource = $"using NES;using static NES.NESLib;{Environment.NewLine}{csharpSource}";
 
         var syntaxTree = CSharpSyntaxTree.ParseText(csharpSource);
+        var systemPrivateCoreLib = typeof(object).Assembly.Location;
         var references = new List<MetadataReference>
         {
-            MetadataReference.CreateFromFile(typeof(object).Assembly.Location),
+            MetadataReference.CreateFromFile(systemPrivateCoreLib),
+            MetadataReference.CreateFromFile(Path.Combine(Path.GetDirectoryName(systemPrivateCoreLib)!, "netstandard.dll")),
+            MetadataReference.CreateFromFile(Path.Combine(Path.GetDirectoryName(systemPrivateCoreLib)!, "System.Runtime.dll")),
             MetadataReference.CreateFromFile(typeof(NESLib).Assembly.Location)
         };
 
