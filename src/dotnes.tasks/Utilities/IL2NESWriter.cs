@@ -12,7 +12,6 @@ class IL2NESWriter : NESWriter
     public IL2NESWriter(Stream stream, bool leaveOpen = false, ILogger? logger = null)
         : base(stream, leaveOpen, logger)
     {
-        _nextLocalAddress = local;
     }
 
     /// <summary>
@@ -28,38 +27,35 @@ class IL2NESWriter : NESWriter
     /// </summary>
     public IReadOnlyList<ImmutableArray<byte>> ByteArrays => _byteArrays;
     readonly List<ImmutableArray<byte>> _byteArrays = new();
-    readonly ushort local = 0x325; // cc65 compatibility: locals start at $0325
-    readonly ushort tempVar = 0x327; // cc65 compatibility: temp variable at $0327 (after x=$0325, y=$0326)
+    readonly ushort local = 0x324;
+    readonly ushort tempVar = 0x327; // Temp variable for pad_poll result storage
     readonly ReflectionCache _reflectionCache = new();
     ILOpCode previous;
     
     /// <summary>
-    /// Tracks the last byte value loaded into A for optimization (e.g., consecutive stores)
+    /// Tracks if pad_poll was called and the result is available in A or tempVar.
+    /// When true, AND operations should emit actual 6502 AND instruction.
     /// </summary>
-    int? _lastLoadedByteValue;
-    
-    /// <summary>
-    /// Tracks if a value has been stored to the temp variable and needs to be reloaded before use
-    /// </summary>
-    bool _tempVarHasValue;
-    
-    /// <summary>
-    /// Tracks if this is the first use of the temp var value (A still has it, no reload needed)
-    /// </summary>
-    bool _tempVarFirstUse;
-    
-    /// <summary>
-    /// Tracks the next available memory address for local variables.
-    /// Byte arrays don't consume memory addresses (they're in ROM).
-    /// </summary>
-    ushort _nextLocalAddress;
+    bool _padPollResultAvailable;
 
     /// <summary>
-    /// Tracks pending increment/decrement operations for pattern matching
-    /// Value: local index to increment/decrement, null = none pending
+    /// Tracks if this is the first AND after pad_poll (A still has value) or
+    /// subsequent AND (need to reload from tempVar first).
     /// </summary>
-    int? _pendingIncLocalIndex;
-    int? _pendingDecLocalIndex;
+    bool _firstAndAfterPadPoll;
+
+    /// <summary>
+    /// Tracks when we're in an increment/decrement pattern.
+    /// Set by Add/Sub when operand is 1 and we need runtime arithmetic.
+    /// </summary>
+    int? _pendingIncDecLocal;
+    bool _pendingIsIncrement;
+
+    /// <summary>
+    /// Tracks the local index that was just loaded by Ldloc_N.
+    /// Used to detect inc/dec patterns.
+    /// </summary>
+    int? _lastLoadedLocalIndex;
 
     /// <summary>
     /// NOTE: may not be exactly correct, this is the instructions inside zerobss:
@@ -137,166 +133,102 @@ class IL2NESWriter : NESWriter
                 WriteLdc(8);
                 break;
             case ILOpCode.Stloc_0:
-                if (previous == ILOpCode.Ldtoken)
+                if (_pendingIncDecLocal == 0)
                 {
-                    // Capture label for byte array reference - no memory address used
+                    // INC/DEC was already emitted, just update tracking
+                    Locals[0] = new Local(Stack.Pop(), local);
+                    _pendingIncDecLocal = null;
+                }
+                else if (previous == ILOpCode.Ldtoken)
+                {
+                    // Capture label for byte array reference
                     Locals[0] = new Local(_lastByteArraySize, LabelName: _lastByteArrayLabel);
                     _lastByteArrayLabel = null;
                     Stack.Pop(); // Discard marker
                 }
-                else if (_pendingDecLocalIndex == 0 && Locals.TryGetValue(0, out var loc0) && loc0.Address is not null)
-                {
-                    // Decrement pattern with known address
-                    Stack.Pop();
-                    Emit(Opcode.DEC, AddressMode.Absolute, (ushort)loc0.Address);
-                    Locals[0] = new Local(loc0.Value - 1, loc0.Address);
-                    _pendingDecLocalIndex = null;
-                }
-                else if (_pendingIncLocalIndex == 0 && Locals.TryGetValue(0, out var loc0i) && loc0i.Address is not null)
-                {
-                    // Increment pattern with known address
-                    Stack.Pop();
-                    Emit(Opcode.INC, AddressMode.Absolute, (ushort)loc0i.Address);
-                    Locals[0] = new Local(loc0i.Value + 1, loc0i.Address);
-                    _pendingIncLocalIndex = null;
-                }
                 else
                 {
-                    // First time storing to this local - allocate address
-                    var value = Stack.Pop();
-                    var address = _nextLocalAddress;
-                    _nextLocalAddress += (ushort)(value < byte.MaxValue ? 1 : 2);
-                    WriteStloc(Locals[0] = new Local(value, address));
+                    WriteStloc(Locals[0] = new Local(Stack.Pop(), local));
                 }
                 break;
             case ILOpCode.Stloc_1:
-                if (previous == ILOpCode.Ldtoken)
+                if (_pendingIncDecLocal == 1)
+                {
+                    Locals[1] = new Local(Stack.Pop(), local + 1);
+                    _pendingIncDecLocal = null;
+                }
+                else if (previous == ILOpCode.Ldtoken)
                 {
                     Locals[1] = new Local(_lastByteArraySize, LabelName: _lastByteArrayLabel);
                     _lastByteArrayLabel = null;
                     Stack.Pop();
                 }
-                else if (_pendingDecLocalIndex == 1 && Locals.TryGetValue(1, out var loc1) && loc1.Address is not null)
-                {
-                    Stack.Pop();
-                    Emit(Opcode.DEC, AddressMode.Absolute, (ushort)loc1.Address);
-                    Locals[1] = new Local(loc1.Value - 1, loc1.Address);
-                    _pendingDecLocalIndex = null;
-                }
-                else if (_pendingIncLocalIndex == 1 && Locals.TryGetValue(1, out var loc1i) && loc1i.Address is not null)
-                {
-                    Stack.Pop();
-                    Emit(Opcode.INC, AddressMode.Absolute, (ushort)loc1i.Address);
-                    Locals[1] = new Local(loc1i.Value + 1, loc1i.Address);
-                    _pendingIncLocalIndex = null;
-                }
                 else
                 {
-                    var value = Stack.Pop();
-                    var address = _nextLocalAddress;
-                    _nextLocalAddress += (ushort)(value < byte.MaxValue ? 1 : 2);
-                    WriteStloc(Locals[1] = new Local(value, address));
+                    WriteStloc(Locals[1] = new Local(Stack.Pop(), local + 1));
                 }
                 break;
             case ILOpCode.Stloc_2:
-                if (previous == ILOpCode.Ldtoken)
+                if (_pendingIncDecLocal == 2)
+                {
+                    Locals[2] = new Local(Stack.Pop(), local + 2);
+                    _pendingIncDecLocal = null;
+                }
+                else if (previous == ILOpCode.Ldtoken)
                 {
                     Locals[2] = new Local(_lastByteArraySize, LabelName: _lastByteArrayLabel);
                     _lastByteArrayLabel = null;
                     Stack.Pop();
                 }
-                else if (_pendingDecLocalIndex == 2 && Locals.TryGetValue(2, out var loc2) && loc2.Address is not null)
-                {
-                    Stack.Pop();
-                    Emit(Opcode.DEC, AddressMode.Absolute, (ushort)loc2.Address);
-                    Locals[2] = new Local(loc2.Value - 1, loc2.Address);
-                    _pendingDecLocalIndex = null;
-                }
-                else if (_pendingIncLocalIndex == 2 && Locals.TryGetValue(2, out var loc2i) && loc2i.Address is not null)
-                {
-                    Stack.Pop();
-                    Emit(Opcode.INC, AddressMode.Absolute, (ushort)loc2i.Address);
-                    Locals[2] = new Local(loc2i.Value + 1, loc2i.Address);
-                    _pendingIncLocalIndex = null;
-                }
                 else
                 {
-                    var value = Stack.Pop();
-                    var address = _nextLocalAddress;
-                    _nextLocalAddress += (ushort)(value < byte.MaxValue ? 1 : 2);
-                    WriteStloc(Locals[2] = new Local(value, address));
+                    WriteStloc(Locals[2] = new Local(Stack.Pop(), local + 2));
                 }
                 break;
             case ILOpCode.Stloc_3:
-                if (previous == ILOpCode.Ldtoken)
+                if (_pendingIncDecLocal == 3)
+                {
+                    Locals[3] = new Local(Stack.Pop(), local + 3);
+                    _pendingIncDecLocal = null;
+                }
+                else if (previous == ILOpCode.Ldtoken)
                 {
                     Locals[3] = new Local(_lastByteArraySize, LabelName: _lastByteArrayLabel);
                     _lastByteArrayLabel = null;
                     Stack.Pop();
                 }
-                else if (_pendingDecLocalIndex == 3 && Locals.TryGetValue(3, out var loc3) && loc3.Address is not null)
-                {
-                    Stack.Pop();
-                    Emit(Opcode.DEC, AddressMode.Absolute, (ushort)loc3.Address);
-                    Locals[3] = new Local(loc3.Value - 1, loc3.Address);
-                    _pendingDecLocalIndex = null;
-                }
-                else if (_pendingIncLocalIndex == 3 && Locals.TryGetValue(3, out var loc3i) && loc3i.Address is not null)
-                {
-                    Stack.Pop();
-                    Emit(Opcode.INC, AddressMode.Absolute, (ushort)loc3i.Address);
-                    Locals[3] = new Local(loc3i.Value + 1, loc3i.Address);
-                    _pendingIncLocalIndex = null;
-                }
                 else
                 {
-                    var value = Stack.Pop();
-                    var address = _nextLocalAddress;
-                    _nextLocalAddress += (ushort)(value < byte.MaxValue ? 1 : 2);
-                    WriteStloc(Locals[3] = new Local(value, address));
+                    WriteStloc(Locals[3] = new Local(Stack.Pop(), local + 3));
                 }
                 break;
             case ILOpCode.Ldloc_0:
-                WriteLdloc(Locals[0], 0);
+                WriteLdloc(Locals[0]);
+                _lastLoadedLocalIndex = 0;
                 break;
             case ILOpCode.Ldloc_1:
-                WriteLdloc(Locals[1], 1);
+                WriteLdloc(Locals[1]);
+                _lastLoadedLocalIndex = 1;
                 break;
             case ILOpCode.Ldloc_2:
-                WriteLdloc(Locals[2], 2);
+                WriteLdloc(Locals[2]);
+                _lastLoadedLocalIndex = 2;
                 break;
             case ILOpCode.Ldloc_3:
-                WriteLdloc(Locals[3], 3);
+                WriteLdloc(Locals[3]);
+                _lastLoadedLocalIndex = 3;
                 break;
             case ILOpCode.Conv_u1:
             case ILOpCode.Conv_u2:
             case ILOpCode.Conv_u4:
             case ILOpCode.Conv_u8:
-                // Do nothing - keep any pending inc/dec intact
+                // Do nothing
                 break;
             case ILOpCode.Add:
-                {
-                    int b = Stack.Pop();
-                    int a = Stack.Pop();
-                    Stack.Push(a + b);
-                    // Check for increment pattern: Ldloc_N, Ldc_i4_1, Add
-                    // If previous was Ldc_i4_1 and we had a pending local load, this is x++
-                    if (previous == ILOpCode.Ldc_i4_1 && _pendingDecLocalIndex is not null)
-                    {
-                        // Convert dec to inc (we used Dec field to track the local index)
-                        _pendingIncLocalIndex = _pendingDecLocalIndex;
-                        _pendingDecLocalIndex = null;
-                    }
-                }
+                HandleAddSub(isAdd: true);
                 break;
             case ILOpCode.Sub:
-                {
-                    int b = Stack.Pop();
-                    int a = Stack.Pop();
-                    Stack.Push(a - b);
-                    // Check for decrement pattern: Ldloc_N, Ldc_i4_1, Sub
-                    // _pendingDecLocalIndex is set by Ldloc when followed by Ldc_i4_1
-                }
+                HandleAddSub(isAdd: false);
                 break;
             case ILOpCode.Mul:
                 Stack.Push(Stack.Pop() * Stack.Pop());
@@ -306,31 +238,31 @@ class IL2NESWriter : NESWriter
                 break;
             case ILOpCode.And:
                 {
-                    // AND the value in A with the constant from the stack
                     int mask = Stack.Pop();
                     int value = Stack.Count > 0 ? Stack.Pop() : 0;
-                    
-                    // If the previous instruction was Ldc_i4*, it emitted LDA #imm which we need to remove.
-                    // The value we want to AND is already in A from before the Ldc.
-                    if (previous is ILOpCode.Ldc_i4_0 or ILOpCode.Ldc_i4_1 or ILOpCode.Ldc_i4_2 
-                        or ILOpCode.Ldc_i4_3 or ILOpCode.Ldc_i4_4 or ILOpCode.Ldc_i4_5 
-                        or ILOpCode.Ldc_i4_6 or ILOpCode.Ldc_i4_7 or ILOpCode.Ldc_i4_8
-                        or ILOpCode.Ldc_i4_s or ILOpCode.Ldc_i4)
+
+                    // If pad_poll result is available, emit actual AND instruction
+                    if (_padPollResultAvailable)
                     {
-                        // Remove the LDA #imm instruction that was just emitted
-                        RemoveLastInstructions(1);
+                        // Remove the LDA #mask that was emitted by Ldc_i4*
+                        if (previous is ILOpCode.Ldc_i4_s or ILOpCode.Ldc_i4 
+                            or ILOpCode.Ldc_i4_0 or ILOpCode.Ldc_i4_1 or ILOpCode.Ldc_i4_2
+                            or ILOpCode.Ldc_i4_3 or ILOpCode.Ldc_i4_4 or ILOpCode.Ldc_i4_5
+                            or ILOpCode.Ldc_i4_6 or ILOpCode.Ldc_i4_7 or ILOpCode.Ldc_i4_8)
+                        {
+                            RemoveLastInstructions(1);
+                        }
+
+                        // If not first AND, need to reload pad value from temp
+                        if (!_firstAndAfterPadPoll)
+                        {
+                            Emit(Opcode.LDA, AddressMode.Absolute, tempVar);
+                        }
+                        _firstAndAfterPadPoll = false;
+
+                        Emit(Opcode.AND, AddressMode.Immediate, checked((byte)mask));
                     }
-                    
-                    // If we have a value stored in temp var, reload it before AND
-                    // This handles the dup+and pattern for multiple button tests
-                    // Skip reload on first use since A still has the value
-                    if (_tempVarHasValue && !_tempVarFirstUse)
-                    {
-                        Emit(Opcode.LDA, AddressMode.Absolute, tempVar);
-                    }
-                    _tempVarFirstUse = false; // Subsequent uses need reload
-                    
-                    Emit(Opcode.AND, AddressMode.Immediate, checked((byte)mask));
+
                     Stack.Push(value & mask);
                 }
                 break;
@@ -402,25 +334,12 @@ class IL2NESWriter : NESWriter
                 Emit(Opcode.BNE, AddressMode.Relative, NumberOfInstructionsForBranch(instruction.Offset + operand + 2));
                 break;
             case ILOpCode.Brfalse_s:
-                // Branch if value is zero/false
-                // The previous AND/comparison result is in A register
-                // Use BEQ (branch if equal/zero) to jump if result is 0
+                // Branch if value is zero/false (after AND test)
+                // The AND result is in A and sets the zero flag, so use BEQ
                 {
                     operand = (sbyte)(byte)operand;
                     var labelName = $"instruction_{instruction.Offset + operand + 2:X2}";
                     EmitWithLabel(Opcode.BEQ, AddressMode.Relative, labelName);
-                    if (Stack.Count > 0)
-                        Stack.Pop();
-                }
-                break;
-            case ILOpCode.Brtrue_s:
-                // Branch if value is non-zero/true
-                // The previous AND/comparison result is in A register
-                // Use BNE (branch if not equal/not zero) to jump if result is non-0
-                {
-                    operand = (sbyte)(byte)operand;
-                    var labelName = $"instruction_{instruction.Offset + operand + 2:X2}";
-                    EmitWithLabel(Opcode.BNE, AddressMode.Relative, labelName);
                     if (Stack.Count > 0)
                         Stack.Pop();
                 }
@@ -533,25 +452,13 @@ class IL2NESWriter : NESWriter
                         Stack.Push(address);
                         break;
                     case "pad_poll":
-                        // pad_poll returns value in A - emit JSR then store to temp for multiple tests
+                        // pad_poll returns result in A - emit JSR then store to tempVar for multiple tests
                         EmitWithLabel(Opcode.JSR, AddressMode.Absolute, operand);
-                        Emit(Opcode.STA, AddressMode.Absolute, tempVar); // Store result to $0327
-                        _tempVarHasValue = true;
-                        _tempVarFirstUse = true; // First AND can skip reload
-                        _lastLoadedByteValue = null;
+                        Emit(Opcode.STA, AddressMode.Absolute, tempVar);
+                        _padPollResultAvailable = true;
+                        _firstAndAfterPadPoll = true;
                         break;
                     default:
-                        // Check if there's a byte array argument on the stack
-                        // Byte arrays are marked with negative values (marker = -labelIndex)
-                        if (Stack.Count > 0 && Stack.Peek() < 0)
-                        {
-                            // This is a byte array reference - load its address
-                            int marker = -Stack.Peek(); // Convert back to positive index
-                            string byteArrayLabel = $"bytearray_{marker - 1}"; // Index is 1-based
-                            EmitWithLabel(Opcode.LDA, AddressMode.Immediate_LowByte, byteArrayLabel);
-                            EmitWithLabel(Opcode.LDX, AddressMode.Immediate_HighByte, byteArrayLabel);
-                            _lastLoadedByteValue = null; // Invalidate
-                        }
                         // Emit JSR to built-in method
                         EmitWithLabel(Opcode.JSR, AddressMode.Absolute, operand);
                         break;
@@ -613,6 +520,91 @@ class IL2NESWriter : NESWriter
         previous = instruction.OpCode;
     }
 
+    /// <summary>
+    /// Handles Add and Sub operations. For patterns like x++ or x--, emits optimized INC/DEC.
+    /// For other arithmetic, performs compile-time calculation.
+    /// </summary>
+    void HandleAddSub(bool isAdd)
+    {
+        int operand = Stack.Pop(); // The value being added/subtracted (e.g., 1)
+        int baseValue = Stack.Pop(); // The base value (from local variable)
+
+        // Check if this is an x++ or x-- pattern:
+        // Ldloc_N, Ldc_i4_1, Add/Sub, Conv_u1, Stloc_N (where the two N's match)
+        if (_lastLoadedLocalIndex.HasValue && operand == 1 && 
+            Locals.TryGetValue(_lastLoadedLocalIndex.Value, out var loadedLocal) && loadedLocal.Address.HasValue)
+        {
+            // Check if next instructions are Conv_u1 and Stloc_N (matching N)
+            if (Instructions is not null && Index + 2 < Instructions.Length)
+            {
+                var next1 = Instructions[Index + 1];
+                var next2 = Instructions[Index + 2];
+                
+                int? storeLocalIndex = GetStlocIndex(next2.OpCode);
+                
+                if ((next1.OpCode == ILOpCode.Conv_u1 || next1.OpCode == ILOpCode.Conv_u2 ||
+                     next1.OpCode == ILOpCode.Conv_u4 || next1.OpCode == ILOpCode.Conv_u8) &&
+                    storeLocalIndex == _lastLoadedLocalIndex)
+                {
+                    // This is an x++ or x-- pattern!
+                    // Remove the previously emitted instructions:
+                    // WriteLdloc emits: LDA $addr; JSR pusha (2 instructions)
+                    // WriteLdc(byte) emits: LDA #imm (1 instruction)
+                    // Total: 3 instructions to remove
+                    RemoveLastInstructions(3);
+                    
+                    // Emit optimized INC or DEC
+                    ushort addr = (ushort)loadedLocal.Address.Value;
+                    if (isAdd)
+                    {
+                        Emit(Opcode.INC, AddressMode.Absolute, addr);
+                    }
+                    else
+                    {
+                        Emit(Opcode.DEC, AddressMode.Absolute, addr);
+                    }
+                    
+                    // Signal that Stloc should be skipped
+                    _pendingIncDecLocal = _lastLoadedLocalIndex;
+                    _pendingIsIncrement = isAdd;
+                    
+                    // Push the updated value (for tracking)
+                    int result = isAdd ? baseValue + 1 : baseValue - 1;
+                    Stack.Push(result);
+                    _lastLoadedLocalIndex = null;
+                    return;
+                }
+            }
+        }
+        
+        // Default: compile-time calculation only
+        int compileTimeResult;
+        if (isAdd)
+        {
+            compileTimeResult = baseValue + operand;
+        }
+        else
+        {
+            compileTimeResult = baseValue - operand;
+        }
+        Stack.Push(compileTimeResult);
+        _lastLoadedLocalIndex = null;
+    }
+
+    /// <summary>
+    /// Gets the local index for a Stloc opcode, or null if not a Stloc.
+    /// </summary>
+    static int? GetStlocIndex(ILOpCode opCode) => opCode switch
+    {
+        ILOpCode.Stloc_0 => 0,
+        ILOpCode.Stloc_1 => 1,
+        ILOpCode.Stloc_2 => 2,
+        ILOpCode.Stloc_3 => 3,
+        ILOpCode.Stloc => null, // Would need operand
+        ILOpCode.Stloc_s => null, // Would need operand  
+        _ => null
+    };
+
     void WriteStloc(Local local)
     {
         if (local.Address is null)
@@ -623,15 +615,10 @@ class IL2NESWriter : NESWriter
             LocalCount += 1;
             // Remove the previous LDA instruction (1 instruction = 2 bytes)
             RemoveLastInstructions(1);
-            
-            // Optimization: if we're storing the same byte value as last time, 
-            // skip the LDA since A already has the value
-            if (_lastLoadedByteValue != local.Value)
-            {
-                Emit(Opcode.LDA, AddressMode.Immediate, (byte)local.Value);
-                _lastLoadedByteValue = local.Value;
-            }
+            Emit(Opcode.LDA, AddressMode.Immediate, (byte)local.Value);
             Emit(Opcode.STA, AddressMode.Absolute, (ushort)local.Address);
+            Emit(Opcode.LDA, AddressMode.Immediate, 0x22);
+            Emit(Opcode.LDX, AddressMode.Immediate, 0x86);
         }
         else if (local.Value < ushort.MaxValue)
         {
@@ -642,7 +629,8 @@ class IL2NESWriter : NESWriter
             Emit(Opcode.LDA, AddressMode.Immediate, 0xC0);
             Emit(Opcode.STA, AddressMode.Absolute, (ushort)local.Address);
             Emit(Opcode.STX, AddressMode.Absolute, (ushort)(local.Address + 1));
-            _lastLoadedByteValue = null; // Invalidate since we modified A
+            Emit(Opcode.LDA, AddressMode.Immediate, 0x28);
+            Emit(Opcode.LDX, AddressMode.Immediate, 0x86);
         }
         else
         {
@@ -663,16 +651,6 @@ class IL2NESWriter : NESWriter
 
     void WriteLdc(byte operand)
     {
-        // If we just loaded a local var, the next instructions could be inc/dec pattern
-        // Don't call pusha yet - wait to see if this is a simple inc/dec
-        if (operand == 1 && _pendingDecLocalIndex is not null)
-        {
-            // This might be an inc/dec pattern - don't emit the LDA yet
-            // The pattern will be detected in Add/Sub and handled in Stloc
-            Stack.Push(operand);
-            return;
-        }
-        
         if (LastLDA)
         {
             EmitJSR("pusha");
@@ -681,20 +659,8 @@ class IL2NESWriter : NESWriter
         Stack.Push(operand);
     }
 
-    void WriteLdloc(Local local, int localIndex = -1)
+    void WriteLdloc(Local local)
     {
-        // Track potential inc/dec pattern
-        if (localIndex >= 0 && local.Address is not null && local.Value < byte.MaxValue)
-        {
-            _pendingDecLocalIndex = localIndex;
-            // Don't emit LDA+JSR pusha yet - it might be an inc/dec pattern
-            Stack.Push(local.Value);
-            return;
-        }
-        
-        _pendingDecLocalIndex = null;
-        _pendingIncLocalIndex = null;
-        
         if (local.LabelName is not null)
         {
             // This local holds a byte array label reference
