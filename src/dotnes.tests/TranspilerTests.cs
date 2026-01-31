@@ -14,6 +14,8 @@ public class TranspilerTests
     [InlineData("hello", false)]
     [InlineData("attributetable", true)]
     [InlineData("attributetable", false)]
+    [InlineData("movingsprite", true)]
+    [InlineData("movingsprite", false)]
     public Task ReadStaticVoidMain(string name, bool debug)
     {
         var suffix = debug ? "debug" : "release";
