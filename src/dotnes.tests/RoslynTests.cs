@@ -23,11 +23,13 @@ public class RoslynTests
 
         var syntaxTree = CSharpSyntaxTree.ParseText(csharpSource);
         var systemPrivateCoreLib = typeof(object).Assembly.Location;
+        var frameworkDir = Path.GetDirectoryName(systemPrivateCoreLib);
+        Assert.NotNull(frameworkDir);
         var references = new List<MetadataReference>
         {
             MetadataReference.CreateFromFile(systemPrivateCoreLib),
-            MetadataReference.CreateFromFile(Path.Combine(Path.GetDirectoryName(systemPrivateCoreLib)!, "netstandard.dll")),
-            MetadataReference.CreateFromFile(Path.Combine(Path.GetDirectoryName(systemPrivateCoreLib)!, "System.Runtime.dll")),
+            MetadataReference.CreateFromFile(Path.Combine(frameworkDir, "netstandard.dll")),
+            MetadataReference.CreateFromFile(Path.Combine(frameworkDir, "System.Runtime.dll")),
             MetadataReference.CreateFromFile(typeof(NESLib).Assembly.Location)
         };
 
