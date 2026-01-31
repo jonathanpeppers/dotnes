@@ -80,24 +80,54 @@ public class Block
     /// <returns>This block for fluent chaining</returns>
     public Block Emit(Instruction instruction, string? label = null)
     {
-        // Use pending label if no explicit label provided
-        var effectiveLabel = label ?? _pendingLabel;
-        _pendingLabel = null; // Clear pending label after use
+        // Use explicit label if provided, otherwise use first pending label
+        var effectiveLabel = label ?? (_pendingLabels.Count > 0 ? _pendingLabels[0] : null);
+        
+        // Add instruction with first label
         _instructions.Add((instruction, effectiveLabel));
+        
+        // For any additional pending labels, add them as aliases pointing to same instruction
+        // We store them in the _labelAliases dictionary to resolve during address calculation
+        if (label == null && _pendingLabels.Count > 1)
+        {
+            for (int i = 1; i < _pendingLabels.Count; i++)
+            {
+                _labelAliases[_pendingLabels[i]] = effectiveLabel!;
+            }
+        }
+        
+        _pendingLabels.Clear();
         return this;
     }
+    
+    /// <summary>
+    /// Maps aliased labels to their primary label (for IL instructions that don't emit code)
+    /// </summary>
+    private readonly Dictionary<string, string> _labelAliases = new();
+    
+    /// <summary>
+    /// Gets the label aliases dictionary for address resolution
+    /// </summary>
+    public IReadOnlyDictionary<string, string> LabelAliases => _labelAliases;
 
     /// <summary>
     /// Adds multiple instructions at the end of the block
     /// </summary>
     public Block EmitRange(IEnumerable<Instruction> instructions)
     {
+        bool first = true;
         foreach (var instruction in instructions)
         {
-            // Use pending label for first instruction only
-            var effectiveLabel = _pendingLabel;
-            _pendingLabel = null;
-            _instructions.Add((instruction, effectiveLabel));
+            if (first)
+            {
+                // First instruction gets all pending labels
+                Emit(instruction);
+                first = false;
+            }
+            else
+            {
+                _instructions.Add((instruction, null));
+            }
         }
         return this;
     }
@@ -149,17 +179,19 @@ public class Block
     }
 
     /// <summary>
-    /// Pending label to be applied to the next emitted instruction
+    /// Pending labels to be applied to the next emitted instruction.
+    /// Multiple labels can accumulate when IL instructions don't emit code.
     /// </summary>
-    private string? _pendingLabel;
+    private List<string> _pendingLabels = new();
 
     /// <summary>
     /// Sets a label to be applied to the next emitted instruction.
     /// Used for single-pass transpilation where labels are added as instructions are emitted.
+    /// If multiple labels are set before an instruction is emitted, all are preserved.
     /// </summary>
     public void SetNextLabel(string label)
     {
-        _pendingLabel = label;
+        _pendingLabels.Add(label);
     }
 
     /// <summary>

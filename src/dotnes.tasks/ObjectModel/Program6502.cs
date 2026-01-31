@@ -198,6 +198,15 @@ public class Program6502
                         _labels.DefineOrUpdate(label, currentAddress);
                     currentAddress += (ushort)instruction.Size;
                 }
+                
+                // Resolve label aliases (for IL instructions that don't emit code)
+                foreach (var kvp in block.LabelAliases)
+                {
+                    if (_labels.TryResolve(kvp.Value, out ushort address))
+                    {
+                        _labels.DefineOrUpdate(kvp.Key, address);
+                    }
+                }
             }
         }
 
