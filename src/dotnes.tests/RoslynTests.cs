@@ -462,7 +462,66 @@ public class RoslynTests
                 """,
             expectedAssembly:
                 """
-                A928        ; placeholder - will be updated after seeing actual output
+                A928        ; LDA #$28 (x = 40)
+                8D2403      ; STA $0324
+                A922        ; LDA #$22
+                A286        ; LDX #$86
+                A928        ; LDA #$28 (y = 40)
+                8D2503      ; STA $0325
+                A922        ; LDA #$22
+                A286        ; LDX #$86
+                201182      ; JSR pal_all
+                208982      ; JSR ppu_on_all
+                20F082      ; JSR ppu_wait_nmi (loop start)
+                A900        ; LDA #$00
+                206C86      ; JSR pad_poll
+                A940        ; LDA #$40 (PAD.LEFT)
+                2940        ; AND #$40
+                F00F        ; BEQ +15
+                AD2403      ; LDA x
+                20F185      ; JSR pusha
+                A9D9        ; LDA #$D9 (x-1)
+                8D2403      ; STA x
+                A922        ; LDA #$22
+                A286        ; LDX #$86
+                A980        ; LDA #$80 (PAD.RIGHT)
+                2980        ; AND #$80
+                F00F        ; BEQ +15
+                AD2403      ; LDA x
+                20F185      ; JSR pusha
+                A9DA        ; LDA #$DA (x+1)
+                8D2403      ; STA x
+                A922        ; LDA #$22
+                A286        ; LDX #$86
+                A910        ; LDA #$10 (PAD.UP)
+                2910        ; AND #$10
+                F00F        ; BEQ +15
+                AD2503      ; LDA y
+                20F185      ; JSR pusha
+                A9D9        ; LDA #$D9 (y-1)
+                8D2503      ; STA y
+                A922        ; LDA #$22
+                A286        ; LDX #$86
+                A920        ; LDA #$20 (PAD.DOWN)
+                2920        ; AND #$20
+                F00F        ; BEQ +15
+                AD2503      ; LDA y
+                20F185      ; JSR pusha
+                A9DA        ; LDA #$DA (y+1)
+                8D2503      ; STA y
+                A922        ; LDA #$22
+                A286        ; LDX #$86
+                AD2403      ; LDA x
+                20F185      ; JSR pusha
+                AD2503      ; LDA y
+                20F185      ; JSR pusha
+                A9D8        ; LDA #$D8 (tile)
+                20F185      ; JSR pusha
+                A900        ; LDA #$00 (attr)
+                20F185      ; JSR pusha
+                A900        ; LDA #$00 (id)
+                204086      ; JSR oam_spr
+                4C1885      ; JMP loop
                 """);
     }
 }
