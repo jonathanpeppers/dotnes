@@ -150,13 +150,22 @@ public class Block
 
     /// <summary>
     /// Removes the last N instructions (replaces SeekBack!)
+    /// Any labels on removed instructions are moved back to pending labels.
     /// </summary>
     /// <param name="count">Number of instructions to remove</param>
     public void RemoveLast(int count = 1)
     {
         for (int i = 0; i < count && _instructions.Count > 0; i++)
         {
+            var (_, label) = _instructions[_instructions.Count - 1];
             _instructions.RemoveAt(_instructions.Count - 1);
+            
+            // Preserve any label that was on the removed instruction
+            if (label != null)
+            {
+                // Insert at the beginning so they're processed first
+                _pendingLabels.Insert(0, label);
+            }
         }
     }
 
