@@ -202,10 +202,8 @@ public class Program6502
                 // Resolve label aliases (for IL instructions that don't emit code)
                 foreach (var kvp in block.LabelAliases.Where(kvp => _labels.TryResolve(kvp.Value, out _)))
                 {
-                    if (_labels.TryResolve(kvp.Value, out ushort address))
-                    {
-                        _labels.DefineOrUpdate(kvp.Key, address);
-                    }
+                    _labels.TryResolve(kvp.Value, out ushort address);
+                    _labels.DefineOrUpdate(kvp.Key, address);
                 }
             }
         }
