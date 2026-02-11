@@ -17,9 +17,10 @@ class IL2NESWriter : NESWriter
     /// <summary>
     /// The local evaluation stack
     /// </summary>
-    readonly Stack<int> Stack = new();
+    internal readonly Stack<int> Stack = new();
+    
     /// <summary>
-    /// Dictionary of local varaiables
+    /// Dictionary of local variables
     /// </summary>
     readonly Dictionary<int, Local> Locals = new();
     /// <summary>
@@ -49,7 +50,6 @@ class IL2NESWriter : NESWriter
     /// Set by Add/Sub when operand is 1 and we need runtime arithmetic.
     /// </summary>
     int? _pendingIncDecLocal;
-    bool _pendingIsIncrement;
 
     /// <summary>
     /// Tracks the local index that was just loaded by Ldloc_N.
@@ -553,9 +553,20 @@ class IL2NESWriter : NESWriter
                 // Clear byte array label if it was consumed by Ldtoken→Call path
                 if (_lastByteArrayLabel != null && previous == ILOpCode.Ldtoken)
                     _lastByteArrayLabel = null;
-                // Return value, dup for now might be fine?
-                if (_reflectionCache.HasReturnValue(operand) && Stack.Count > 0)
-                    Stack.Push(Stack.Peek());
+                // Return value handling
+                if (_reflectionCache.HasReturnValue(operand))
+                {
+                    // For pad_poll, push the return value placeholder after args are popped
+                    if (operand == "pad_poll")
+                    {
+                        Stack.Push(0);
+                    }
+                    else if (Stack.Count > 0)
+                    {
+                        // Other methods: dup for now might be fine?
+                        Stack.Push(Stack.Peek());
+                    }
+                }
                 break;
             default:
                 throw new NotImplementedException($"OpCode {instruction.OpCode} with String operand is not implemented!");
@@ -617,61 +628,49 @@ class IL2NESWriter : NESWriter
         // Check if this is an x++ or x-- pattern:
         // Ldloc_N, Ldc_i4_1, Add/Sub, Conv_u1, Stloc_N (where the two N's match)
         if (_lastLoadedLocalIndex.HasValue && operand == 1 && 
-            Locals.TryGetValue(_lastLoadedLocalIndex.Value, out var loadedLocal) && loadedLocal.Address.HasValue)
+            Locals.TryGetValue(_lastLoadedLocalIndex.Value, out var loadedLocal) && loadedLocal.Address.HasValue &&
+            Instructions is not null && Index + 2 < Instructions.Length)
         {
-            // Check if next instructions are Conv_u1 and Stloc_N (matching N)
-            if (Instructions is not null && Index + 2 < Instructions.Length)
+            var next1 = Instructions[Index + 1];
+            var next2 = Instructions[Index + 2];
+            
+            int? storeLocalIndex = GetStlocIndex(next2.OpCode);
+            
+            if ((next1.OpCode == ILOpCode.Conv_u1 || next1.OpCode == ILOpCode.Conv_u2 ||
+                 next1.OpCode == ILOpCode.Conv_u4 || next1.OpCode == ILOpCode.Conv_u8) &&
+                storeLocalIndex == _lastLoadedLocalIndex)
             {
-                var next1 = Instructions[Index + 1];
-                var next2 = Instructions[Index + 2];
+                // This is an x++ or x-- pattern!
+                // Remove the previously emitted instructions:
+                // WriteLdloc emits: LDA $addr; JSR pusha (2 instructions)
+                // WriteLdc(byte) emits: LDA #imm (1 instruction)
+                // Total: 3 instructions to remove
+                RemoveLastInstructions(3);
                 
-                int? storeLocalIndex = GetStlocIndex(next2.OpCode);
-                
-                if ((next1.OpCode == ILOpCode.Conv_u1 || next1.OpCode == ILOpCode.Conv_u2 ||
-                     next1.OpCode == ILOpCode.Conv_u4 || next1.OpCode == ILOpCode.Conv_u8) &&
-                    storeLocalIndex == _lastLoadedLocalIndex)
+                // Emit optimized INC or DEC
+                ushort addr = (ushort)loadedLocal.Address.Value;
+                if (isAdd)
                 {
-                    // This is an x++ or x-- pattern!
-                    // Remove the previously emitted instructions:
-                    // WriteLdloc emits: LDA $addr; JSR pusha (2 instructions)
-                    // WriteLdc(byte) emits: LDA #imm (1 instruction)
-                    // Total: 3 instructions to remove
-                    RemoveLastInstructions(3);
-                    
-                    // Emit optimized INC or DEC
-                    ushort addr = (ushort)loadedLocal.Address.Value;
-                    if (isAdd)
-                    {
-                        Emit(Opcode.INC, AddressMode.Absolute, addr);
-                    }
-                    else
-                    {
-                        Emit(Opcode.DEC, AddressMode.Absolute, addr);
-                    }
-                    
-                    // Signal that Stloc should be skipped
-                    _pendingIncDecLocal = _lastLoadedLocalIndex;
-                    _pendingIsIncrement = isAdd;
-                    
-                    // Push the updated value (for tracking)
-                    int result = isAdd ? baseValue + 1 : baseValue - 1;
-                    Stack.Push(result);
-                    _lastLoadedLocalIndex = null;
-                    return;
+                    Emit(Opcode.INC, AddressMode.Absolute, addr);
                 }
+                else
+                {
+                    Emit(Opcode.DEC, AddressMode.Absolute, addr);
+                }
+                
+                // Signal that Stloc should be skipped
+                _pendingIncDecLocal = _lastLoadedLocalIndex;
+                
+                // Push the updated value (for tracking)
+                int result = isAdd ? baseValue + 1 : baseValue - 1;
+                Stack.Push(result);
+                _lastLoadedLocalIndex = null;
+                return;
             }
         }
         
         // Default: compile-time calculation only
-        int compileTimeResult;
-        if (isAdd)
-        {
-            compileTimeResult = baseValue + operand;
-        }
-        else
-        {
-            compileTimeResult = baseValue - operand;
-        }
+        int compileTimeResult = isAdd ? baseValue + operand : baseValue - operand;
         Stack.Push(compileTimeResult);
         _lastLoadedLocalIndex = null;
     }
