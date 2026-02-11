@@ -282,6 +282,9 @@ class IL2NESWriter : NESWriter
                 // Do nothing
                 break;
             case ILOpCode.Stelem_i1:
+            case ILOpCode.Stelem_i2:
+            case ILOpCode.Stelem_i4:
+            case ILOpCode.Stelem_i8:
                 // TODO: implement this right!
                 Emit(Opcode.STA, AddressMode.Absolute, 0x300);
                 break;

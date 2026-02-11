@@ -569,4 +569,28 @@ public class RoslynTests
                 4C3F85  ; JMP $853F
                 """);
     }
+
+    [Fact]
+    public void ArrayIndexers_i4()
+    {
+        AssertProgram(
+            csharpSource:
+                """
+                int[] data = new int[4] { 0x12345678, 0x11111111, 0x22222222, 0x33333333 };
+                data[0] = 0x55;
+                ppu_on_all();
+                while (true) ;
+                """,
+            expectedAssembly:
+                """
+                A904    ; LDA #$04
+                207485  ; JSR pusha
+                A900    ; LDA #$00
+                207485  ; JSR pusha
+                A955    ; LDA #$55
+                8D0003  ; STA __RAM_START__
+                208982  ; JSR ppu_on_all
+                4C1285  ; JMP $8512
+                """);
+    }
 }
