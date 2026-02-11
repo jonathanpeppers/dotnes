@@ -49,7 +49,6 @@ class IL2NESWriter : NESWriter
     /// Set by Add/Sub when operand is 1 and we need runtime arithmetic.
     /// </summary>
     int? _pendingIncDecLocal;
-    bool _pendingIsIncrement;
 
     /// <summary>
     /// Tracks the local index that was just loaded by Ldloc_N.
@@ -517,6 +516,8 @@ class IL2NESWriter : NESWriter
                         _immediateInA = null;
                         if (DeferredByteArrayMode)
                             LocalCount += 1; // tempVar counts as a local for zerobss
+                        // pad_poll produces a return value; push a placeholder onto the IL evaluation stack
+                        Stack.Push(0);
                         break;
                     case "oam_spr":
                         if (DeferredByteArrayMode)
@@ -617,61 +618,49 @@ class IL2NESWriter : NESWriter
         // Check if this is an x++ or x-- pattern:
         // Ldloc_N, Ldc_i4_1, Add/Sub, Conv_u1, Stloc_N (where the two N's match)
         if (_lastLoadedLocalIndex.HasValue && operand == 1 && 
-            Locals.TryGetValue(_lastLoadedLocalIndex.Value, out var loadedLocal) && loadedLocal.Address.HasValue)
+            Locals.TryGetValue(_lastLoadedLocalIndex.Value, out var loadedLocal) && loadedLocal.Address.HasValue &&
+            Instructions is not null && Index + 2 < Instructions.Length)
         {
-            // Check if next instructions are Conv_u1 and Stloc_N (matching N)
-            if (Instructions is not null && Index + 2 < Instructions.Length)
+            var next1 = Instructions[Index + 1];
+            var next2 = Instructions[Index + 2];
+            
+            int? storeLocalIndex = GetStlocIndex(next2.OpCode);
+            
+            if ((next1.OpCode == ILOpCode.Conv_u1 || next1.OpCode == ILOpCode.Conv_u2 ||
+                 next1.OpCode == ILOpCode.Conv_u4 || next1.OpCode == ILOpCode.Conv_u8) &&
+                storeLocalIndex == _lastLoadedLocalIndex)
             {
-                var next1 = Instructions[Index + 1];
-                var next2 = Instructions[Index + 2];
+                // This is an x++ or x-- pattern!
+                // Remove the previously emitted instructions:
+                // WriteLdloc emits: LDA $addr; JSR pusha (2 instructions)
+                // WriteLdc(byte) emits: LDA #imm (1 instruction)
+                // Total: 3 instructions to remove
+                RemoveLastInstructions(3);
                 
-                int? storeLocalIndex = GetStlocIndex(next2.OpCode);
-                
-                if ((next1.OpCode == ILOpCode.Conv_u1 || next1.OpCode == ILOpCode.Conv_u2 ||
-                     next1.OpCode == ILOpCode.Conv_u4 || next1.OpCode == ILOpCode.Conv_u8) &&
-                    storeLocalIndex == _lastLoadedLocalIndex)
+                // Emit optimized INC or DEC
+                ushort addr = (ushort)loadedLocal.Address.Value;
+                if (isAdd)
                 {
-                    // This is an x++ or x-- pattern!
-                    // Remove the previously emitted instructions:
-                    // WriteLdloc emits: LDA $addr; JSR pusha (2 instructions)
-                    // WriteLdc(byte) emits: LDA #imm (1 instruction)
-                    // Total: 3 instructions to remove
-                    RemoveLastInstructions(3);
-                    
-                    // Emit optimized INC or DEC
-                    ushort addr = (ushort)loadedLocal.Address.Value;
-                    if (isAdd)
-                    {
-                        Emit(Opcode.INC, AddressMode.Absolute, addr);
-                    }
-                    else
-                    {
-                        Emit(Opcode.DEC, AddressMode.Absolute, addr);
-                    }
-                    
-                    // Signal that Stloc should be skipped
-                    _pendingIncDecLocal = _lastLoadedLocalIndex;
-                    _pendingIsIncrement = isAdd;
-                    
-                    // Push the updated value (for tracking)
-                    int result = isAdd ? baseValue + 1 : baseValue - 1;
-                    Stack.Push(result);
-                    _lastLoadedLocalIndex = null;
-                    return;
+                    Emit(Opcode.INC, AddressMode.Absolute, addr);
                 }
+                else
+                {
+                    Emit(Opcode.DEC, AddressMode.Absolute, addr);
+                }
+                
+                // Signal that Stloc should be skipped
+                _pendingIncDecLocal = _lastLoadedLocalIndex;
+                
+                // Push the updated value (for tracking)
+                int result = isAdd ? baseValue + 1 : baseValue - 1;
+                Stack.Push(result);
+                _lastLoadedLocalIndex = null;
+                return;
             }
         }
         
         // Default: compile-time calculation only
-        int compileTimeResult;
-        if (isAdd)
-        {
-            compileTimeResult = baseValue + operand;
-        }
-        else
-        {
-            compileTimeResult = baseValue - operand;
-        }
+        int compileTimeResult = isAdd ? baseValue + operand : baseValue - operand;
         Stack.Push(compileTimeResult);
         _lastLoadedLocalIndex = null;
     }
@@ -690,18 +679,18 @@ class IL2NESWriter : NESWriter
         _ => null
     };
 
-    void WriteStloc(Local local)
+    void WriteStloc(Local localVar)
     {
-        if (local.Address is null)
-            throw new ArgumentNullException(nameof(local.Address));
+        if (localVar.Address is null)
+            throw new ArgumentNullException(nameof(localVar.Address));
 
-        if (local.Value < byte.MaxValue)
+        if (localVar.Value < byte.MaxValue)
         {
             LocalCount += 1;
             if (DeferredByteArrayMode)
             {
                 // New pattern: just emit STA (keep the LDA from WriteLdc)
-                Emit(Opcode.STA, AddressMode.Absolute, (ushort)local.Address);
+                Emit(Opcode.STA, AddressMode.Absolute, (ushort)localVar.Address);
                 // STA doesn't change A, so _immediateInA stays valid
                 _needsByteArrayLoadInCall = true;
             }
@@ -709,29 +698,29 @@ class IL2NESWriter : NESWriter
             {
                 // Old pattern: full sequence with trailing LDA/LDX
                 RemoveLastInstructions(1);
-                Emit(Opcode.LDA, AddressMode.Immediate, (byte)local.Value);
-                Emit(Opcode.STA, AddressMode.Absolute, (ushort)local.Address);
+                Emit(Opcode.LDA, AddressMode.Immediate, (byte)localVar.Value);
+                Emit(Opcode.STA, AddressMode.Absolute, (ushort)localVar.Address);
                 Emit(Opcode.LDA, AddressMode.Immediate, 0x22);
                 Emit(Opcode.LDX, AddressMode.Immediate, 0x86);
                 _immediateInA = null;
             }
         }
-        else if (local.Value < ushort.MaxValue)
+        else if (localVar.Value < ushort.MaxValue)
         {
             LocalCount += 2;
             // Remove the previous LDX + LDA instructions (2 instructions = 4 bytes)
             RemoveLastInstructions(2);
             Emit(Opcode.LDX, AddressMode.Immediate, 0x03);
             Emit(Opcode.LDA, AddressMode.Immediate, 0xC0);
-            Emit(Opcode.STA, AddressMode.Absolute, (ushort)local.Address);
-            Emit(Opcode.STX, AddressMode.Absolute, (ushort)(local.Address + 1));
+            Emit(Opcode.STA, AddressMode.Absolute, (ushort)localVar.Address);
+            Emit(Opcode.STX, AddressMode.Absolute, (ushort)(localVar.Address + 1));
             Emit(Opcode.LDA, AddressMode.Immediate, 0x28);
             Emit(Opcode.LDX, AddressMode.Immediate, 0x86);
             _immediateInA = null;
         }
         else
         {
-            throw new NotImplementedException($"{nameof(WriteStloc)} not implemented for value larger than ushort: {local.Value}");
+            throw new NotImplementedException($"{nameof(WriteStloc)} not implemented for value larger than ushort: {localVar.Value}");
         }
     }
 

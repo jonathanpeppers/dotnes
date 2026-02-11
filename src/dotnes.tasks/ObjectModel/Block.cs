@@ -191,7 +191,7 @@ public class Block
     /// Pending labels to be applied to the next emitted instruction.
     /// Multiple labels can accumulate when IL instructions don't emit code.
     /// </summary>
-    private List<string> _pendingLabels = new();
+    private readonly List<string> _pendingLabels = new();
 
     /// <summary>
     /// Sets a label to be applied to the next emitted instruction.

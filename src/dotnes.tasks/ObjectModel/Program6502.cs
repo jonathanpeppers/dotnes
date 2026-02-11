@@ -200,7 +200,7 @@ public class Program6502
                 }
                 
                 // Resolve label aliases (for IL instructions that don't emit code)
-                foreach (var kvp in block.LabelAliases)
+                foreach (var kvp in block.LabelAliases.Where(kvp => _labels.TryResolve(kvp.Value, out _)))
                 {
                     if (_labels.TryResolve(kvp.Value, out ushort address))
                     {
@@ -563,10 +563,12 @@ public class Program6502
         {
             if (usedMethods.Contains("pad_poll"))
                 AddBlock(BuiltInSubroutines.PadPoll());
-            if (needsDecsp4 && usedMethods.Contains("pad_poll"))
+            if (needsDecsp4 && (usedMethods.Contains("pad_trigger") || usedMethods.Contains("pad_state")))
             {
-                AddBlock(BuiltInSubroutines.PadTrigger());
-                AddBlock(BuiltInSubroutines.PadState());
+                if (usedMethods.Contains("pad_trigger"))
+                    AddBlock(BuiltInSubroutines.PadTrigger());
+                if (usedMethods.Contains("pad_state"))
+                    AddBlock(BuiltInSubroutines.PadState());
             }
             if (usedMethods.Contains("oam_spr"))
                 AddBlock(BuiltInSubroutines.OamSpr());
