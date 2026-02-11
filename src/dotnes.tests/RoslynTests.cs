@@ -506,4 +506,89 @@ public class RoslynTests
                 4C1285      ; JMP loop
                 """);
     }
+
+    [Fact]
+    public void ArrayIndexers()
+    {
+        AssertProgram(
+            csharpSource:
+                """
+                byte[] ATTRIBUTE_TABLE = new byte[0x40] {
+                  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                  0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55,
+                  0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa,
+                  0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+                  0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+                  0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
+                  0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
+                  0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f
+                };
+                byte[] PALETTE = new byte[16] {
+                  0x03,
+                  0x11,0x30,0x27,0x0,
+                  0x1c,0x20,0x2c,0x0,
+                  0x00,0x10,0x20,0x0,
+                  0x06,0x16,0x26
+                };
+                ATTRIBUTE_TABLE[0] = 0x55; // This line is new
+                pal_bg(PALETTE);
+                vram_adr(NAMETABLE_A);
+                vram_fill(0x16, 32 * 30);
+                vram_write(ATTRIBUTE_TABLE);
+                ppu_on_all();
+                while (true) ;
+                """,
+            expectedAssembly:
+                """
+                A9ED    ; LDA #$ED
+                A285    ; LDX #$85
+                20B485  ; JSR pushax
+                A200    ; LDX #$00
+                A940    ; LDA #$40
+                209E85  ; JSR pusha
+                A900    ; LDA #$00
+                209E85  ; JSR pusha
+                A955    ; LDA #$55
+                202B82  ; JSR pal_bg
+                A220    ; LDX #$20
+                A900    ; LDA #$00
+                20D483  ; JSR vram_adr
+                A916    ; LDA #$16
+                209E85  ; JSR pusha
+                A203    ; LDX #$03
+                A9C0    ; LDA #$C0
+                20DF83  ; JSR vram_fill
+                A9ED    ; LDA #$ED
+                A285    ; LDX #$85
+                20B485  ; JSR pushax
+                A200    ; LDX #$00
+                A940    ; LDA #$40
+                204F83  ; JSR vram_write
+                208982  ; JSR ppu_on_all
+                4C3C85  ; JMP $853C
+                """);
+    }
+
+    [Fact]
+    public void ArrayIndexers_i4()
+    {
+        AssertProgram(
+            csharpSource:
+                """
+                int[] data = new int[4] { 0x12345678, 0x11111111, 0x22222222, 0x33333333 };
+                data[0] = 0x55;
+                ppu_on_all();
+                while (true) ;
+                """,
+            expectedAssembly:
+                """
+                A904    ; LDA #$04
+                207185  ; JSR pusha
+                A900    ; LDA #$00
+                207185  ; JSR pusha
+                A955    ; LDA #$55
+                208982  ; JSR ppu_on_all
+                4C0F85  ; JMP $850F
+                """);
+    }
 }

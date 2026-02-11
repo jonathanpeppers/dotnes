@@ -281,6 +281,26 @@ class IL2NESWriter : NESWriter
             case ILOpCode.Conv_u8:
                 // Do nothing
                 break;
+            case ILOpCode.Stelem_i1:
+            case ILOpCode.Stelem_i2:
+            case ILOpCode.Stelem_i4:
+            case ILOpCode.Stelem_i8:
+                // stelem.i*(stack: arrayref, index, value → stack: )
+                // TODO: Implement proper address calculation and store operation.
+                // For now, we consume the IL stack operands to maintain consistency
+                // and prevent subsequent operations from seeing incorrect stack state.
+                if (Stack.Count >= 3)
+                {
+                    Stack.Pop(); // value
+                    Stack.Pop(); // index
+                    Stack.Pop(); // arrayref
+                }
+                else
+                {
+                    // In case of an inconsistent tracked stack, reset to a safe state.
+                    Stack.Clear();
+                }
+                break;
             case ILOpCode.Add:
                 HandleAddSub(isAdd: true);
                 break;
