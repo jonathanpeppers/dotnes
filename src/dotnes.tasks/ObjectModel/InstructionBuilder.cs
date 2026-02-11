@@ -336,6 +336,9 @@ public static class Asm
     public static Instruction STA_abs(string label) =>
         new(Opcode.STA, AddressMode.Absolute, new LabelOperand(label, OperandSize.Word));
 
+    public static Instruction LDA_abs_Y(string label) =>
+        new(Opcode.LDA, AddressMode.AbsoluteY, new LabelOperand(label, OperandSize.Word));
+
     #endregion
 
     #region Relative Addressing (Branches) - Label

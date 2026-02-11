@@ -220,12 +220,16 @@ class Transpiler : IDisposable
         
         // totalSize is used for donelib/copydata - points past the data tables
         // PRG_LAST already accounts for the standard final built-ins size (donelib, copydata, popax,
-        // incsp2, popa, pusha, pushax, zerobss). When the new codegen pattern (decsp4) changes the
+        // incsp2, popa, pusha, pushax, zerobss with 0 locals). When optional methods change the
         // final built-ins composition, we must add the size delta.
         const ushort PRG_LAST = 0x85AE;
-        bool needsDecsp4 = UsedMethods != null && UsedMethods.Contains("decsp4");
+        bool needsDelta = UsedMethods != null && (
+            UsedMethods.Contains("decsp4") ||
+            UsedMethods.Contains("apu_init") ||
+            UsedMethods.Contains("start_music") ||
+            UsedMethods.Contains("play_music"));
         int finalBuiltInsOffset = 0;
-        if (needsDecsp4)
+        if (needsDelta)
         {
             int standardSize = Program6502.CalculateFinalBuiltInsSize(0, null);
             int actualSize = Program6502.CalculateFinalBuiltInsSize(locals, UsedMethods);

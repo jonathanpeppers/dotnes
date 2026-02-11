@@ -1505,4 +1505,256 @@ internal static class BuiltInSubroutines
     }
 
     #endregion
+
+    #region APU / Music Subroutines
+
+    /// <summary>
+    /// apu_init - Initialize APU: enable channels and silence all
+    /// </summary>
+    public static Block ApuInit()
+    {
+        var block = new Block(nameof(NESLib.apu_init));
+        block.Emit(LDA(0x0F))           // Enable pulse1, pulse2, triangle, noise
+             .Emit(STA_abs(APU_STATUS))
+             .Emit(LDA(0x30))           // Silence pulse channels (constant volume = 0)
+             .Emit(STA_abs(APU_PULSE1_CTRL))
+             .Emit(STA_abs(APU_PULSE2_CTRL))
+             .Emit(LDA(0x80))           // Silence triangle (halt flag)
+             .Emit(STA_abs(APU_TRIANGLE_CTRL))
+             .Emit(LDA(0x00))           // Disable sweep on both pulse channels
+             .Emit(STA_abs(APU_PULSE1_SWEEP))
+             .Emit(STA_abs(APU_PULSE2_SWEEP))
+             .Emit(RTS());
+        return block;
+    }
+
+    /// <summary>
+    /// start_music - Set up music data pointer. Address passed in A (lo) and X (hi).
+    /// </summary>
+    public static Block StartMusic()
+    {
+        var block = new Block(nameof(NESLib.start_music));
+        block.Emit(STA_zpg(MUSIC_PTR))       // Store low byte of music data address
+             .Emit(STX_zpg(MUSIC_PTR + 1))   // Store high byte
+             .Emit(STA_zpg(MUSIC_START))      // Save start address for looping
+             .Emit(STX_zpg(MUSIC_START + 1))
+             .Emit(LDA(0x00))
+             .Emit(STA_zpg(MUSIC_DURATION))   // cur_duration = 0
+             .Emit(STA_zpg(MUSIC_CHS))        // chs = 0
+             .Emit(RTS());
+        return block;
+    }
+
+    // Bass note threshold: notes below this go to triangle channel
+    const byte BASS_NOTE = 36; // 0x24
+
+    /// <summary>
+    /// play_music - Play one frame of music. Processes bytes until a duration marker is found.
+    /// Music data format (from 8bitworkshop music.c):
+    ///   Byte with bit 7 clear (0x00-0x7F): note index → look up period in note table, play on next free channel
+    ///   Byte with bit 7 set (0x80-0xFE): duration marker, duration = byte &amp; 0x3F, resets channel mask
+    ///   0xFF: end of score → loop from beginning
+    /// Notes &lt; BASS_NOTE (36) play on triangle channel if available, otherwise pulse.
+    /// </summary>
+    public static Block PlayMusic()
+    {
+        var block = new Block(nameof(NESLib.play_music));
+
+        // Check if duration counter is non-zero → jump to decrement and return
+        block.Emit(LDA_zpg(MUSIC_DURATION))
+             .Emit(BEQ("@process_byte"));     // if duration == 0, enter inner loop
+        block.Emit(JMP("@decrement"));        // otherwise jump to decrement (far)
+
+        // --- Inner loop: process bytes until duration marker ---
+        // Read next byte from music data via indirect pointer
+        block.Emit(LDY(0x00), "@process_byte")
+             .Emit(LDA_ind_Y(MUSIC_PTR));    // A = *(music_ptr)
+
+        // Increment music pointer (16-bit)
+        block.Emit(INC_zpg(MUSIC_PTR))
+             .Emit(BNE("@no_carry"))
+             .Emit(INC_zpg(MUSIC_PTR + 1));
+
+        // Check for end marker (0xFF)
+        block.Emit(CMP(0xFF), "@no_carry")
+             .Emit(BNE("@not_end"));          // not end → check duration marker
+        block.Emit(JMP("@restart"));           // end marker → restart (far)
+
+        // Check if this is a duration marker (bit 7 set → negative)
+        block.Emit(BMI("@set_duration"), "@not_end");
+
+        // --- It's a note byte ---
+        // Save full note value, extract note index (bits 0-5)
+        block.Emit(STA_zpg(TEMP))            // TEMP = note
+             .Emit(AND(0x3F))                 // A = noteIndex (note & 63)
+             .Emit(TAY());                    // Y = noteIndex for table lookups
+
+        // Decide channel: if note >= BASS_NOTE or triangle busy → use pulse
+        block.Emit(LDA_zpg(TEMP))            // A = note
+             .Emit(CMP(BASS_NOTE))           // compare with BASS_NOTE (36)
+             .Emit(BCS("@pulse_note"));       // if note >= 36, use pulse
+
+        // Check if triangle is already busy
+        block.Emit(LDA_zpg(MUSIC_CHS))
+             .Emit(AND(0x04))                 // chs & 4
+             .Emit(BNE("@pulse_note"));       // if triangle busy, use pulse
+
+        // --- Play on triangle channel ---
+        block.Emit(LDA_abs_Y("note_table_tri_lo"))  // period low byte
+             .Emit(STA_abs(APU_TRIANGLE_TIMER_LO))
+             .Emit(LDA_abs_Y("note_table_tri_hi"))  // period high byte
+             .Emit(STA_abs(APU_TRIANGLE_TIMER_HI))
+             .Emit(LDA(0x8F))                // linear counter = 15, control flag set
+             .Emit(STA_abs(APU_TRIANGLE_CTRL));
+
+        // chs |= 4
+        block.Emit(LDA_zpg(MUSIC_CHS))
+             .Emit(ORA(0x04))
+             .Emit(STA_zpg(MUSIC_CHS))
+             .Emit(JMP("@process_byte"));     // continue inner loop
+
+        // --- Play on pulse channel ---
+        // Check which pulse channel is free
+        block.Emit(LDA_zpg(MUSIC_CHS), "@pulse_note")
+             .Emit(AND(0x01))                 // chs & 1
+             .Emit(BNE("@try_pulse2"));       // if pulse 1 busy, try pulse 2
+
+        // --- Pulse 1 ---
+        // APU_PULSE_DECAY(0, period, DUTY_25, 2, 10)
+        // $4000 = (duty << 6) | decay_rate = (1 << 6) | 2 = 0x42
+        // $4001 = 0x00 (no sweep)
+        // $4002 = period_lo
+        // $4003 = ((length & 0x1F) << 3) | (period_hi & 0x07) = (10 << 3) | period_hi = 0x50 | period_hi
+        block.Emit(LDA(0x42))                // duty=25%, envelope mode, rate=2
+             .Emit(STA_abs(APU_PULSE1_CTRL))
+             .Emit(LDA_abs_Y("note_table_49_lo"))
+             .Emit(STA_abs(APU_PULSE1_TIMER_LO))
+             .Emit(LDA_abs_Y("note_table_49_hi"))
+             .Emit(AND(0x07))                 // keep timer high 3 bits
+             .Emit(ORA(0x50))                 // length counter = 10 (10 << 3)
+             .Emit(STA_abs(APU_PULSE1_TIMER_HI));
+
+        // chs |= 1
+        block.Emit(LDA_zpg(MUSIC_CHS))
+             .Emit(ORA(0x01))
+             .Emit(STA_zpg(MUSIC_CHS))
+             .Emit(JMP("@process_byte"));
+
+        // --- Pulse 2 ---
+        block.Emit(LDA_zpg(MUSIC_CHS), "@try_pulse2")
+             .Emit(AND(0x02))                 // chs & 2
+             .Emit(BNE("@process_byte"));     // both busy, skip note
+
+        // APU_PULSE_DECAY(1, period, DUTY_25, 2, 10)
+        block.Emit(LDA(0x42))
+             .Emit(STA_abs(APU_PULSE2_CTRL))
+             .Emit(LDA_abs_Y("note_table_49_lo"))
+             .Emit(STA_abs(APU_PULSE2_TIMER_LO))
+             .Emit(LDA_abs_Y("note_table_49_hi"))
+             .Emit(AND(0x07))
+             .Emit(ORA(0x50))
+             .Emit(STA_abs(APU_PULSE2_TIMER_HI));
+
+        // chs |= 2
+        block.Emit(LDA_zpg(MUSIC_CHS))
+             .Emit(ORA(0x02))
+             .Emit(STA_zpg(MUSIC_CHS))
+             .Emit(JMP("@process_byte"));
+
+        // --- Duration marker (bit 7 set, not 0xFF) ---
+        block.Emit(AND(0x3F), "@set_duration") // duration = byte & 63
+             .Emit(STA_zpg(MUSIC_DURATION))
+             .Emit(LDA(0x00))
+             .Emit(STA_zpg(MUSIC_CHS));       // reset channel mask
+        // Fall through to @decrement (duration was just set, decrement it once)
+
+        // --- Decrement duration and return ---
+        block.Emit(DEC_zpg(MUSIC_DURATION), "@decrement")
+             .Emit(RTS());
+
+        // --- Restart: loop music from beginning ---
+        block.Emit(LDA_zpg(MUSIC_START), "@restart")
+             .Emit(STA_zpg(MUSIC_PTR))
+             .Emit(LDA_zpg(MUSIC_START + 1))
+             .Emit(STA_zpg(MUSIC_PTR + 1))
+             .Emit(JMP("@process_byte"));
+
+        return block;
+    }
+
+    /// <summary>
+    /// Note period lookup table (low bytes) for pulse channels.
+    /// From 8bitworkshop note_table_49 (A=440.5Hz, 64 entries).
+    /// </summary>
+    public static Block NoteTable49Lo()
+    {
+        return Block.FromRawData(
+        [
+            0xD0, 0xDE, 0xFA, 0x23, 0x58, 0x98, 0xE3, 0x38,
+            0x97, 0xFF, 0x6F, 0xE7, 0x67, 0xEF, 0x7D, 0x11,
+            0xAB, 0x4B, 0xF1, 0x9C, 0x4B, 0xFF, 0xB7, 0x73,
+            0x33, 0xF7, 0xBE, 0x88, 0x55, 0x25, 0xF8, 0xCD,
+            0xA5, 0x7F, 0x5B, 0x39, 0x19, 0xFB, 0xDE, 0xC3,
+            0xAA, 0x92, 0x7B, 0x66, 0x52, 0x3F, 0x2D, 0x1C,
+            0x0C, 0xFD, 0xEF, 0xE1, 0xD5, 0xC9, 0xBD, 0xB3,
+            0xA8, 0x9F, 0x96, 0x8E, 0x86, 0x7E, 0x77, 0x70
+        ], "note_table_49_lo");
+    }
+
+    /// <summary>
+    /// Note period lookup table (high bytes) for pulse channels.
+    /// </summary>
+    public static Block NoteTable49Hi()
+    {
+        return Block.FromRawData(
+        [
+            0x10, 0x0F, 0x0E, 0x0E, 0x0D, 0x0C, 0x0B, 0x0B,
+            0x0A, 0x09, 0x09, 0x08, 0x08, 0x07, 0x07, 0x07,
+            0x06, 0x06, 0x05, 0x05, 0x05, 0x04, 0x04, 0x04,
+            0x04, 0x03, 0x03, 0x03, 0x03, 0x03, 0x02, 0x02,
+            0x02, 0x02, 0x02, 0x02, 0x02, 0x01, 0x01, 0x01,
+            0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01,
+            0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+        ], "note_table_49_hi");
+    }
+
+    /// <summary>
+    /// Note period lookup table (low bytes) for triangle channel.
+    /// From 8bitworkshop note_table_tri (A=443.7Hz, 64 entries).
+    /// </summary>
+    public static Block NoteTableTriLo()
+    {
+        return Block.FromRawData(
+        [
+            0x5A, 0xE2, 0x71, 0x06, 0xA1, 0x42, 0xE8, 0x93,
+            0x43, 0xF8, 0xB0, 0x6D, 0x2D, 0xF1, 0xB9, 0x83,
+            0x51, 0x21, 0xF4, 0xCA, 0xA2, 0x7C, 0x59, 0x37,
+            0x17, 0xF9, 0xDD, 0xC2, 0xA9, 0x91, 0x7B, 0x66,
+            0x52, 0x3F, 0x2D, 0x1C, 0x0C, 0xFD, 0xEF, 0xE2,
+            0xD5, 0xC9, 0xBE, 0xB3, 0xA9, 0xA0, 0x97, 0x8E,
+            0x87, 0x7F, 0x78, 0x71, 0x6B, 0x65, 0x5F, 0x5A,
+            0x55, 0x50, 0x4C, 0x48, 0x44, 0x40, 0x3C, 0x39
+        ], "note_table_tri_lo");
+    }
+
+    /// <summary>
+    /// Note period lookup table (high bytes) for triangle channel.
+    /// </summary>
+    public static Block NoteTableTriHi()
+    {
+        return Block.FromRawData(
+        [
+            0x08, 0x07, 0x07, 0x07, 0x06, 0x06, 0x05, 0x05,
+            0x05, 0x04, 0x04, 0x04, 0x04, 0x03, 0x03, 0x03,
+            0x03, 0x03, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02,
+            0x02, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01,
+            0x01, 0x01, 0x01, 0x01, 0x01, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+        ], "note_table_tri_hi");
+    }
+
+    #endregion
 }

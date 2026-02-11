@@ -55,19 +55,37 @@ public static class NESLib
     public static void pal_bg_bright(byte bright) => throw null!;
 
     /// <summary>
-    /// play music
+    /// play music (FamiTone)
     /// </summary>
     public static void music_play(byte song) => throw null!;
 
     /// <summary>
-    /// stop music
+    /// stop music (FamiTone)
     /// </summary>
     public static void music_stop() => throw null!;
 
     /// <summary>
-    /// pause music
+    /// pause music (FamiTone)
     /// </summary>
     public static void music_pause(byte pause) => throw null!;
+
+    /// <summary>
+    /// initialize the APU (Audio Processing Unit)
+    /// enables all sound channels and sets initial state
+    /// </summary>
+    public static void apu_init() => throw null!;
+
+    /// <summary>
+    /// set up music data pointer for playback
+    /// data is a byte array containing encoded music commands
+    /// </summary>
+    public static void start_music(byte[] data) => throw null!;
+
+    /// <summary>
+    /// play one frame of music, call once per vblank
+    /// processes music data and writes to APU registers
+    /// </summary>
+    public static void play_music() => throw null!;
 
     /// <summary>
     /// play sound effect

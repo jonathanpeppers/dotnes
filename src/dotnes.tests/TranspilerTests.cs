@@ -46,6 +46,8 @@ public class TranspilerTests
     [InlineData("onelocalbyte", false)]
     [InlineData("staticsprite", true)]
     [InlineData("staticsprite", false)]
+    [InlineData("music", true)]
+    [InlineData("music", false)]
     public Task Write(string name, bool debug)
     {
         var configuration = debug ? "debug" : "release";
