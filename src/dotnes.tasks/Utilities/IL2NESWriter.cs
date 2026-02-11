@@ -522,8 +522,6 @@ class IL2NESWriter : NESWriter
                         _immediateInA = null;
                         if (DeferredByteArrayMode)
                             LocalCount += 1; // tempVar counts as a local for zerobss
-                        // pad_poll produces a return value; push a placeholder onto the IL evaluation stack
-                        Stack.Push(0);
                         break;
                     case "oam_spr":
                         if (DeferredByteArrayMode)
@@ -560,9 +558,20 @@ class IL2NESWriter : NESWriter
                 // Clear byte array label if it was consumed by Ldtoken→Call path
                 if (_lastByteArrayLabel != null && previous == ILOpCode.Ldtoken)
                     _lastByteArrayLabel = null;
-                // Return value, dup for now might be fine?
-                if (_reflectionCache.HasReturnValue(operand) && Stack.Count > 0)
-                    Stack.Push(Stack.Peek());
+                // Return value handling
+                if (_reflectionCache.HasReturnValue(operand))
+                {
+                    // For pad_poll, push the return value placeholder after args are popped
+                    if (operand == "pad_poll")
+                    {
+                        Stack.Push(0);
+                    }
+                    else if (Stack.Count > 0)
+                    {
+                        // Other methods: dup for now might be fine?
+                        Stack.Push(Stack.Peek());
+                    }
+                }
                 break;
             default:
                 throw new NotImplementedException($"OpCode {instruction.OpCode} with String operand is not implemented!");

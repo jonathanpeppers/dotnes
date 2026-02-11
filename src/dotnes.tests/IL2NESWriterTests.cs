@@ -151,21 +151,14 @@ public class IL2NESWriterTests
 
         // Simulate: PAD pad = pad_poll(0);
         writer.Write(new ILInstruction(ILOpCode.Ldc_i4_0)); // Push argument
+        Assert.Single(writer.StackForTesting); // Argument on stack
         
         writer.Write(new ILInstruction(ILOpCode.Call), nameof(pad_poll)); // Call pad_poll
         
-        // After pad_poll, the stack should have at least 1 item
-        // The fix ensures that Stack.Push(0) is called after the JSR/STA
-        int stackAfterCall = writer.StackForTesting.Count;
-        
-        // The key assertion: after calling pad_poll, we have a return value on the stack
-        // Before the fix, stackAfterCall would be 0 (or wrong), causing issues in subsequent operations
-        Assert.True(stackAfterCall > 0, 
-            $"pad_poll should push a return value onto the stack. Stack count after call: {stackAfterCall}");
-        
-        // Verify we can pop the return value
-        int returnValue = writer.StackForTesting.Pop();
-        Assert.Equal(0, returnValue); // Placeholder value
+        // After pad_poll, exactly 1 item should remain (the return value)
+        // The argument should have been consumed, and a return value pushed
+        Assert.Single(writer.StackForTesting);
+        Assert.Equal(0, writer.StackForTesting.Peek()); // Placeholder value
     }
 
     /// <summary>
