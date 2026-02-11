@@ -498,26 +498,78 @@ public class Program6502
     }
 
     /// <summary>
+    /// Pre-calculates the total byte size of all final built-in subroutines.
+    /// Must match the blocks added by AddFinalBuiltIns.
+    /// </summary>
+    public static int CalculateFinalBuiltInsSize(byte locals, HashSet<string>? usedMethods = null)
+    {
+        int size = 0;
+        bool needsDecsp4 = usedMethods != null && usedMethods.Contains("decsp4");
+
+        size += BuiltInSubroutines.Donelib(0).ByteSize;
+        size += BuiltInSubroutines.Copydata(0).ByteSize;
+        if (needsDecsp4) size += BuiltInSubroutines.Decsp4().ByteSize;
+        size += BuiltInSubroutines.Popax().ByteSize;
+        size += BuiltInSubroutines.Incsp2().ByteSize;
+        size += BuiltInSubroutines.Popa().ByteSize;
+        if (!needsDecsp4)
+        {
+            size += BuiltInSubroutines.Pusha().ByteSize;
+            size += BuiltInSubroutines.Pushax().ByteSize;
+        }
+        size += BuiltInSubroutines.Zerobss(locals).ByteSize;
+        if (usedMethods != null)
+        {
+            if (usedMethods.Contains("pad_poll"))
+                size += BuiltInSubroutines.PadPoll().ByteSize;
+            if (needsDecsp4 && usedMethods.Contains("pad_poll"))
+            {
+                size += BuiltInSubroutines.PadTrigger().ByteSize;
+                size += BuiltInSubroutines.PadState().ByteSize;
+            }
+            if (usedMethods.Contains("oam_spr"))
+                size += BuiltInSubroutines.OamSpr().ByteSize;
+        }
+        return size;
+    }
+
+    /// <summary>
     /// Adds the final built-in subroutines that come after main().
     /// </summary>
     public void AddFinalBuiltIns(ushort totalSize, byte locals, HashSet<string>? usedMethods = null)
     {
         AddBlock(BuiltInSubroutines.Donelib(totalSize));
         AddBlock(BuiltInSubroutines.Copydata(totalSize));
+
+        bool needsDecsp4 = usedMethods != null && usedMethods.Contains("decsp4");
+
+        if (needsDecsp4)
+            AddBlock(BuiltInSubroutines.Decsp4());
+
         AddBlock(BuiltInSubroutines.Popax());
         AddBlock(BuiltInSubroutines.Incsp2());
         AddBlock(BuiltInSubroutines.Popa());
-        AddBlock(BuiltInSubroutines.Pusha());
-        AddBlock(BuiltInSubroutines.Pushax());
+
+        // Pusha/Pushax only needed for old code gen pattern (not decsp4)
+        if (!needsDecsp4)
+        {
+            AddBlock(BuiltInSubroutines.Pusha());
+            AddBlock(BuiltInSubroutines.Pushax());
+        }
         AddBlock(BuiltInSubroutines.Zerobss(locals));
 
         // Optional methods
         if (usedMethods != null)
         {
-            if (usedMethods.Contains("oam_spr"))
-                AddBlock(BuiltInSubroutines.OamSpr());
             if (usedMethods.Contains("pad_poll"))
                 AddBlock(BuiltInSubroutines.PadPoll());
+            if (needsDecsp4 && usedMethods.Contains("pad_poll"))
+            {
+                AddBlock(BuiltInSubroutines.PadTrigger());
+                AddBlock(BuiltInSubroutines.PadState());
+            }
+            if (usedMethods.Contains("oam_spr"))
+                AddBlock(BuiltInSubroutines.OamSpr());
         }
     }
 

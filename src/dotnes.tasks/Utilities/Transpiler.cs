@@ -153,6 +153,9 @@ class Transpiler : IDisposable
                 writer.CurrentBlock.SetNextLabel(labelName);
             }
             
+            // Record block count before processing this instruction
+            writer.RecordBlockCount(instruction.Offset);
+            
             if (instruction.Integer != null)
             {
                 writer.Write(instruction, instruction.Integer.Value);
@@ -215,9 +218,20 @@ class Transpiler : IDisposable
         // Program layout: built-ins -> main -> final built-ins -> byte/string tables -> destructor
         program.ResolveAddresses(); // Resolve to get current size
         
-        // totalSize is used for donelib/copydata - points to end of data tables (BSS clearing end)
+        // totalSize is used for donelib/copydata - points past the data tables
+        // PRG_LAST already accounts for the standard final built-ins size (donelib, copydata, popax,
+        // incsp2, popa, pusha, pushax, zerobss). When the new codegen pattern (decsp4) changes the
+        // final built-ins composition, we must add the size delta.
         const ushort PRG_LAST = 0x85AE;
-        ushort totalSize = (ushort)(PRG_LAST.GetAddressAfterMain(sizeOfMain) + byteArrayTableSize + stringTableSize);
+        bool needsDecsp4 = UsedMethods != null && UsedMethods.Contains("decsp4");
+        int finalBuiltInsOffset = 0;
+        if (needsDecsp4)
+        {
+            int standardSize = Program6502.CalculateFinalBuiltInsSize(0, null);
+            int actualSize = Program6502.CalculateFinalBuiltInsSize(locals, UsedMethods);
+            finalBuiltInsOffset = actualSize - standardSize;
+        }
+        ushort totalSize = (ushort)(PRG_LAST.GetAddressAfterMain(sizeOfMain) + finalBuiltInsOffset + byteArrayTableSize + stringTableSize);
         
         program.AddFinalBuiltIns(totalSize, locals, UsedMethods);
 

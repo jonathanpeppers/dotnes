@@ -253,4 +253,19 @@ public class Block
         }
         return offset;
     }
+
+    /// <summary>
+    /// Gets the total byte size of this block (all instructions or raw data).
+    /// </summary>
+    public int ByteSize
+    {
+        get
+        {
+            if (RawData != null) return RawData.Length;
+            int size = 0;
+            for (int i = 0; i < _instructions.Count; i++)
+                size += _instructions[i].Instruction.Size;
+            return size;
+        }
+    }
 }

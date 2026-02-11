@@ -332,3 +332,12 @@ ASALocalRun/
 
 # Local History for Visual Studio
 .localhistory/
+
+# Verify test diagnostic artifacts
+*.received.bin
+*.received.txt
+*.expected.txt
+
+# Development tools and reference files
+tools/
+dump_il*

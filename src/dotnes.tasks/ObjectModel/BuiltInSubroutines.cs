@@ -945,6 +945,23 @@ internal static class BuiltInSubroutines
     #region Stack Operations
 
     /// <summary>
+    /// decsp4 - Decrement stack pointer by 4 (allocate 4 bytes)
+    /// </summary>
+    public static Block Decsp4()
+    {
+        var block = new Block(nameof(decsp4));
+        block.Emit(LDA_zpg(sp))
+             .Emit(SEC())
+             .Emit(SBC(0x04))
+             .Emit(STA_zpg(sp))
+             .Emit(BCC(1))
+             .Emit(RTS())
+             .Emit(DEC_zpg(sp + 1))
+             .Emit(RTS());
+        return block;
+    }
+
+    /// <summary>
     /// popa - Pop byte from stack
     /// </summary>
     public static Block Popa()
@@ -1453,6 +1470,35 @@ internal static class BuiltInSubroutines
              .Emit(STA_abs_Y(0x0040))
              .Emit(TXA())
              .Emit(STA_abs_Y(0x003E))
+             .Emit(LDX(0x00))
+             .Emit(RTS());
+        return block;
+    }
+
+    /// <summary>
+    /// pad_trigger - Read pad trigger (newly pressed buttons)
+    /// </summary>
+    public static Block PadTrigger()
+    {
+        var block = new Block("pad_trigger");
+        block.Emit(PHA())
+             .Emit(JSR(nameof(NESLib.pad_poll)))
+             .Emit(PLA())
+             .Emit(TAX())
+             .Emit(LDA_zpg_X(0x40))
+             .Emit(LDX(0x00))
+             .Emit(RTS());
+        return block;
+    }
+
+    /// <summary>
+    /// pad_state - Read pad state (currently held buttons)
+    /// </summary>
+    public static Block PadState()
+    {
+        var block = new Block("pad_state");
+        block.Emit(TAX())
+             .Emit(LDA_zpg_X(0x3C))
              .Emit(LDX(0x00))
              .Emit(RTS());
         return block;
