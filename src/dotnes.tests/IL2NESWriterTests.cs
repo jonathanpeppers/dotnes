@@ -152,9 +152,6 @@ public class IL2NESWriterTests
         // Simulate: PAD pad = pad_poll(0);
         writer.Write(new ILInstruction(ILOpCode.Ldc_i4_0)); // Push argument
         
-        // Initially stack has 1 item (the argument)
-        int stackBeforeCall = writer.StackForTesting.Count;
-        
         writer.Write(new ILInstruction(ILOpCode.Call), nameof(pad_poll)); // Call pad_poll
         
         // After pad_poll, the stack should have at least 1 item

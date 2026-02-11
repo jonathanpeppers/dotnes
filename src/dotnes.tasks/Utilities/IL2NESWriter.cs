@@ -25,7 +25,7 @@ class IL2NESWriter : NESWriter
     internal Stack<int> StackForTesting => Stack;
     
     /// <summary>
-    /// Dictionary of local varaiables
+    /// Dictionary of local variables
     /// </summary>
     readonly Dictionary<int, Local> Locals = new();
     /// <summary>
