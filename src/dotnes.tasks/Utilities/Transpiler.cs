@@ -1,4 +1,4 @@
-﻿using System.Buffers;
+using System.Buffers;
 using System.Collections.Immutable;
 using System.Reflection;
 using System.Reflection.Metadata;
@@ -223,18 +223,9 @@ class Transpiler : IDisposable
         // incsp2, popa, pusha, pushax, zerobss with 0 locals). When optional methods change the
         // final built-ins composition, we must add the size delta.
         const ushort PRG_LAST = 0x85AE;
-        bool needsDelta = UsedMethods != null && (
-            UsedMethods.Contains("decsp4") ||
-            UsedMethods.Contains("apu_init") ||
-            UsedMethods.Contains("start_music") ||
-            UsedMethods.Contains("play_music"));
-        int finalBuiltInsOffset = 0;
-        if (needsDelta)
-        {
-            int standardSize = Program6502.CalculateFinalBuiltInsSize(0, null);
-            int actualSize = Program6502.CalculateFinalBuiltInsSize(locals, UsedMethods);
-            finalBuiltInsOffset = actualSize - standardSize;
-        }
+        int standardSize = Program6502.CalculateFinalBuiltInsSize(0, null);
+        int actualSize = Program6502.CalculateFinalBuiltInsSize(locals, UsedMethods);
+        int finalBuiltInsOffset = actualSize - standardSize;
         ushort totalSize = (ushort)(PRG_LAST.GetAddressAfterMain(sizeOfMain) + finalBuiltInsOffset + byteArrayTableSize + stringTableSize);
         
         program.AddFinalBuiltIns(totalSize, locals, UsedMethods);
@@ -361,9 +352,23 @@ class Transpiler : IDisposable
                         // 32-bit
                         case OperandType.BrTarget:
                         case OperandType.I:
-                        case OperandType.Type:
                         case OperandType.ShortR:
                             intValue = blob.ReadInt32();
+                            break;
+                        case OperandType.Type:
+                            {
+                                var token = blob.ReadInt32();
+                                intValue = token;
+                                // Resolve type name for Newarr (e.g. "Byte", "UInt16")
+                                if (opCode == ILOpCode.Newarr)
+                                {
+                                    var handle = MetadataTokens.EntityHandle(token);
+                                    if (handle.Kind == HandleKind.TypeReference)
+                                        stringValue = _reader.GetString(_reader.GetTypeReference((TypeReferenceHandle)handle).Name);
+                                    else if (handle.Kind == HandleKind.TypeDefinition)
+                                        stringValue = _reader.GetString(_reader.GetTypeDefinition((TypeDefinitionHandle)handle).Name);
+                                }
+                            }
                             break;
                         case OperandType.String:
                             stringValue = _reader.GetUserString(MetadataTokens.UserStringHandle(blob.ReadInt32()));

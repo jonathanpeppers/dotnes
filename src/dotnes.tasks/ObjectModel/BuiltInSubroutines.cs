@@ -1602,12 +1602,18 @@ internal static class BuiltInSubroutines
         // --- Duration marker (0x80-0xFE) ---
         block.Emit(AND(0x3F))                // duration = byte & 63
              .Emit(STA_zpg(MUSIC_DURATION))
+             .Emit(BEQ("@zero_duration"))    // if duration == 0, skip decrement
              .Emit(LDA(0x00))
-             .Emit(STA_zpg(MUSIC_CHS));       // reset channel mask
+             .Emit(STA_zpg(MUSIC_CHS));      // reset channel mask
         // Fall through to @decrement (duration was just set, decrement it once)
 
         // --- Decrement duration and return ---
         block.Emit(DEC_zpg(MUSIC_DURATION), "@decrement")
+             .Emit(RTS());
+
+        // Duration was 0 (byte 0x80): just reset channels and return
+        block.Emit(LDA(0x00), "@zero_duration")
+             .Emit(STA_zpg(MUSIC_CHS))
              .Emit(RTS());
 
         // --- End marker (0xFF): set NULL pointer and duration 63 ---
