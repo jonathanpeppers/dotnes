@@ -93,5 +93,5 @@ Write(NESInstruction.JMP_abs, label);         // 4C xx xx - Unconditional jump
    - Reason: The types are different (Local vs ushort) and the context makes usage clear
 
 3. **Do not change conditional logic that appears redundant without understanding the semantic relationship**
-   - Example: `if (needsDecsp4 && usedMethods.Contains("pad_poll"))` should not be changed to check other methods
-   - Reason: pad_trigger/pad_state are internal dependencies of pad_poll, not independent features
+   - Example: `if (needsDecsp4 && usedMethods.Contains("pad_poll"))` correctly adds PadTrigger/PadState blocks
+   - Reason: When decsp4 is needed, pad_trigger and pad_state are internal implementation dependencies of the pad_poll feature, not separate user-facing methods. They should be added together when pad_poll is used with needsDecsp4, not checked individually.
