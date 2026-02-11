@@ -679,18 +679,18 @@ class IL2NESWriter : NESWriter
         _ => null
     };
 
-    void WriteStloc(Local localVar)
+    void WriteStloc(Local local)
     {
-        if (localVar.Address is null)
-            throw new ArgumentNullException(nameof(localVar.Address));
+        if (local.Address is null)
+            throw new ArgumentNullException(nameof(local.Address));
 
-        if (localVar.Value < byte.MaxValue)
+        if (local.Value < byte.MaxValue)
         {
             LocalCount += 1;
             if (DeferredByteArrayMode)
             {
                 // New pattern: just emit STA (keep the LDA from WriteLdc)
-                Emit(Opcode.STA, AddressMode.Absolute, (ushort)localVar.Address);
+                Emit(Opcode.STA, AddressMode.Absolute, (ushort)local.Address);
                 // STA doesn't change A, so _immediateInA stays valid
                 _needsByteArrayLoadInCall = true;
             }
@@ -698,29 +698,29 @@ class IL2NESWriter : NESWriter
             {
                 // Old pattern: full sequence with trailing LDA/LDX
                 RemoveLastInstructions(1);
-                Emit(Opcode.LDA, AddressMode.Immediate, (byte)localVar.Value);
-                Emit(Opcode.STA, AddressMode.Absolute, (ushort)localVar.Address);
+                Emit(Opcode.LDA, AddressMode.Immediate, (byte)local.Value);
+                Emit(Opcode.STA, AddressMode.Absolute, (ushort)local.Address);
                 Emit(Opcode.LDA, AddressMode.Immediate, 0x22);
                 Emit(Opcode.LDX, AddressMode.Immediate, 0x86);
                 _immediateInA = null;
             }
         }
-        else if (localVar.Value < ushort.MaxValue)
+        else if (local.Value < ushort.MaxValue)
         {
             LocalCount += 2;
             // Remove the previous LDX + LDA instructions (2 instructions = 4 bytes)
             RemoveLastInstructions(2);
             Emit(Opcode.LDX, AddressMode.Immediate, 0x03);
             Emit(Opcode.LDA, AddressMode.Immediate, 0xC0);
-            Emit(Opcode.STA, AddressMode.Absolute, (ushort)localVar.Address);
-            Emit(Opcode.STX, AddressMode.Absolute, (ushort)(localVar.Address + 1));
+            Emit(Opcode.STA, AddressMode.Absolute, (ushort)local.Address);
+            Emit(Opcode.STX, AddressMode.Absolute, (ushort)(local.Address + 1));
             Emit(Opcode.LDA, AddressMode.Immediate, 0x28);
             Emit(Opcode.LDX, AddressMode.Immediate, 0x86);
             _immediateInA = null;
         }
         else
         {
-            throw new NotImplementedException($"{nameof(WriteStloc)} not implemented for value larger than ushort: {localVar.Value}");
+            throw new NotImplementedException($"{nameof(WriteStloc)} not implemented for value larger than ushort: {local.Value}");
         }
     }
 

@@ -78,3 +78,20 @@ Write(NESInstruction.JMP_abs, label);         // 4C xx xx - Unconditional jump
 **6502 registers:** A (accumulator), X/Y (index). Zero page ($00-$FF) is fast memory; stack at $0100-$01FF.
 
 **Resources:** [6502 Instruction Set](https://www.masswerk.at/6502/6502_instruction_set.html) | [NES Dev Wiki](https://wiki.nesdev.org/w/index.php/INES) | [8bitworkshop](https://8bitworkshop.com)
+
+## Code Review Guidelines
+
+**⚠️ DO NOT suggest these changes in code reviews:**
+
+1. **Do not use .Where() for filtering when the loop body needs TryResolve out parameters**
+   - BAD: `foreach (var kvp in dict.Where(kvp => TryResolve(kvp.Value, out _))) { TryResolve(kvp.Value, out var x); }`
+   - GOOD: `foreach (var kvp in dict) { if (TryResolve(kvp.Value, out var x)) { } }`
+   - Reason: The Where() clause calls TryResolve twice (slower) and doesn't capture the out parameter
+
+2. **Do not rename parameters to avoid shadowing field names unless it causes actual bugs**
+   - Example: Parameter `local` in `WriteStloc(Local local)` is fine even though there's a field `readonly ushort local = 0x325`
+   - Reason: The types are different (Local vs ushort) and the context makes usage clear
+
+3. **Do not change conditional logic that appears redundant without understanding the semantic relationship**
+   - Example: `if (needsDecsp4 && usedMethods.Contains("pad_poll"))` should not be changed to check other methods
+   - Reason: pad_trigger/pad_state are internal dependencies of pad_poll, not independent features
