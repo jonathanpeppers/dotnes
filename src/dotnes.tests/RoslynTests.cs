@@ -540,33 +540,32 @@ public class RoslynTests
                 """,
             expectedAssembly:
                 """
-                A9F0    ; LDA #$F0
+                A9ED    ; LDA #$ED
                 A285    ; LDX #$85
-                20B785  ; JSR pushax
+                20B485  ; JSR pushax
                 A200    ; LDX #$00
                 A940    ; LDA #$40
-                20A185  ; JSR pusha
+                209E85  ; JSR pusha
                 A900    ; LDA #$00
-                20A185  ; JSR pusha
+                209E85  ; JSR pusha
                 A955    ; LDA #$55
-                8D0003  ; STA __RAM_START__
                 202B82  ; JSR pal_bg
                 A220    ; LDX #$20
                 A900    ; LDA #$00
                 20D483  ; JSR vram_adr
                 A916    ; LDA #$16
-                20A185  ; JSR pusha
+                209E85  ; JSR pusha
                 A203    ; LDX #$03
                 A9C0    ; LDA #$C0
                 20DF83  ; JSR vram_fill
-                A9F0    ; LDA #$F0
+                A9ED    ; LDA #$ED
                 A285    ; LDX #$85
-                20B785  ; JSR pushax
+                20B485  ; JSR pushax
                 A200    ; LDX #$00
                 A940    ; LDA #$40
                 204F83  ; JSR vram_write
                 208982  ; JSR ppu_on_all
-                4C3F85  ; JMP $853F
+                4C3C85  ; JMP $853C
                 """);
     }
 
@@ -584,13 +583,12 @@ public class RoslynTests
             expectedAssembly:
                 """
                 A904    ; LDA #$04
-                207485  ; JSR pusha
+                207185  ; JSR pusha
                 A900    ; LDA #$00
-                207485  ; JSR pusha
+                207185  ; JSR pusha
                 A955    ; LDA #$55
-                8D0003  ; STA __RAM_START__
                 208982  ; JSR ppu_on_all
-                4C1285  ; JMP $8512
+                4C0F85  ; JMP $850F
                 """);
     }
 }
