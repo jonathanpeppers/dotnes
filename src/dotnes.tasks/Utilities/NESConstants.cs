@@ -69,6 +69,7 @@ internal static class NESConstants
     public const string pusha = nameof(pusha);
     public const string pushax = nameof(pushax);
     public const string incsp2 = nameof(incsp2);
+    public const string decsp4 = nameof(decsp4);
     
     // NMI/Update labels
     public const string updPal = nameof(updPal);

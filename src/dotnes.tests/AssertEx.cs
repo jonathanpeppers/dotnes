@@ -12,7 +12,19 @@ static class AssertEx
 
     public static void Equal(byte[] expected, byte[] actual)
     {
-        Assert.Equal(expected.Length, actual.Length);
+        if (expected.Length != actual.Length)
+        {
+            // Print the actual bytes as hex for easier test updating
+            var hexDump = new StringBuilder();
+            hexDump.AppendLine($"Expected {expected.Length} bytes but got {actual.Length} bytes.");
+            hexDump.AppendLine("Actual bytes (for updating test):");
+            for (int i = 0; i < actual.Length; i++)
+            {
+                hexDump.Append($"{actual[i]:X2}");
+                if ((i + 1) % 16 == 0) hexDump.AppendLine();
+            }
+            Assert.Fail(hexDump.ToString());
+        }
 
         var builder = new StringBuilder();
         for (int i = 0; i < actual.Length; i++)
