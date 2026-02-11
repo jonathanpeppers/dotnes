@@ -17,12 +17,7 @@ class IL2NESWriter : NESWriter
     /// <summary>
     /// The local evaluation stack
     /// </summary>
-    readonly Stack<int> Stack = new();
-    
-    /// <summary>
-    /// For testing: exposes the internal IL evaluation stack state
-    /// </summary>
-    internal Stack<int> StackForTesting => Stack;
+    internal readonly Stack<int> Stack = new();
     
     /// <summary>
     /// Dictionary of local variables

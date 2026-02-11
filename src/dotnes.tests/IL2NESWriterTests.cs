@@ -151,14 +151,14 @@ public class IL2NESWriterTests
 
         // Simulate: PAD pad = pad_poll(0);
         writer.Write(new ILInstruction(ILOpCode.Ldc_i4_0)); // Push argument
-        Assert.Single(writer.StackForTesting); // Argument on stack
+        Assert.Single(writer.Stack); // Argument on stack
         
         writer.Write(new ILInstruction(ILOpCode.Call), nameof(pad_poll)); // Call pad_poll
         
         // After pad_poll, exactly 1 item should remain (the return value)
         // The argument should have been consumed, and a return value pushed
-        Assert.Single(writer.StackForTesting);
-        Assert.Equal(0, writer.StackForTesting.Peek()); // Placeholder value
+        Assert.Single(writer.Stack);
+        Assert.Equal(0, writer.Stack.Peek()); // Placeholder value
     }
 
     /// <summary>
@@ -174,14 +174,14 @@ public class IL2NESWriterTests
         writer.Write(new ILInstruction(ILOpCode.Ldc_i4), 5);
         writer.Write(new ILInstruction(ILOpCode.Ldc_i4), 3);
         writer.Write(new ILInstruction(ILOpCode.Add));
-        Assert.Equal(8, writer.StackForTesting.Peek());
-        writer.StackForTesting.Pop();
+        Assert.Equal(8, writer.Stack.Peek());
+        writer.Stack.Pop();
         
         // Test subtraction: 10 - 4 = 6  
         writer.Write(new ILInstruction(ILOpCode.Ldc_i4), 10);
         writer.Write(new ILInstruction(ILOpCode.Ldc_i4), 4);
         writer.Write(new ILInstruction(ILOpCode.Sub));
-        Assert.Equal(6, writer.StackForTesting.Peek());
+        Assert.Equal(6, writer.Stack.Peek());
     }
     
     /// <summary>
@@ -225,14 +225,14 @@ public class IL2NESWriterTests
         writer.Write(new ILInstruction(ILOpCode.Add));
         
         // The result should be on the stack
-        Assert.Equal(43, writer.StackForTesting.Peek());
+        Assert.Equal(43, writer.Stack.Peek());
         
         // Test subtraction
-        writer.StackForTesting.Clear();
+        writer.Stack.Clear();
         writer.Write(new ILInstruction(ILOpCode.Ldc_i4), 50);
         writer.Write(new ILInstruction(ILOpCode.Ldc_i4_1));
         writer.Write(new ILInstruction(ILOpCode.Sub));
         
-        Assert.Equal(49, writer.StackForTesting.Peek());
+        Assert.Equal(49, writer.Stack.Peek());
     }
 }
