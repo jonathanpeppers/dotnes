@@ -1514,16 +1514,19 @@ internal static class BuiltInSubroutines
     public static Block ApuInit()
     {
         var block = new Block(nameof(NESLib.apu_init));
-        block.Emit(LDA(0x0F))           // Enable pulse1, pulse2, triangle, noise
-             .Emit(STA_abs(APU_STATUS))
-             .Emit(LDA(0x30))           // Silence pulse channels (constant volume = 0)
+        // Match original apu.c: memcpy APUINIT to $4000, then set $4017 and $4015
+        block.Emit(LDA(0x30))           // Silence pulse channels (constant volume = 0)
              .Emit(STA_abs(APU_PULSE1_CTRL))
              .Emit(STA_abs(APU_PULSE2_CTRL))
-             .Emit(LDA(0x80))           // Silence triangle (halt flag)
-             .Emit(STA_abs(APU_TRIANGLE_CTRL))
-             .Emit(LDA(0x00))           // Disable sweep on both pulse channels
+             .Emit(LDA(0x08))           // Sweep: negate flag set (prevents period underflow)
              .Emit(STA_abs(APU_PULSE1_SWEEP))
              .Emit(STA_abs(APU_PULSE2_SWEEP))
+             .Emit(LDA(0x80))           // Silence triangle (halt flag, counter=0)
+             .Emit(STA_abs(APU_TRIANGLE_CTRL))
+             .Emit(LDA(0x40))           // Frame counter: 5-step mode
+             .Emit(STA_abs(PPU_FRAMECNT))
+             .Emit(LDA(0x0F))           // Enable pulse1, pulse2, triangle, noise
+             .Emit(STA_abs(APU_STATUS))
              .Emit(RTS());
         return block;
     }
