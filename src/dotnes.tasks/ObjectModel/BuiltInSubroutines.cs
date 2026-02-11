@@ -1560,8 +1560,20 @@ internal static class BuiltInSubroutines
     {
         var block = new Block(nameof(NESLib.play_music));
 
+        // Check if music_ptr is NULL (both bytes zero = no music playing)
+        // Original C: if (music_ptr) { ... } else return
+        // After 0xFF end marker, ptr is set to NULL. We auto-restart.
+        block.Emit(LDA_zpg(MUSIC_PTR))
+             .Emit(ORA_zpg(MUSIC_PTR + 1))
+             .Emit(BNE("@check_duration"));   // if ptr != NULL, continue
+        // music_ptr is NULL → restart from saved start address
+        block.Emit(LDA_zpg(MUSIC_START))
+             .Emit(STA_zpg(MUSIC_PTR))
+             .Emit(LDA_zpg(MUSIC_START + 1))
+             .Emit(STA_zpg(MUSIC_PTR + 1));
+
         // Check if duration counter is non-zero → jump to decrement and return
-        block.Emit(LDA_zpg(MUSIC_DURATION))
+        block.Emit(LDA_zpg(MUSIC_DURATION), "@check_duration")
              .Emit(BEQ("@process_byte"));     // if duration == 0, enter inner loop
         block.Emit(JMP("@decrement"));        // otherwise jump to decrement (far)
 
@@ -1575,17 +1587,40 @@ internal static class BuiltInSubroutines
              .Emit(BNE("@no_carry"))
              .Emit(INC_zpg(MUSIC_PTR + 1));
 
-        // Check for end marker (0xFF)
-        block.Emit(CMP(0xFF), "@no_carry")
-             .Emit(BNE("@not_end"));          // not end → check duration marker
-        block.Emit(JMP("@restart"));           // end marker → restart (far)
+        // Test bit 7 first (duration/end marker check) before any CMP
+        // BMI tests N flag from LDA or INC; we need to re-test A
+        block.Emit(CMP(0x80), "@no_carry");  // sets C if A >= 0x80 (bit 7 set)
+        block.Emit(BCC("@is_note"));          // if A < 0x80, it's a note
 
-        // Check if this is a duration marker (bit 7 set → negative)
-        block.Emit(BMI("@set_duration"), "@not_end");
+        // Bit 7 is set: either duration marker or end marker (0xFF)
+        block.Emit(CMP(0xFF))
+             .Emit(BEQ("@end_marker"));       // if 0xFF, handle end
 
-        // --- It's a note byte ---
+        // --- Duration marker (0x80-0xFE) ---
+        block.Emit(AND(0x3F))                // duration = byte & 63
+             .Emit(STA_zpg(MUSIC_DURATION))
+             .Emit(LDA(0x00))
+             .Emit(STA_zpg(MUSIC_CHS));       // reset channel mask
+        // Fall through to @decrement (duration was just set, decrement it once)
+
+        // --- Decrement duration and return ---
+        block.Emit(DEC_zpg(MUSIC_DURATION), "@decrement")
+             .Emit(RTS());
+
+        // --- End marker (0xFF): set NULL pointer and duration 63 ---
+        // Original C: music_ptr = NULL; cur_duration = 0xFF & 63 = 63; chs = 0;
+        block.Emit(LDA(0x00), "@end_marker")
+             .Emit(STA_zpg(MUSIC_PTR))
+             .Emit(STA_zpg(MUSIC_PTR + 1))    // music_ptr = NULL
+             .Emit(LDA(0x3F))
+             .Emit(STA_zpg(MUSIC_DURATION))   // cur_duration = 63
+             .Emit(LDA(0x00))
+             .Emit(STA_zpg(MUSIC_CHS))
+             .Emit(JMP("@decrement"));        // decrement and return
+
+        // --- It's a note byte (bit 7 clear) ---
         // Save full note value, extract note index (bits 0-5)
-        block.Emit(STA_zpg(TEMP))            // TEMP = note
+        block.Emit(STA_zpg(TEMP), "@is_note") // TEMP = note
              .Emit(AND(0x3F))                 // A = noteIndex (note & 63)
              .Emit(TAY());                    // Y = noteIndex for table lookups
 
@@ -1600,12 +1635,18 @@ internal static class BuiltInSubroutines
              .Emit(BNE("@pulse_note"));       // if triangle busy, use pulse
 
         // --- Play on triangle channel ---
-        block.Emit(LDA_abs_Y("note_table_tri_lo"))  // period low byte
+        // APU_TRIANGLE_LENGTH(period, 15):
+        //   $4008 = 0x7F (counter=127, no halt)
+        //   $400A = period & 0xFF
+        //   $400B = ((period>>8)&7) | (15<<3) = period_hi | 0x78
+        block.Emit(LDA(0x7F))                // linear counter = 127, no halt
+             .Emit(STA_abs(APU_TRIANGLE_CTRL))
+             .Emit(LDA_abs_Y("note_table_tri_lo"))  // period low byte
              .Emit(STA_abs(APU_TRIANGLE_TIMER_LO))
              .Emit(LDA_abs_Y("note_table_tri_hi"))  // period high byte
-             .Emit(STA_abs(APU_TRIANGLE_TIMER_HI))
-             .Emit(LDA(0x8F))                // linear counter = 15, control flag set
-             .Emit(STA_abs(APU_TRIANGLE_CTRL));
+             .Emit(AND(0x07))                 // keep timer high 3 bits
+             .Emit(ORA(0x78))                 // length counter = 15 (15 << 3)
+             .Emit(STA_abs(APU_TRIANGLE_TIMER_HI));
 
         // chs |= 4
         block.Emit(LDA_zpg(MUSIC_CHS))
@@ -1620,19 +1661,18 @@ internal static class BuiltInSubroutines
              .Emit(BNE("@try_pulse2"));       // if pulse 1 busy, try pulse 2
 
         // --- Pulse 1 ---
-        // APU_PULSE_DECAY(0, period, DUTY_25, 2, 10)
-        // $4000 = (duty << 6) | decay_rate = (1 << 6) | 2 = 0x42
-        // $4001 = 0x00 (no sweep)
-        // $4002 = period_lo
-        // $4003 = ((length & 0x1F) << 3) | (period_hi & 0x07) = (10 << 3) | period_hi = 0x50 | period_hi
-        block.Emit(LDA(0x42))                // duty=25%, envelope mode, rate=2
-             .Emit(STA_abs(APU_PULSE1_CTRL))
-             .Emit(LDA_abs_Y("note_table_49_lo"))
+        // APU_PULSE_DECAY(0, period, DUTY_25, 2, 10):
+        //   $4002 = period & 0xFF
+        //   $4003 = ((period>>8)&7) | (10<<3) = period_hi | 0x50
+        //   $4000 = DUTY_25 | 2 = 0x42
+        block.Emit(LDA_abs_Y("note_table_49_lo"))
              .Emit(STA_abs(APU_PULSE1_TIMER_LO))
              .Emit(LDA_abs_Y("note_table_49_hi"))
              .Emit(AND(0x07))                 // keep timer high 3 bits
              .Emit(ORA(0x50))                 // length counter = 10 (10 << 3)
-             .Emit(STA_abs(APU_PULSE1_TIMER_HI));
+             .Emit(STA_abs(APU_PULSE1_TIMER_HI))
+             .Emit(LDA(0x42))                // duty=25%, envelope mode, rate=2
+             .Emit(STA_abs(APU_PULSE1_CTRL));
 
         // chs |= 1
         block.Emit(LDA_zpg(MUSIC_CHS))
@@ -1643,40 +1683,23 @@ internal static class BuiltInSubroutines
         // --- Pulse 2 ---
         block.Emit(LDA_zpg(MUSIC_CHS), "@try_pulse2")
              .Emit(AND(0x02))                 // chs & 2
-             .Emit(BNE("@process_byte"));     // both busy, skip note
+             .Emit(BEQ("@play_pulse2"));      // if pulse 2 free, play note
+        block.Emit(JMP("@process_byte"));     // both busy, skip note (far)
 
         // APU_PULSE_DECAY(1, period, DUTY_25, 2, 10)
-        block.Emit(LDA(0x42))
-             .Emit(STA_abs(APU_PULSE2_CTRL))
-             .Emit(LDA_abs_Y("note_table_49_lo"))
+        block.Emit(LDA_abs_Y("note_table_49_lo"), "@play_pulse2")
              .Emit(STA_abs(APU_PULSE2_TIMER_LO))
              .Emit(LDA_abs_Y("note_table_49_hi"))
              .Emit(AND(0x07))
              .Emit(ORA(0x50))
-             .Emit(STA_abs(APU_PULSE2_TIMER_HI));
+             .Emit(STA_abs(APU_PULSE2_TIMER_HI))
+             .Emit(LDA(0x42))
+             .Emit(STA_abs(APU_PULSE2_CTRL));
 
         // chs |= 2
         block.Emit(LDA_zpg(MUSIC_CHS))
              .Emit(ORA(0x02))
              .Emit(STA_zpg(MUSIC_CHS))
-             .Emit(JMP("@process_byte"));
-
-        // --- Duration marker (bit 7 set, not 0xFF) ---
-        block.Emit(AND(0x3F), "@set_duration") // duration = byte & 63
-             .Emit(STA_zpg(MUSIC_DURATION))
-             .Emit(LDA(0x00))
-             .Emit(STA_zpg(MUSIC_CHS));       // reset channel mask
-        // Fall through to @decrement (duration was just set, decrement it once)
-
-        // --- Decrement duration and return ---
-        block.Emit(DEC_zpg(MUSIC_DURATION), "@decrement")
-             .Emit(RTS());
-
-        // --- Restart: loop music from beginning ---
-        block.Emit(LDA_zpg(MUSIC_START), "@restart")
-             .Emit(STA_zpg(MUSIC_PTR))
-             .Emit(LDA_zpg(MUSIC_START + 1))
-             .Emit(STA_zpg(MUSIC_PTR + 1))
              .Emit(JMP("@process_byte"));
 
         return block;
