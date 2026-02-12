@@ -2,10 +2,6 @@
 // A simple music player.
 // Based on https://github.com/sehugg/8bitworkshop/blob/master/presets/nes/music.c
 //
-// Note tables and playback routines are implemented as built-in 6502
-// subroutines since dotnes does not yet support user-defined methods,
-// array indexing, or bitwise operations.
-//
 
 //
 // NOTE TABLES
@@ -21,6 +17,7 @@ ushort[] note_table_49 = [
      268,  253,  239,  225,  213,  201,  189,  179,  168,  159,  150,  142,
      134,  126,  119,  112,
 ];
+set_music_pulse_table(note_table_49);
 
 // Namespace(bias=-1.0, freq=55930.4, length=64, maxbits=12, upper=53)
 // 443.7 8.47550713772 53
@@ -32,9 +29,7 @@ ushort[] note_table_tri = [
      135,  127,  120,  113,  107,  101,   95,   90,   85,   80,   76,   72,
       68,   64,   60,   57,
 ];
-
-// #define NOTE_TABLE note_table_49
-// #define BASS_NOTE 36
+set_music_triangle_table(note_table_tri);
 
 //
 // MUSIC DATA -- "The Easy Winners" by Scott Joplin

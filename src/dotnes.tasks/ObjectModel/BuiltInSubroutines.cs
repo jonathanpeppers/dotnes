@@ -1650,9 +1650,9 @@ internal static class BuiltInSubroutines
         //   $400B = ((period>>8)&7) | (15<<3) = period_hi | 0x78
         block.Emit(LDA(0x7F))                // linear counter = 127, no halt
              .Emit(STA_abs(APU_TRIANGLE_CTRL))
-             .Emit(LDA_abs_Y("note_table_tri_lo"))  // period low byte
+             .Emit(LDA_abs_Y("note_table_triangle_lo"))  // period low byte
              .Emit(STA_abs(APU_TRIANGLE_TIMER_LO))
-             .Emit(LDA_abs_Y("note_table_tri_hi"))  // period high byte
+             .Emit(LDA_abs_Y("note_table_triangle_hi"))  // period high byte
              .Emit(AND(0x07))                 // keep timer high 3 bits
              .Emit(ORA(0x78))                 // length counter = 15 (15 << 3)
              .Emit(STA_abs(APU_TRIANGLE_TIMER_HI));
@@ -1674,9 +1674,9 @@ internal static class BuiltInSubroutines
         //   $4002 = period & 0xFF
         //   $4003 = ((period>>8)&7) | (10<<3) = period_hi | 0x50
         //   $4000 = DUTY_25 | 2 = 0x42
-        block.Emit(LDA_abs_Y("note_table_49_lo"))
+        block.Emit(LDA_abs_Y("note_table_pulse_lo"))
              .Emit(STA_abs(APU_PULSE1_TIMER_LO))
-             .Emit(LDA_abs_Y("note_table_49_hi"))
+             .Emit(LDA_abs_Y("note_table_pulse_hi"))
              .Emit(AND(0x07))                 // keep timer high 3 bits
              .Emit(ORA(0x50))                 // length counter = 10 (10 << 3)
              .Emit(STA_abs(APU_PULSE1_TIMER_HI))
@@ -1696,9 +1696,9 @@ internal static class BuiltInSubroutines
         block.Emit(JMP("@process_byte"));     // both busy, skip note (far)
 
         // APU_PULSE_DECAY(1, period, DUTY_25, 2, 10)
-        block.Emit(LDA_abs_Y("note_table_49_lo"), "@play_pulse2")
+        block.Emit(LDA_abs_Y("note_table_pulse_lo"), "@play_pulse2")
              .Emit(STA_abs(APU_PULSE2_TIMER_LO))
-             .Emit(LDA_abs_Y("note_table_49_hi"))
+             .Emit(LDA_abs_Y("note_table_pulse_hi"))
              .Emit(AND(0x07))
              .Emit(ORA(0x50))
              .Emit(STA_abs(APU_PULSE2_TIMER_HI))

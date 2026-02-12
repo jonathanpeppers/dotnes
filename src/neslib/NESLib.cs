@@ -88,6 +88,16 @@ public static class NESLib
     public static void play_music() => throw null!;
 
     /// <summary>
+    /// register a ushort[] note table for pulse channel playback
+    /// </summary>
+    public static void set_music_pulse_table(ushort[] table) => throw null!;
+
+    /// <summary>
+    /// register a ushort[] note table for triangle channel playback
+    /// </summary>
+    public static void set_music_triangle_table(ushort[] table) => throw null!;
+
+    /// <summary>
     /// play sound effect
     /// </summary>
     public static void sfx_play(byte sound, byte channel) => throw null!;

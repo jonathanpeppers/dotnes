@@ -189,19 +189,11 @@ class Transpiler : IDisposable
         // Get local count from writer
         locals = checked((byte)writer.LocalCount);
 
-        // Split ushort[] arrays (e.g. note tables) into lo/hi byte tables
-        // Convention: first ushort[] = pulse note table, second = triangle note table
-        // This ordering is reliable because C# top-level statements preserve local
-        // declaration order in the generated IL, and the play_music built-in expects
-        // these specific label names for its note table lookups.
-        string[][] noteTableLabels = [
-            ["note_table_49_lo", "note_table_49_hi"],
-            ["note_table_tri_lo", "note_table_tri_hi"],
-        ];
+        // Split named ushort[] arrays (note tables) into lo/hi byte tables
         var noteTableData = new List<(string label, byte[] data)>();
-        for (int i = 0; i < writer.UShortArrays.Count; i++)
+        foreach (var kvp in writer.UShortArrays)
         {
-            var rawBytes = writer.UShortArrays[i];
+            var rawBytes = kvp.Value;
             int count = rawBytes.Length / 2; // 2 bytes per ushort (little-endian)
             var lo = new byte[count];
             var hi = new byte[count];
@@ -210,11 +202,8 @@ class Transpiler : IDisposable
                 lo[j] = rawBytes[j * 2];       // low byte
                 hi[j] = rawBytes[j * 2 + 1];   // high byte
             }
-            if (i < noteTableLabels.Length)
-            {
-                noteTableData.Add((noteTableLabels[i][0], lo));
-                noteTableData.Add((noteTableLabels[i][1], hi));
-            }
+            noteTableData.Add(($"{kvp.Key}_lo", lo));
+            noteTableData.Add(($"{kvp.Key}_hi", hi));
         }
 
         // Calculate byte array table size

@@ -29,16 +29,17 @@ class IL2NESWriter : NESWriter
     public IReadOnlyList<ImmutableArray<byte>> ByteArrays => _byteArrays;
     readonly List<ImmutableArray<byte>> _byteArrays = new();
     /// <summary>
-    /// List of ushort[] data extracted from the IL (note tables, etc.)
-    /// Each entry is the raw bytes of a ushort[] array (2 bytes per element, little-endian).
+    /// Named ushort[] data extracted from the IL (note tables, etc.)
+    /// Key is the label prefix (e.g. "note_table_pulse"), value is raw bytes (2 bytes per ushort, LE).
     /// </summary>
-    public IReadOnlyList<ImmutableArray<byte>> UShortArrays => _ushortArrays;
-    readonly List<ImmutableArray<byte>> _ushortArrays = new();
+    public IReadOnlyDictionary<string, ImmutableArray<byte>> UShortArrays => _ushortArrays;
+    readonly Dictionary<string, ImmutableArray<byte>> _ushortArrays = new();
     readonly ushort local = 0x325;
     readonly ushort tempVar = 0x327; // Temp variable for pad_poll result storage
     readonly ReflectionCache _reflectionCache = new();
     ILOpCode previous;
     string? _pendingArrayType;
+    ImmutableArray<byte>? _pendingUShortArray;
     
     /// <summary>
     /// Tracks if pad_poll was called and the result is available in A or tempVar.
@@ -564,6 +565,19 @@ class IL2NESWriter : NESWriter
                             _immediateInA = null;
                         }
                         break;
+                    case nameof(NESLib.set_music_pulse_table):
+                    case nameof(NESLib.set_music_triangle_table):
+                        // Store the pending ushort[] with the appropriate label
+                        if (_pendingUShortArray != null)
+                        {
+                            string label = operand == nameof(NESLib.set_music_pulse_table)
+                                ? "note_table_pulse"
+                                : "note_table_triangle";
+                            _ushortArrays[label] = _pendingUShortArray.Value;
+                            _pendingUShortArray = null;
+                        }
+                        // These are transpiler-only directives; no 6502 code emitted
+                        break;
                     default:
                         if (_needsByteArrayLoadInCall && _lastByteArrayLabel != null 
                             && previous != ILOpCode.Ldtoken)
@@ -628,7 +642,7 @@ class IL2NESWriter : NESWriter
                 // Non-byte arrays (e.g. ushort[]) are collected separately and not emitted as code
                 if (_pendingArrayType != null && _pendingArrayType != "Byte")
                 {
-                    _ushortArrays.Add(operand);
+                    _pendingUShortArray = operand;
                     _pendingArrayType = null;
                     break;
                 }
