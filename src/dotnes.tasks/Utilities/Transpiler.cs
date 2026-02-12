@@ -191,6 +191,9 @@ class Transpiler : IDisposable
 
         // Split ushort[] arrays (e.g. note tables) into lo/hi byte tables
         // Convention: first ushort[] = pulse note table, second = triangle note table
+        // This ordering is reliable because C# top-level statements preserve local
+        // declaration order in the generated IL, and the play_music built-in expects
+        // these specific label names for its note table lookups.
         string[][] noteTableLabels = [
             ["note_table_49_lo", "note_table_49_hi"],
             ["note_table_tri_lo", "note_table_tri_hi"],
