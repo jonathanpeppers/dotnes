@@ -2,28 +2,28 @@
 A simple music player.
 Paste into https://8bitworkshop.com (NES platform) to compile.
 Based on https://github.com/sehugg/8bitworkshop/blob/master/presets/nes/music.c
+with apu.h/apu.c inlined.
 */
 
+#include <string.h>
 #include "neslib.h"
 
 typedef unsigned char byte;
 
-//
-// MUSIC ROUTINES
-//
+// --- Note tables ---
 
 // Namespace(bias=1.0, freq=111860.8, length=64, maxbits=13, upper=49)
-// 440.5 1.79281159771 49
 const int note_table_49[64] = {
 4304, 4062, 3834, 3619, 3416, 3224, 3043, 2872, 2711, 2559, 2415, 2279, 2151, 2031, 1917, 1809, 1707, 1611, 1521, 1436, 1355, 1279, 1207, 1139, 1075, 1015, 958, 904, 853, 805, 760, 717, 677, 639, 603, 569, 537, 507, 478, 451, 426, 402, 379, 358, 338, 319, 301, 284, 268, 253, 239, 225, 213, 201, 189, 179, 168, 159, 150, 142, 134, 126, 119, 112, };
 
 // Namespace(bias=-1.0, freq=55930.4, length=64, maxbits=12, upper=53)
-// 443.7 8.47550713772 53
 const int note_table_tri[64] = {
 2138, 2018, 1905, 1798, 1697, 1602, 1512, 1427, 1347, 1272, 1200, 1133, 1069, 1009, 953, 899, 849, 801, 756, 714, 674, 636, 601, 567, 535, 505, 477, 450, 425, 401, 379, 358, 338, 319, 301, 284, 268, 253, 239, 226, 213, 201, 190, 179, 169, 160, 151, 142, 135, 127, 120, 113, 107, 101, 95, 90, 85, 80, 76, 72, 68, 64, 60, 57, };
 
 #define NOTE_TABLE note_table_49
 #define BASS_NOTE 36
+
+// --- Music player ---
 
 byte cur_duration = 0;
 
@@ -39,11 +39,13 @@ void play_music() {
         if (note >= BASS_NOTE || (chs & 4)) {
           int period = NOTE_TABLE[note & 63];
           if (!(chs & 1)) {
+            // APU_PULSE_DECAY(0, period, DUTY_25, 2, 10)
             *(byte*)0x4002 = period & 0xff;
             *(byte*)0x4003 = ((period) >> 8) | (10 << 3);
             *(byte*)0x4000 = 0x42;
             chs |= 1;
           } else if (!(chs & 2)) {
+            // APU_PULSE_DECAY(1, period, DUTY_25, 2, 10)
             *(byte*)0x4006 = period & 0xff;
             *(byte*)0x4007 = ((period) >> 8) | (10 << 3);
             *(byte*)0x4004 = 0x42;
@@ -51,6 +53,7 @@ void play_music() {
           }
         } else {
           int period = note_table_tri[note & 63];
+          // APU_TRIANGLE_LENGTH(period, 15)
           *(byte*)0x4008 = 0x7f;
           *(byte*)0x400A = period & 0xff;
           *(byte*)0x400B = ((period) >> 8) | (15 << 3);
@@ -74,38 +77,14 @@ void start_music(const byte* music) {
 
 void main(void)
 {
-  // apu_init: initialize APU registers
-  // pulse 1
-  *(byte*)0x4000 = 0x30;
-  *(byte*)0x4001 = 0x08;
-  *(byte*)0x4002 = 0x00;
-  *(byte*)0x4003 = 0x00;
-  // pulse 2
-  *(byte*)0x4004 = 0x30;
-  *(byte*)0x4005 = 0x08;
-  *(byte*)0x4006 = 0x00;
-  *(byte*)0x4007 = 0x00;
-  // triangle
-  *(byte*)0x4008 = 0x80;
-  *(byte*)0x4009 = 0x00;
-  *(byte*)0x400A = 0x00;
-  *(byte*)0x400B = 0x00;
-  // noise
-  *(byte*)0x400C = 0x30;
-  *(byte*)0x400D = 0x00;
-  *(byte*)0x400E = 0x00;
-  *(byte*)0x400F = 0x00;
-  // DMC
-  *(byte*)0x4010 = 0x00;
-  *(byte*)0x4011 = 0x00;
-  *(byte*)0x4012 = 0x00;
-  // disable frame counter IRQ
+  // apu_init() inlined
+  memcpy((void*)0x4000, "\x30\x08\x00\x00\x30\x08\x00\x00\x80\x00\x00\x00\x30\x00\x00\x00\x00\x00\x00", 19);
   *(byte*)0x4017 = 0x40;
-  // enable all channels
   *(byte*)0x4015 = 0x0F;
-  music_ptr = 0;
+
+  start_music(music1);
+
   while (1) {
-    if (!music_ptr) start_music(music1);
     ppu_wait_nmi();
     play_music();
   }
