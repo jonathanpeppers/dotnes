@@ -28,10 +28,17 @@ class IL2NESWriter : NESWriter
     /// </summary>
     public IReadOnlyList<ImmutableArray<byte>> ByteArrays => _byteArrays;
     readonly List<ImmutableArray<byte>> _byteArrays = new();
+    /// <summary>
+    /// List of ushort[] data extracted from the IL (note tables, etc.)
+    /// Each entry is the raw bytes of a ushort[] array (2 bytes per element, little-endian).
+    /// </summary>
+    public IReadOnlyList<ImmutableArray<byte>> UShortArrays => _ushortArrays;
+    readonly List<ImmutableArray<byte>> _ushortArrays = new();
     readonly ushort local = 0x325;
     readonly ushort tempVar = 0x327; // Temp variable for pad_poll result storage
     readonly ReflectionCache _reflectionCache = new();
     ILOpCode previous;
+    string? _pendingArrayType;
     
     /// <summary>
     /// Tracks if pad_poll was called and the result is available in A or tempVar.
@@ -391,10 +398,18 @@ class IL2NESWriter : NESWriter
                 }
                 break;
             case ILOpCode.Newarr:
-                if (previous == ILOpCode.Ldc_i4_s)
+                if (previous == ILOpCode.Ldc_i4_s || previous == ILOpCode.Ldc_i4)
                 {
                     // Remove the previous LDA instruction (1 instruction = 2 bytes)
                     RemoveLastInstructions(1);
+                }
+                // Track the array element type so the next Ldtoken can handle non-byte arrays
+                _pendingArrayType = instruction.String;
+                if (_pendingArrayType != null && _pendingArrayType != "Byte")
+                {
+                    // Non-byte array: pop the array size that Ldc pushed
+                    if (Stack.Count > 0)
+                        Stack.Pop();
                 }
                 break;
             case ILOpCode.Stloc_s:
@@ -610,6 +625,15 @@ class IL2NESWriter : NESWriter
         switch (instruction.OpCode)
         {
             case ILOpCode.Ldtoken:
+                // Non-byte arrays (e.g. ushort[]) are collected separately and not emitted as code
+                if (_pendingArrayType != null && _pendingArrayType != "Byte")
+                {
+                    _ushortArrays.Add(operand);
+                    _pendingArrayType = null;
+                    break;
+                }
+                _pendingArrayType = null;
+
                 // Use labels for byte arrays (resolved during address resolution)
                 string byteArrayLabel = $"bytearray_{_byteArrayLabelIndex}";
                 _byteArrayLabelIndex++;

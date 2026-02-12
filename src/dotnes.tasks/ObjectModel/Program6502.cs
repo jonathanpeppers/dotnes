@@ -536,10 +536,6 @@ public class Program6502
             if (usedMethods.Contains("play_music"))
             {
                 size += BuiltInSubroutines.PlayMusic().ByteSize;
-                size += BuiltInSubroutines.NoteTable49Lo().ByteSize;
-                size += BuiltInSubroutines.NoteTable49Hi().ByteSize;
-                size += BuiltInSubroutines.NoteTableTriLo().ByteSize;
-                size += BuiltInSubroutines.NoteTableTriHi().ByteSize;
             }
         }
         return size;
@@ -589,10 +585,6 @@ public class Program6502
             if (usedMethods.Contains("play_music"))
             {
                 AddBlock(BuiltInSubroutines.PlayMusic());
-                AddBlock(BuiltInSubroutines.NoteTable49Lo());
-                AddBlock(BuiltInSubroutines.NoteTable49Hi());
-                AddBlock(BuiltInSubroutines.NoteTableTriLo());
-                AddBlock(BuiltInSubroutines.NoteTableTriHi());
             }
         }
     }

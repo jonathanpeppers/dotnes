@@ -189,11 +189,42 @@ class Transpiler : IDisposable
         // Get local count from writer
         locals = checked((byte)writer.LocalCount);
 
+        // Split ushort[] arrays (e.g. note tables) into lo/hi byte tables
+        // Convention: first ushort[] = pulse note table, second = triangle note table
+        string[][] noteTableLabels = [
+            ["note_table_49_lo", "note_table_49_hi"],
+            ["note_table_tri_lo", "note_table_tri_hi"],
+        ];
+        var noteTableData = new List<(string label, byte[] data)>();
+        for (int i = 0; i < writer.UShortArrays.Count; i++)
+        {
+            var rawBytes = writer.UShortArrays[i];
+            int count = rawBytes.Length / 2; // 2 bytes per ushort (little-endian)
+            var lo = new byte[count];
+            var hi = new byte[count];
+            for (int j = 0; j < count; j++)
+            {
+                lo[j] = rawBytes[j * 2];       // low byte
+                hi[j] = rawBytes[j * 2 + 1];   // high byte
+            }
+            if (i < noteTableLabels.Length)
+            {
+                noteTableData.Add((noteTableLabels[i][0], lo));
+                noteTableData.Add((noteTableLabels[i][1], hi));
+            }
+        }
+
         // Calculate byte array table size
         int byteArrayTableSize = 0;
         foreach (var bytes in writer.ByteArrays)
         {
             byteArrayTableSize += bytes.ToArray().Length;
+        }
+
+        // Add note table sizes to the data table size
+        foreach (var (_, data) in noteTableData)
+        {
+            byteArrayTableSize += data.Length;
         }
         
         // Calculate string table size  
@@ -237,6 +268,12 @@ class Transpiler : IDisposable
             string label = $"bytearray_{byteArrayIndex}";
             program.AddProgramData(bytes.ToArray(), label);
             byteArrayIndex++;
+        }
+
+        // Add note table lo/hi data blocks (from ushort[] arrays)
+        foreach (var (label, data) in noteTableData)
+        {
+            program.AddProgramData(data, label);
         }
         
         // Add string table
