@@ -116,6 +116,46 @@ while (true)
 
 For more details, see [docs/music-sample.md](docs/music-sample.md).
 
+## Metasprites
+
+The `samples/metasprites` project demonstrates runtime arrays, for loops, random
+numbers, and metasprites — combining multiple hardware sprites into larger
+sprites:
+
+```csharp
+byte[] metasprite = [
+    0, 0, 0xD8, 0,   // top-left
+    0, 8, 0xD9, 0,   // bottom-left
+    8, 0, 0xDA, 0,   // top-right
+    8, 8, 0xDB, 0,   // bottom-right
+    128               // terminator
+];
+
+byte[] actor_x = new byte[16];
+byte[] actor_y = new byte[16];
+
+byte i = 0;
+while (i < 16)
+{
+    actor_x[i] = rand8();
+    actor_y[i] = rand8();
+    i = (byte)(i + 1);
+}
+
+while (true)
+{
+    byte oam_id = 0;
+    i = 0;
+    while (i < 16)
+    {
+        oam_id = oam_meta_spr(actor_x[i], actor_y[i], oam_id, metasprite);
+        i = (byte)(i + 1);
+    }
+    if (oam_id != 0) oam_hide_rest(oam_id);
+    ppu_wait_frame();
+}
+```
+
 ## Scope
 
 The types of things I wanted to get working initially:
@@ -128,6 +168,7 @@ The types of things I wanted to get working initially:
 * Local variables work in some form
 * Project template, MSBuild support, IDE support
 * Music playback via the NES APU (see `samples/music`)
+* Metasprites, for loops, runtime arrays, and `rand8()` (see `samples/metasprites`)
 
 Down the road, I might think about support for:
 
