@@ -361,8 +361,25 @@ class IL2NESWriter : NESWriter
                     int mask = Stack.Pop();
                     int value = Stack.Count > 0 ? Stack.Pop() : 0;
 
+                    // Check if the value came from a local variable load (runtime value)
+                    // IL pattern: ldloc.s N, ldc.i4.X, and
+                    bool localInA = false;
+                    if (Instructions != null && Index >= 2)
+                    {
+                        var prevPrev = Instructions[Index - 2].OpCode;
+                        if (prevPrev is ILOpCode.Ldloc_s or ILOpCode.Ldloc_0 or ILOpCode.Ldloc_1
+                            or ILOpCode.Ldloc_2 or ILOpCode.Ldloc_3)
+                        {
+                            var locIdx = GetLdlocIndex(Instructions[Index - 2]);
+                            if (locIdx != null && Locals.TryGetValue(locIdx.Value, out var loc) && loc.Address != null)
+                            {
+                                localInA = true;
+                            }
+                        }
+                    }
+
                     // Emit runtime AND if A has a runtime value
-                    if (_padPollResultAvailable || _runtimeValueInA)
+                    if (_padPollResultAvailable || _runtimeValueInA || localInA)
                     {
                         // Remove the LDA #mask that was emitted by Ldc_i4*
                         // Only remove if WriteLdc actually emitted LDA (not skipped due to _runtimeValueInA)
