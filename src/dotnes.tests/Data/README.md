@@ -12,6 +12,9 @@
 
 * `attributetable`: `samples/attributetable` in repo
 * `hello`: `samples/hello` in repo
+* `flicker`: `samples/flicker` in repo — flicker demo with 24 actors and sprite cycling
+* `metasprites`: `samples/metasprites` in repo — metasprite rendering demo
+* `music`: `samples/music` in repo — APU music playback demo
 
 ## `onelocal`
 

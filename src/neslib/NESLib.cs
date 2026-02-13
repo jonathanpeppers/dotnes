@@ -143,9 +143,11 @@ public static class NESLib
     public static void oam_clear_fast() => throw null!;
 
     /// <summary>
-    /// set metasprite in OAM buffer with palette
+    /// set metasprite in OAM buffer with palette override
+    /// palette bits (0-3) are OR'd into each sprite's attribute byte
     /// </summary>
-    public static void oam_meta_spr_pal(byte x, byte y, byte pal, byte[] metasprite) => throw null!;
+    /// <returns>returns sprid+N, which is offset for next sprite</returns>
+    public static byte oam_meta_spr_pal(byte x, byte y, byte pal, byte sprid, byte[] data) => throw null!;
 
     /// <summary>
     /// set metasprite in OAM buffer with clipping

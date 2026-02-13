@@ -668,6 +668,9 @@ class IL2NESWriter : NESWriter
                     case nameof(NESLib.oam_meta_spr):
                         EmitOamMetaSpr();
                         break;
+                    case nameof(NESLib.oam_meta_spr_pal):
+                        EmitOamMetaSprPal();
+                        break;
                     case nameof(NESLib.set_music_pulse_table):
                     case nameof(NESLib.set_music_triangle_table):
                         // Store the pending ushort[] with the appropriate label
@@ -1437,7 +1440,165 @@ class IL2NESWriter : NESWriter
     }
 
     /// <summary>
-    /// Checks if a Ldc instruction at the given index is consumed by a following Add/Sub
+    /// Emits oam_meta_spr_pal call with proper argument setup.
+    /// IL pattern: ldloc(arr_x), ldloc_s(i), ldelem_u1, ldloc(arr_y), ldloc_s(i), ldelem_u1,
+    ///             ldloc_s(pal), ldloc_s(sprid), ldloc(metasprite), call oam_meta_spr_pal
+    /// 
+    /// Sets up: TEMP = x, TEMP2 = y, TEMP3 = pal, PTR = data pointer, A = sprid
+    /// </summary>
+    void EmitOamMetaSprPal()
+    {
+        if (Instructions is null)
+            throw new InvalidOperationException("EmitOamMetaSprPal requires Instructions");
+
+        int? xArrayIdx = null, yArrayIdx = null, indexIdx = null, spridIdx = null, palIdx = null;
+        string? dataLabel = null;
+        int firstArgILOffset = -1;
+
+        int scan = Index - 1;
+
+        // Find data source (should be a local with LabelName)
+        if (scan >= 0)
+        {
+            var dataInstr = Instructions[scan];
+            var dataLocIdx = GetLdlocIndex(dataInstr);
+            if (dataLocIdx != null && Locals.TryGetValue(dataLocIdx.Value, out var dataLocal) && dataLocal.LabelName != null)
+            {
+                dataLabel = dataLocal.LabelName;
+                scan--;
+            }
+        }
+
+        // Find sprid source
+        if (scan >= 0)
+        {
+            var spridInstr = Instructions[scan];
+            var spridLocIdx = GetLdlocIndex(spridInstr);
+            if (spridLocIdx != null && Locals.TryGetValue(spridLocIdx.Value, out var spridLocal) && spridLocal.Address != null)
+            {
+                spridIdx = spridLocIdx.Value;
+                scan--;
+            }
+        }
+
+        // Find pal source
+        if (scan >= 0)
+        {
+            var palInstr = Instructions[scan];
+            // pal might be preceded by AND #3 and Conv_u1 — skip those
+            // The IL for (byte)(i & 3) is: ldloc_s(i), ldc.i4.3, and, conv.u1
+            // Or it might just be ldloc_s(pal)
+            var palLocIdx = GetLdlocIndex(palInstr);
+            if (palLocIdx != null && Locals.TryGetValue(palLocIdx.Value, out var palLocal) && palLocal.Address != null)
+            {
+                palIdx = palLocIdx.Value;
+                scan--;
+            }
+        }
+
+        // Find y source (ldelem_u1 preceded by ldloc(arr) + ldloc(idx))
+        if (scan >= 0 && Instructions[scan].OpCode == ILOpCode.Ldelem_u1)
+        {
+            scan--;
+            if (scan >= 0)
+            {
+                var yIdxInstr = Instructions[scan];
+                indexIdx = GetLdlocIndex(yIdxInstr);
+                scan--;
+            }
+            if (scan >= 0)
+            {
+                var yArrInstr = Instructions[scan];
+                yArrayIdx = GetLdlocIndex(yArrInstr);
+                scan--;
+            }
+        }
+
+        // Find x source (ldelem_u1 preceded by ldloc(arr) + ldloc(idx))
+        if (scan >= 0 && Instructions[scan].OpCode == ILOpCode.Ldelem_u1)
+        {
+            scan--;
+            scan--;
+            if (scan >= 0)
+            {
+                var xArrInstr = Instructions[scan];
+                xArrayIdx = GetLdlocIndex(xArrInstr);
+                firstArgILOffset = xArrInstr.Offset;
+            }
+        }
+
+        // Remove all previously emitted instructions for these arguments
+        if (firstArgILOffset >= 0 && _blockCountAtILOffset.TryGetValue(firstArgILOffset, out int blockCount))
+        {
+            int instrToRemove = GetBufferedBlockCount() - blockCount;
+            if (instrToRemove > 0)
+            {
+                RemoveLastInstructions(instrToRemove);
+            }
+        }
+
+        // 1. Load x coordinate into TEMP
+        if (xArrayIdx != null && indexIdx != null)
+        {
+            var xArr = Locals[xArrayIdx.Value];
+            var idx = Locals[indexIdx.Value];
+            if (idx.Address != null)
+            {
+                Emit(Opcode.LDX, AddressMode.Absolute, (ushort)idx.Address);
+            }
+            if (xArr.ArraySize > 0 && xArr.Address != null)
+            {
+                Emit(Opcode.LDA, AddressMode.AbsoluteX, (ushort)xArr.Address);
+            }
+            Emit(Opcode.STA, AddressMode.ZeroPage, (byte)NESConstants.TEMP);
+        }
+
+        // 2. Load y coordinate into TEMP2
+        if (yArrayIdx != null && indexIdx != null)
+        {
+            var yArr = Locals[yArrayIdx.Value];
+            if (yArr.ArraySize > 0 && yArr.Address != null)
+            {
+                Emit(Opcode.LDA, AddressMode.AbsoluteX, (ushort)yArr.Address);
+            }
+            Emit(Opcode.STA, AddressMode.ZeroPage, (byte)NESConstants.TEMP2);
+        }
+
+        // 3. Load palette into TEMP3
+        if (palIdx != null)
+        {
+            var palLocal = Locals[palIdx.Value];
+            if (palLocal.Address != null)
+            {
+                Emit(Opcode.LDA, AddressMode.Absolute, (ushort)palLocal.Address);
+            }
+            Emit(Opcode.STA, AddressMode.ZeroPage, (byte)NESConstants.TEMP3);
+        }
+
+        // 4. Load data pointer into PTR
+        if (dataLabel != null)
+        {
+            EmitWithLabel(Opcode.LDA, AddressMode.Immediate_LowByte, dataLabel);
+            Emit(Opcode.STA, AddressMode.ZeroPage, (byte)NESConstants.ptr1);
+            EmitWithLabel(Opcode.LDA, AddressMode.Immediate_HighByte, dataLabel);
+            Emit(Opcode.STA, AddressMode.ZeroPage, (byte)(NESConstants.ptr1 + 1));
+        }
+
+        // 5. Load sprid into A
+        if (spridIdx != null)
+        {
+            var spridLocal = Locals[spridIdx.Value];
+            if (spridLocal.Address != null)
+            {
+                Emit(Opcode.LDA, AddressMode.Absolute, (ushort)spridLocal.Address);
+            }
+        }
+
+        // 6. Call oam_meta_spr_pal
+        EmitWithLabel(Opcode.JSR, AddressMode.Absolute, nameof(NESLib.oam_meta_spr_pal));
+        _immediateInA = null;
+        _runtimeValueInA = true; // Return value in A
+    }
     /// (making it part of a compound expression like Ldloc + Ldc + Add).
     /// </summary>
     bool IsConsumedByAdd(int idx)

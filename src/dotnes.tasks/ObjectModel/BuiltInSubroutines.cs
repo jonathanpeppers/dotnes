@@ -621,7 +621,45 @@ internal static class BuiltInSubroutines
     }
 
     /// <summary>
-    /// _oam_spr - Add a sprite to OAM
+    /// _oam_meta_spr_pal - Set metasprite in OAM buffer with palette override
+    /// Same as oam_meta_spr, but OR's TEMP3 ($1A) into each sprite's attribute byte.
+    /// Entry: A = sprid, TEMP = x, TEMP2 = y, PTR ($2A) = data pointer, TEMP3 = palette
+    /// Returns: A = updated sprid
+    /// </summary>
+    public static Block OamMetaSprPal()
+    {
+        var block = new Block(nameof(NESLib.oam_meta_spr_pal));
+        block.Emit(TAX())
+             .Emit(LDY(0x00))
+             .Emit(LDA_ind_Y(ptr1), "@loop")  // x offset
+             .Emit(CMP(0x80))
+             .Emit(BEQ("@done"))
+             .Emit(CLC())
+             .Emit(ADC_zpg(TEMP))              // add sprite X
+             .Emit(STA_abs_X(OAM_BUF + 3))
+             .Emit(INY())
+             .Emit(LDA_ind_Y(ptr1))            // y offset
+             .Emit(CLC())
+             .Emit(ADC_zpg(TEMP2))             // add sprite Y
+             .Emit(STA_abs_X(OAM_BUF + 0))
+             .Emit(INY())
+             .Emit(LDA_ind_Y(ptr1))            // tile
+             .Emit(STA_abs_X(OAM_BUF + 1))
+             .Emit(INY())
+             .Emit(LDA_ind_Y(ptr1))            // attr from metasprite
+             .Emit(ORA_zpg(TEMP3))             // OR with palette bits
+             .Emit(STA_abs_X(OAM_BUF + 2))
+             .Emit(INY())
+             .Emit(INX())
+             .Emit(INX())
+             .Emit(INX())
+             .Emit(INX())
+             .Emit(JMP("@loop"))
+             .Emit(TXA(), "@done")             // return sprid
+             .Emit(LDX(0x00))
+             .Emit(RTS());
+        return block;
+    }
     /// </summary>
     public static Block OamSpr()
     {

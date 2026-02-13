@@ -555,6 +555,8 @@ public class Program6502
                 size += BuiltInSubroutines.SetRand().ByteSize;
             if (usedMethods.Contains("oam_meta_spr"))
                 size += BuiltInSubroutines.OamMetaSpr().ByteSize;
+            if (usedMethods.Contains("oam_meta_spr_pal"))
+                size += BuiltInSubroutines.OamMetaSprPal().ByteSize;
             if (usedMethods.Contains("apu_init"))
                 size += BuiltInSubroutines.ApuInit().ByteSize;
         }
@@ -604,6 +606,8 @@ public class Program6502
                 AddBlock(BuiltInSubroutines.SetRand());
             if (usedMethods.Contains("oam_meta_spr"))
                 AddBlock(BuiltInSubroutines.OamMetaSpr());
+            if (usedMethods.Contains("oam_meta_spr_pal"))
+                AddBlock(BuiltInSubroutines.OamMetaSprPal());
             if (usedMethods.Contains("apu_init"))
                 AddBlock(BuiltInSubroutines.ApuInit());
         }
