@@ -37,6 +37,11 @@ cd samples/hello && dotnet run  # Build + run in emulator
 
 **Diagnostic logging:** Add `<NESDiagnosticLogging>true</NESDiagnosticLogging>` to project.
 
+### Diagnostic Scripts
+
+- `dotnet run scripts/ildump.cs -- <path-to-dll>` — Dumps IL opcodes from a .NET DLL (useful for understanding what IL the transpiler will process)
+- `python scripts/compare_rom.py <cc65.nes> <dotnes.nes>` — Side-by-side ROM comparison with 6502 disassembly (useful for debugging transpiler output vs cc65 reference)
+
 ## MSBuild Integration
 - [bin/Debug/dotnes.props](bin/Debug/dotnes.props) - Disables BCL (`NoStdLib=true`), forces `Optimize=true`
 - [bin/Debug/dotnes.targets](bin/Debug/dotnes.targets) - Runs `TranspileToNES` task after Build
