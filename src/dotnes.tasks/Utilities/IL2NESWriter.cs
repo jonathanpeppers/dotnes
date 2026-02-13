@@ -892,8 +892,11 @@ class IL2NESWriter : NESWriter
             // This is actually a local variable
             if (local.Value < byte.MaxValue)
             {
+                if (LastLDA)
+                {
+                    EmitJSR("pusha");
+                }
                 Emit(Opcode.LDA, AddressMode.Absolute, (ushort)local.Address);
-                EmitJSR("pusha");
                 _immediateInA = null;
             }
             else if (local.Value < ushort.MaxValue)
