@@ -258,18 +258,17 @@ public class RoslynTests
                 A900
                 20D483  ; JSR vram_adr
                 AD2503
-                209385  ; JSR pusha
                 A203
                 A9C0
                 20DF83  ; JSR vram_fill
-                A9E2
+                A9DF
                 A285
-                20A985  ; JSR pushax
+                20A685  ; JSR pushax
                 A200
                 A940
                 204F83  ; JSR vram_write
                 208982  ; JSR ppu_on_all
-                4C3185  ; JMP $8531
+                4C2E85  ; JMP loop
                 """);
     }
 
@@ -341,28 +340,26 @@ public class RoslynTests
                 """,
             expectedAssembly:
                 """
-                A911
+                A90B
                 A286
                 201182  ; JSR pal_all
                 A928
                 8D2503  ; STA M0001
                 A922
                 A286
-                AD2503  ; LDA M0001
                 C928    ; CMP #$28
-                D01D    ; BNE $8530
+                D01A    ; BNE skip
                 AD2503  ; LDA M0001
-                209685  ; JSR popa
                 A928
-                209685  ; JSR popa
+                209085  ; JSR popa
                 A910
-                209685  ; JSR popa
+                209085  ; JSR popa
                 A903
-                209685  ; JSR popa
+                209085  ; JSR popa
                 A900
-                20E585  ; JSR oam_spr
+                20DF85  ; JSR oam_spr
                 208982  ; JSR ppu_on_all
-                4C3485
+                4C2E85
                 """);
     }
 
@@ -475,19 +472,19 @@ public class RoslynTests
                 20ED85      ; JSR pad_poll
                 8D2703      ; STA $0327 (store pad for reuse)
                 2940        ; AND #$40 (PAD.LEFT)
-                F003        ; BEQ +3
+                F003        ; BEQ +3 (skip DEC if zero)
                 CE2503      ; DEC $0325 (x--)
                 AD2703      ; LDA $0327 (reload pad)
                 2980        ; AND #$80 (PAD.RIGHT)
-                F003        ; BEQ +3
+                F003        ; BEQ +3 (skip INC if zero)
                 EE2503      ; INC $0325 (x++)
                 AD2703      ; LDA $0327 (reload pad)
                 2910        ; AND #$10 (PAD.UP)
-                F003        ; BEQ +3
+                F003        ; BEQ +3 (skip DEC if zero)
                 CE2603      ; DEC $0326 (y--)
                 AD2703      ; LDA $0327 (reload pad)
                 2920        ; AND #$20 (PAD.DOWN)
-                F003        ; BEQ +3
+                F003        ; BEQ +3 (skip INC if zero)
                 EE2603      ; INC $0326 (y++)
                 209B85      ; JSR decsp4
                 AD2503      ; LDA $0325 (load x)

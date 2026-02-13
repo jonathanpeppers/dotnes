@@ -214,22 +214,11 @@ class Transpiler : IDisposable
             byteArrayTableSize += data.Length;
         }
         
-        // Calculate string table size  
+        // Calculate string table size from writer's tracked strings
         int stringTableSize = 0;
-        int stringHeapSize = _reader.GetHeapSize(HeapIndex.UserString);
-        if (stringHeapSize > 0)
+        foreach (var (_, data) in writer.StringTable)
         {
-            var handle = MetadataTokens.UserStringHandle(0);
-            do
-            {
-                string value = _reader.GetUserString(handle);
-                if (!string.IsNullOrEmpty(value))
-                {
-                    stringTableSize += Encoding.ASCII.GetByteCount(value) + 1; // +1 for null terminator
-                }
-                handle = _reader.GetNextHandle(handle);
-            }
-            while (!handle.IsNil);
+            stringTableSize += data.Length;
         }
 
         // Add final built-ins (before data tables)
@@ -263,24 +252,10 @@ class Transpiler : IDisposable
             byteArrayIndex++;
         }
         
-        // Add string table
-        if (stringHeapSize > 0)
+        // Add string table with labels for address resolution
+        foreach (var (label, data) in writer.StringTable)
         {
-            var handle = MetadataTokens.UserStringHandle(0);
-            do
-            {
-                string value = _reader.GetUserString(handle);
-                if (!string.IsNullOrEmpty(value))
-                {
-                    // Convert string to ASCII bytes with null terminator
-                    byte[] stringBytes = new byte[Encoding.ASCII.GetByteCount(value) + 1];
-                    Encoding.ASCII.GetBytes(value, 0, value.Length, stringBytes, 0);
-                    stringBytes[stringBytes.Length - 1] = 0; // null terminator
-                    program.AddProgramData(stringBytes);
-                }
-                handle = _reader.GetNextHandle(handle);
-            }
-            while (!handle.IsNil);
+            program.AddProgramData(data, label);
         }
 
         // Add destructor table LAST

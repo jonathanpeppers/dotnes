@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using System.Reflection.Metadata;
+using System.Text;
 using dotnes.ObjectModel;
 using static NES.NESLib;
 using static dotnes.NESConstants;
@@ -34,6 +35,14 @@ class IL2NESWriter : NESWriter
     /// </summary>
     public IReadOnlyDictionary<string, ImmutableArray<byte>> UShortArrays => _ushortArrays;
     readonly Dictionary<string, ImmutableArray<byte>> _ushortArrays = new();
+    /// <summary>
+    /// Ordered list of (label, ASCII bytes) for string literals encountered in IL.
+    /// </summary>
+    public IReadOnlyList<(string Label, byte[] Data)> StringTable => _stringTable;
+    readonly List<(string Label, byte[] Data)> _stringTable = new();
+    readonly Dictionary<string, string> _stringLabelMap = new();
+    int _stringLabelIndex;
+
     readonly ushort local = 0x325;
     readonly ushort tempVar = 0x327; // Temp variable for pad_poll result storage
     readonly ReflectionCache _reflectionCache = new();
@@ -506,16 +515,23 @@ class IL2NESWriter : NESWriter
             case ILOpCode.Nop:
                 break;
             case ILOpCode.Ldstr:
-                //TODO: hardcoded until string table figured out
-                Emit(Opcode.LDA, AddressMode.Immediate, 0xF1);
-                Emit(Opcode.LDX, AddressMode.Immediate, 0x85);
+                // Deduplicate: reuse label if same string was already seen
+                if (!_stringLabelMap.TryGetValue(operand, out string? stringLabel))
+                {
+                    stringLabel = $"string_{_stringLabelIndex}";
+                    _stringLabelIndex++;
+                    byte[] asciiBytes = Encoding.ASCII.GetBytes(operand);
+                    byte[] withNull = new byte[asciiBytes.Length + 1];
+                    asciiBytes.CopyTo(withNull, 0);
+                    _stringTable.Add((stringLabel, withNull));
+                    _stringLabelMap[operand] = stringLabel;
+                }
+
+                EmitWithLabel(Opcode.LDA, AddressMode.Immediate_LowByte, stringLabel);
+                EmitWithLabel(Opcode.LDX, AddressMode.Immediate_HighByte, stringLabel);
                 EmitJSR("pushax");
                 Emit(Opcode.LDX, AddressMode.Immediate, 0x00);
-                if (operand.Length > ushort.MaxValue)
-                {
-                    throw new NotImplementedException($"{instruction.OpCode} not implemented for value larger than ushort: {operand}");
-                }
-                else if (operand.Length > byte.MaxValue)
+                if (operand.Length > byte.MaxValue)
                 {
                     WriteLdc(checked((ushort)operand.Length));
                 }
@@ -531,24 +547,21 @@ class IL2NESWriter : NESWriter
                     case nameof(NTADR_B):
                     case nameof(NTADR_C):
                     case nameof(NTADR_D):
-                        if (Stack.Count < 2)
-                        {
-                            throw new InvalidOperationException($"{operand} was called with less than 2 on the stack.");
-                        }
+                        byte y = checked((byte)Stack.Pop());
+                        byte x = checked((byte)Stack.Pop());
                         var address = operand switch
                         {
-                            nameof(NTADR_A) => NTADR_A(checked((byte)Stack.Pop()), checked((byte)Stack.Pop())),
-                            nameof(NTADR_B) => NTADR_B(checked((byte)Stack.Pop()), checked((byte)Stack.Pop())),
-                            nameof(NTADR_C) => NTADR_C(checked((byte)Stack.Pop()), checked((byte)Stack.Pop())),
-                            nameof(NTADR_D) => NTADR_D(checked((byte)Stack.Pop()), checked((byte)Stack.Pop())),
+                            nameof(NTADR_A) => NTADR_A(x, y),
+                            nameof(NTADR_B) => NTADR_B(x, y),
+                            nameof(NTADR_C) => NTADR_C(x, y),
+                            nameof(NTADR_D) => NTADR_D(x, y),
                             _ => throw new InvalidOperationException($"Address lookup of {operand} not implemented!"),
                         };
                         // Remove the two constants that were loaded
                         // Typically: LDA #imm (2 bytes) + JSR pusha (3 bytes) + LDA #imm (2 bytes) = 7 bytes, 3 instructions
                         RemoveLastInstructions(3);
-                        //TODO: these are hardcoded until I figure this out
-                        Emit(Opcode.LDX, AddressMode.Immediate, 0x20);
-                        Emit(Opcode.LDA, AddressMode.Immediate, 0x42);
+                        Emit(Opcode.LDX, AddressMode.Immediate, checked((byte)(address >> 8)));
+                        Emit(Opcode.LDA, AddressMode.Immediate, checked((byte)(address & 0xFF)));
                         Stack.Push(address);
                         break;
                     case "pad_poll":
@@ -616,6 +629,21 @@ class IL2NESWriter : NESWriter
                                 _pokeLastValue = (byte)value;
                                 _immediateInA = (byte)value;
                             }
+                        }
+                        break;
+                    case "scroll":
+                        // scroll() takes unsigned int params, which use popax (2-byte pop).
+                        // The preceding instructions are: JSR pusha, LDA $addr.
+                        // Replace pusha (1-byte push) with LDX #$00 + pushax (2-byte push).
+                        {
+                            var block = CurrentBlock!;
+                            var ldaInstr = block[block.Count - 1]; // LDA $addr (scroll_y)
+                            RemoveLastInstructions(2); // Remove JSR pusha + LDA $addr
+                            Emit(Opcode.LDX, AddressMode.Immediate, 0x00);
+                            EmitJSR("pushax");
+                            block.Emit(ldaInstr); // Re-emit LDA $addr
+                            EmitWithLabel(Opcode.JSR, AddressMode.Absolute, operand);
+                            _immediateInA = null;
                         }
                         break;
                     default:
@@ -740,10 +768,10 @@ class IL2NESWriter : NESWriter
             {
                 // This is an x++ or x-- pattern!
                 // Remove the previously emitted instructions:
-                // WriteLdloc emits: LDA $addr; JSR pusha (2 instructions)
+                // WriteLdloc emits: LDA $addr (1 instruction)
                 // WriteLdc(byte) emits: LDA #imm (1 instruction)
-                // Total: 3 instructions to remove
-                RemoveLastInstructions(3);
+                // Total: 2 instructions to remove
+                RemoveLastInstructions(2);
                 
                 // Emit optimized INC or DEC
                 ushort addr = (ushort)loadedLocal.Address.Value;
@@ -878,8 +906,11 @@ class IL2NESWriter : NESWriter
             // This is actually a local variable
             if (local.Value < byte.MaxValue)
             {
+                if (LastLDA)
+                {
+                    EmitJSR("pusha");
+                }
                 Emit(Opcode.LDA, AddressMode.Absolute, (ushort)local.Address);
-                EmitJSR("pusha");
                 _immediateInA = null;
             }
             else if (local.Value < ushort.MaxValue)

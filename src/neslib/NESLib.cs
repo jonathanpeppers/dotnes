@@ -394,6 +394,18 @@ public static class NESLib
     public static ushort NTADR_D(byte x, byte y) => (ushort)(NAMETABLE_D | ((y << 5) | x));
 
     /// <summary>
+    /// macro to get most significant byte in compile time
+    /// #define MSB(x)			(((x)>>8))
+    /// </summary>
+    public static byte MSB(ushort x) => (byte)(x >> 8);
+
+    /// <summary>
+    /// macro to get least significant byte in compile time
+    /// #define LSB(x)			(((x)&0xff))
+    /// </summary>
+    public static byte LSB(ushort x) => (byte)(x & 0xff);
+
+    /// <summary>
     /// NOTE: this one is internal, not in neslib.h
     /// </summary>
     internal static void pal_copy() => throw null!;

@@ -37,6 +37,8 @@ public class IL2NESWriterTests
         writer.Labels["ppu_on_all"] = 0x8289;
         // Set up instruction label for Br_s target (while(true) infinite loop)
         writer.Labels["instruction_00"] = 0x0000;
+        // String label placeholder (resolved by transpiler in real builds)
+        writer.Labels["string_0"] = 0x8657;
 
         // pal_col(0, 0x02);
         writer.Write(new ILInstruction(ILOpCode.Ldc_i4_0));
