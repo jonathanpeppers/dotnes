@@ -341,7 +341,9 @@ class Transpiler : IDisposable
                                             break;
                                         }
                                     }
-                                    throw new NotImplementedException($"Reading fields like {fieldName} is not implemented!");
+                                    // Non-RVA fields (e.g., oam_off) are passed as string operands
+                                    stringValue = fieldName;
+                                    break;
                             }
                             break;
                         // 64-bit

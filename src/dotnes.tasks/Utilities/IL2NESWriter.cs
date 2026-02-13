@@ -793,6 +793,40 @@ class IL2NESWriter : NESWriter
                     _runtimeValueInA = false;
                 }
                 break;
+            case ILOpCode.Stsfld:
+                if (operand == nameof(NESLib.oam_off))
+                {
+                    // Store value to OAM_OFF zero-page address
+                    if (_runtimeValueInA)
+                    {
+                        Emit(Opcode.STA, AddressMode.ZeroPage, (byte)NESConstants.OAM_OFF);
+                    }
+                    else if (_immediateInA != null)
+                    {
+                        Emit(Opcode.LDA, AddressMode.Immediate, (byte)_immediateInA);
+                        Emit(Opcode.STA, AddressMode.ZeroPage, (byte)NESConstants.OAM_OFF);
+                    }
+                    _runtimeValueInA = false;
+                    _immediateInA = null;
+                }
+                else
+                {
+                    throw new NotImplementedException($"Stsfld for field '{operand}' is not implemented!");
+                }
+                break;
+            case ILOpCode.Ldsfld:
+                if (operand == nameof(NESLib.oam_off))
+                {
+                    // Load value from OAM_OFF zero-page address
+                    Emit(Opcode.LDA, AddressMode.ZeroPage, (byte)NESConstants.OAM_OFF);
+                    _runtimeValueInA = true;
+                    _immediateInA = null;
+                }
+                else
+                {
+                    throw new NotImplementedException($"Ldsfld for field '{operand}' is not implemented!");
+                }
+                break;
             default:
                 throw new NotImplementedException($"OpCode {instruction.OpCode} with String operand is not implemented!");
         }
@@ -1459,16 +1493,17 @@ class IL2NESWriter : NESWriter
     /// <summary>
     /// Emits oam_meta_spr_pal call with proper argument setup.
     /// IL pattern: ldloc(arr_x), ldloc_s(i), ldelem_u1, ldloc(arr_y), ldloc_s(i), ldelem_u1,
-    ///             ldloc_s(pal), ldloc_s(sprid), ldloc(metasprite), call oam_meta_spr_pal
+    ///             ldloc_s(pal), ldloc(metasprite), call oam_meta_spr_pal
     /// 
-    /// Sets up: TEMP = x, TEMP2 = y, TEMP3 = pal, PTR = data pointer, A = sprid
+    /// Sets up: TEMP = x, TEMP2 = y, TEMP3 = pal, PTR = data pointer
+    /// Uses OAM_OFF zero-page global for OAM buffer offset.
     /// </summary>
     void EmitOamMetaSprPal()
     {
         if (Instructions is null)
             throw new InvalidOperationException("EmitOamMetaSprPal requires Instructions");
 
-        int? xArrayIdx = null, yArrayIdx = null, indexIdx = null, spridIdx = null, palIdx = null;
+        int? xArrayIdx = null, yArrayIdx = null, indexIdx = null, palIdx = null;
         string? dataLabel = null;
         int firstArgILOffset = -1;
 
@@ -1486,25 +1521,10 @@ class IL2NESWriter : NESWriter
             }
         }
 
-        // Find sprid source
-        if (scan >= 0)
-        {
-            var spridInstr = Instructions[scan];
-            var spridLocIdx = GetLdlocIndex(spridInstr);
-            if (spridLocIdx != null && Locals.TryGetValue(spridLocIdx.Value, out var spridLocal) && spridLocal.Address != null)
-            {
-                spridIdx = spridLocIdx.Value;
-                scan--;
-            }
-        }
-
         // Find pal source
         if (scan >= 0)
         {
             var palInstr = Instructions[scan];
-            // pal might be preceded by AND #3 and Conv_u1 — skip those
-            // The IL for (byte)(i & 3) is: ldloc_s(i), ldc.i4.3, and, conv.u1
-            // Or it might just be ldloc_s(pal)
             var palLocIdx = GetLdlocIndex(palInstr);
             if (palLocIdx != null && Locals.TryGetValue(palLocIdx.Value, out var palLocal) && palLocal.Address != null)
             {
@@ -1601,20 +1621,10 @@ class IL2NESWriter : NESWriter
             Emit(Opcode.STA, AddressMode.ZeroPage, (byte)(NESConstants.ptr1 + 1));
         }
 
-        // 5. Load sprid into A
-        if (spridIdx != null)
-        {
-            var spridLocal = Locals[spridIdx.Value];
-            if (spridLocal.Address != null)
-            {
-                Emit(Opcode.LDA, AddressMode.Absolute, (ushort)spridLocal.Address);
-            }
-        }
-
-        // 6. Call oam_meta_spr_pal
+        // 5. Call oam_meta_spr_pal (uses OAM_OFF global, no sprid param)
         EmitWithLabel(Opcode.JSR, AddressMode.Absolute, nameof(NESLib.oam_meta_spr_pal));
         _immediateInA = null;
-        _runtimeValueInA = true; // Return value in A
+        _runtimeValueInA = false; // void return
     }
     /// <summary>
     /// Checks if the value loaded at instruction index <paramref name="idx"/> is consumed

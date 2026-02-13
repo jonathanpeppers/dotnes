@@ -623,13 +623,13 @@ internal static class BuiltInSubroutines
     /// <summary>
     /// _oam_meta_spr_pal - Set metasprite in OAM buffer with palette override
     /// Same as oam_meta_spr, but OR's TEMP3 ($1A) into each sprite's attribute byte.
-    /// Entry: A = sprid, TEMP = x, TEMP2 = y, PTR ($2A) = data pointer, TEMP3 = palette
-    /// Returns: A = updated sprid
+    /// Entry: TEMP = x, TEMP2 = y, PTR ($2A) = data pointer, TEMP3 = palette
+    /// Uses OAM_OFF ($1B) for OAM buffer offset, updates it after writing.
     /// </summary>
     public static Block OamMetaSprPal()
     {
         var block = new Block(nameof(NESLib.oam_meta_spr_pal));
-        block.Emit(TAX())
+        block.Emit(LDX_zpg(OAM_OFF))            // load oam_off into X
              .Emit(LDY(0x00))
              .Emit(LDA_ind_Y(ptr1), "@loop")  // x offset
              .Emit(CMP(0x80))
@@ -655,8 +655,7 @@ internal static class BuiltInSubroutines
              .Emit(INX())
              .Emit(INX())
              .Emit(JMP("@loop"))
-             .Emit(TXA(), "@done")             // return sprid
-             .Emit(LDX(0x00))
+             .Emit(STX_zpg(OAM_OFF), "@done") // store updated offset back to oam_off
              .Emit(RTS());
         return block;
     }

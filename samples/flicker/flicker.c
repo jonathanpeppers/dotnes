@@ -57,7 +57,6 @@ byte actor_dy[NUM_ACTORS];
 // main program
 void main() {
   byte i;	// actor index
-  byte oam_id;
   byte count;
   byte pal;
 
@@ -78,14 +77,16 @@ void main() {
 
   // loop forever
   while (1) {
-    oam_id = 0;
+    oam_off = 0;
     count = 0;
 
     // draw up to 15 actors per frame (15 * 4 = 60 sprites, under the 64 limit)
     while (count < 15) {
       // palette color cycles with actor index (i & 3)
       pal = i & 3;
-      oam_id = oam_meta_spr_pal(actor_x[i], actor_y[i], pal, oam_id, metasprite);
+      // Note: 8bitworkshop's oam_meta_spr_pal has a bug where pal is ignored.
+      // Our C# version correctly applies the palette via ORA into OAM attributes.
+      oam_meta_spr_pal(actor_x[i], actor_y[i], pal, metasprite);
 
       // update position
       actor_x[i] = actor_x[i] + actor_dx[i];
@@ -100,7 +101,7 @@ void main() {
       count++;
     }
 
-    oam_hide_rest(oam_id);
+    oam_hide_rest(oam_off);
     ppu_wait_nmi();
   }
 }

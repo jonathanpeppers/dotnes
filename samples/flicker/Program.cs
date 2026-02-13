@@ -55,7 +55,7 @@ while (i < 24)
 // main loop - i persists across frames for flicker effect
 while (true)
 {
-    byte oam_id = 0;
+    oam_off = 0;
     byte count = 0;
 
     // draw up to 15 actors per frame (15 * 4 = 60 sprites, under the 64 limit)
@@ -63,7 +63,7 @@ while (true)
     {
         // palette color cycles with actor index (i & 3)
         byte pal = (byte)(i & 3);
-        oam_id = oam_meta_spr_pal(actor_x[i], actor_y[i], pal, oam_id, metasprite);
+        oam_meta_spr_pal(actor_x[i], actor_y[i], pal, metasprite);
 
         // update position
         actor_x[i] = (byte)(actor_x[i] + actor_dx[i]);
@@ -79,6 +79,6 @@ while (true)
         count = (byte)(count + 1);
     }
 
-    oam_hide_rest(oam_id);
+    oam_hide_rest(oam_off);
     ppu_wait_nmi();
 }
