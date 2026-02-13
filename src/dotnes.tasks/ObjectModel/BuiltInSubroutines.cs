@@ -500,18 +500,20 @@ internal static class BuiltInSubroutines
 
     /// <summary>
     /// _rand8 - Get random number 0..255 using Galois LFSR
-    /// Uses RAND_SEED ($18) zero-page variable.
+    /// Uses RAND_SEED ($3C) zero-page variable.
+    /// Matches cc65 neslib: LDA seed; BEQ +3; ASL; BCC +2; EOR #$CF; STA seed; LDX #0; RTS
     /// </summary>
     public static Block Rand8()
     {
-        // Galois LFSR: shift left, XOR with polynomial if carry set
-        // LDA RAND_SEED; ASL A; BCC @1; EOR #$CF; @1: STA RAND_SEED; LDX #$00; RTS
+        // Galois LFSR with zero-seed bootstrap:
+        // If seed is 0, skip ASL+BCC to hit EOR #$CF (bootstraps seed to $CF)
         var block = new Block(nameof(NESLib.rand8));
         block.Emit(LDA_zpg(RAND_SEED))
+             .Emit(BEQ(3))   // if seed==0, skip ASL+BCC to EOR (bootstrap)
              .Emit(ASL_A())
-             .Emit(BCC(2))  // skip EOR if carry clear
+             .Emit(BCC(2))   // skip EOR if carry clear
              .Emit(EOR(0xCF))
-             .Emit(STA_zpg(RAND_SEED), "@1")
+             .Emit(STA_zpg(RAND_SEED))
              .Emit(LDX(0x00))
              .Emit(RTS());
         return block;
