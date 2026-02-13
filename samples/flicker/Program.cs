@@ -61,8 +61,8 @@ while (true)
     // draw up to 15 actors per frame (15 * 4 = 60 sprites, under the 64 limit)
     while (count < 15)
     {
-        // palette color based on the count (stable per-slot within each frame)
-        byte pal = (byte)(count & 3);
+        // palette color cycles with actor index (i & 3)
+        byte pal = (byte)(i & 3);
         oam_id = oam_meta_spr_pal(actor_x[i], actor_y[i], pal, oam_id, metasprite);
 
         // update position
