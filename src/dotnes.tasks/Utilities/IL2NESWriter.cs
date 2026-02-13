@@ -1703,22 +1703,32 @@ class IL2NESWriter : NESWriter
                     {
                         int val = il.OpCode - ILOpCode.Ldc_i4_0;
                         // Check what operation consumes this constant
-                        for (int j = i + 1; j < Index; j++)
+                        if (i + 1 < Index)
                         {
-                            if (Instructions[j].OpCode == ILOpCode.And) { andMask = val; break; }
-                            if (Instructions[j].OpCode == ILOpCode.Sub) { subValue = val; break; }
-                            break;
+                            if (Instructions[i + 1].OpCode == ILOpCode.And)
+                            {
+                                andMask = val;
+                            }
+                            else if (Instructions[i + 1].OpCode == ILOpCode.Sub)
+                            {
+                                subValue = val;
+                            }
                         }
                     }
                     break;
                 case ILOpCode.Ldc_i4_s: case ILOpCode.Ldc_i4:
                     {
                         int val = il.Integer ?? 0;
-                        for (int j = i + 1; j < Index; j++)
+                        if (i + 1 < Index)
                         {
-                            if (Instructions[j].OpCode == ILOpCode.And) { andMask = val; break; }
-                            if (Instructions[j].OpCode == ILOpCode.Sub) { subValue = val; break; }
-                            break;
+                            if (Instructions[i + 1].OpCode == ILOpCode.And)
+                            {
+                                andMask = val;
+                            }
+                            else if (Instructions[i + 1].OpCode == ILOpCode.Sub)
+                            {
+                                subValue = val;
+                            }
                         }
                     }
                     break;
