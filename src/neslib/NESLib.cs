@@ -17,125 +17,223 @@ public static class NESLib
     /// <summary>
     /// set bg and spr palettes, data is 32 bytes array
     /// </summary>
-    public static void pal_all(byte[] data) { }
+    public static void pal_all(byte[] data) => throw null!;
 
     /// <summary>
     /// set bg palette only, data is 16 bytes array
     /// </summary>
-    public static void pal_bg(byte[] data) { }
+    public static void pal_bg(byte[] data) => throw null!;
 
     /// <summary>
     /// set spr palette only, data is 16 bytes array
     /// </summary>
-    public static void pal_spr(byte[] data) { }
+    public static void pal_spr(byte[] data) => throw null!;
 
     /// <summary>
     /// set a palette entry, index is 0..31
     /// </summary>
-    public static void pal_col(byte index, byte color) { }
+    public static void pal_col(byte index, byte color) => throw null!;
 
     /// <summary>
     /// reset palette to $0f
     /// </summary>
-    public static void pal_clear() { }
+    public static void pal_clear() => throw null!;
 
     /// <summary>
     /// set virtual bright both for sprites and background, 0 is black, 4 is normal, 8 is white
     /// </summary>
-    public static void pal_bright(byte bright) { }
+    public static void pal_bright(byte bright) => throw null!;
 
     /// <summary>
     /// set virtual bright for sprites only
     /// </summary>
-    public static void pal_spr_bright(byte bright) { }
+    public static void pal_spr_bright(byte bright) => throw null!;
 
     /// <summary>
     /// set virtual bright for sprites background only
     /// </summary>
-    public static void pal_bg_bright(byte bright) { }
+    public static void pal_bg_bright(byte bright) => throw null!;
 
+    /// <summary>
+    /// play music (FamiTone)
+    /// </summary>
+    public static void music_play(byte song) => throw null!;
 
+    /// <summary>
+    /// stop music (FamiTone)
+    /// </summary>
+    public static void music_stop() => throw null!;
 
+    /// <summary>
+    /// pause music (FamiTone)
+    /// </summary>
+    public static void music_pause(byte pause) => throw null!;
 
+    /// <summary>
+    /// initialize the APU (Audio Processing Unit)
+    /// enables all sound channels and sets initial state
+    /// </summary>
+    public static void apu_init() => throw null!;
+
+    /// <summary>
+    /// set up music data pointer for playback
+    /// data is a byte array containing encoded music commands
+    /// </summary>
+    public static void start_music(byte[] data) => throw null!;
+
+    /// <summary>
+    /// play one frame of music, call once per vblank
+    /// processes music data and writes to APU registers
+    /// </summary>
+    public static void play_music() => throw null!;
+
+    /// <summary>
+    /// register a ushort[] note table for pulse channel playback
+    /// </summary>
+    public static void set_music_pulse_table(ushort[] table) => throw null!;
+
+    /// <summary>
+    /// register a ushort[] note table for triangle channel playback
+    /// </summary>
+    public static void set_music_triangle_table(ushort[] table) => throw null!;
+
+    /// <summary>
+    /// play sound effect
+    /// </summary>
+    public static void sfx_play(byte sound, byte channel) => throw null!;
+
+    /// <summary>
+    /// play sample
+    /// </summary>
+    public static void sample_play(byte sample) => throw null!;
+
+    /// <summary>
+    /// get pad trigger
+    /// </summary>
+    public static byte pad_trigger(byte pad) => throw null!;
+
+    /// <summary>
+    /// get pad state
+    /// </summary>
+    public static byte pad_state(byte pad) => throw null!;
+
+    /// <summary>
+    /// read from vram
+    /// </summary>
+    public static void vram_read(byte[] dst, uint size) => throw null!;
+
+    /// <summary>
+    /// write to vram
+    /// </summary>
+    public static void vram_write(byte[] src, uint size) => throw null!;
+
+    /// <summary>
+    /// unpack LZ4 data to vram
+    /// </summary>
+    public static void vram_unlz4(byte[] input, byte[] output, uint uncompressedSize) => throw null!;
+
+    /// <summary>
+    /// fill memory
+    /// </summary>
+    public static void memfill(object dst, byte value, uint len) => throw null!;
+
+    /// <summary>
+    /// clear OAM buffer fast
+    /// </summary>
+    public static void oam_clear_fast() => throw null!;
+
+    /// <summary>
+    /// set metasprite in OAM buffer with palette
+    /// </summary>
+    public static void oam_meta_spr_pal(byte x, byte y, byte pal, byte[] metasprite) => throw null!;
+
+    /// <summary>
+    /// set metasprite in OAM buffer with clipping
+    /// </summary>
+    public static void oam_meta_spr_clip(int x, byte y, byte[] metasprite) => throw null!;
 
     /// <summary>
     /// wait actual TV frame, 50hz for PAL, 60hz for NTSC
     /// </summary>
-    public static void ppu_wait_nmi() { }
+    public static void ppu_wait_nmi() => throw null!;
+
+    /// <summary>
+    /// write a byte value to an absolute memory address
+    /// </summary>
+    public static void poke(ushort addr, byte value) => throw null!;
 
     /// <summary>
     /// wait virtual frame, it is always 50hz, frame-to-frame in PAL, frameskip in NTSC
     /// </summary>
-    public static void ppu_wait_frame() { }
+    public static void ppu_wait_frame() => throw null!;
 
     /// <summary>
     /// turn off rendering, nmi still enabled when rendering is disabled
     /// </summary>
-    public static void ppu_off() { }
+    public static void ppu_off() => throw null!;
 
     /// <summary>
     /// turn on bg, spr
     /// </summary>
-    public static void ppu_on_all() { }
+    public static void ppu_on_all() => throw null!;
 
     /// <summary>
     /// turn on bg only
     /// </summary>
-    public static void ppu_on_bg() { }
+    public static void ppu_on_bg() => throw null!;
 
     /// <summary>
     /// turn on spr only
     /// </summary>
-    public static void ppu_on_spr() { }
+    public static void ppu_on_spr() => throw null!;
 
     /// <summary>
     /// set PPU_MASK directly
     /// </summary>
-    public static void ppu_mask(byte mask) { }
+    public static void ppu_mask(byte mask) => throw null!;
 
     /// <summary>
     /// get current video system, 0 for PAL, not 0 for NTSC
     /// </summary>
-    public static byte ppu_system() => default;
+    public static byte ppu_system() => throw null!;
 
     /// <summary>
     /// Return an 8-bit counter incremented at each vblank
     /// </summary>
-    public static byte nesclock() => default;
+    public static byte nesclock() => throw null!;
 
     /// <summary>
     /// get the internal ppu ctrl cache var for manual writing
     /// </summary>
-    public static byte get_ppu_ctrl_var() => default;
+    public static byte get_ppu_ctrl_var() => throw null!;
 
     /// <summary>
     /// set the internal ppu ctrl cache var for manual writing
     /// </summary>
-    public static void set_ppu_ctrl_var(byte var) { }
-
+    public static void set_ppu_ctrl_var(byte var) => throw null!;
 
     /// <summary>
     /// clear OAM buffer, all the sprites are hidden
     /// </summary>
-    public static void oam_clear() { }
+    public static void oam_clear() => throw null!;
 
     /// <summary>
     /// set sprite display mode, 0 for 8x8 sprites, 1 for 8x16 sprites
     /// </summary>
-    public static void oam_size(byte size) { }
+    public static void oam_size(byte size) => throw null!;
 
     /// <summary>
     /// set sprite in OAM buffer, chrnum is tile, attr is attribute, sprid is offset in OAM in bytes
     /// </summary>
     /// <returns>returns sprid+4, which is offset for a next sprite</returns>
-    public static byte oam_spr(byte x, byte y, byte chrnum, byte attr, byte sprid) => default;
+    public static byte oam_spr(byte x, byte y, byte chrnum, byte attr, byte sprid) => throw null!;
 
     /// <summary>
     /// poll controller and return enum like PAD.LEFT, etc.
     /// </summary>
     /// <param name="pad">pad number (0 or 1)</param>
     /// <returns>Enum like PAD.LEFT, etc.</returns>
-    public static PAD pad_poll(byte pad) => default;
+    public static PAD pad_poll(byte pad) => throw null!;
 
     /// <summary>
     /// set metasprite in OAM buffer
@@ -144,59 +242,58 @@ public static class NESLib
     /// x=128 is end of a meta sprite
     /// </summary>
     /// <returns>returns sprid+4, which is offset for a next sprite</returns>
-    public static byte oam_meta_spr(byte x, byte y, byte sprid, byte[] data) => default;
+    public static byte oam_meta_spr(byte x, byte y, byte sprid, byte[] data) => throw null!;
 
     /// <summary>
     /// hide all remaining sprites from given offset
     /// </summary>
-    public static void oam_hide_rest(byte sprid) { }
-
+    public static void oam_hide_rest(byte sprid) => throw null!;
 
     /// <summary>
     /// set vram pointer to write operations if you need to write some data to vram
     /// </summary>
-    public static void vram_adr(ushort adr) { }
+    public static void vram_adr(ushort adr) => throw null!;
 
     /// <summary>
     /// put a byte at current vram address, works only when rendering is turned off
     /// </summary>
-    public static void vram_put(byte n) { }
+    public static void vram_put(byte n) => throw null!;
 
     /// <summary>
     /// fill a block with a byte at current vram address, works only when rendering is turned off
     /// </summary>
-    public static void vram_fill(byte n, uint len) { }
+    public static void vram_fill(byte n, uint len) => throw null!;
 
     /// <summary>
     /// set vram autoincrement, 0 for +1 and not 0 for +32
     /// </summary>
-    public static void vram_inc(byte n) { }
+    public static void vram_inc(byte n) => throw null!;
 
     /// <summary>
     /// write a block to current address of vram, works only when rendering is turned off
     /// </summary>
-    public static void vram_write(string src) { }
+    public static void vram_write(string src) => throw null!;
 
     /// <summary>
     /// write a block to current address of vram, works only when rendering is turned off
     /// </summary>
-    public static void vram_write(byte[] src) { }
+    public static void vram_write(byte[] src) => throw null!;
 
     /// <summary>
     /// unpack RLE data to current address of vram, mostly used for nametables
     /// </summary>
-    public static void vram_unrle(byte[] data) { }
+    public static void vram_unrle(byte[] data) => throw null!;
 
     /// <summary>
     /// delay for N frames
     /// </summary>
-    public static void delay(byte frames) { }
+    public static void delay(byte frames) => throw null!;
 
     /// <summary>
     /// set scroll, including rhe top bits
     /// it is always applied at beginning of a TV frame, not at the function call
     /// </summary>
-    public static void scroll(int x, int y) { }
+    public static void scroll(int x, int y) => throw null!;
 
     /// <summary>
     /// set scroll after screen split invoked by the sprite 0 hit
@@ -205,36 +302,37 @@ public static class NESLib
     ///          otherwise empty frames without split will be inserted, resulting in jumpy screen
     /// warning: only X scroll could be changed in this version
     /// </summary>
-    public static void split(int x, int y) { }
-
+    public static void split(int x, int y) => throw null!;
 
     /// <summary>
     /// select current chr bank for sprites, 0..1
     /// </summary>
-    public static void bank_spr(byte n) { }
+    public static void bank_spr(byte n) => throw null!;
 
     /// <summary>
     /// select current chr bank for background, 0..1
     /// </summary>
-    public static void bank_bg(byte n) { }
+    public static void bank_bg(byte n) => throw null!;
 
     /// <summary>
     /// get random number 0..255, same as rand8()
     /// </summary>
-    public static byte rand() => default;
+    public static byte rand() => throw null!;
+
     /// <summary>
     /// get random number 0..255
     /// </summary>
-    public static byte rand8() => default;
+    public static byte rand8() => throw null!;
+
     /// <summary>
     /// get random number 0..65535
     /// </summary>
-    public static ushort rand16() => default;
+    public static ushort rand16() => throw null!;
 
     /// <summary>
     /// set random seed
     /// </summary>
-    public static void set_rand(ushort seed) { }
+    public static void set_rand(ushort seed) => throw null!;
 
     /// <summary>
     /// when display is enabled, vram access could only be done with this vram update system
@@ -253,14 +351,14 @@ public static class NESLib
     ///
     /// length of this data should be under 256 bytes
     /// </summary>
-    public static void set_vram_update(byte[] buf) { }
+    public static void set_vram_update(byte[] buf) => throw null!;
 
     // all following vram functions only work when display is disabled
 
     /// <summary>
     /// do a series of VRAM writes, the same format as for set_vram_update, but writes done right away
     /// </summary>
-    public static void flush_vram_update(byte[] buf) { }
+    public static void flush_vram_update(byte[] buf) => throw null!;
 
     // These are from: https://github.com/mhughson/attributes/blob/master/neslib.h
 
@@ -310,12 +408,12 @@ public static class NESLib
     /// <summary>
     /// NOTE: this one is internal, not in neslib.h
     /// </summary>
-    internal static void pal_copy() { }
+    internal static void pal_copy() => throw null!;
 
     /// <summary>
     /// NOTE: this one is internal, not in neslib.h
     /// </summary>
-    internal static void ppu_onoff() { }
+    internal static void ppu_onoff() => throw null!;
 
     // Tables are from: https://github.com/clbr/neslib/blob/master/neslib.sinc
 

@@ -1,0 +1,23 @@
+name: "Copilot Setup Steps"
+on: workflow_dispatch
+jobs:
+  copilot-setup-steps:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '10.x'
+    - name: Build the project
+      run: dotnet build -bl
+    - name: Upload msbuild.binlog on failure
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: msbuild-binlog
+        path: msbuild.binlog
+        if-no-files-found: warn

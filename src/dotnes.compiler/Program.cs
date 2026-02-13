@@ -2,10 +2,6 @@
 
 var logger = new ConsoleLogger();
 
-string targetPath = "";
-string assemblyFile = "";
-string outputPath = "";
-
 if (args.Length < 2
     || string.IsNullOrWhiteSpace(args[0])
     || string.IsNullOrWhiteSpace(args[1]))
@@ -14,8 +10,8 @@ if (args.Length < 2
     return;
 }
 
-targetPath = args[0];
-assemblyFile = args[1];
+string targetPath = args[0];
+string assemblyFile = args[1];
 
 if (!File.Exists(targetPath))
 {
@@ -29,7 +25,7 @@ if (!File.Exists(assemblyFile))
     return;
 }
 
-outputPath = Path.ChangeExtension(targetPath, "nes");
+string outputPath = Path.ChangeExtension(targetPath, "nes");
 
 logger.WriteStatus("Running compiler.");
 logger.WriteStatus($"Target Path: {targetPath}");

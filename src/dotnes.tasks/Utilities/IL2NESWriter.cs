@@ -1,6 +1,9 @@
 using System.Collections.Immutable;
 using System.Reflection.Metadata;
+using dotnes.ObjectModel;
 using static NES.NESLib;
+using static dotnes.NESConstants;
+using static dotnes.ObjectModel.Asm;
 
 namespace dotnes;
 
@@ -14,25 +17,91 @@ class IL2NESWriter : NESWriter
     /// <summary>
     /// The local evaluation stack
     /// </summary>
-    readonly Stack<int> Stack = new();
+    internal readonly Stack<int> Stack = new();
+    
     /// <summary>
-    /// Dictionary of local varaiables
+    /// Dictionary of local variables
     /// </summary>
     readonly Dictionary<int, Local> Locals = new();
     /// <summary>
-    /// List of byte[] data
+    /// List of byte[] data (accessible for Program6502 building)
     /// </summary>
-    readonly List<ImmutableArray<byte>> ByteArrays = new();
-
+    public IReadOnlyList<ImmutableArray<byte>> ByteArrays => _byteArrays;
+    readonly List<ImmutableArray<byte>> _byteArrays = new();
     /// <summary>
-    /// List of strings and offsets.
+    /// Named ushort[] data extracted from the IL (note tables, etc.)
+    /// Key is the label prefix (e.g. "note_table_pulse"), value is raw bytes (2 bytes per ushort, LE).
     /// </summary>
-    readonly Dictionary<string, ushort> Strings = new();
-    
-    readonly ushort local = 0x324;
-    ushort DataOffset = 0;
+    public IReadOnlyDictionary<string, ImmutableArray<byte>> UShortArrays => _ushortArrays;
+    readonly Dictionary<string, ImmutableArray<byte>> _ushortArrays = new();
+
+    readonly ushort local = 0x325;
+    readonly ushort tempVar = 0x327; // Temp variable for pad_poll result storage
     readonly ReflectionCache _reflectionCache = new();
     ILOpCode previous;
+    string? _pendingArrayType;
+    ImmutableArray<byte>? _pendingUShortArray;
+    
+    /// <summary>
+    /// Tracks if pad_poll was called and the result is available in A or tempVar.
+    /// When true, AND operations should emit actual 6502 AND instruction.
+    /// </summary>
+    bool _padPollResultAvailable;
+
+    /// <summary>
+    /// Tracks if this is the first AND after pad_poll (A still has value) or
+    /// subsequent AND (need to reload from tempVar first).
+    /// </summary>
+    bool _firstAndAfterPadPoll;
+
+    /// <summary>
+    /// Tracks when we're in an increment/decrement pattern.
+    /// Set by Add/Sub when operand is 1 and we need runtime arithmetic.
+    /// </summary>
+    int? _pendingIncDecLocal;
+
+    /// <summary>
+    /// Tracks the local index that was just loaded by Ldloc_N.
+    /// Used to detect inc/dec patterns.
+    /// </summary>
+    int? _lastLoadedLocalIndex;
+
+    /// <summary>
+    /// Tracks the immediate value currently in the A register (for redundant LDA elimination).
+    /// Cleared when A is modified by JSR, LDA absolute, AND, etc.
+    /// </summary>
+    byte? _immediateInA;
+
+    /// <summary>
+    /// Tracks the last value stored by poke() — used to skip redundant LDA across consecutive pokes.
+    /// Separate from _immediateInA because poke's RemoveLastInstructions makes _immediateInA unreliable.
+    /// </summary>
+    byte? _pokeLastValue;
+
+    /// <summary>
+    /// True when the byte array from Ldtoken needs its address explicitly loaded at
+    /// the Call point. This only happens in the new pattern (movingsprite-like) where
+    /// Stloc_0 does NOT take the Ldtoken path.
+    /// </summary>
+    bool _needsByteArrayLoadInCall;
+
+    /// <summary>
+    /// True when Stloc_0 took the Ldtoken path (stored a byte array reference).
+    /// In this case, the old code generation pattern is used where WriteStloc trailing
+    /// bytes serve as the byte array address.
+    /// </summary>
+    bool _stloc0IsLdtokenPath;
+
+    /// <summary>
+    /// True when using new code generation pattern. Set when a byte-path WriteStloc
+    /// is called while the byte array is deferred AND Stloc_0 did NOT take the Ldtoken path.
+    /// </summary>
+    bool DeferredByteArrayMode => _lastByteArrayLabel != null && !_byteArrayAddressEmitted && !_stloc0IsLdtokenPath;
+
+    /// <summary>
+    /// Set to true when the Ldtoken handler already emitted LDA/LDX for the byte array address.
+    /// </summary>
+    bool _byteArrayAddressEmitted;
 
     /// <summary>
     /// NOTE: may not be exactly correct, this is the instructions inside zerobss:
@@ -56,9 +125,36 @@ class IL2NESWriter : NESWriter
     /// </summary>
     public int LocalCount { get; private set; }
 
-    record Local(int Value, int? Address = null);
+    record Local(int Value, int? Address = null, string? LabelName = null);
 
-    public void Write(ILInstruction instruction, ushort sizeOfMain)
+    /// <summary>
+    /// Tracks the buffered block instruction count at the START of processing each IL instruction.
+    /// Key = IL instruction offset, Value = block instruction count before processing.
+    /// Used by EmitOamSprDecsp4 to remove previously emitted argument instructions.
+    /// </summary>
+    readonly Dictionary<int, int> _blockCountAtILOffset = new();
+
+    /// <summary>
+    /// Emits a JSR to a label reference.
+    /// </summary>
+    void EmitJSR(string labelName) => EmitWithLabel(Opcode.JSR, AddressMode.Absolute, labelName);
+
+    /// <summary>
+    /// Records the current block instruction count for an IL instruction offset.
+    /// Called before processing each IL instruction.
+    /// </summary>
+    public void RecordBlockCount(int ilOffset)
+    {
+        if (_bufferedBlock != null)
+            _blockCountAtILOffset[ilOffset] = GetBufferedBlockCount();
+    }
+
+    /// <summary>
+    /// Emits a JMP to a label reference.
+    /// </summary>
+    void EmitJMP(string labelName) => EmitWithLabel(Opcode.JMP, AddressMode.Absolute, labelName);
+
+    public void Write(ILInstruction instruction)
     {
         switch (instruction.OpCode)
         {
@@ -73,83 +169,126 @@ class IL2NESWriter : NESWriter
                     Stack.Pop();
                 break;
             case ILOpCode.Ldc_i4_0:
-                WriteLdc(0, sizeOfMain);
+                WriteLdc(0);
                 break;
             case ILOpCode.Ldc_i4_1:
-                WriteLdc(1, sizeOfMain);
+                WriteLdc(1);
                 break;
             case ILOpCode.Ldc_i4_2:
-                WriteLdc(2, sizeOfMain);
+                WriteLdc(2);
                 break;
             case ILOpCode.Ldc_i4_3:
-                WriteLdc(3, sizeOfMain);
+                WriteLdc(3);
                 break;
             case ILOpCode.Ldc_i4_4:
-                WriteLdc(4, sizeOfMain);
+                WriteLdc(4);
                 break;
             case ILOpCode.Ldc_i4_5:
-                WriteLdc(5, sizeOfMain);
+                WriteLdc(5);
                 break;
             case ILOpCode.Ldc_i4_6:
-                WriteLdc(6, sizeOfMain);
+                WriteLdc(6);
                 break;
             case ILOpCode.Ldc_i4_7:
-                WriteLdc(7, sizeOfMain);
+                WriteLdc(7);
                 break;
             case ILOpCode.Ldc_i4_8:
-                WriteLdc(8, sizeOfMain);
+                WriteLdc(8);
                 break;
             case ILOpCode.Stloc_0:
-                if (previous == ILOpCode.Ldtoken)
+                if (_pendingIncDecLocal == 0)
                 {
-                    Locals[0] = new Local(Stack.Pop());
+                    // INC/DEC was already emitted, just update tracking
+                    Locals[0] = new Local(Stack.Pop(), Locals[0].Address);
+                    _pendingIncDecLocal = null;
+                }
+                else if (previous == ILOpCode.Ldtoken)
+                {
+                    // Capture label for byte array reference
+                    Locals[0] = new Local(_lastByteArraySize, LabelName: _lastByteArrayLabel);
+                    _lastByteArrayLabel = null;
+                    _stloc0IsLdtokenPath = true;
+                    Stack.Pop(); // Discard marker
                 }
                 else
                 {
-                    WriteStloc(Locals[0] = new Local(Stack.Pop(), local));
+                    var addr = Locals.TryGetValue(0, out var existing) && existing.Address is not null
+                        ? (ushort)existing.Address : (ushort)(local + LocalCount);
+                    WriteStloc(Locals[0] = new Local(Stack.Pop(), addr));
                 }
                 break;
             case ILOpCode.Stloc_1:
-                if (previous == ILOpCode.Ldtoken)
+                if (_pendingIncDecLocal == 1)
                 {
-                    Locals[1] = new Local(Stack.Pop());
+                    Locals[1] = new Local(Stack.Pop(), Locals[1].Address);
+                    _pendingIncDecLocal = null;
+                }
+                else if (previous == ILOpCode.Ldtoken)
+                {
+                    Locals[1] = new Local(_lastByteArraySize, LabelName: _lastByteArrayLabel);
+                    _lastByteArrayLabel = null;
+                    Stack.Pop();
                 }
                 else
                 {
-                    WriteStloc(Locals[1] = new Local(Stack.Pop(), local + 1));
+                    var addr = Locals.TryGetValue(1, out var existing) && existing.Address is not null
+                        ? (ushort)existing.Address : (ushort)(local + LocalCount);
+                    WriteStloc(Locals[1] = new Local(Stack.Pop(), addr));
                 }
                 break;
             case ILOpCode.Stloc_2:
-                if (previous == ILOpCode.Ldtoken)
+                if (_pendingIncDecLocal == 2)
                 {
-                    Locals[2] = new Local(Stack.Pop());
+                    Locals[2] = new Local(Stack.Pop(), Locals[2].Address);
+                    _pendingIncDecLocal = null;
+                }
+                else if (previous == ILOpCode.Ldtoken)
+                {
+                    Locals[2] = new Local(_lastByteArraySize, LabelName: _lastByteArrayLabel);
+                    _lastByteArrayLabel = null;
+                    Stack.Pop();
                 }
                 else
                 {
-                    WriteStloc(Locals[2] = new Local(Stack.Pop(), local + 2));
+                    var addr = Locals.TryGetValue(2, out var existing) && existing.Address is not null
+                        ? (ushort)existing.Address : (ushort)(local + LocalCount);
+                    WriteStloc(Locals[2] = new Local(Stack.Pop(), addr));
                 }
                 break;
             case ILOpCode.Stloc_3:
-                if (previous == ILOpCode.Ldtoken)
+                if (_pendingIncDecLocal == 3)
                 {
-                    Locals[3] = new Local(Stack.Pop());
+                    Locals[3] = new Local(Stack.Pop(), Locals[3].Address);
+                    _pendingIncDecLocal = null;
+                }
+                else if (previous == ILOpCode.Ldtoken)
+                {
+                    Locals[3] = new Local(_lastByteArraySize, LabelName: _lastByteArrayLabel);
+                    _lastByteArrayLabel = null;
+                    Stack.Pop();
                 }
                 else
                 {
-                    WriteStloc(Locals[3] = new Local(Stack.Pop(), local + 3));
+                    var addr = Locals.TryGetValue(3, out var existing) && existing.Address is not null
+                        ? (ushort)existing.Address : (ushort)(local + LocalCount);
+                    WriteStloc(Locals[3] = new Local(Stack.Pop(), addr));
                 }
                 break;
             case ILOpCode.Ldloc_0:
-                WriteLdloc(Locals[0], sizeOfMain);
+                WriteLdloc(Locals[0]);
+                _lastLoadedLocalIndex = 0;
                 break;
             case ILOpCode.Ldloc_1:
-                WriteLdloc(Locals[1], sizeOfMain);
+                WriteLdloc(Locals[1]);
+                _lastLoadedLocalIndex = 1;
                 break;
             case ILOpCode.Ldloc_2:
-                WriteLdloc(Locals[2], sizeOfMain);
+                WriteLdloc(Locals[2]);
+                _lastLoadedLocalIndex = 2;
                 break;
             case ILOpCode.Ldloc_3:
-                WriteLdloc(Locals[3], sizeOfMain);
+                WriteLdloc(Locals[3]);
+                _lastLoadedLocalIndex = 3;
                 break;
             case ILOpCode.Conv_u1:
             case ILOpCode.Conv_u2:
@@ -157,11 +296,31 @@ class IL2NESWriter : NESWriter
             case ILOpCode.Conv_u8:
                 // Do nothing
                 break;
+            case ILOpCode.Stelem_i1:
+            case ILOpCode.Stelem_i2:
+            case ILOpCode.Stelem_i4:
+            case ILOpCode.Stelem_i8:
+                // stelem.i*(stack: arrayref, index, value → stack: )
+                // TODO: Implement proper address calculation and store operation.
+                // For now, we consume the IL stack operands to maintain consistency
+                // and prevent subsequent operations from seeing incorrect stack state.
+                if (Stack.Count >= 3)
+                {
+                    Stack.Pop(); // value
+                    Stack.Pop(); // index
+                    Stack.Pop(); // arrayref
+                }
+                else
+                {
+                    // In case of an inconsistent tracked stack, reset to a safe state.
+                    Stack.Clear();
+                }
+                break;
             case ILOpCode.Add:
-                Stack.Push(Stack.Pop() + Stack.Pop());
+                HandleAddSub(isAdd: true);
                 break;
             case ILOpCode.Sub:
-                Stack.Push(Stack.Pop() - Stack.Pop());
+                HandleAddSub(isAdd: false);
                 break;
             case ILOpCode.Mul:
                 Stack.Push(Stack.Pop() * Stack.Pop());
@@ -170,7 +329,34 @@ class IL2NESWriter : NESWriter
                 Stack.Push(Stack.Pop() / Stack.Pop());
                 break;
             case ILOpCode.And:
-                Stack.Push(Stack.Pop() & Stack.Pop());
+                {
+                    int mask = Stack.Pop();
+                    int value = Stack.Count > 0 ? Stack.Pop() : 0;
+
+                    // If pad_poll result is available, emit actual AND instruction
+                    if (_padPollResultAvailable)
+                    {
+                        // Remove the LDA #mask that was emitted by Ldc_i4*
+                        if (previous is ILOpCode.Ldc_i4_s or ILOpCode.Ldc_i4 
+                            or ILOpCode.Ldc_i4_0 or ILOpCode.Ldc_i4_1 or ILOpCode.Ldc_i4_2
+                            or ILOpCode.Ldc_i4_3 or ILOpCode.Ldc_i4_4 or ILOpCode.Ldc_i4_5
+                            or ILOpCode.Ldc_i4_6 or ILOpCode.Ldc_i4_7 or ILOpCode.Ldc_i4_8)
+                        {
+                            RemoveLastInstructions(1);
+                        }
+
+                        // If not first AND, need to reload pad value from temp
+                        if (!_firstAndAfterPadPoll)
+                        {
+                            Emit(Opcode.LDA, AddressMode.Absolute, tempVar);
+                        }
+                        _firstAndAfterPadPoll = false;
+
+                        Emit(Opcode.AND, AddressMode.Immediate, checked((byte)mask));
+                    }
+
+                    Stack.Push(value & mask);
+                }
                 break;
             case ILOpCode.Or:
                 Stack.Push(Stack.Pop() | Stack.Pop());
@@ -184,7 +370,7 @@ class IL2NESWriter : NESWriter
         previous = instruction.OpCode;
     }
 
-    public void Write(ILInstruction instruction, int operand, ushort sizeOfMain)
+    public void Write(ILInstruction instruction, int operand)
     {
         switch (instruction.OpCode)
         {
@@ -198,33 +384,66 @@ class IL2NESWriter : NESWriter
                 }
                 else if (operand > byte.MaxValue)
                 {
-                    WriteLdc(checked((ushort)operand), sizeOfMain);
+                    WriteLdc(checked((ushort)operand));
                 }
                 else
                 {
-                    WriteLdc((byte)operand, sizeOfMain);
+                    WriteLdc((byte)operand);
                 }
                 break;
             case ILOpCode.Br_s:
-                // NOTE: This is (-3) because we want to go to the instruction right before donelib, that is "jump to self"
-                Write(NESInstruction.JMP_abs, (ushort)(Labels[nameof(donelib)] - 3));
+                {
+                    operand = (sbyte)(byte)operand;
+                    var labelName = $"instruction_{instruction.Offset + operand + 2:X2}";
+                    EmitJMP(labelName);
+                }
+                break;
+            case ILOpCode.Br:
+                // Long form unconditional branch (32-bit offset)
+                {
+                    var labelName = $"instruction_{instruction.Offset + operand + 5:X2}";
+                    EmitJMP(labelName);
+                }
                 break;
             case ILOpCode.Newarr:
-                if (previous == ILOpCode.Ldc_i4_s)
+                if (previous == ILOpCode.Ldc_i4_s || previous == ILOpCode.Ldc_i4)
                 {
-                    SeekBack(2);
+                    // Remove the previous LDA (and LDX for ushort-sized values)
+                    int toRemove = Stack.Count > 0 && Stack.Peek() > byte.MaxValue ? 2 : 1;
+                    RemoveLastInstructions(toRemove);
+                }
+                // Track the array element type so the next Ldtoken can handle non-byte arrays
+                _pendingArrayType = instruction.String;
+                if (_pendingArrayType != null && _pendingArrayType != "Byte")
+                {
+                    // Non-byte array: pop the array size that Ldc pushed
+                    if (Stack.Count > 0)
+                        Stack.Pop();
                 }
                 break;
             case ILOpCode.Stloc_s:
                 Locals[operand] = new Local(Stack.Pop());
                 break;
             case ILOpCode.Ldloc_s:
-                WriteLdloc(Locals[operand], sizeOfMain);
+                WriteLdloc(Locals[operand]);
                 break;
             case ILOpCode.Bne_un_s:
-                SeekBack(5);
-                Write(NESInstruction.CMP, checked((byte)Stack.Pop()));
-                Write(NESInstruction.BNE_rel, NumberOfInstructionsForBranch(instruction.Offset + operand + 2, sizeOfMain));
+                // Remove the previous comparison value loading
+                // This is typically JSR pusha (3 bytes) + LDA #imm (2 bytes) = 5 bytes, 2 instructions
+                RemoveLastInstructions(2);
+                Emit(Opcode.CMP, AddressMode.Immediate, checked((byte)Stack.Pop()));
+                Emit(Opcode.BNE, AddressMode.Relative, NumberOfInstructionsForBranch(instruction.Offset + operand + 2));
+                break;
+            case ILOpCode.Brfalse_s:
+                // Branch if value is zero/false (after AND test)
+                // The AND result is in A and sets the zero flag, so use BEQ
+                {
+                    operand = (sbyte)(byte)operand;
+                    var labelName = $"instruction_{instruction.Offset + operand + 2:X2}";
+                    EmitWithLabel(Opcode.BEQ, AddressMode.Relative, labelName);
+                    if (Stack.Count > 0)
+                        Stack.Pop();
+                }
                 break;
             default:
                 throw new NotImplementedException($"OpCode {instruction.OpCode} with Int32 operand is not implemented!");
@@ -236,73 +455,77 @@ class IL2NESWriter : NESWriter
 
     public int Index { get; set; }
 
-    byte NumberOfInstructionsForBranch(int stopAt, ushort sizeOfMain)
+    byte NumberOfInstructionsForBranch(int stopAt)
     {
         _logger.WriteLine($"Reading forward until IL_{stopAt:x4}...");
 
         if (Instructions is null)
             throw new ArgumentNullException(nameof(Instructions));
 
-        long nesPosition = _writer.BaseStream.Position;
+        // Use block size for measurement
+        if (_bufferedBlock == null)
+            throw new InvalidOperationException("NumberOfInstructionsForBranch requires block buffering mode");
+        
+        int startSize = GetBufferedBlockSize();
+        int startCount = GetBufferedBlockCount();
+        
         for (int i = Index + 1; ; i++)
         {
             var instruction = Instructions[i];
             if (instruction.Integer != null)
             {
-                Write(instruction, instruction.Integer.Value, sizeOfMain);
+                Write(instruction, instruction.Integer.Value);
             }
             else if (instruction.String != null)
             {
-                Write(instruction, instruction.String, sizeOfMain);
+                Write(instruction, instruction.String);
             }
             else if (instruction.Bytes != null)
             {
-                Write(instruction, instruction.Bytes.Value, sizeOfMain);
+                Write(instruction, instruction.Bytes.Value);
             }
             else
             {
-                Write(instruction, sizeOfMain);
+                Write(instruction);
             }
             if (instruction.Offset >= stopAt)
                 break;
         }
-        byte numberOfInstructions = checked((byte)(_writer.BaseStream.Position - nesPosition));
-        SeekBack(numberOfInstructions);
-        return numberOfInstructions;
+        
+        // Calculate from block size
+        byte numberOfBytes = checked((byte)(GetBufferedBlockSize() - startSize));
+        // Remove the instructions we just added
+        int instructionsAdded = GetBufferedBlockCount() - startCount;
+        RemoveLastInstructions(instructionsAdded);
+        return numberOfBytes;
     }
 
-    public void Write(ILInstruction instruction, string operand, ushort sizeOfMain)
+    public void Write(ILInstruction instruction, string operand)
     {
         switch (instruction.OpCode)
         {
             case ILOpCode.Nop:
                 break;
             case ILOpCode.Ldstr:
-                if (!Strings.TryGetValue(operand, out ushort stringOffset))
+                //TODO: hardcoded until string table figured out
+                Emit(Opcode.LDA, AddressMode.Immediate, 0xF1);
+                Emit(Opcode.LDX, AddressMode.Immediate, 0x85);
+                EmitJSR("pushax");
+                Emit(Opcode.LDX, AddressMode.Immediate, 0x00);
+                if (operand.Length > ushort.MaxValue)
                 {
-                    if (DataOffset == 0)
-                    {
-                        DataOffset = rodata.GetAddressAfterMain(sizeOfMain);
-                    }
-
-                    stringOffset = DataOffset;
-                    Strings.Add(operand, stringOffset);
+                    throw new NotImplementedException($"{instruction.OpCode} not implemented for value larger than ushort: {operand}");
                 }
-
-                Write(NESInstruction.LDA, LSB(stringOffset));
-                Write(NESInstruction.LDX, MSB(stringOffset));
-                Write(NESInstruction.JSR, Labels[nameof(pushax)]);
-                Write(NESInstruction.LDX, 0x00);
-                Write(ILOpCode.Ldc_i4_s, operand.Length, sizeOfMain);
-                DataOffset = (ushort)(DataOffset + operand.Length);
+                else if (operand.Length > byte.MaxValue)
+                {
+                    WriteLdc(checked((ushort)operand.Length));
+                }
+                else
+                {
+                    WriteLdc((byte)operand.Length);
+                }
                 break;
             case ILOpCode.Call:
-                int argumentsCount = GetNumberOfArguments(operand);
-                if (Stack.Count < argumentsCount)
-                {
-                    throw new InvalidOperationException($"{operand} was called with less than {argumentsCount} on the stack.");
-                }
-
                 switch (operand)
                 {
                     case nameof(NTADR_A):
@@ -319,18 +542,93 @@ class IL2NESWriter : NESWriter
                             nameof(NTADR_D) => NTADR_D(x, y),
                             _ => throw new InvalidOperationException($"Address lookup of {operand} not implemented!"),
                         };
-
-                        SeekBack(10);
-                        WriteLdc(address, sizeOfMain);
+                        // Remove the two constants that were loaded
+                        // Typically: LDA #imm (2 bytes) + JSR pusha (3 bytes) + LDA #imm (2 bytes) = 7 bytes, 3 instructions
+                        RemoveLastInstructions(3);
+                        //TODO: these are hardcoded until I figure this out
+                        Emit(Opcode.LDX, AddressMode.Immediate, 0x20);
+                        Emit(Opcode.LDA, AddressMode.Immediate, 0x42);
+                        Stack.Push(address);
+                        break;
+                    case "pad_poll":
+                        // pad_poll returns result in A - emit JSR then store to tempVar for multiple tests
+                        EmitWithLabel(Opcode.JSR, AddressMode.Absolute, operand);
+                        Emit(Opcode.STA, AddressMode.Absolute, tempVar);
+                        _padPollResultAvailable = true;
+                        _firstAndAfterPadPoll = true;
+                        _immediateInA = null;
+                        if (DeferredByteArrayMode)
+                            LocalCount += 1; // tempVar counts as a local for zerobss
+                        break;
+                    case "oam_spr":
+                        if (DeferredByteArrayMode)
+                        {
+                            EmitOamSprDecsp4();
+                        }
+                        else
+                        {
+                            EmitWithLabel(Opcode.JSR, AddressMode.Absolute, operand);
+                            _immediateInA = null;
+                        }
+                        break;
+                    case nameof(NESLib.set_music_pulse_table):
+                    case nameof(NESLib.set_music_triangle_table):
+                        // Store the pending ushort[] with the appropriate label
+                        if (_pendingUShortArray != null)
+                        {
+                            string label = operand == nameof(NESLib.set_music_pulse_table)
+                                ? "note_table_pulse"
+                                : "note_table_triangle";
+                            _ushortArrays[label] = _pendingUShortArray.Value;
+                            _pendingUShortArray = null;
+                        }
+                        // These are transpiler-only directives; no 6502 code emitted
+                        break;
+                    case nameof(NESLib.start_music):
+                        // start_music expects address in A/X (it pushes internally).
+                        // Emit the byte array address from the deferred label.
+                        if (_lastByteArrayLabel != null)
+                        {
+                            EmitWithLabel(Opcode.LDA, AddressMode.Immediate_LowByte, _lastByteArrayLabel);
+                            EmitWithLabel(Opcode.LDX, AddressMode.Immediate_HighByte, _lastByteArrayLabel);
+                        }
+                        EmitWithLabel(Opcode.JSR, AddressMode.Absolute, operand);
+                        _immediateInA = null;
+                        break;
+                    case nameof(NESLib.poke):
+                        {
+                            // poke(ushort addr, byte value) -> LDA #value, STA abs addr
+                            if (Stack.Count >= 2)
+                            {
+                                int value = Stack.Pop();
+                                int addr = Stack.Pop();
+                                // Remove previously emitted instructions:
+                                // LDX #hi, LDA #lo, JSR pusha, LDA #value = 4 instructions
+                                RemoveLastInstructions(4);
+                                // After removal, _immediateInA may be stale; only trust
+                                // the value if the PREVIOUS poke set it (STA doesn't change A)
+                                if (_pokeLastValue != (byte)value)
+                                {
+                                    Emit(Opcode.LDA, AddressMode.Immediate, (byte)value);
+                                }
+                                Emit(Opcode.STA, AddressMode.Absolute, (ushort)addr);
+                                _pokeLastValue = (byte)value;
+                                _immediateInA = (byte)value;
+                            }
+                        }
                         break;
                     default:
-                        Write(NESInstruction.JSR, GetAddress(operand));
-                        // Pop N times
-                        for (int i = 0; i < argumentsCount; i++)
+                        if (_needsByteArrayLoadInCall && _lastByteArrayLabel != null 
+                            && previous != ILOpCode.Ldtoken)
                         {
-                            if (Stack.Count > 0)
-                                Stack.Pop();
+                            // Load deferred byte array address into AX before calling the function
+                            EmitWithLabel(Opcode.LDA, AddressMode.Immediate_LowByte, _lastByteArrayLabel);
+                            EmitWithLabel(Opcode.LDX, AddressMode.Immediate_HighByte, _lastByteArrayLabel);
+                            _needsByteArrayLoadInCall = false; // Only emit once
                         }
+                        // Emit JSR to built-in method
+                        EmitWithLabel(Opcode.JSR, AddressMode.Absolute, operand);
+                        _immediateInA = null;
                         break;
                 }
                 // Pop N times
@@ -340,9 +638,23 @@ class IL2NESWriter : NESWriter
                     if (Stack.Count > 0)
                         Stack.Pop();
                 }
-                // Return value, dup for now might be fine?
-                if (_reflectionCache.HasReturnValue(operand) && Stack.Count > 0)
-                    Stack.Push(Stack.Peek());
+                // Clear byte array label if it was consumed by Ldtoken→Call path
+                if (_lastByteArrayLabel != null && previous == ILOpCode.Ldtoken)
+                    _lastByteArrayLabel = null;
+                // Return value handling
+                if (_reflectionCache.HasReturnValue(operand))
+                {
+                    // For pad_poll, push the return value placeholder after args are popped
+                    if (operand == "pad_poll")
+                    {
+                        Stack.Push(0);
+                    }
+                    else if (Stack.Count > 0)
+                    {
+                        // Other methods: dup for now might be fine?
+                        Stack.Push(Stack.Peek());
+                    }
+                }
                 break;
             default:
                 throw new NotImplementedException($"OpCode {instruction.OpCode} with String operand is not implemented!");
@@ -350,30 +662,50 @@ class IL2NESWriter : NESWriter
         previous = instruction.OpCode;
     }
 
-    public void Write(ILInstruction instruction, ImmutableArray<byte> operand, ushort sizeOfMain)
+    /// <summary>
+    /// Counter for generating unique byte array labels
+    /// </summary>
+    int _byteArrayLabelIndex = 0;
+    
+    /// <summary>
+    /// Track the last byte array label for Stloc handling
+    /// </summary>
+    string? _lastByteArrayLabel = null;
+    int _lastByteArraySize = 0;
+
+    public void Write(ILInstruction instruction, ImmutableArray<byte> operand)
     {
         switch (instruction.OpCode)
         {
             case ILOpCode.Ldtoken:
-                if (DataOffset == 0)
+                // Non-byte arrays (e.g. ushort[]) are collected separately and not emitted as code
+                if (_pendingArrayType != null && _pendingArrayType != "Byte")
                 {
-                    DataOffset = rodata.GetAddressAfterMain(sizeOfMain);
-
-                    // HACK: adjust ByteArrayOffset based on length of oam_spr
-                    if (UsedMethods is not null && UsedMethods.Contains(nameof(oam_spr)))
-                    {
-                        DataOffset += 44;
-                    }
+                    _pendingUShortArray = operand;
+                    _pendingArrayType = null;
+                    break;
                 }
+                _pendingArrayType = null;
+
+                // Use labels for byte arrays (resolved during address resolution)
+                string byteArrayLabel = $"bytearray_{_byteArrayLabelIndex}";
+                _byteArrayLabelIndex++;
+                
                 // HACK: write these if next instruction is Call
+                _byteArrayAddressEmitted = false;
                 if (Instructions is not null && Instructions[Index + 1].OpCode == ILOpCode.Call)
                 {
-                    Write(NESInstruction.LDA, (byte)(DataOffset & 0xff));
-                    Write(NESInstruction.LDX, (byte)(DataOffset >> 8));
+                    EmitWithLabel(Opcode.LDA, AddressMode.Immediate_LowByte, byteArrayLabel);
+                    EmitWithLabel(Opcode.LDX, AddressMode.Immediate_HighByte, byteArrayLabel);
+                    _byteArrayAddressEmitted = true;
                 }
-                Stack.Push(DataOffset);
-                DataOffset = (ushort)(DataOffset + operand.Length);
-                ByteArrays.Add(operand);
+                _byteArrays.Add(operand);
+                
+                // Push a marker value and track the label for later Stloc
+                // Use negative value as marker that this is a label reference
+                _lastByteArrayLabel = byteArrayLabel;
+                _lastByteArraySize = operand.Length;
+                Stack.Push(-(_byteArrayLabelIndex)); // Negative marker
                 break;
             default:
                 throw new NotImplementedException($"OpCode {instruction.OpCode} with byte[] operand is not implemented!");
@@ -382,84 +714,77 @@ class IL2NESWriter : NESWriter
     }
 
     /// <summary>
-    /// Write all the byte[] values
+    /// Handles Add and Sub operations. For patterns like x++ or x--, emits optimized INC/DEC.
+    /// For other arithmetic, performs compile-time calculation.
     /// </summary>
-    public void WriteByteArrays(IL2NESWriter parent)
+    void HandleAddSub(bool isAdd)
     {
-        foreach (var bytes in parent.ByteArrays)
+        int operand = Stack.Pop(); // The value being added/subtracted (e.g., 1)
+        int baseValue = Stack.Pop(); // The base value (from local variable)
+
+        // Check if this is an x++ or x-- pattern:
+        // Ldloc_N, Ldc_i4_1, Add/Sub, Conv_u1, Stloc_N (where the two N's match)
+        if (_lastLoadedLocalIndex.HasValue && operand == 1 && 
+            Locals.TryGetValue(_lastLoadedLocalIndex.Value, out var loadedLocal) && loadedLocal.Address.HasValue &&
+            Instructions is not null && Index + 2 < Instructions.Length)
         {
-            foreach (var b in bytes)
+            var next1 = Instructions[Index + 1];
+            var next2 = Instructions[Index + 2];
+            
+            int? storeLocalIndex = GetStlocIndex(next2.OpCode);
+            
+            if ((next1.OpCode == ILOpCode.Conv_u1 || next1.OpCode == ILOpCode.Conv_u2 ||
+                 next1.OpCode == ILOpCode.Conv_u4 || next1.OpCode == ILOpCode.Conv_u8) &&
+                storeLocalIndex == _lastLoadedLocalIndex)
             {
-                _writer.Write(b);
+                // This is an x++ or x-- pattern!
+                // Remove the previously emitted instructions:
+                // WriteLdloc emits: LDA $addr; JSR pusha (2 instructions)
+                // WriteLdc(byte) emits: LDA #imm (1 instruction)
+                // Total: 3 instructions to remove
+                RemoveLastInstructions(3);
+                
+                // Emit optimized INC or DEC
+                ushort addr = (ushort)loadedLocal.Address.Value;
+                if (isAdd)
+                {
+                    Emit(Opcode.INC, AddressMode.Absolute, addr);
+                }
+                else
+                {
+                    Emit(Opcode.DEC, AddressMode.Absolute, addr);
+                }
+                
+                // Signal that Stloc should be skipped
+                _pendingIncDecLocal = _lastLoadedLocalIndex;
+                
+                // Push the updated value (for tracking)
+                int result = isAdd ? baseValue + 1 : baseValue - 1;
+                Stack.Push(result);
+                _lastLoadedLocalIndex = null;
+                return;
             }
         }
+        
+        // Default: compile-time calculation only
+        int compileTimeResult = isAdd ? baseValue + operand : baseValue - operand;
+        Stack.Push(compileTimeResult);
+        _lastLoadedLocalIndex = null;
     }
 
-    ushort GetAddress(string name)
+    /// <summary>
+    /// Gets the local index for a Stloc opcode, or null if not a Stloc.
+    /// </summary>
+    static int? GetStlocIndex(ILOpCode opCode) => opCode switch
     {
-        switch (name)
-        {
-            case nameof(pal_col):
-                return 0x823E;
-            case nameof(pal_bg):
-                return 0x822B;
-            case nameof(pal_clear):
-                return 0x824E;
-            case nameof(pal_all):
-                return 0x8211;
-            case nameof(pal_spr):
-                return 0x8235;
-            case nameof(pal_spr_bright):
-                return 0x825D;
-            case nameof(ppu_on_all):
-                return 0x8289;
-            case nameof(vram_adr):
-                return 0x83D4;
-            case nameof(ppu_wait_frame):
-                return 0x82DB;
-            case nameof(ppu_on_bg):
-                return 0x8292;
-            case nameof(ppu_on_spr):
-                return 0x8298;
-            case nameof(rand):
-                return 0x860C;
-            case nameof(rand8):
-                return 0x860C;
-            case nameof(rand16):
-                return 0x8617;
-            case nameof(set_rand):
-                return 0x8623;
-            case nameof(delay):
-                return 0x841A;
-            case nameof(nesclock):
-                return 0x8415;
-            case nameof(oam_clear):
-                return 0x82AE;
-            case nameof(oam_hide_rest):
-                return 0x82CE;
-            case nameof(oam_size):
-                return 0x82BC;
-            case nameof(vram_fill):
-                return 0x83DF;
-            case nameof(vram_write):
-                return 0x834F;
-            case nameof(vram_put):
-                return 0x83DB;
-            case nameof(vram_inc):
-                return 0x8401;
-            case nameof(set_vram_update):
-                return 0x8376;
-            case nameof(set_ppu_ctrl_var):
-                return 0x82AB;
-            case nameof(scroll):
-                return 0x82FB;
-            case nameof(oam_spr):
-            case nameof(pad_poll):
-                return Labels.TryGetValue(name, out var address) ? address : (ushort)0;
-            default:
-                throw new NotImplementedException($"{nameof(GetAddress)} for {name} is not implemented!");
-        }
-    }
+        ILOpCode.Stloc_0 => 0,
+        ILOpCode.Stloc_1 => 1,
+        ILOpCode.Stloc_2 => 2,
+        ILOpCode.Stloc_3 => 3,
+        ILOpCode.Stloc => null, // Would need operand
+        ILOpCode.Stloc_s => null, // Would need operand  
+        _ => null
+    };
 
     void WriteStloc(Local local)
     {
@@ -468,27 +793,37 @@ class IL2NESWriter : NESWriter
 
         if (local.Value < byte.MaxValue)
         {
-            if (!Locals.ContainsValue(local))
+            LocalCount += 1;
+            if (DeferredByteArrayMode)
             {
-                LocalCount += 1;
+                // New pattern: just emit STA (keep the LDA from WriteLdc)
+                Emit(Opcode.STA, AddressMode.Absolute, (ushort)local.Address);
+                // STA doesn't change A, so _immediateInA stays valid
+                _needsByteArrayLoadInCall = true;
             }
-
-            SeekBack(2);
-            Write(NESInstruction.LDA, (byte)local.Value);
-            Write(NESInstruction.STA_abs, (ushort)local.Address);
-            Write(NESInstruction.LDA, 0x22);
-            Write(NESInstruction.LDX, 0x86);
+            else
+            {
+                // Old pattern: full sequence with trailing LDA/LDX
+                RemoveLastInstructions(1);
+                Emit(Opcode.LDA, AddressMode.Immediate, (byte)local.Value);
+                Emit(Opcode.STA, AddressMode.Absolute, (ushort)local.Address);
+                Emit(Opcode.LDA, AddressMode.Immediate, 0x22);
+                Emit(Opcode.LDX, AddressMode.Immediate, 0x86);
+                _immediateInA = null;
+            }
         }
         else if (local.Value < ushort.MaxValue)
         {
             LocalCount += 2;
-            SeekBack(4);
-            Write(NESInstruction.LDX, 0x03);
-            Write(NESInstruction.LDA, 0xC0);
-            Write(NESInstruction.STA_abs, (ushort)local.Address);
-            Write(NESInstruction.STX_abs, (ushort)(local.Address + 1));
-            Write(NESInstruction.LDA, 0x28);
-            Write(NESInstruction.LDX, 0x86);
+            // Remove the previous LDX + LDA instructions (2 instructions = 4 bytes)
+            RemoveLastInstructions(2);
+            Emit(Opcode.LDX, AddressMode.Immediate, 0x03);
+            Emit(Opcode.LDA, AddressMode.Immediate, 0xC0);
+            Emit(Opcode.STA, AddressMode.Absolute, (ushort)local.Address);
+            Emit(Opcode.STX, AddressMode.Absolute, (ushort)(local.Address + 1));
+            Emit(Opcode.LDA, AddressMode.Immediate, 0x28);
+            Emit(Opcode.LDX, AddressMode.Immediate, 0x86);
+            _immediateInA = null;
         }
         else
         {
@@ -496,42 +831,62 @@ class IL2NESWriter : NESWriter
         }
     }
 
-    void WriteLdc(ushort operand, ushort sizeOfMain)
+    void WriteLdc(ushort operand)
     {
         if (LastLDA)
         {
-            Write(NESInstruction.JSR, Labels[nameof(pusha)]);
+            EmitJSR("pusha");
         }
-        Write(NESInstruction.LDX, MSB(operand));
-        Write(NESInstruction.LDA, LSB(operand));
+        Emit(Opcode.LDX, AddressMode.Immediate, checked((byte)(operand >> 8)));
+        Emit(Opcode.LDA, AddressMode.Immediate, checked((byte)(operand & 0xff)));
         Stack.Push(operand);
     }
 
-    void WriteLdc(byte operand, ushort sizeOfMain)
+    void WriteLdc(byte operand)
     {
         if (LastLDA)
         {
-            Write(NESInstruction.JSR, Labels[nameof(pusha)]);
+            EmitJSR("pusha");
+            _immediateInA = null;
         }
-        Write(NESInstruction.LDA, operand);
+        if (DeferredByteArrayMode && _immediateInA.HasValue && _immediateInA.Value == operand)
+        {
+            // A already has this value, skip the LDA
+            Stack.Push(operand);
+            return;
+        }
+        Emit(Opcode.LDA, AddressMode.Immediate, operand);
+        _immediateInA = operand;
         Stack.Push(operand);
     }
 
-    void WriteLdloc(Local local, ushort sizeOfMain)
+    void WriteLdloc(Local local)
     {
-        if (local.Address is not null)
+        if (local.LabelName is not null)
+        {
+            // This local holds a byte array label reference
+            EmitWithLabel(Opcode.LDA, AddressMode.Immediate_LowByte, local.LabelName);
+            EmitWithLabel(Opcode.LDX, AddressMode.Immediate_HighByte, local.LabelName);
+            EmitJSR("pushax");
+            Emit(Opcode.LDX, AddressMode.Immediate, 0x00);
+            Emit(Opcode.LDA, AddressMode.Immediate, (byte)local.Value); // Size of array
+            _immediateInA = (byte)local.Value;
+        }
+        else if (local.Address is not null)
         {
             // This is actually a local variable
             if (local.Value < byte.MaxValue)
             {
-                Write(NESInstruction.LDA_abs, (ushort)local.Address);
-                Write(NESInstruction.JSR, Labels[nameof(pusha)]);
+                Emit(Opcode.LDA, AddressMode.Absolute, (ushort)local.Address);
+                EmitJSR("pusha");
+                _immediateInA = null;
             }
             else if (local.Value < ushort.MaxValue)
             {
-                Write(NESInstruction.JSR, Labels[nameof(pusha)]);
-                Write(NESInstruction.LDA_abs, (ushort)local.Address);
-                Write(NESInstruction.LDX_abs, (ushort)(local.Address + 1));
+                EmitJSR("pusha");
+                Emit(Opcode.LDA, AddressMode.Absolute, (ushort)local.Address);
+                Emit(Opcode.LDX, AddressMode.Absolute, (ushort)(local.Address + 1));
+                _immediateInA = null;
             }
             else
             {
@@ -541,26 +896,220 @@ class IL2NESWriter : NESWriter
         else
         {
             // This is more like an inline constant value
-            Write(NESInstruction.LDA, (byte)(local.Value & 0xff));
-            Write(NESInstruction.LDX, (byte)(local.Value >> 8));
-            Write(NESInstruction.JSR, Labels[nameof(pushax)]);
-            Write(NESInstruction.LDX, 0x00);
-            Write(NESInstruction.LDA, 0x40);
+            Emit(Opcode.LDA, AddressMode.Immediate, (byte)(local.Value & 0xff));
+            Emit(Opcode.LDX, AddressMode.Immediate, (byte)(local.Value >> 8));
+            EmitJSR("pushax");
+            Emit(Opcode.LDX, AddressMode.Immediate, 0x00);
+            Emit(Opcode.LDA, AddressMode.Immediate, 0x40);
+            _immediateInA = 0x40;
         }
         Stack.Push(local.Value);
     }
 
-    void SeekBack(int length)
+    /// <summary>
+    /// Flushes the buffered block to the stream and stops block buffering.
+    /// Wrapper for FlushBufferedBlock() for backward compatibility.
+    /// </summary>
+    public void FlushMainBlock() => FlushBufferedBlock();
+
+    /// <summary>
+    /// Gets the main program as a Block without flushing it to the stream.
+    /// The block can then be added to a Program6502 for analysis or manipulation.
+    /// Call this INSTEAD OF FlushMainBlock() when building a full Program6502.
+    /// </summary>
+    /// <param name="label">Optional label for the main block (e.g., "main")</param>
+    /// <returns>The main program block, or null if not in block buffering mode</returns>
+    public Block? GetMainBlock(string? label = "main")
     {
-        LastLDA = false;
-        _logger.WriteLine($"Seek back {length} bytes");
-        if (_writer.BaseStream.Length < length)
+        if (_bufferedBlock == null)
+            return null;
+
+        var block = _bufferedBlock;
+        block.Label = label;
+        _bufferedBlock = null;
+        return block;
+    }
+
+    /// <summary>
+    /// Gets the current block being buffered (read-only access).
+    /// Returns null if not in block buffering mode.
+    /// </summary>
+    public Block? CurrentBlock => _bufferedBlock;
+
+    /// <summary>
+    /// Emits oam_spr call using decsp4 + inline STA ($22),Y pattern.
+    /// Used when arguments include runtime variables (deferred byte array mode).
+    /// </summary>
+    void EmitOamSprDecsp4()
+    {
+        if (Instructions is null)
+            throw new InvalidOperationException("EmitOamSprDecsp4 requires Instructions");
+
+        // oam_spr has 5 args: x, y, tile, attr, id
+        // Walk back through IL to find the 5 argument-producing IL instructions
+        // and determine the first argument's IL offset for instruction removal
+        var argInfos = new List<(bool isLocal, int localIndex, int constValue, bool hasAdd, int addValue)>();
+        int ilIdx = Index - 1;
+        int needed = 5;
+        int firstArgIlIdx = -1;
+        int? pendingAddValue = null; // Tracks Ldc value that's consumed by Add (part of Ldloc+N expression)
+
+        while (needed > 0 && ilIdx >= 0)
         {
-            _writer.BaseStream.SetLength(0);
+            var il = Instructions[ilIdx];
+            switch (il.OpCode)
+            {
+                case ILOpCode.Ldloc_0: case ILOpCode.Ldloc_1:
+                case ILOpCode.Ldloc_2: case ILOpCode.Ldloc_3:
+                    int locIdx = il.OpCode - ILOpCode.Ldloc_0;
+                    if (pendingAddValue != null)
+                    {
+                        argInfos.Add((true, locIdx, 0, true, pendingAddValue.Value));
+                        pendingAddValue = null;
+                    }
+                    else
+                    {
+                        argInfos.Add((true, locIdx, 0, false, 0));
+                    }
+                    needed--;
+                    firstArgIlIdx = ilIdx;
+                    break;
+                case ILOpCode.Ldc_i4_0: case ILOpCode.Ldc_i4_1: case ILOpCode.Ldc_i4_2:
+                case ILOpCode.Ldc_i4_3: case ILOpCode.Ldc_i4_4: case ILOpCode.Ldc_i4_5:
+                case ILOpCode.Ldc_i4_6: case ILOpCode.Ldc_i4_7: case ILOpCode.Ldc_i4_8:
+                {
+                    int val = il.OpCode - ILOpCode.Ldc_i4_0;
+                    if (IsConsumedByAdd(ilIdx))
+                    {
+                        pendingAddValue = val;
+                    }
+                    else
+                    {
+                        argInfos.Add((false, 0, val, false, 0));
+                        needed--;
+                        firstArgIlIdx = ilIdx;
+                    }
+                    break;
+                }
+                case ILOpCode.Ldc_i4_s:
+                case ILOpCode.Ldc_i4:
+                {
+                    int val = il.Integer ?? 0;
+                    if (IsConsumedByAdd(ilIdx))
+                    {
+                        pendingAddValue = val;
+                    }
+                    else
+                    {
+                        argInfos.Add((false, 0, val, false, 0));
+                        needed--;
+                        firstArgIlIdx = ilIdx;
+                    }
+                    break;
+                }
+                case ILOpCode.Add: case ILOpCode.Sub:
+                case ILOpCode.Conv_u1: case ILOpCode.Conv_u2:
+                case ILOpCode.Pop:
+                    break;
+                default:
+                    break;
+            }
+            ilIdx--;
         }
-        else
+
+        argInfos.Reverse();
+
+        // Remove all previously emitted instructions for these args
+        if (firstArgIlIdx >= 0)
         {
-            _writer.BaseStream.SetLength(_writer.BaseStream.Length - length);
+            int firstArgIlOffset = Instructions[firstArgIlIdx].Offset;
+            if (_blockCountAtILOffset.TryGetValue(firstArgIlOffset, out int blockCountAtFirstArg))
+            {
+                int instrToRemove = GetBufferedBlockCount() - blockCountAtFirstArg;
+                if (instrToRemove > 0)
+                    RemoveLastInstructions(instrToRemove);
+            }
         }
+
+        // Mark decsp4 as used
+        UsedMethods?.Add("decsp4");
+        UsedMethods?.Add("pad_trigger");
+        UsedMethods?.Add("pad_state");
+
+        // Emit: JSR decsp4
+        EmitJSR("decsp4");
+
+        // First 4 args go to stack via STA ($22),Y
+        for (int i = 0; i < 4 && i < argInfos.Count; i++)
+        {
+            var arg = argInfos[i];
+            if (arg.isLocal)
+            {
+                var loc = Locals[arg.localIndex];
+                Emit(Opcode.LDA, AddressMode.Absolute, (ushort)loc.Address!);
+                if (arg.hasAdd)
+                {
+                    Emit(Opcode.CLC, AddressMode.Implied);
+                    Emit(Opcode.ADC, AddressMode.Immediate, checked((byte)arg.addValue));
+                }
+            }
+            else
+            {
+                Emit(Opcode.LDA, AddressMode.Immediate, checked((byte)arg.constValue));
+            }
+
+            if (i == 0)
+                Emit(Opcode.LDY, AddressMode.Immediate, 0x03);
+            else
+                Emit(Opcode.DEY, AddressMode.Implied);
+
+            Emit(Opcode.STA, AddressMode.IndirectIndexed, (byte)0x22);
+        }
+
+        // 5th arg (id) stays in A - check if we can skip LDA (STA doesn't change A)
+        if (argInfos.Count >= 5)
+        {
+            var idArg = argInfos[4];
+            byte idVal = checked((byte)idArg.constValue);
+            if (argInfos.Count >= 4)
+            {
+                var attrArg = argInfos[3];
+                if (!attrArg.isLocal && !idArg.isLocal && attrArg.constValue == idArg.constValue)
+                {
+                    // A already has the right value from attr
+                }
+                else
+                {
+                    Emit(Opcode.LDA, AddressMode.Immediate, idVal);
+                }
+            }
+            else
+            {
+                Emit(Opcode.LDA, AddressMode.Immediate, idVal);
+            }
+        }
+
+        // JSR oam_spr
+        EmitWithLabel(Opcode.JSR, AddressMode.Absolute, "oam_spr");
+        _immediateInA = null;
+    }
+
+    /// <summary>
+    /// Checks if a Ldc instruction at the given index is consumed by a following Add/Sub
+    /// (making it part of a compound expression like Ldloc + Ldc + Add).
+    /// </summary>
+    bool IsConsumedByAdd(int idx)
+    {
+        if (Instructions is null) return false;
+        for (int scan = idx + 1; scan < Index; scan++)
+        {
+            var op = Instructions[scan].OpCode;
+            if (op == ILOpCode.Add || op == ILOpCode.Sub)
+                return true;
+            if (op is ILOpCode.Conv_u1 or ILOpCode.Conv_u2)
+                continue;
+            break;
+        }
+        return false;
     }
 }

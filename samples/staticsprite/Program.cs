@@ -1,4 +1,4 @@
-﻿byte[] PALETTE = new byte[32] { 
+﻿byte[] PALETTE = [ 
     0x30,               // screen color
 
     0x11,0x30,0x27,0x0, // background palette 0
@@ -10,7 +10,7 @@
     0x00,0x37,0x25,0x0, // sprite palette 1
     0x0d,0x2d,0x3a,0x0, // sprite palette 2
     0x0d,0x27,0x2a      // sprite palette 3
-};
+];
 
 pal_all(PALETTE);
 oam_spr(40, 40, 0xD8, 0, 0);

@@ -12,7 +12,7 @@ PRs of any kind are welcome! If you have a question, feel free to:
 
 * [File an Issue](https://github.com/jonathanpeppers/dotnes/issues)
 * [Open a Discussion](https://github.com/jonathanpeppers/dotnes/discussions)
-* [Join the Discord](https://discord.gg/YbAyj6KP)
+* [Join the Discord](https://discord.gg/xcYmpC5EPF)
 
 Thanks!
 
@@ -90,6 +90,32 @@ Additionally, a `chr_generic.s` file is included as your game's "artwork" (lol?)
 
 This table of data is used to render sprites, text, etc.
 
+## Music
+
+.NES also supports NES music playback via the APU. The `samples/music` project
+plays "The Easy Winners" by Scott Joplin using pulse and triangle channels:
+
+```csharp
+ushort[] note_table = [ 4304, 4062, 3834, ... ];
+set_music_pulse_table(note_table);
+
+ushort[] tri_table = [ 2138, 2018, 1905, ... ];
+set_music_triangle_table(tri_table);
+
+byte[] music1 = [ 0x2a, 0x1e, 0x95, ... ];
+
+apu_init();
+start_music(music1);
+
+while (true)
+{
+    ppu_wait_nmi();
+    play_music();
+}
+```
+
+For more details, see [docs/music-sample.md](docs/music-sample.md).
+
 ## Scope
 
 The types of things I wanted to get working initially:
@@ -101,6 +127,7 @@ The types of things I wanted to get working initially:
 * Byte arrays, and a more advanced sample like `attributetable` run
 * Local variables work in some form
 * Project template, MSBuild support, IDE support
+* Music playback via the NES APU (see `samples/music`)
 
 Down the road, I might think about support for:
 
@@ -147,7 +174,7 @@ fact! there is *only* a reference assembly even shipped in .NES:
 > 7z l dotnes.0.2.0-alpha.nupkg
    Date      Time    Attr         Size   Compressed  Name
 ------------------- ----- ------------ ------------  ------------------------
-2023-09-14 14:37:38 .....         8192         3169  ref\net8.0\neslib.dll
+2023-09-14 14:37:38 .....         8192         3169  ref\net10.0\neslib.dll
 ```
 
 If you decompile `neslib.dll`, no code is inside:
@@ -162,8 +189,8 @@ public static void pal_col(byte index, byte color) => throw null;
 When generating `*.nes` binaries, .NES simply does a lookup for `pal_col` to
 "jump" to the appropriate subroutine to call it.
 
-.NES also emits the assembly instructions for the actual `pal_col` subroutine, a
-code snippet of the implementation:
+.NES also emits the assembly instructions for the actual `pal_col` subroutine. 
+The implementation uses an object model that represents 6502 instructions:
 
 ```csharp
 /*
@@ -176,14 +203,16 @@ code snippet of the implementation:
 * 824B	E607          	INC PAL_UPDATE                
 * 824D	60            	RTS
 */
-Write(NESInstruction.STA_zpg, TEMP);
-Write(NESInstruction.JSR, popa.GetAddressAfterMain(sizeOfMain));
-Write(NESInstruction.AND, 0x1F);
-Write(NESInstruction.TAX_impl);
-Write(NESInstruction.LDA_zpg, TEMP);
-Write(NESInstruction.STA_abs_X, PAL_BUF);
-Write(NESInstruction.INC_zpg, PAL_UPDATE);
-Write(NESInstruction.RTS_impl);
+// Uses Block and Instruction objects from the 6502 object model:
+var block = new Block("_pal_col");
+block.Emit(STA_zpg(TEMP))
+     .Emit(JSR(popa))
+     .Emit(AND(0x1F))
+     .Emit(TAX())
+     .Emit(LDA_zpg(TEMP))
+     .Emit(STA_abs_X(PAL_BUF))
+     .Emit(INC_zpg(PAL_UPDATE))
+     .Emit(RTS());
 ```
 
 [srm]: https://learn.microsoft.com/dotnet/api/system.reflection.metadata

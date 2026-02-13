@@ -1,9 +1,11 @@
-﻿using System.Buffers;
+using System.Buffers;
 using System.Collections.Immutable;
 using System.Reflection;
 using System.Reflection.Metadata;
 using System.Reflection.Metadata.Ecma335;
 using System.Reflection.PortableExecutable;
+using System.Text;
+using dotnes.ObjectModel;
 
 namespace dotnes;
 
@@ -27,52 +29,6 @@ class Transpiler : IDisposable
         _logger = logger ?? new NullLogger();
     }
 
-    /// <summary>
-    /// Figure out the addresses of functions so we can use to them for JMPs.
-    /// TODO: ASM-type labels would be nice...
-    /// </summary>
-    /// <param name="sizeOfMain"></param>
-    /// <returns></returns>
-    private Dictionary<string, ushort> CalculateAddressLabels(ILInstruction[] instructions)
-    {
-        using var ms = new MemoryStream();
-        using var writer = new IL2NESWriter(ms, logger: _logger)
-        {
-            UsedMethods = UsedMethods,
-            Instructions = instructions,
-        };
-
-        // Write built-in functions
-        writer.WriteBuiltIns(sizeOfMain: 0);
-
-        // Write main program
-        for (int i = 0; i < writer.Instructions.Length; i++)
-        {
-            writer.Index = i;
-            var instruction = writer.Instructions[i];
-            if (instruction.Integer != null)
-            {
-                writer.Write(instruction, instruction.Integer.Value, sizeOfMain: 0);
-            }
-            else if (instruction.String != null)
-            {
-                writer.Write(instruction, instruction.String, sizeOfMain: 0);
-            }
-            else if (instruction.Bytes != null)
-            {
-                writer.Write(instruction, instruction.Bytes.Value, sizeOfMain: 0);
-            }
-            else
-            {
-                writer.Write(instruction, sizeOfMain: 0);
-            }
-        }
-
-        writer.WriteFinalBuiltIns(0, 0);
-
-        return writer.Labels;
-    }
-
     public void Write(Stream stream)
     {
         if (_assemblyFiles.Count == 0)
@@ -81,173 +37,261 @@ class Transpiler : IDisposable
         var assemblyReader = _assemblyFiles.FirstOrDefault(a => Path.GetFileName(a.Path) == "chr_generic.s") ?? _assemblyFiles[0];
         var chr_rom = assemblyReader.GetSegments().FirstOrDefault(s => s.Name == "CHARS") ??
             throw new InvalidOperationException($"At least one 'CHARS' segment must be present in: {assemblyReader.Path}");
-        int CHR_ROM_SIZE = (int)(chr_rom.Bytes.Length / NESWriter.CHR_ROM_BLOCK_SIZE);
 
-        _logger.WriteLine($"First pass...");
+        _logger.WriteLine($"Building program...");
 
-        var instructions = ReadStaticVoidMain().ToArray();
-        var labels = CalculateAddressLabels(instructions);
+        // Build the complete program using single-pass transpilation
+        var program = BuildProgram6502(out ushort sizeOfMain, out byte locals);
+        var programBytes = program.ToBytes();
 
-        // Generate static void main in a first pass, so we know the size of the program
-        FirstPass(labels, instructions, out ushort sizeOfMain, out byte locals);
+        _logger.WriteLine($"Size of main: {sizeOfMain}, locals: {locals}");
 
-        _logger.WriteLine($"Size of main: {sizeOfMain}");
-
-        using var writer = new IL2NESWriter(stream, logger: _logger)
-        {
-            Instructions = instructions,
-            UsedMethods = UsedMethods,
-        };
-        writer.SetLabels(labels);
-
+        // Write the NES ROM
+        using var writer = new BinaryWriter(stream, Encoding.ASCII, leaveOpen: true);
+        
+        // Write NES header (16 bytes)
         _logger.WriteLine($"Writing header...");
-        writer.WriteHeader(PRG_ROM_SIZE: 2, CHR_ROM_SIZE: 1);
-        _logger.WriteLine($"Writing built-ins...");
-        writer.WriteBuiltIns(sizeOfMain);
+        writer.Write('N');
+        writer.Write('E');
+        writer.Write('S');
+        writer.Write((byte)0x1A);
+        writer.Write((byte)2); // PRG_ROM_SIZE (2 * 16KB = 32KB)
+        writer.Write((byte)1); // CHR_ROM_SIZE (1 * 8KB)
+        writer.Write((byte)0); // Flags6
+        writer.Write((byte)0); // Flags7
+        writer.Write((byte)0); // Flags8
+        writer.Write((byte)0); // Flags9
+        writer.Write((byte)0); // Flags10
+        // Pad header to 16 bytes
+        for (int i = 0; i < 5; i++)
+            writer.Write((byte)0);
 
-        _logger.WriteLine($"Second pass...");
+        // Write PRG ROM
+        _logger.WriteLine($"Writing PRG ROM ({programBytes.Length} bytes)...");
+        writer.Write(programBytes);
 
-        // Write static void main *again*, second pass
-        // With a known value for sizeOfMain
-        SecondPass(sizeOfMain, writer);
-
-        // NOTE: not sure if string or byte[] is first
-        _logger.WriteLine($"Writing string/byte[] table...");
-        using (var memoryStream = new MemoryStream())
+        // Pad first PRG ROM bank to 16KB
+        int firstBankPadding = NESWriter.PRG_ROM_BLOCK_SIZE - (programBytes.Length % NESWriter.PRG_ROM_BLOCK_SIZE);
+        if (firstBankPadding < NESWriter.PRG_ROM_BLOCK_SIZE)
         {
-            using (var tableWriter = new IL2NESWriter(memoryStream, leaveOpen: true, logger: _logger))
-            {
-                // Write byte[] table
-                tableWriter.WriteByteArrays(writer);
-
-                // Write C# string table
-                int stringHeapSize = _reader.GetHeapSize(HeapIndex.UserString);
-                if (stringHeapSize > 0)
-                {
-                    var handle = MetadataTokens.UserStringHandle(0);
-                    do
-                    {
-                        string value = _reader.GetUserString(handle);
-                        if (!string.IsNullOrEmpty(value))
-                        {
-                            tableWriter.WriteString(value);
-                        }
-                        handle = _reader.GetNextHandle(handle);
-                    }
-                    while (!handle.IsNil);
-                }
-            }
-
-            const ushort PRG_LAST = 0x85AE;
-            writer.WriteFinalBuiltIns((ushort)(PRG_LAST.GetAddressAfterMain(sizeOfMain) + memoryStream.Length), locals);
-            memoryStream.Position = 0;
-            memoryStream.CopyTo(writer.BaseStream);
+            for (int i = 0; i < firstBankPadding; i++)
+                writer.Write((byte)0);
         }
 
-        _logger.WriteLine($"Destructor table...");
-        writer.WriteDestructorTable();
-
-        // Pad 0s
-        int PRG_ROM_SIZE = (int)writer.Length - 16;
-        writer.WriteZeroes(NESWriter.PRG_ROM_BLOCK_SIZE - (PRG_ROM_SIZE % NESWriter.PRG_ROM_BLOCK_SIZE));
-
-        // Write interrupt vectors
+        // Write second PRG ROM bank (16KB), with interrupt vectors at the end
         const int VECTOR_ADDRESSES_SIZE = 6;
-        writer.WriteZeroes(NESWriter.PRG_ROM_BLOCK_SIZE - VECTOR_ADDRESSES_SIZE);
+        int secondBankPadding = NESWriter.PRG_ROM_BLOCK_SIZE - VECTOR_ADDRESSES_SIZE;
+        for (int i = 0; i < secondBankPadding; i++)
+            writer.Write((byte)0);
+
+        // Write vectors: NMI, RESET, IRQ (little-endian)
         ushort nmi_data = 0x80BC;
         ushort reset_data = 0x8000;
         ushort irq_data = 0x8202;
-        writer.Write([nmi_data, reset_data, irq_data]);
+        writer.Write((byte)(nmi_data & 0xFF));
+        writer.Write((byte)(nmi_data >> 8));
+        writer.Write((byte)(reset_data & 0xFF));
+        writer.Write((byte)(reset_data >> 8));
+        writer.Write((byte)(irq_data & 0xFF));
+        writer.Write((byte)(irq_data >> 8));
 
-        _logger.WriteLine($"Writing chr_rom...");
+        // Write CHR ROM
+        _logger.WriteLine($"Writing CHR ROM...");
         writer.Write(chr_rom.Bytes);
-        // Pad remaining zeros
-        int padLength = chr_rom.Bytes.Length % NESWriter.CHR_ROM_BLOCK_SIZE;
-        if (padLength != 0)
+        
+        // Pad CHR ROM to 8KB boundary
+        int chrPadding = chr_rom.Bytes.Length % NESWriter.CHR_ROM_BLOCK_SIZE;
+        if (chrPadding != 0)
         {
-            var buffer = ArrayPool<byte>.Shared.Rent(padLength);
-            try
-            {
-                //NOTE: this byte[] can contain non-zero values!
-                buffer.AsSpan().Fill(0);
-                writer.Write(buffer, 0, padLength);
-            }
-            finally
-            {
-                ArrayPool<byte>.Shared.Return(buffer);
-            }
+            chrPadding = NESWriter.CHR_ROM_BLOCK_SIZE - chrPadding;
+            for (int i = 0; i < chrPadding; i++)
+                writer.Write((byte)0);
         }
+
         writer.Flush();
+        _logger.WriteLine($"ROM complete. Total size: {stream.Length} bytes");
     }
 
     /// <summary>
-    /// Generate static void main in a first pass, so we know the size of the program
+    /// Builds a full Program6502 object model representation of the transpiled program.
+    /// Uses single-pass transpilation with label references, resolves addresses once,
+    /// then the program can emit bytes in a single pass.
     /// </summary>
-    protected virtual void FirstPass(Dictionary<string, ushort> labels, ILInstruction[] instructions, out ushort sizeOfMain, out byte locals)
+    /// <param name="sizeOfMain">Output: size of the main program in bytes</param>
+    /// <param name="locals">Output: number of local variables</param>
+    /// <returns>A Program6502 containing built-ins, main program, and final built-ins</returns>
+    public Program6502 BuildProgram6502(out ushort sizeOfMain, out byte locals)
     {
+        _logger.WriteLine($"Single-pass transpilation...");
+        
+        var instructions = ReadStaticVoidMain().ToArray();
+
+        // Create the base program with built-ins
+        var program = Program6502.CreateWithBuiltIns();
+
+        // Build main program block using label references (addresses resolved later)
         using var writer = new IL2NESWriter(new MemoryStream(), logger: _logger)
         {
-            UsedMethods = UsedMethods,
             Instructions = instructions,
+            UsedMethods = UsedMethods,
         };
-        writer.SetLabels(labels);
+
+        writer.StartBlockBuffering();
+
+        // Translate IL to 6502 (single pass - sizeOfMain = 0 since we'll calculate later)
         for (int i = 0; i < writer.Instructions.Length; i++)
         {
             writer.Index = i;
             var instruction = writer.Instructions[i];
-            _logger.WriteLine($"{instruction}");
+            
+            // Record IL instruction labels for branch targets
+            // In single-pass mode, we add labels to the block instead of global dictionary
+            var labelName = $"instruction_{instruction.Offset:X2}";
+            if (writer.CurrentBlock != null)
+            {
+                // Add label to next instruction
+                writer.CurrentBlock.SetNextLabel(labelName);
+            }
+            
+            // Record block count before processing this instruction
+            writer.RecordBlockCount(instruction.Offset);
+            
             if (instruction.Integer != null)
             {
-                writer.Write(instruction, instruction.Integer.Value, sizeOfMain: 0);
+                writer.Write(instruction, instruction.Integer.Value);
             }
             else if (instruction.String != null)
             {
-                writer.Write(instruction, instruction.String, sizeOfMain: 0);
+                writer.Write(instruction, instruction.String);
             }
             else if (instruction.Bytes != null)
             {
-                writer.Write(instruction, instruction.Bytes.Value, sizeOfMain: 0);
+                writer.Write(instruction, instruction.Bytes.Value);
             }
             else
             {
-                writer.Write(instruction, sizeOfMain: 0);
+                writer.Write(instruction);
             }
         }
-        writer.Flush();
-        sizeOfMain = checked((ushort)writer.BaseStream.Length);
+
+        // Add music subroutines BEFORE main (matches cc65 ROM layout)
+        int musicSubroutinesSize = Program6502.CalculateMusicSubroutinesSize(UsedMethods);
+        program.AddMusicSubroutines(UsedMethods);
+
+        // Get main program as a Block
+        var mainBlock = writer.GetMainBlock("main");
+        if (mainBlock != null)
+        {
+            program.AddMainProgram(mainBlock);
+            sizeOfMain = (ushort)mainBlock.Size;
+        }
+        else
+        {
+            sizeOfMain = 0;
+        }
+
+        // Get local count from writer
         locals = checked((byte)writer.LocalCount);
-    }
 
-    /// <summary>
-    /// Write static void main *again*, second pass
-    /// With a known value for sizeOfMain
-    /// </summary>
-    protected virtual void SecondPass(ushort sizeOfMain, IL2NESWriter writer)
-    {
-        if (writer.Instructions is null)
-            throw new ArgumentNullException(nameof(writer.Instructions));
-
-        for (int i = 0; i < writer.Instructions.Length; i++)
+        // Store named ushort[] arrays (note tables) as interleaved 16-bit data (cc65 compatible)
+        var noteTableData = new List<(string label, byte[] data)>();
+        foreach (var kvp in writer.UShortArrays)
         {
-            writer.Index = i;
-            var instruction = writer.Instructions[i];
-            if (instruction.Integer != null)
-            {
-                writer.Write(instruction, instruction.Integer.Value, sizeOfMain);
-            }
-            else if (instruction.String != null)
-            {
-                writer.Write(instruction, instruction.String, sizeOfMain);
-            }
-            else if (instruction.Bytes != null)
-            {
-                writer.Write(instruction, instruction.Bytes.Value, sizeOfMain);
-            }
-            else
-            {
-                writer.Write(instruction, sizeOfMain);
-            }
+            // Keep raw bytes as-is: interleaved lo/hi pairs (little-endian 16-bit)
+            noteTableData.Add((kvp.Key, kvp.Value.ToArray()));
         }
+
+        // Calculate byte array table size
+        int byteArrayTableSize = 0;
+        foreach (var bytes in writer.ByteArrays)
+        {
+            byteArrayTableSize += bytes.ToArray().Length;
+        }
+
+        // Add note table sizes to the data table size
+        foreach (var (_, data) in noteTableData)
+        {
+            byteArrayTableSize += data.Length;
+        }
+        
+        // Calculate string table size  
+        int stringTableSize = 0;
+        int stringHeapSize = _reader.GetHeapSize(HeapIndex.UserString);
+        if (stringHeapSize > 0)
+        {
+            var handle = MetadataTokens.UserStringHandle(0);
+            do
+            {
+                string value = _reader.GetUserString(handle);
+                if (!string.IsNullOrEmpty(value))
+                {
+                    stringTableSize += Encoding.ASCII.GetByteCount(value) + 1; // +1 for null terminator
+                }
+                handle = _reader.GetNextHandle(handle);
+            }
+            while (!handle.IsNil);
+        }
+
+        // Add final built-ins (before data tables)
+        // Program layout: built-ins -> main -> final built-ins -> byte/string tables -> destructor
+        program.ResolveAddresses(); // Resolve to get current size
+        
+        // totalSize is used for donelib/copydata - points past the data tables
+        // PRG_LAST already accounts for the standard final built-ins size (donelib, copydata, popax,
+        // incsp2, popa, pusha, pushax, zerobss with 0 locals). When optional methods change the
+        // final built-ins composition, we must add the size delta.
+        const ushort PRG_LAST = 0x85AE;
+        int standardSize = Program6502.CalculateFinalBuiltInsSize(0, null);
+        int actualSize = Program6502.CalculateFinalBuiltInsSize(locals, UsedMethods);
+        int finalBuiltInsOffset = actualSize - standardSize;
+        ushort totalSize = (ushort)(PRG_LAST.GetAddressAfterMain(sizeOfMain) + finalBuiltInsOffset + musicSubroutinesSize + byteArrayTableSize + stringTableSize);
+        
+        program.AddFinalBuiltIns(totalSize, locals, UsedMethods);
+
+        // Add note table data blocks BEFORE byte arrays (matches cc65 layout)
+        foreach (var (label, data) in noteTableData)
+        {
+            program.AddProgramData(data, label);
+        }
+
+        // Add byte array data (music data etc.)
+        int byteArrayIndex = 0;
+        foreach (var bytes in writer.ByteArrays)
+        {
+            string label = $"bytearray_{byteArrayIndex}";
+            program.AddProgramData(bytes.ToArray(), label);
+            byteArrayIndex++;
+        }
+        
+        // Add string table
+        if (stringHeapSize > 0)
+        {
+            var handle = MetadataTokens.UserStringHandle(0);
+            do
+            {
+                string value = _reader.GetUserString(handle);
+                if (!string.IsNullOrEmpty(value))
+                {
+                    // Convert string to ASCII bytes with null terminator
+                    byte[] stringBytes = new byte[Encoding.ASCII.GetByteCount(value) + 1];
+                    Encoding.ASCII.GetBytes(value, 0, value.Length, stringBytes, 0);
+                    stringBytes[stringBytes.Length - 1] = 0; // null terminator
+                    program.AddProgramData(stringBytes);
+                }
+                handle = _reader.GetNextHandle(handle);
+            }
+            while (!handle.IsNil);
+        }
+
+        // Add destructor table LAST
+        program.AddDestructorTable();
+
+        // Final address resolution
+        program.ResolveAddresses();
+
+        _logger.WriteLine($"Single-pass complete. Size of main: {sizeOfMain}, locals: {locals}");
+
+        return program;
     }
 
     /// <summary>
@@ -332,9 +376,23 @@ class Transpiler : IDisposable
                         // 32-bit
                         case OperandType.BrTarget:
                         case OperandType.I:
-                        case OperandType.Type:
                         case OperandType.ShortR:
                             intValue = blob.ReadInt32();
+                            break;
+                        case OperandType.Type:
+                            {
+                                var token = blob.ReadInt32();
+                                intValue = token;
+                                // Resolve type name for Newarr (e.g. "Byte", "UInt16")
+                                if (opCode == ILOpCode.Newarr)
+                                {
+                                    var handle = MetadataTokens.EntityHandle(token);
+                                    if (handle.Kind == HandleKind.TypeReference)
+                                        stringValue = _reader.GetString(_reader.GetTypeReference((TypeReferenceHandle)handle).Name);
+                                    else if (handle.Kind == HandleKind.TypeDefinition)
+                                        stringValue = _reader.GetString(_reader.GetTypeDefinition((TypeDefinitionHandle)handle).Name);
+                                }
+                            }
                             break;
                         case OperandType.String:
                             stringValue = _reader.GetUserString(MetadataTokens.UserStringHandle(blob.ReadInt32()));
