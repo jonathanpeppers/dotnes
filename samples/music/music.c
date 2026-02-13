@@ -5,7 +5,6 @@ Based on https://github.com/sehugg/8bitworkshop/blob/master/presets/nes/music.c
 with apu.h/apu.c inlined.
 */
 
-#include <string.h>
 #include "neslib.h"
 
 typedef unsigned char byte;
@@ -77,8 +76,26 @@ void start_music(const byte* music) {
 
 void main(void)
 {
-  // apu_init() inlined
-  memcpy((void*)0x4000, "\x30\x08\x00\x00\x30\x08\x00\x00\x80\x00\x00\x00\x30\x00\x00\x00\x00\x00\x00", 19);
+  // apu_init (inlined with individual writes)
+  *(byte*)0x4000 = 0x30;
+  *(byte*)0x4001 = 0x08;
+  *(byte*)0x4002 = 0x00;
+  *(byte*)0x4003 = 0x00;
+  *(byte*)0x4004 = 0x30;
+  *(byte*)0x4005 = 0x08;
+  *(byte*)0x4006 = 0x00;
+  *(byte*)0x4007 = 0x00;
+  *(byte*)0x4008 = 0x80;
+  *(byte*)0x4009 = 0x00;
+  *(byte*)0x400A = 0x00;
+  *(byte*)0x400B = 0x00;
+  *(byte*)0x400C = 0x30;
+  *(byte*)0x400D = 0x00;
+  *(byte*)0x400E = 0x00;
+  *(byte*)0x400F = 0x00;
+  *(byte*)0x4010 = 0x00;
+  *(byte*)0x4011 = 0x00;
+  *(byte*)0x4012 = 0x00;
   *(byte*)0x4017 = 0x40;
   *(byte*)0x4015 = 0x0F;
 
