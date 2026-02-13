@@ -560,9 +560,8 @@ class IL2NESWriter : NESWriter
                         // Remove the two constants that were loaded
                         // Typically: LDA #imm (2 bytes) + JSR pusha (3 bytes) + LDA #imm (2 bytes) = 7 bytes, 3 instructions
                         RemoveLastInstructions(3);
-                        //TODO: these are hardcoded until I figure this out
-                        Emit(Opcode.LDX, AddressMode.Immediate, 0x20);
-                        Emit(Opcode.LDA, AddressMode.Immediate, 0x42);
+                        Emit(Opcode.LDX, AddressMode.Immediate, checked((byte)(address >> 8)));
+                        Emit(Opcode.LDA, AddressMode.Immediate, checked((byte)(address & 0xFF)));
                         Stack.Push(address);
                         break;
                     case "pad_poll":
