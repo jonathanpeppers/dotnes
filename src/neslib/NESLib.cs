@@ -158,6 +158,11 @@ public static class NESLib
     public static void ppu_wait_nmi() => throw null!;
 
     /// <summary>
+    /// write a byte value to an absolute memory address
+    /// </summary>
+    public static void poke(ushort addr, byte value) => throw null!;
+
+    /// <summary>
     /// wait virtual frame, it is always 50hz, frame-to-frame in PAL, frameskip in NTSC
     /// </summary>
     public static void ppu_wait_frame() => throw null!;

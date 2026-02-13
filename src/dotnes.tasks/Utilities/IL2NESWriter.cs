@@ -578,6 +578,22 @@ class IL2NESWriter : NESWriter
                         }
                         // These are transpiler-only directives; no 6502 code emitted
                         break;
+                    case nameof(NESLib.poke):
+                        {
+                            // poke(ushort addr, byte value) -> LDA #value, STA abs addr
+                            if (Stack.Count >= 2)
+                            {
+                                int value = Stack.Pop();
+                                int addr = Stack.Pop();
+                                // Remove previously emitted instructions:
+                                // LDX #hi, LDA #lo, JSR pusha, LDA #value = 4 instructions
+                                RemoveLastInstructions(4);
+                                Emit(Opcode.LDA, AddressMode.Immediate, (byte)value);
+                                Emit(Opcode.STA, AddressMode.Absolute, (ushort)addr);
+                                _immediateInA = (byte)value;
+                            }
+                        }
+                        break;
                     default:
                         if (_needsByteArrayLoadInCall && _lastByteArrayLabel != null 
                             && previous != ILOpCode.Ldtoken)
