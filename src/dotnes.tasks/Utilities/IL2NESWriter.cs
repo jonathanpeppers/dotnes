@@ -72,6 +72,12 @@ class IL2NESWriter : NESWriter
     byte? _immediateInA;
 
     /// <summary>
+    /// Tracks the last value stored by poke() — used to skip redundant LDA across consecutive pokes.
+    /// Separate from _immediateInA because poke's RemoveLastInstructions makes _immediateInA unreliable.
+    /// </summary>
+    byte? _pokeLastValue;
+
+    /// <summary>
     /// True when the byte array from Ldtoken needs its address explicitly loaded at
     /// the Call point. This only happens in the new pattern (movingsprite-like) where
     /// Stloc_0 does NOT take the Ldtoken path.
@@ -401,8 +407,9 @@ class IL2NESWriter : NESWriter
             case ILOpCode.Newarr:
                 if (previous == ILOpCode.Ldc_i4_s || previous == ILOpCode.Ldc_i4)
                 {
-                    // Remove the previous LDA instruction (1 instruction = 2 bytes)
-                    RemoveLastInstructions(1);
+                    // Remove the previous LDA (and LDX for ushort-sized values)
+                    int toRemove = Stack.Count > 0 && Stack.Peek() > byte.MaxValue ? 2 : 1;
+                    RemoveLastInstructions(toRemove);
                 }
                 // Track the array element type so the next Ldtoken can handle non-byte arrays
                 _pendingArrayType = instruction.String;
@@ -578,6 +585,17 @@ class IL2NESWriter : NESWriter
                         }
                         // These are transpiler-only directives; no 6502 code emitted
                         break;
+                    case nameof(NESLib.start_music):
+                        // start_music expects address in A/X (it pushes internally).
+                        // Emit the byte array address from the deferred label.
+                        if (_lastByteArrayLabel != null)
+                        {
+                            EmitWithLabel(Opcode.LDA, AddressMode.Immediate_LowByte, _lastByteArrayLabel);
+                            EmitWithLabel(Opcode.LDX, AddressMode.Immediate_HighByte, _lastByteArrayLabel);
+                        }
+                        EmitWithLabel(Opcode.JSR, AddressMode.Absolute, operand);
+                        _immediateInA = null;
+                        break;
                     case nameof(NESLib.poke):
                         {
                             // poke(ushort addr, byte value) -> LDA #value, STA abs addr
@@ -588,8 +606,14 @@ class IL2NESWriter : NESWriter
                                 // Remove previously emitted instructions:
                                 // LDX #hi, LDA #lo, JSR pusha, LDA #value = 4 instructions
                                 RemoveLastInstructions(4);
-                                Emit(Opcode.LDA, AddressMode.Immediate, (byte)value);
+                                // After removal, _immediateInA may be stale; only trust
+                                // the value if the PREVIOUS poke set it (STA doesn't change A)
+                                if (_pokeLastValue != (byte)value)
+                                {
+                                    Emit(Opcode.LDA, AddressMode.Immediate, (byte)value);
+                                }
                                 Emit(Opcode.STA, AddressMode.Absolute, (ushort)addr);
+                                _pokeLastValue = (byte)value;
                                 _immediateInA = (byte)value;
                             }
                         }
