@@ -362,21 +362,8 @@ class IL2NESWriter : NESWriter
                     int value = Stack.Count > 0 ? Stack.Pop() : 0;
 
                     // Check if the value came from a local variable load (runtime value)
-                    // IL pattern: ldloc.s N, ldc.i4.X, and
-                    bool localInA = false;
-                    if (Instructions != null && Index >= 2)
-                    {
-                        var prevPrev = Instructions[Index - 2].OpCode;
-                        if (prevPrev is ILOpCode.Ldloc_s or ILOpCode.Ldloc_0 or ILOpCode.Ldloc_1
-                            or ILOpCode.Ldloc_2 or ILOpCode.Ldloc_3)
-                        {
-                            var locIdx = GetLdlocIndex(Instructions[Index - 2]);
-                            if (locIdx != null && Locals.TryGetValue(locIdx.Value, out var loc) && loc.Address != null)
-                            {
-                                localInA = true;
-                            }
-                        }
-                    }
+                    bool localInA = _lastLoadedLocalIndex.HasValue &&
+                        Locals.TryGetValue(_lastLoadedLocalIndex.Value, out var andLocal) && andLocal.Address != null;
 
                     // Emit runtime AND if A has a runtime value
                     if (_padPollResultAvailable || _runtimeValueInA || localInA)
@@ -919,9 +906,21 @@ class IL2NESWriter : NESWriter
             }
         }
         
+        // Check if the value came from a local variable load (runtime value)
+        // Same class of bug as AND: ldloc emits LDA $addr but doesn't set _runtimeValueInA
+        bool localInA = _lastLoadedLocalIndex.HasValue &&
+            Locals.TryGetValue(_lastLoadedLocalIndex.Value, out var lastLocal) && lastLocal.Address.HasValue;
+
         // Default: if we have runtime values, emit actual arithmetic
-        if (_runtimeValueInA)
+        if (_runtimeValueInA || localInA)
         {
+            if (localInA && !_runtimeValueInA)
+            {
+                // WriteLdloc emitted LDA $addr (sets LastLDA=true)
+                // WriteLdc then emitted JSR pusha + LDA #imm (2 instructions)
+                // Remove the pusha + LDA #imm to restore A = local value
+                RemoveLastInstructions(2);
+            }
             if (isAdd)
             {
                 if (_savedRuntimeToTemp)
@@ -958,6 +957,7 @@ class IL2NESWriter : NESWriter
             Stack.Push(0); // Placeholder
             _lastLoadedLocalIndex = null;
             _savedRuntimeToTemp = false;
+            _runtimeValueInA = true; // Result of arithmetic is a runtime value
             return;
         }
 
