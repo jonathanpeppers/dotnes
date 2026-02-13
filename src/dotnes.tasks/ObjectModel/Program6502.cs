@@ -550,10 +550,9 @@ public class Program6502
             if (usedMethods.Contains("oam_spr"))
                 size += BuiltInSubroutines.OamSpr().ByteSize;
             if (usedMethods.Contains("rand8"))
-            {
                 size += BuiltInSubroutines.Rand8().ByteSize;
+            if (usedMethods.Contains("rand8") || usedMethods.Contains("set_rand"))
                 size += BuiltInSubroutines.SetRand().ByteSize;
-            }
             if (usedMethods.Contains("oam_meta_spr"))
                 size += BuiltInSubroutines.OamMetaSpr().ByteSize;
             if (usedMethods.Contains("apu_init"))
