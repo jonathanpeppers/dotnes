@@ -537,32 +537,34 @@ public class RoslynTests
                 """,
             expectedAssembly:
                 """
-                A9ED    ; LDA #$ED
-                A285    ; LDX #$85
-                20B485  ; JSR pushax
+                A9F1    ; LDA array_lo (ATTRIBUTE_TABLE)
+                A285    ; LDX array_hi
+                20B885  ; JSR pushax
                 A200    ; LDX #$00
                 A940    ; LDA #$40
-                209E85  ; JSR pusha
+                20A285  ; JSR pusha
                 A900    ; LDA #$00
-                209E85  ; JSR pusha
+                20A285  ; JSR pusha
                 A955    ; LDA #$55
+                A931    ; LDA #$31 (PALETTE address lo)
+                A286    ; LDX #$86 (PALETTE address hi)
                 202B82  ; JSR pal_bg
                 A220    ; LDX #$20
                 A900    ; LDA #$00
                 20D483  ; JSR vram_adr
                 A916    ; LDA #$16
-                209E85  ; JSR pusha
+                20A285  ; JSR pusha
                 A203    ; LDX #$03
                 A9C0    ; LDA #$C0
                 20DF83  ; JSR vram_fill
-                A9ED    ; LDA #$ED
-                A285    ; LDX #$85
-                20B485  ; JSR pushax
+                A9F1    ; LDA array_lo (ATTRIBUTE_TABLE)
+                A285    ; LDX array_hi
+                20B885  ; JSR pushax
                 A200    ; LDX #$00
                 A940    ; LDA #$40
                 204F83  ; JSR vram_write
                 208982  ; JSR ppu_on_all
-                4C3C85  ; JMP $853C
+                4C4085  ; JMP loop
                 """);
     }
 

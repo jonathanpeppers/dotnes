@@ -27,5 +27,5 @@ class ReflectionCache
 
     public int GetNumberOfArguments(string name) => GetMethod(name).GetParameters().Length;
 
-    public bool HasReturnValue(string name) => GetMethod(name).ReturnType != null;
+    public bool HasReturnValue(string name) => GetMethod(name).ReturnType != typeof(void);
 }

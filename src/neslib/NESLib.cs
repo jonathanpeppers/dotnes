@@ -332,7 +332,7 @@ public static class NESLib
     /// <summary>
     /// set random seed
     /// </summary>
-    public static void set_rand(ushort seed) => throw null!;
+    public static void set_rand(byte seed) => throw null!;
 
     /// <summary>
     /// when display is enabled, vram access could only be done with this vram update system
