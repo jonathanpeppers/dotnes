@@ -482,17 +482,12 @@ class IL2NESWriter : NESWriter
                         _lastByteArrayLabel = null;
                         Stack.Pop();
                     }
-                    else if (_runtimeValueInA)
+                    else
                     {
-                        // Runtime value in A (from function return, ldelem, etc.) — needs real STA
+                        // Regular byte local — allocate address and store
                         var addr = Locals.TryGetValue(localIdx, out var existing) && existing.Address is not null
                             ? (ushort)existing.Address : (ushort)(local + LocalCount);
                         WriteStloc(Locals[localIdx] = new Local(Stack.Pop(), addr));
-                    }
-                    else
-                    {
-                        // Simple tracking (no code emitted) — preserves legacy behavior
-                        Locals[localIdx] = new Local(Stack.Pop());
                     }
                 }
                 break;
@@ -506,6 +501,7 @@ class IL2NESWriter : NESWriter
                 RemoveLastInstructions(2);
                 Emit(Opcode.CMP, AddressMode.Immediate, checked((byte)Stack.Pop()));
                 Emit(Opcode.BNE, AddressMode.Relative, NumberOfInstructionsForBranch(instruction.Offset + operand + 2));
+                _runtimeValueInA = false;
                 break;
             case ILOpCode.Brfalse_s:
                 // Branch if value is zero/false (after AND test)
@@ -516,6 +512,7 @@ class IL2NESWriter : NESWriter
                     EmitWithLabel(Opcode.BEQ, AddressMode.Relative, labelName);
                     if (Stack.Count > 0)
                         Stack.Pop();
+                    _runtimeValueInA = false; // Branch taken/not taken — A state is indeterminate
                 }
                 break;
             case ILOpCode.Blt_s:
@@ -1349,7 +1346,7 @@ class IL2NESWriter : NESWriter
             if (scan >= 0)
             {
                 var yIdxInstr = Instructions[scan];
-                indexIdx = GetLdlocIndex(yIdxInstr)?.GetHashCode() != 0 ? GetLdlocIndex(yIdxInstr) : null;
+                indexIdx = GetLdlocIndex(yIdxInstr);
                 scan--;
             }
             if (scan >= 0)

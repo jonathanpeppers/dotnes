@@ -50,6 +50,8 @@ public class TranspilerTests
     [InlineData("staticsprite", false)]
     [InlineData("music", true)]
     [InlineData("music", false)]
+    [InlineData("metasprites", true)]
+    [InlineData("metasprites", false)]
     public Task Write(string name, bool debug)
     {
         var configuration = debug ? "debug" : "release";
