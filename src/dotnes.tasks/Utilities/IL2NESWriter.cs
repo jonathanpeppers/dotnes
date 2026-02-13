@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using System.Reflection.Metadata;
+using System.Text;
 using dotnes.ObjectModel;
 using static NES.NESLib;
 using static dotnes.NESConstants;
@@ -34,6 +35,13 @@ class IL2NESWriter : NESWriter
     /// </summary>
     public IReadOnlyDictionary<string, ImmutableArray<byte>> UShortArrays => _ushortArrays;
     readonly Dictionary<string, ImmutableArray<byte>> _ushortArrays = new();
+    /// <summary>
+    /// Ordered list of (label, ASCII bytes) for string literals encountered in IL.
+    /// </summary>
+    public IReadOnlyList<(string Label, byte[] Data)> StringTable => _stringTable;
+    readonly List<(string Label, byte[] Data)> _stringTable = new();
+    readonly Dictionary<string, string> _stringLabelMap = new();
+    int _stringLabelIndex;
 
     readonly ushort local = 0x325;
     readonly ushort tempVar = 0x327; // Temp variable for pad_poll result storage
@@ -507,16 +515,23 @@ class IL2NESWriter : NESWriter
             case ILOpCode.Nop:
                 break;
             case ILOpCode.Ldstr:
-                //TODO: hardcoded until string table figured out
-                Emit(Opcode.LDA, AddressMode.Immediate, 0xF1);
-                Emit(Opcode.LDX, AddressMode.Immediate, 0x85);
+                // Deduplicate: reuse label if same string was already seen
+                if (!_stringLabelMap.TryGetValue(operand, out string? stringLabel))
+                {
+                    stringLabel = $"string_{_stringLabelIndex}";
+                    _stringLabelIndex++;
+                    byte[] asciiBytes = Encoding.ASCII.GetBytes(operand);
+                    byte[] withNull = new byte[asciiBytes.Length + 1];
+                    asciiBytes.CopyTo(withNull, 0);
+                    _stringTable.Add((stringLabel, withNull));
+                    _stringLabelMap[operand] = stringLabel;
+                }
+
+                EmitWithLabel(Opcode.LDA, AddressMode.Immediate_LowByte, stringLabel);
+                EmitWithLabel(Opcode.LDX, AddressMode.Immediate_HighByte, stringLabel);
                 EmitJSR("pushax");
                 Emit(Opcode.LDX, AddressMode.Immediate, 0x00);
-                if (operand.Length > ushort.MaxValue)
-                {
-                    throw new NotImplementedException($"{instruction.OpCode} not implemented for value larger than ushort: {operand}");
-                }
-                else if (operand.Length > byte.MaxValue)
+                if (operand.Length > byte.MaxValue)
                 {
                     WriteLdc(checked((ushort)operand.Length));
                 }
