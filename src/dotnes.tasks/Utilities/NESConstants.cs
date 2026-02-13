@@ -20,6 +20,7 @@ internal static class NESConstants
     public const int SCROLL_Y = 0x0D;
     public const int NMI_CALLBACK = 0x14;  // 3 bytes: JMP opcode + address ($14-$16)
     public const int TEMP = 0x17;
+    public const int RAND_SEED = 0x18;  // 1 byte: random seed for LFSR PRNG
     public const int TEMP2 = 0x19;  // Additional temporary variable
     public const int TEMP3 = 0x1A;  // Additional temporary variable
     public const int sp = 0x22;

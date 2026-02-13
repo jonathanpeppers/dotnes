@@ -499,6 +499,126 @@ internal static class BuiltInSubroutines
     }
 
     /// <summary>
+    /// _rand8 - Get random number 0..255 using Galois LFSR
+    /// Uses RAND_SEED ($18) zero-page variable.
+    /// </summary>
+    public static Block Rand8()
+    {
+        // Galois LFSR: shift left, XOR with polynomial if carry set
+        // LDA RAND_SEED; ASL A; BCC @1; EOR #$CF; @1: STA RAND_SEED; LDX #$00; RTS
+        var block = new Block(nameof(NESLib.rand8));
+        block.Emit(LDA_zpg(RAND_SEED))
+             .Emit(ASL_A())
+             .Emit(BCC(2))  // skip EOR if carry clear
+             .Emit(EOR(0xCF))
+             .Emit(STA_zpg(RAND_SEED), "@1")
+             .Emit(LDX(0x00))
+             .Emit(RTS());
+        return block;
+    }
+
+    /// <summary>
+    /// _set_rand - Set random seed
+    /// </summary>
+    public static Block SetRand()
+    {
+        var block = new Block(nameof(NESLib.set_rand));
+        block.Emit(STA_zpg(RAND_SEED))
+             .Emit(RTS());
+        return block;
+    }
+
+    /// <summary>
+    /// _oam_meta_spr - Set metasprite in OAM buffer
+    /// Args: A = sprid, data pointer on C stack, x/y pushed before data pointer
+    /// Standard neslib convention: A = sprid, (sp) -> y, x, data_lo, data_hi
+    /// 
+    /// For our transpiler, the calling convention is different:
+    /// - x is pushed to C stack first, then y, then sprid
+    /// - data pointer is loaded in A/X via label before the call
+    /// 
+    /// This implementation uses the simplified calling convention where
+    /// all args are passed via the C software stack:
+    /// (sp)+0 = data_lo, (sp)+1 = data_hi, (sp)+2 = sprid, (sp)+3 = y, (sp)+4 = x
+    /// A = sprid on entry (last fastcall arg)
+    /// </summary>
+    public static Block OamMetaSpr()
+    {
+        // Simplified implementation that takes:
+        // A = sprid (OAM buffer offset)  
+        // Data pointer and x,y passed via C stack
+        //
+        // We use a simpler approach: the transpiler will emit inline code
+        // that sets up PTR with the metasprite data pointer and passes x,y,sprid
+        // in known locations.
+        //
+        // For now, implement the standard loop:
+        // TAX ; sprid -> X (OAM buffer index)
+        // LDY #0
+        // @loop:
+        //   LDA (PTR),Y ; x offset
+        //   CMP #$80     ; end marker?
+        //   BEQ @done
+        //   CLC
+        //   ADC TEMP     ; add sprite X
+        //   STA OAM_BUF+3,X
+        //   INY
+        //   LDA (PTR),Y ; y offset
+        //   CLC
+        //   ADC TEMP+2   ; add sprite Y
+        //   STA OAM_BUF+0,X
+        //   INY
+        //   LDA (PTR),Y ; tile
+        //   STA OAM_BUF+1,X
+        //   INY
+        //   LDA (PTR),Y ; attr
+        //   STA OAM_BUF+2,X
+        //   INY
+        //   INX ; advance OAM by 4
+        //   INX
+        //   INX
+        //   INX
+        //   JMP @loop
+        // @done:
+        //   TXA          ; return sprid in A
+        //   LDX #0
+        //   RTS
+        
+        // For the transpiler, we'll use TEMP ($17) for sprite X and TEMP+2 ($19) for sprite Y.
+        // PTR ($2A) holds the metasprite data pointer.
+        var block = new Block(nameof(NESLib.oam_meta_spr));
+        block.Emit(TAX())
+             .Emit(LDY(0x00))
+             .Emit(LDA_ind_Y(ptr1), "@loop")  // x offset
+             .Emit(CMP(0x80))
+             .Emit(BEQ("@done"))
+             .Emit(CLC())
+             .Emit(ADC_zpg(TEMP))              // add sprite X
+             .Emit(STA_abs_X(OAM_BUF + 3))
+             .Emit(INY())
+             .Emit(LDA_ind_Y(ptr1))            // y offset
+             .Emit(CLC())
+             .Emit(ADC_zpg(TEMP2))             // add sprite Y
+             .Emit(STA_abs_X(OAM_BUF + 0))
+             .Emit(INY())
+             .Emit(LDA_ind_Y(ptr1))            // tile
+             .Emit(STA_abs_X(OAM_BUF + 1))
+             .Emit(INY())
+             .Emit(LDA_ind_Y(ptr1))            // attr
+             .Emit(STA_abs_X(OAM_BUF + 2))
+             .Emit(INY())
+             .Emit(INX())
+             .Emit(INX())
+             .Emit(INX())
+             .Emit(INX())
+             .Emit(JMP("@loop"))
+             .Emit(TXA(), "@done")             // return sprid
+             .Emit(LDX(0x00))
+             .Emit(RTS());
+        return block;
+    }
+
+    /// <summary>
     /// _oam_spr - Add a sprite to OAM
     /// </summary>
     public static Block OamSpr()
