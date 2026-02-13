@@ -1251,7 +1251,7 @@ internal static class BuiltInSubroutines
              .Emit(STA_abs(PPU_SCROLL))
              .Emit(STA_abs(PPU_SCROLL))
              .Emit(STA_abs(PPU_OAM_ADDR))
-             .Emit(JMP_abs(0x8500));  // main
+             .Emit(JMP_abs("main"));
         return block;
     }
 

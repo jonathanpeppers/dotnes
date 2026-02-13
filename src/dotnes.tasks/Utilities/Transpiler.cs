@@ -174,6 +174,10 @@ class Transpiler : IDisposable
             }
         }
 
+        // Add music subroutines BEFORE main (matches cc65 ROM layout)
+        int musicSubroutinesSize = Program6502.CalculateMusicSubroutinesSize(UsedMethods);
+        program.AddMusicSubroutines(UsedMethods);
+
         // Get main program as a Block
         var mainBlock = writer.GetMainBlock("main");
         if (mainBlock != null)
@@ -240,23 +244,23 @@ class Transpiler : IDisposable
         int standardSize = Program6502.CalculateFinalBuiltInsSize(0, null);
         int actualSize = Program6502.CalculateFinalBuiltInsSize(locals, UsedMethods);
         int finalBuiltInsOffset = actualSize - standardSize;
-        ushort totalSize = (ushort)(PRG_LAST.GetAddressAfterMain(sizeOfMain) + finalBuiltInsOffset + byteArrayTableSize + stringTableSize);
+        ushort totalSize = (ushort)(PRG_LAST.GetAddressAfterMain(sizeOfMain) + finalBuiltInsOffset + musicSubroutinesSize + byteArrayTableSize + stringTableSize);
         
         program.AddFinalBuiltIns(totalSize, locals, UsedMethods);
 
-        // Add byte array data after final built-ins
+        // Add note table data blocks BEFORE byte arrays (matches cc65 layout)
+        foreach (var (label, data) in noteTableData)
+        {
+            program.AddProgramData(data, label);
+        }
+
+        // Add byte array data (music data etc.)
         int byteArrayIndex = 0;
         foreach (var bytes in writer.ByteArrays)
         {
             string label = $"bytearray_{byteArrayIndex}";
             program.AddProgramData(bytes.ToArray(), label);
             byteArrayIndex++;
-        }
-
-        // Add note table lo/hi data blocks (from ushort[] arrays)
-        foreach (var (label, data) in noteTableData)
-        {
-            program.AddProgramData(data, label);
         }
         
         // Add string table
