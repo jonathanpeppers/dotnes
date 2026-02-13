@@ -46,10 +46,14 @@ public class TranspilerTests
     [InlineData("onelocalbyte", false)]
     [InlineData("staticsprite", true)]
     [InlineData("staticsprite", false)]
+    [InlineData("music", true)]
+    [InlineData("music", false)]
     public Task Write(string name, bool debug)
     {
         var configuration = debug ? "debug" : "release";
-        var chr_generic = new StreamReader(Utilities.GetResource("chr_generic.s"));
+        var chrName = $"chr_{name}.s";
+        var chrStream = typeof(Utilities).Assembly.GetManifestResourceStream(chrName);
+        var chr_generic = new StreamReader(chrStream ?? Utilities.GetResource("chr_generic.s"));
 
         using var dll = Utilities.GetResource($"{name}.{configuration}.dll");
         using var il = new Transpiler(dll, [new AssemblyReader(chr_generic)], _logger);

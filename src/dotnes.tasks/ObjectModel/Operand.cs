@@ -77,6 +77,26 @@ public record LabelOperand(string Label, OperandSize OperandSize) : Operand
 }
 
 /// <summary>
+/// A label reference plus a constant offset, resolved to (label_address + offset).
+/// Used for accessing hi bytes in interleaved 16-bit tables (label+1).
+/// </summary>
+public record LabelOffsetOperand(string Label, int Offset) : Operand
+{
+    public override int Size => 2; // Always word-sized
+
+    public override byte[] ToBytes(ushort currentAddress, LabelTable labels)
+    {
+        if (!labels.TryResolve(Label, out ushort address))
+            throw new UnresolvedLabelException(Label);
+
+        ushort resolved = (ushort)(address + Offset);
+        return [(byte)(resolved & 0xFF), (byte)(resolved >> 8)];
+    }
+
+    public override string ToString() => $"{Label}+{Offset}";
+}
+
+/// <summary>
 /// A relative offset operand for branch instructions (resolved from label)
 /// </summary>
 public record RelativeOperand(string Label) : Operand

@@ -28,10 +28,18 @@ class IL2NESWriter : NESWriter
     /// </summary>
     public IReadOnlyList<ImmutableArray<byte>> ByteArrays => _byteArrays;
     readonly List<ImmutableArray<byte>> _byteArrays = new();
+    /// <summary>
+    /// Named ushort[] data extracted from the IL (note tables, etc.)
+    /// Key is the label prefix (e.g. "note_table_pulse"), value is raw bytes (2 bytes per ushort, LE).
+    /// </summary>
+    public IReadOnlyDictionary<string, ImmutableArray<byte>> UShortArrays => _ushortArrays;
+    readonly Dictionary<string, ImmutableArray<byte>> _ushortArrays = new();
     readonly ushort local = 0x325;
     readonly ushort tempVar = 0x327; // Temp variable for pad_poll result storage
     readonly ReflectionCache _reflectionCache = new();
     ILOpCode previous;
+    string? _pendingArrayType;
+    ImmutableArray<byte>? _pendingUShortArray;
     
     /// <summary>
     /// Tracks if pad_poll was called and the result is available in A or tempVar.
@@ -62,6 +70,12 @@ class IL2NESWriter : NESWriter
     /// Cleared when A is modified by JSR, LDA absolute, AND, etc.
     /// </summary>
     byte? _immediateInA;
+
+    /// <summary>
+    /// Tracks the last value stored by poke() — used to skip redundant LDA across consecutive pokes.
+    /// Separate from _immediateInA because poke's RemoveLastInstructions makes _immediateInA unreliable.
+    /// </summary>
+    byte? _pokeLastValue;
 
     /// <summary>
     /// True when the byte array from Ldtoken needs its address explicitly loaded at
@@ -391,10 +405,19 @@ class IL2NESWriter : NESWriter
                 }
                 break;
             case ILOpCode.Newarr:
-                if (previous == ILOpCode.Ldc_i4_s)
+                if (previous == ILOpCode.Ldc_i4_s || previous == ILOpCode.Ldc_i4)
                 {
-                    // Remove the previous LDA instruction (1 instruction = 2 bytes)
-                    RemoveLastInstructions(1);
+                    // Remove the previous LDA (and LDX for ushort-sized values)
+                    int toRemove = Stack.Count > 0 && Stack.Peek() > byte.MaxValue ? 2 : 1;
+                    RemoveLastInstructions(toRemove);
+                }
+                // Track the array element type so the next Ldtoken can handle non-byte arrays
+                _pendingArrayType = instruction.String;
+                if (_pendingArrayType != null && _pendingArrayType != "Byte")
+                {
+                    // Non-byte array: pop the array size that Ldc pushed
+                    if (Stack.Count > 0)
+                        Stack.Pop();
                 }
                 break;
             case ILOpCode.Stloc_s:
@@ -549,6 +572,52 @@ class IL2NESWriter : NESWriter
                             _immediateInA = null;
                         }
                         break;
+                    case nameof(NESLib.set_music_pulse_table):
+                    case nameof(NESLib.set_music_triangle_table):
+                        // Store the pending ushort[] with the appropriate label
+                        if (_pendingUShortArray != null)
+                        {
+                            string label = operand == nameof(NESLib.set_music_pulse_table)
+                                ? "note_table_pulse"
+                                : "note_table_triangle";
+                            _ushortArrays[label] = _pendingUShortArray.Value;
+                            _pendingUShortArray = null;
+                        }
+                        // These are transpiler-only directives; no 6502 code emitted
+                        break;
+                    case nameof(NESLib.start_music):
+                        // start_music expects address in A/X (it pushes internally).
+                        // Emit the byte array address from the deferred label.
+                        if (_lastByteArrayLabel != null)
+                        {
+                            EmitWithLabel(Opcode.LDA, AddressMode.Immediate_LowByte, _lastByteArrayLabel);
+                            EmitWithLabel(Opcode.LDX, AddressMode.Immediate_HighByte, _lastByteArrayLabel);
+                        }
+                        EmitWithLabel(Opcode.JSR, AddressMode.Absolute, operand);
+                        _immediateInA = null;
+                        break;
+                    case nameof(NESLib.poke):
+                        {
+                            // poke(ushort addr, byte value) -> LDA #value, STA abs addr
+                            if (Stack.Count >= 2)
+                            {
+                                int value = Stack.Pop();
+                                int addr = Stack.Pop();
+                                // Remove previously emitted instructions:
+                                // LDX #hi, LDA #lo, JSR pusha, LDA #value = 4 instructions
+                                RemoveLastInstructions(4);
+                                // After removal, _immediateInA may be stale; only trust
+                                // the value if the PREVIOUS poke set it (STA doesn't change A)
+                                if (_pokeLastValue != (byte)value)
+                                {
+                                    Emit(Opcode.LDA, AddressMode.Immediate, (byte)value);
+                                }
+                                Emit(Opcode.STA, AddressMode.Absolute, (ushort)addr);
+                                _pokeLastValue = (byte)value;
+                                _immediateInA = (byte)value;
+                            }
+                        }
+                        break;
                     default:
                         if (_needsByteArrayLoadInCall && _lastByteArrayLabel != null 
                             && previous != ILOpCode.Ldtoken)
@@ -610,6 +679,15 @@ class IL2NESWriter : NESWriter
         switch (instruction.OpCode)
         {
             case ILOpCode.Ldtoken:
+                // Non-byte arrays (e.g. ushort[]) are collected separately and not emitted as code
+                if (_pendingArrayType != null && _pendingArrayType != "Byte")
+                {
+                    _pendingUShortArray = operand;
+                    _pendingArrayType = null;
+                    break;
+                }
+                _pendingArrayType = null;
+
                 // Use labels for byte arrays (resolved during address resolution)
                 string byteArrayLabel = $"bytearray_{_byteArrayLabelIndex}";
                 _byteArrayLabelIndex++;

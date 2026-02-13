@@ -1,10 +1,10 @@
 ﻿ILInstruction { OpCode = Ldc_i4_s, Offset = 0, Integer = 64, String = , Bytes =  }
-ILInstruction { OpCode = Newarr, Offset = 2, Integer = 16777235, String = , Bytes =  }
+ILInstruction { OpCode = Newarr, Offset = 2, Integer = 16777235, String = Byte, Bytes =  }
 ILInstruction { OpCode = Dup, Offset = 7, Integer = , String = , Bytes =  }
 ILInstruction { OpCode = Ldtoken, Offset = 8, Integer = , String = , Bytes = System.Collections.Immutable.ImmutableArray`1[System.Byte] }
 ILInstruction { OpCode = Stloc_0, Offset = 18, Integer = , String = , Bytes =  }
 ILInstruction { OpCode = Ldc_i4_s, Offset = 19, Integer = 16, String = , Bytes =  }
-ILInstruction { OpCode = Newarr, Offset = 21, Integer = 16777235, String = , Bytes =  }
+ILInstruction { OpCode = Newarr, Offset = 21, Integer = 16777235, String = Byte, Bytes =  }
 ILInstruction { OpCode = Dup, Offset = 26, Integer = , String = , Bytes =  }
 ILInstruction { OpCode = Ldtoken, Offset = 27, Integer = , String = , Bytes = System.Collections.Immutable.ImmutableArray`1[System.Byte] }
 ILInstruction { OpCode = Call, Offset = 37, Integer = , String = pal_bg, Bytes =  }

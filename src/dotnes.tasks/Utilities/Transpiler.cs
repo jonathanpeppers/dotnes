@@ -1,4 +1,4 @@
-﻿using System.Buffers;
+using System.Buffers;
 using System.Collections.Immutable;
 using System.Reflection;
 using System.Reflection.Metadata;
@@ -174,6 +174,10 @@ class Transpiler : IDisposable
             }
         }
 
+        // Add music subroutines BEFORE main (matches cc65 ROM layout)
+        int musicSubroutinesSize = Program6502.CalculateMusicSubroutinesSize(UsedMethods);
+        program.AddMusicSubroutines(UsedMethods);
+
         // Get main program as a Block
         var mainBlock = writer.GetMainBlock("main");
         if (mainBlock != null)
@@ -189,11 +193,25 @@ class Transpiler : IDisposable
         // Get local count from writer
         locals = checked((byte)writer.LocalCount);
 
+        // Store named ushort[] arrays (note tables) as interleaved 16-bit data (cc65 compatible)
+        var noteTableData = new List<(string label, byte[] data)>();
+        foreach (var kvp in writer.UShortArrays)
+        {
+            // Keep raw bytes as-is: interleaved lo/hi pairs (little-endian 16-bit)
+            noteTableData.Add((kvp.Key, kvp.Value.ToArray()));
+        }
+
         // Calculate byte array table size
         int byteArrayTableSize = 0;
         foreach (var bytes in writer.ByteArrays)
         {
             byteArrayTableSize += bytes.ToArray().Length;
+        }
+
+        // Add note table sizes to the data table size
+        foreach (var (_, data) in noteTableData)
+        {
+            byteArrayTableSize += data.Length;
         }
         
         // Calculate string table size  
@@ -220,22 +238,23 @@ class Transpiler : IDisposable
         
         // totalSize is used for donelib/copydata - points past the data tables
         // PRG_LAST already accounts for the standard final built-ins size (donelib, copydata, popax,
-        // incsp2, popa, pusha, pushax, zerobss). When the new codegen pattern (decsp4) changes the
+        // incsp2, popa, pusha, pushax, zerobss with 0 locals). When optional methods change the
         // final built-ins composition, we must add the size delta.
         const ushort PRG_LAST = 0x85AE;
-        bool needsDecsp4 = UsedMethods != null && UsedMethods.Contains("decsp4");
-        int finalBuiltInsOffset = 0;
-        if (needsDecsp4)
-        {
-            int standardSize = Program6502.CalculateFinalBuiltInsSize(0, null);
-            int actualSize = Program6502.CalculateFinalBuiltInsSize(locals, UsedMethods);
-            finalBuiltInsOffset = actualSize - standardSize;
-        }
-        ushort totalSize = (ushort)(PRG_LAST.GetAddressAfterMain(sizeOfMain) + finalBuiltInsOffset + byteArrayTableSize + stringTableSize);
+        int standardSize = Program6502.CalculateFinalBuiltInsSize(0, null);
+        int actualSize = Program6502.CalculateFinalBuiltInsSize(locals, UsedMethods);
+        int finalBuiltInsOffset = actualSize - standardSize;
+        ushort totalSize = (ushort)(PRG_LAST.GetAddressAfterMain(sizeOfMain) + finalBuiltInsOffset + musicSubroutinesSize + byteArrayTableSize + stringTableSize);
         
         program.AddFinalBuiltIns(totalSize, locals, UsedMethods);
 
-        // Add byte array data after final built-ins
+        // Add note table data blocks BEFORE byte arrays (matches cc65 layout)
+        foreach (var (label, data) in noteTableData)
+        {
+            program.AddProgramData(data, label);
+        }
+
+        // Add byte array data (music data etc.)
         int byteArrayIndex = 0;
         foreach (var bytes in writer.ByteArrays)
         {
@@ -357,9 +376,23 @@ class Transpiler : IDisposable
                         // 32-bit
                         case OperandType.BrTarget:
                         case OperandType.I:
-                        case OperandType.Type:
                         case OperandType.ShortR:
                             intValue = blob.ReadInt32();
+                            break;
+                        case OperandType.Type:
+                            {
+                                var token = blob.ReadInt32();
+                                intValue = token;
+                                // Resolve type name for Newarr (e.g. "Byte", "UInt16")
+                                if (opCode == ILOpCode.Newarr)
+                                {
+                                    var handle = MetadataTokens.EntityHandle(token);
+                                    if (handle.Kind == HandleKind.TypeReference)
+                                        stringValue = _reader.GetString(_reader.GetTypeReference((TypeReferenceHandle)handle).Name);
+                                    else if (handle.Kind == HandleKind.TypeDefinition)
+                                        stringValue = _reader.GetString(_reader.GetTypeDefinition((TypeDefinitionHandle)handle).Name);
+                                }
+                            }
                             break;
                         case OperandType.String:
                             stringValue = _reader.GetUserString(MetadataTokens.UserStringHandle(blob.ReadInt32()));

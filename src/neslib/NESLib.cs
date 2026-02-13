@@ -55,19 +55,47 @@ public static class NESLib
     public static void pal_bg_bright(byte bright) => throw null!;
 
     /// <summary>
-    /// play music
+    /// play music (FamiTone)
     /// </summary>
     public static void music_play(byte song) => throw null!;
 
     /// <summary>
-    /// stop music
+    /// stop music (FamiTone)
     /// </summary>
     public static void music_stop() => throw null!;
 
     /// <summary>
-    /// pause music
+    /// pause music (FamiTone)
     /// </summary>
     public static void music_pause(byte pause) => throw null!;
+
+    /// <summary>
+    /// initialize the APU (Audio Processing Unit)
+    /// enables all sound channels and sets initial state
+    /// </summary>
+    public static void apu_init() => throw null!;
+
+    /// <summary>
+    /// set up music data pointer for playback
+    /// data is a byte array containing encoded music commands
+    /// </summary>
+    public static void start_music(byte[] data) => throw null!;
+
+    /// <summary>
+    /// play one frame of music, call once per vblank
+    /// processes music data and writes to APU registers
+    /// </summary>
+    public static void play_music() => throw null!;
+
+    /// <summary>
+    /// register a ushort[] note table for pulse channel playback
+    /// </summary>
+    public static void set_music_pulse_table(ushort[] table) => throw null!;
+
+    /// <summary>
+    /// register a ushort[] note table for triangle channel playback
+    /// </summary>
+    public static void set_music_triangle_table(ushort[] table) => throw null!;
 
     /// <summary>
     /// play sound effect
@@ -128,6 +156,11 @@ public static class NESLib
     /// wait actual TV frame, 50hz for PAL, 60hz for NTSC
     /// </summary>
     public static void ppu_wait_nmi() => throw null!;
+
+    /// <summary>
+    /// write a byte value to an absolute memory address
+    /// </summary>
+    public static void poke(ushort addr, byte value) => throw null!;
 
     /// <summary>
     /// wait virtual frame, it is always 50hz, frame-to-frame in PAL, frameskip in NTSC

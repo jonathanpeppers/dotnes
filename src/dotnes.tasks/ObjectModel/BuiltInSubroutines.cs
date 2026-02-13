@@ -1251,7 +1251,7 @@ internal static class BuiltInSubroutines
              .Emit(STA_abs(PPU_SCROLL))
              .Emit(STA_abs(PPU_SCROLL))
              .Emit(STA_abs(PPU_OAM_ADDR))
-             .Emit(JMP_abs(0x8500));  // main
+             .Emit(JMP_abs("main"));
         return block;
     }
 
@@ -1501,6 +1501,215 @@ internal static class BuiltInSubroutines
              .Emit(LDA_zpg_X(0x3C))
              .Emit(LDX(0x00))
              .Emit(RTS());
+        return block;
+    }
+
+    #endregion
+
+    #region APU / Music Subroutines
+
+    /// <summary>
+    /// apu_init - Initialize APU: enable channels and silence all
+    /// </summary>
+    public static Block ApuInit()
+    {
+        var block = new Block(nameof(NESLib.apu_init));
+        // Match original apu.c: memcpy APUINIT to $4000, then set $4017 and $4015
+        block.Emit(LDA(0x30))           // Silence pulse channels (constant volume = 0)
+             .Emit(STA_abs(APU_PULSE1_CTRL))
+             .Emit(STA_abs(APU_PULSE2_CTRL))
+             .Emit(LDA(0x08))           // Sweep: negate flag set (prevents period underflow)
+             .Emit(STA_abs(APU_PULSE1_SWEEP))
+             .Emit(STA_abs(APU_PULSE2_SWEEP))
+             .Emit(LDA(0x80))           // Silence triangle (halt flag, counter=0)
+             .Emit(STA_abs(APU_TRIANGLE_CTRL))
+             .Emit(LDA(0x40))           // Frame counter: 5-step mode
+             .Emit(STA_abs(PPU_FRAMECNT))
+             .Emit(LDA(0x0F))           // Enable pulse1, pulse2, triangle, noise
+             .Emit(STA_abs(APU_STATUS))
+             .Emit(RTS());
+        return block;
+    }
+
+    /// <summary>
+    /// start_music - Set up music data pointer using cc65 calling convention.
+    /// Music address arrives in A (lo) / X (hi), already pushed to cc65 stack by transpiler.
+    /// Reads args from software stack, stores to $0301-$0302 (cc65 BSS).
+    /// </summary>
+    public static Block StartMusic()
+    {
+        var block = new Block(nameof(NESLib.start_music));
+        // cc65 calling convention: JSR pushax was called before us,
+        // args are on the cc65 software stack at ($22)
+        block.Emit(JSR("pushax"))               // push A/X to cc65 stack
+             .Emit(LDY(0x01))
+             .Emit(LDA_ind_Y(sp))               // hi byte from stack
+             .Emit(STA_abs(MUSIC_PTR + 1))       // music_ptr hi = $0302
+             .Emit(DEY())
+             .Emit(LDA_ind_Y(sp))               // lo byte from stack
+             .Emit(STA_abs(MUSIC_PTR))           // music_ptr lo = $0301
+             .Emit(STY_abs(MUSIC_DURATION))      // cur_duration = 0 (Y=0)
+             .Emit(JMP("incsp2"));               // pop 2 bytes from stack and return
+        return block;
+    }
+
+    // Bass note threshold: notes below this go to triangle channel
+    const byte BASS_NOTE = 36; // 0x24
+
+    /// <summary>
+    /// play_music - Play one frame of music. Matches cc65's compiled output exactly.
+    /// Uses $0300+ absolute addressing for state (cc65 BSS layout).
+    /// Uses interleaved 16-bit note tables with ASL+TAY indexing.
+    /// </summary>
+    public static Block PlayMusic()
+    {
+        var block = new Block(nameof(NESLib.play_music));
+
+        // Check if music_ptr is NULL (both bytes zero = no music playing)
+        block.Emit(LDA_abs(MUSIC_PTR))            // LDA $0301
+             .Emit(ORA_abs(MUSIC_PTR + 1))         // ORA $0302
+             .Emit(BNE("@not_null"))               // if ptr != NULL, continue
+             .Emit(RTS());                          // NULL → return
+
+        // Far jump to check_duration (too far for BNE)
+        block.Emit(JMP("@check_duration"), "@not_null");
+
+        // --- Read next byte from music data ---
+        // Copy music_ptr to $2A/$2B for indirect access (cc65 uses ptr1)
+        block.Emit(LDA_abs(MUSIC_PTR + 1), "@read_next")  // hi byte
+             .Emit(STA_zpg(ptr1 + 1))                      // $2B
+             .Emit(LDA_abs(MUSIC_PTR))                     // lo byte
+             .Emit(STA_zpg(ptr1))                           // $2A
+             .Emit(LDY(0x00))
+             .Emit(LDA_ind_Y(ptr1));                        // A = *music_ptr
+
+        // Save note in temp and increment music_ptr (16-bit)
+        block.Emit(STA_abs(MUSIC_TEMP))             // $0329 = note
+             .Emit(INC_abs(MUSIC_PTR))               // music_ptr lo++
+             .Emit(BNE("@no_carry_ptr"))
+             .Emit(INC_abs(MUSIC_PTR + 1));          // carry to hi byte
+
+        // Check bit 7 of note
+        block.Emit(LDA_abs(MUSIC_TEMP), "@no_carry_ptr")
+             .Emit(AND(0x80))
+             .Emit(BEQ("@is_note"))                  // bit 7 clear → note
+             .Emit(JMP("@duration_handler"));         // bit 7 set → duration/end
+
+        // --- Note handler ---
+        // Check if note >= BASS_NOTE (36 = 0x24)
+        block.Emit(LDA_abs(MUSIC_TEMP), "@is_note")
+             .Emit(CMP(BASS_NOTE))
+             .Emit(BCS("@pulse_note"))                // >= BASS_NOTE → pulse
+
+        // Check if triangle channel already used (chs & 4)
+             .Emit(LDA_abs(MUSIC_CHS))
+             .Emit(AND(0x04))
+             .Emit(BEQ("@triangle_note"));            // triangle free → triangle
+
+        // --- Pulse note: lookup in pulse table (interleaved 16-bit) ---
+        block.Emit(LDA_abs(MUSIC_TEMP), "@pulse_note")
+             .Emit(AND(0x3F))
+             .Emit(ASL_A())                           // note * 2 for 16-bit entries
+             .Emit(TAY())                             // Y = byte offset into table
+
+        // Read 16-bit period from interleaved table
+             .Emit(LDA_abs_Y("note_table_pulse", 1))  // hi byte (table+1+Y)
+             .Emit(STA_abs(MUSIC_PERIOD_HI))           // $032B
+             .Emit(LDA_abs_Y("note_table_pulse"))      // lo byte (table+Y)
+             .Emit(STA_abs(MUSIC_PERIOD_LO));           // $032A
+
+        // Check pulse channel 1 free
+        block.Emit(LDA_abs(MUSIC_CHS))
+             .Emit(AND(0x01))
+             .Emit(BNE("@try_pulse2"));                // ch1 busy → try ch2
+
+        // --- Write pulse channel 1 ---
+        block.Emit(LDA_abs(MUSIC_PERIOD_LO))
+             .Emit(STA_abs(APU_PULSE1_TIMER_LO))       // $4002 = period lo
+             .Emit(LDA_abs(MUSIC_PERIOD_HI))
+             .Emit(ORA(0x50))                           // length counter = 10
+             .Emit(STA_abs(APU_PULSE1_TIMER_HI))       // $4003 = period hi | length
+             .Emit(LDA(0x42))                           // duty=25%, envelope, rate=2
+             .Emit(STA_abs(APU_PULSE1_CTRL))            // $4000
+
+        // chs |= 1
+             .Emit(LDA_abs(MUSIC_CHS))
+             .Emit(ORA(0x01))
+             .Emit(JMP("@store_chs"));
+
+        // --- Try pulse channel 2 ---
+        block.Emit(LDA_abs(MUSIC_CHS), "@try_pulse2")
+             .Emit(AND(0x02))
+             .Emit(BNE("@check_duration"));            // both busy → skip
+
+        // --- Write pulse channel 2 ---
+        block.Emit(LDA_abs(MUSIC_PERIOD_LO))
+             .Emit(STA_abs(APU_PULSE2_TIMER_LO))       // $4006
+             .Emit(LDA_abs(MUSIC_PERIOD_HI))
+             .Emit(ORA(0x50))
+             .Emit(STA_abs(APU_PULSE2_TIMER_HI))       // $4007
+             .Emit(LDA(0x42))
+             .Emit(STA_abs(APU_PULSE2_CTRL))            // $4004
+
+        // chs |= 2
+             .Emit(LDA_abs(MUSIC_CHS))
+             .Emit(ORA(0x02))
+             .Emit(JMP("@store_chs"));
+
+        // --- Triangle note: lookup in triangle table ---
+        block.Emit(LDA_abs(MUSIC_TEMP), "@triangle_note")
+             .Emit(AND(0x3F))
+             .Emit(ASL_A())
+             .Emit(TAY())
+
+        // Read 16-bit period from triangle table
+             .Emit(LDA_abs_Y("note_table_triangle", 1))  // hi byte
+             .Emit(STA_abs(MUSIC_TRI_PERIOD_HI))          // $032D
+             .Emit(LDA_abs_Y("note_table_triangle"))      // lo byte
+             .Emit(STA_abs(MUSIC_TRI_PERIOD_LO));          // $032C
+
+        // Write triangle registers
+        block.Emit(LDA(0x7F))                              // linear counter = 127
+             .Emit(STA_abs(APU_TRIANGLE_CTRL))             // $4008
+             .Emit(LDA_abs(MUSIC_TRI_PERIOD_LO))
+             .Emit(STA_abs(APU_TRIANGLE_TIMER_LO))        // $400A
+             .Emit(LDA_abs(MUSIC_TRI_PERIOD_HI))
+             .Emit(ORA(0x78))                              // length counter = 15
+             .Emit(STA_abs(APU_TRIANGLE_TIMER_HI));        // $400B
+
+        // chs |= 4
+        block.Emit(LDA_abs(MUSIC_CHS))
+             .Emit(ORA(0x04))
+             .Emit(JMP("@store_chs"));
+
+        // --- Duration handler (bit 7 set) ---
+        block.Emit(LDA_abs(MUSIC_TEMP), "@duration_handler")
+             .Emit(CMP(0xFF))
+             .Emit(BNE("@set_duration"));               // not 0xFF → set duration
+
+        // 0xFF end marker: set music_ptr = NULL (Y is 0 from earlier LDY)
+        block.Emit(TYA())
+             .Emit(STA_abs(MUSIC_PTR))                   // ptr lo = 0
+             .Emit(STA_abs(MUSIC_PTR + 1));              // ptr hi = 0
+
+        // Set duration from the byte value (0xFF & 0x3F = 0x3F = 63)
+        block.Emit(LDA_abs(MUSIC_TEMP), "@set_duration")
+             .Emit(AND(0x3F))
+             .Emit(STA_abs(MUSIC_DURATION))              // cur_duration = byte & 63
+             .Emit(TYA());                               // A = 0 (chs = 0, Y was 0)
+
+        // Store chs and fall through to check_duration
+        block.Emit(STA_abs(MUSIC_CHS), "@store_chs");
+
+        // --- Check duration: if 0, loop to read next byte ---
+        block.Emit(LDA_abs(MUSIC_DURATION), "@check_duration")
+             .Emit(BNE("@decrement"))
+             .Emit(JMP("@read_next"));
+
+        // --- Decrement duration and return ---
+        block.Emit(DEC_abs(MUSIC_DURATION), "@decrement")
+             .Emit(RTS());
+
         return block;
     }
 

@@ -45,9 +45,31 @@ internal static class NESConstants
     public const ushort PPU_DATA = 0x2007;
 
     // APU/IO registers
+    public const ushort APU_PULSE1_CTRL = 0x4000;
+    public const ushort APU_PULSE1_SWEEP = 0x4001;
+    public const ushort APU_PULSE1_TIMER_LO = 0x4002;
+    public const ushort APU_PULSE1_TIMER_HI = 0x4003;
+    public const ushort APU_PULSE2_CTRL = 0x4004;
+    public const ushort APU_PULSE2_SWEEP = 0x4005;
+    public const ushort APU_PULSE2_TIMER_LO = 0x4006;
+    public const ushort APU_PULSE2_TIMER_HI = 0x4007;
+    public const ushort APU_TRIANGLE_CTRL = 0x4008;
+    public const ushort APU_TRIANGLE_TIMER_LO = 0x400A;
+    public const ushort APU_TRIANGLE_TIMER_HI = 0x400B;
+    public const ushort APU_STATUS = 0x4015;
     public const ushort DMC_FREQ = 0x4010;
     public const ushort PPU_OAM_DMA = 0x4014;
     public const ushort PPU_FRAMECNT = 0x4017;
+
+    // Music engine state (cc65-compatible BSS at $0300+)
+    public const ushort MUSIC_DURATION = 0x0300;  // 1 byte: frames until next note
+    public const ushort MUSIC_PTR = 0x0301;       // 2 bytes: current position in music data
+    public const ushort MUSIC_CHS = 0x0303;       // 1 byte: channel usage bitmask (static)
+    public const ushort MUSIC_TEMP = 0x0329;      // 1 byte: temp note value
+    public const ushort MUSIC_PERIOD_LO = 0x032A; // 1 byte: temp period low
+    public const ushort MUSIC_PERIOD_HI = 0x032B; // 1 byte: temp period high
+    public const ushort MUSIC_TRI_PERIOD_LO = 0x032C; // 1 byte: triangle period low
+    public const ushort MUSIC_TRI_PERIOD_HI = 0x032D; // 1 byte: triangle period high
 
     // Built-in subroutine addresses (resolved after linking)
     public const ushort skipNtsc = 0x81F9;

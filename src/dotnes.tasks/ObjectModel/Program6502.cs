@@ -425,6 +425,7 @@ public class Program6502
         program.DefineExternalLabel("pushax", 0);
         program.DefineExternalLabel("zerobss", 0);
         program.DefineExternalLabel("copydata", 0);
+        program.DefineExternalLabel("main", 0);
         program.DefineExternalLabel("updName", NESConstants.updName);
 
         // Add all standard built-in subroutines (same order as NESWriter.WriteBuiltIns)
@@ -529,6 +530,8 @@ public class Program6502
             }
             if (usedMethods.Contains("oam_spr"))
                 size += BuiltInSubroutines.OamSpr().ByteSize;
+            if (usedMethods.Contains("apu_init"))
+                size += BuiltInSubroutines.ApuInit().ByteSize;
         }
         return size;
     }
@@ -570,6 +573,40 @@ public class Program6502
             }
             if (usedMethods.Contains("oam_spr"))
                 AddBlock(BuiltInSubroutines.OamSpr());
+            if (usedMethods.Contains("apu_init"))
+                AddBlock(BuiltInSubroutines.ApuInit());
+        }
+    }
+
+    /// <summary>
+    /// Calculates the size of music subroutines (play_music + start_music).
+    /// These are emitted before main() to match cc65's ROM layout.
+    /// </summary>
+    public static int CalculateMusicSubroutinesSize(HashSet<string>? usedMethods = null)
+    {
+        int size = 0;
+        if (usedMethods != null)
+        {
+            if (usedMethods.Contains("play_music"))
+                size += BuiltInSubroutines.PlayMusic().ByteSize;
+            if (usedMethods.Contains("start_music"))
+                size += BuiltInSubroutines.StartMusic().ByteSize;
+        }
+        return size;
+    }
+
+    /// <summary>
+    /// Adds music subroutines (play_music + start_music) before main().
+    /// Matches cc65's ROM layout where music code precedes main().
+    /// </summary>
+    public void AddMusicSubroutines(HashSet<string>? usedMethods = null)
+    {
+        if (usedMethods != null)
+        {
+            if (usedMethods.Contains("play_music"))
+                AddBlock(BuiltInSubroutines.PlayMusic());
+            if (usedMethods.Contains("start_music"))
+                AddBlock(BuiltInSubroutines.StartMusic());
         }
     }
 

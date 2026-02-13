@@ -90,6 +90,32 @@ Additionally, a `chr_generic.s` file is included as your game's "artwork" (lol?)
 
 This table of data is used to render sprites, text, etc.
 
+## Music
+
+.NES also supports NES music playback via the APU. The `samples/music` project
+plays "The Easy Winners" by Scott Joplin using pulse and triangle channels:
+
+```csharp
+ushort[] note_table = [ 4304, 4062, 3834, ... ];
+set_music_pulse_table(note_table);
+
+ushort[] tri_table = [ 2138, 2018, 1905, ... ];
+set_music_triangle_table(tri_table);
+
+byte[] music1 = [ 0x2a, 0x1e, 0x95, ... ];
+
+apu_init();
+start_music(music1);
+
+while (true)
+{
+    ppu_wait_nmi();
+    play_music();
+}
+```
+
+For more details, see [docs/music-sample.md](docs/music-sample.md).
+
 ## Scope
 
 The types of things I wanted to get working initially:
@@ -101,6 +127,7 @@ The types of things I wanted to get working initially:
 * Byte arrays, and a more advanced sample like `attributetable` run
 * Local variables work in some form
 * Project template, MSBuild support, IDE support
+* Music playback via the NES APU (see `samples/music`)
 
 Down the road, I might think about support for:
 
