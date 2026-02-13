@@ -660,7 +660,7 @@ internal static class BuiltInSubroutines
              .Emit(RTS());
         return block;
     }
-    /// </summary>
+
     public static Block OamSpr()
     {
         // 85B7 TAX           ; _oam_spr

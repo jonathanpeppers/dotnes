@@ -1616,7 +1616,9 @@ class IL2NESWriter : NESWriter
         _immediateInA = null;
         _runtimeValueInA = true; // Return value in A
     }
-    /// (making it part of a compound expression like Ldloc + Ldc + Add).
+    /// <summary>
+    /// Checks if the value loaded at instruction index <paramref name="idx"/> is consumed
+    /// by an Add or Sub operation (making it part of a compound expression like Ldloc + Ldc + Add).
     /// </summary>
     bool IsConsumedByAdd(int idx)
     {

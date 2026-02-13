@@ -85,7 +85,7 @@ void main() {
     while (count < 15) {
       // palette color cycles with actor index (i & 3)
       pal = i & 3;
-      oam_id = oam_meta_spr(actor_x[i], actor_y[i], oam_id, metasprite);
+      oam_id = oam_meta_spr_pal(actor_x[i], actor_y[i], pal, oam_id, metasprite);
 
       // update position
       actor_x[i] = actor_x[i] + actor_dx[i];
