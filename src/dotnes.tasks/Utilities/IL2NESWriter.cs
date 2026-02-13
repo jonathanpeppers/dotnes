@@ -754,10 +754,10 @@ class IL2NESWriter : NESWriter
             {
                 // This is an x++ or x-- pattern!
                 // Remove the previously emitted instructions:
-                // WriteLdloc emits: LDA $addr; JSR pusha (2 instructions)
+                // WriteLdloc emits: LDA $addr (1 instruction)
                 // WriteLdc(byte) emits: LDA #imm (1 instruction)
-                // Total: 3 instructions to remove
-                RemoveLastInstructions(3);
+                // Total: 2 instructions to remove
+                RemoveLastInstructions(2);
                 
                 // Emit optimized INC or DEC
                 ushort addr = (ushort)loadedLocal.Address.Value;
