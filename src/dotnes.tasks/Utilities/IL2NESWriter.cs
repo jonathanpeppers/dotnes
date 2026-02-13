@@ -365,7 +365,9 @@ class IL2NESWriter : NESWriter
                     if (_padPollResultAvailable || _runtimeValueInA)
                     {
                         // Remove the LDA #mask that was emitted by Ldc_i4*
-                        if (previous is ILOpCode.Ldc_i4_s or ILOpCode.Ldc_i4 
+                        // Only remove if WriteLdc actually emitted LDA (not skipped due to _runtimeValueInA)
+                        if (!_runtimeValueInA
+                            && previous is ILOpCode.Ldc_i4_s or ILOpCode.Ldc_i4 
                             or ILOpCode.Ldc_i4_0 or ILOpCode.Ldc_i4_1 or ILOpCode.Ldc_i4_2
                             or ILOpCode.Ldc_i4_3 or ILOpCode.Ldc_i4_4 or ILOpCode.Ldc_i4_5
                             or ILOpCode.Ldc_i4_6 or ILOpCode.Ldc_i4_7 or ILOpCode.Ldc_i4_8)
@@ -728,13 +730,24 @@ class IL2NESWriter : NESWriter
                         }
                         break;
                     default:
-                        if (_needsByteArrayLoadInCall && _lastByteArrayLabel != null 
-                            && previous != ILOpCode.Ldtoken)
+                        if (_lastByteArrayLabel != null && previous != ILOpCode.Ldtoken
+                            && !_byteArrayAddressEmitted)
                         {
-                            // Load deferred byte array address into AX before calling the function
-                            EmitWithLabel(Opcode.LDA, AddressMode.Immediate_LowByte, _lastByteArrayLabel);
-                            EmitWithLabel(Opcode.LDX, AddressMode.Immediate_HighByte, _lastByteArrayLabel);
-                            _needsByteArrayLoadInCall = false; // Only emit once
+                            bool needsLoad = _needsByteArrayLoadInCall;
+                            // Check for unconsumed byte array marker on the stack
+                            if (!needsLoad && _reflectionCache.GetNumberOfArguments(operand) > 0)
+                            {
+                                foreach (var val in Stack)
+                                {
+                                    if (val < 0) { needsLoad = true; break; }
+                                }
+                            }
+                            if (needsLoad)
+                            {
+                                EmitWithLabel(Opcode.LDA, AddressMode.Immediate_LowByte, _lastByteArrayLabel);
+                                EmitWithLabel(Opcode.LDX, AddressMode.Immediate_HighByte, _lastByteArrayLabel);
+                                _needsByteArrayLoadInCall = false;
+                            }
                         }
                         // Emit JSR to built-in method
                         EmitWithLabel(Opcode.JSR, AddressMode.Absolute, operand);
@@ -994,6 +1007,7 @@ class IL2NESWriter : NESWriter
                 Emit(Opcode.LDA, AddressMode.Immediate, 0x22);
                 Emit(Opcode.LDX, AddressMode.Immediate, 0x86);
                 _immediateInA = null;
+                _byteArrayAddressEmitted = true;
             }
         }
         else if (local.Value < ushort.MaxValue)
@@ -1001,12 +1015,10 @@ class IL2NESWriter : NESWriter
             LocalCount += 2;
             // Remove the previous LDX + LDA instructions (2 instructions = 4 bytes)
             RemoveLastInstructions(2);
-            Emit(Opcode.LDX, AddressMode.Immediate, 0x03);
-            Emit(Opcode.LDA, AddressMode.Immediate, 0xC0);
+            Emit(Opcode.LDX, AddressMode.Immediate, (byte)(local.Value >> 8));
+            Emit(Opcode.LDA, AddressMode.Immediate, (byte)(local.Value & 0xFF));
             Emit(Opcode.STA, AddressMode.Absolute, (ushort)local.Address);
             Emit(Opcode.STX, AddressMode.Absolute, (ushort)(local.Address + 1));
-            Emit(Opcode.LDA, AddressMode.Immediate, 0x28);
-            Emit(Opcode.LDX, AddressMode.Immediate, 0x86);
             _immediateInA = null;
         }
         else
@@ -1454,8 +1466,10 @@ class IL2NESWriter : NESWriter
         if (Instructions is null || Index < 2)
             throw new InvalidOperationException("HandleLdelemU1 requires at least 2 previous instructions");
 
-        int indexIdx = Stack.Count > 0 ? Stack.Pop() : 0; // index value
-        int arrayRef = Stack.Count > 0 ? Stack.Pop() : 0; // array ref
+        // Pop index and array reference from the evaluation stack; their values are
+        // not needed here because we re-derive them from the preceding IL instructions.
+        if (Stack.Count > 0) Stack.Pop(); // index value
+        if (Stack.Count > 0) Stack.Pop(); // array ref
 
         // Find the two Ldloc instructions that loaded array and index
         var indexInstr = Instructions[Index - 1];
@@ -1532,7 +1546,6 @@ class IL2NESWriter : NESWriter
         int targetArrayILOffset = -1;
 
         // Collect the value expression info
-        var valueOps = new List<ILInstruction>();
 
         // Walk backward from stelem to find all components
         // The pattern is: ldloc(arr), ldloc(idx), <value_expression>, stelem_i1

@@ -581,10 +581,9 @@ public class Program6502
             if (usedMethods.Contains("oam_spr"))
                 AddBlock(BuiltInSubroutines.OamSpr());
             if (usedMethods.Contains("rand8"))
-            {
                 AddBlock(BuiltInSubroutines.Rand8());
+            if (usedMethods.Contains("rand8") || usedMethods.Contains("set_rand"))
                 AddBlock(BuiltInSubroutines.SetRand());
-            }
             if (usedMethods.Contains("oam_meta_spr"))
                 AddBlock(BuiltInSubroutines.OamMetaSpr());
             if (usedMethods.Contains("apu_init"))
