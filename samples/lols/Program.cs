@@ -8,12 +8,7 @@ The vertical scroll area is 480 pixels high; note how
 the nametables wrap around.
 */
 
-// NOTE: C requires variables declared at the top of methods.
-// Putting them at the top in C# should not be required.
-
-int x = 0;   // x scroll position
-int y = 0;   // y scroll position
-string str = "LOL! LOL! LOL! LOL! LOL! LOL!";
+byte y = 0;   // y scroll position
 
 // set palette colors
 pal_col(0, 0x02);   // set screen to dark blue
@@ -21,19 +16,21 @@ pal_col(1, 0x14);   // fuchsia
 pal_col(2, 0x20);   // grey
 pal_col(3, 0x30);   // white
 
-//write text to name table
-vram_adr(NTADR_A(1,0));
+// write text across nametable A
+vram_adr(NTADR_A(2, 2));
 vram_write("LOL! LOL! LOL! LOL! LOL! LOL!");
-// vram_adr(NTADR_A(2,10));
-// vram_write("LOL! LOL! LOL! LOL! LOL! LOL!");
-//  vram_adr(NTADR_B(1,20));
-//  vram_write("LOL! LOL! LOL! LOL! LOL! LOL!");
-// vram_adr(NTADR_B(2,0));
-// vram_write("LOL! LOL! LOL! LOL! LOL! LOL!");
-// vram_adr(NTADR_C(1,10));
-// vram_write("LOL! LOL! LOL! LOL! LOL! LOL!");
-// vram_adr(NTADR_C(2,20));
-// vram_write("LOL! LOL! LOL! LOL! LOL! LOL!");
+vram_adr(NTADR_A(2, 6));
+vram_write("LOL! LOL! LOL! LOL! LOL! LOL!");
+vram_adr(NTADR_A(2, 10));
+vram_write("LOL! LOL! LOL! LOL! LOL! LOL!");
+vram_adr(NTADR_A(2, 14));
+vram_write("LOL! LOL! LOL! LOL! LOL! LOL!");
+vram_adr(NTADR_A(2, 18));
+vram_write("LOL! LOL! LOL! LOL! LOL! LOL!");
+vram_adr(NTADR_A(2, 22));
+vram_write("LOL! LOL! LOL! LOL! LOL! LOL!");
+vram_adr(NTADR_A(2, 26));
+vram_write("LOL! LOL! LOL! LOL! LOL! LOL!");
 
 // enable PPU rendering (turn on screen)
 ppu_on_all();
@@ -43,8 +40,7 @@ while (true)
 {
     // wait for next frame
     ppu_wait_frame();
-    // update y variable
-    // y += 1;
-    // set scroll register
-    // scroll(x, y);
+    // scroll up continuously
+    y += 1;
+    scroll(0, y);
 }
