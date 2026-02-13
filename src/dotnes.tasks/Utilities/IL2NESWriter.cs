@@ -632,6 +632,21 @@ class IL2NESWriter : NESWriter
                             }
                         }
                         break;
+                    case "scroll":
+                        // scroll() takes unsigned int params, which use popax (2-byte pop).
+                        // The preceding instructions are: JSR pusha, LDA $addr.
+                        // Replace pusha (1-byte push) with LDX #$00 + pushax (2-byte push).
+                        {
+                            var block = CurrentBlock!;
+                            var ldaInstr = block[block.Count - 1]; // LDA $addr (scroll_y)
+                            RemoveLastInstructions(2); // Remove JSR pusha + LDA $addr
+                            Emit(Opcode.LDX, AddressMode.Immediate, 0x00);
+                            EmitJSR("pushax");
+                            block.Emit(ldaInstr); // Re-emit LDA $addr
+                            EmitWithLabel(Opcode.JSR, AddressMode.Absolute, operand);
+                            _immediateInA = null;
+                        }
+                        break;
                     default:
                         if (_needsByteArrayLoadInCall && _lastByteArrayLabel != null 
                             && previous != ILOpCode.Ldtoken)
