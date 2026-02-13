@@ -6,6 +6,7 @@ Based on: https://github.com/sehugg/8bitworkshop/blob/master/presets/nes/flicker
 Uses 24 actors with 4 sprites each (96 total), but NES only has 64 sprites.
 Each frame we cycle through actors starting from where we left off,
 creating a flickering effect that shows all sprites over time.
+We also use oam_meta_spr_pal() to change the color of each metasprite.
 */
 
 // define a 2x2 metasprite
@@ -60,7 +61,9 @@ while (true)
     // draw up to 15 actors per frame (15 * 4 = 60 sprites, under the 64 limit)
     while (count < 15)
     {
-        oam_id = oam_meta_spr(actor_x[i], actor_y[i], oam_id, metasprite);
+        // palette color based on the count (stable per-slot within each frame)
+        byte pal = (byte)(count & 3);
+        oam_id = oam_meta_spr_pal(actor_x[i], actor_y[i], pal, oam_id, metasprite);
 
         // update position
         actor_x[i] = (byte)(actor_x[i] + actor_dx[i]);
