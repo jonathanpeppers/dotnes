@@ -526,4 +526,36 @@ public class ObjectModelTests
     }
 
     #endregion
+
+    #region Label Scoping Tests
+
+    [Fact]
+    public void Program6502_LocalLabels_AreScopedPerBlock()
+    {
+        // Two blocks both using @loop should resolve to their own addresses
+        var program = new Program6502 { BaseAddress = 0x8000 };
+
+        var block1 = new Block("block_a");
+        block1.Emit(LDA(0x00), "@loop");   // $8000 (2 bytes)
+        block1.Emit(JMP("@loop"));          // $8002 (3 bytes) -> should JMP $8000
+
+        var block2 = new Block("block_b");
+        block2.Emit(LDX(0x00), "@loop");   // $8005 (2 bytes)
+        block2.Emit(JMP("@loop"));          // $8007 (3 bytes) -> should JMP $8005
+
+        program.AddBlock(block1);
+        program.AddBlock(block2);
+
+        var bytes = program.ToBytes();
+
+        // block1 JMP target at bytes[3..4]
+        ushort target1 = (ushort)(bytes[3] | (bytes[4] << 8));
+        Assert.Equal(0x8000, target1);
+
+        // block2 JMP target at bytes[8..9]
+        ushort target2 = (ushort)(bytes[8] | (bytes[9] << 8));
+        Assert.Equal(0x8005, target2);
+    }
+
+    #endregion
 }

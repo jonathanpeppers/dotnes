@@ -32,18 +32,31 @@ public class LabelTable
     }
 
     /// <summary>
-    /// Attempts to resolve a label to its address
+    /// Attempts to resolve a label to its address.
+    /// When a scope is set, local labels (starting with @) are first tried with the scope prefix.
     /// </summary>
     /// <param name="name">Label name</param>
     /// <param name="address">Resolved address if found</param>
     /// <returns>True if label was resolved</returns>
     public bool TryResolve(string name, out ushort address)
     {
+        // Try scoped lookup for local labels
+        if (CurrentScope != null && name.StartsWith("@"))
+        {
+            string scopedName = $"{CurrentScope}:{name}";
+            if (_labels.TryGetValue(scopedName, out address))
+                return true;
+        }
         if (_labels.TryGetValue(name, out address))
             return true;
         _unresolvedReferences.Add(name);
         return false;
     }
+
+    /// <summary>
+    /// Current scope for local label resolution. When set, @ labels are tried with this prefix first.
+    /// </summary>
+    public string? CurrentScope { get; set; }
 
     /// <summary>
     /// Gets the address of a label, throwing if not found

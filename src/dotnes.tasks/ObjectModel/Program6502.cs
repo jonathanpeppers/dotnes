@@ -142,12 +142,14 @@ public class Program6502
         }
         else
         {
+            _labels.CurrentScope = block.Label;
             foreach (var entry in block.InstructionsWithLabels)
             {
                 var bytes = entry.Instruction.ToBytes(currentAddress, _labels);
                 ms.Write(bytes, 0, bytes.Length);
                 currentAddress += (ushort)bytes.Length;
             }
+            _labels.CurrentScope = null;
         }
 
         return ms.ToArray();
@@ -195,22 +197,37 @@ public class Program6502
                 foreach (var (instruction, label) in block.InstructionsWithLabels)
                 {
                     if (label != null)
-                        _labels.DefineOrUpdate(label, currentAddress);
+                    {
+                        _labels.DefineOrUpdate(ScopeLabel(label, block), currentAddress);
+                    }
                     currentAddress += (ushort)instruction.Size;
                 }
                 
                 // Resolve label aliases (for IL instructions that don't emit code)
                 foreach (var kvp in block.LabelAliases)
                 {
-                    if (_labels.TryResolve(kvp.Value, out ushort address))
+                    if (_labels.TryResolve(ScopeLabel(kvp.Value, block), out ushort address))
                     {
-                        _labels.DefineOrUpdate(kvp.Key, address);
+                        _labels.DefineOrUpdate(ScopeLabel(kvp.Key, block), address);
                     }
                 }
             }
         }
 
         _addressesValid = true;
+    }
+
+    /// <summary>
+    /// Scopes a local label (starting with @) by prefixing it with the block's label.
+    /// Non-local labels are returned unchanged.
+    /// </summary>
+    static string ScopeLabel(string label, Block block)
+    {
+        if (label.StartsWith("@") && block.Label != null)
+        {
+            return $"{block.Label}:{label}";
+        }
+        return label;
     }
 
     /// <summary>
@@ -226,6 +243,7 @@ public class Program6502
 
         foreach (var block in _blocks)
         {
+            _labels.CurrentScope = block.Label;
             if (block.IsDataBlock && block.RawData != null)
             {
                 // Write raw data bytes directly
@@ -243,6 +261,7 @@ public class Program6502
                 }
             }
         }
+        _labels.CurrentScope = null;
 
         return ms.ToArray();
     }
