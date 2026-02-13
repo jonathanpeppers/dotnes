@@ -8,7 +8,7 @@ The vertical scroll area is 480 pixels high; note how
 the nametables wrap around.
 */
 
-byte y = 0;   // y scroll position
+byte scroll_y = 0;   // y scroll position
 
 // set palette colors
 pal_col(0, 0x02);   // set screen to dark blue
@@ -16,18 +16,14 @@ pal_col(1, 0x14);   // fuchsia
 pal_col(2, 0x20);   // grey
 pal_col(3, 0x30);   // white
 
-// write text across nametable A
+// write text to nametable A (rows 0-29)
 vram_adr(NTADR_A(2, 2));
 vram_write("LOL! LOL! LOL! LOL! LOL! LOL!");
-vram_adr(NTADR_A(2, 6));
-vram_write("LOL! LOL! LOL! LOL! LOL! LOL!");
-vram_adr(NTADR_A(2, 10));
+vram_adr(NTADR_A(2, 8));
 vram_write("LOL! LOL! LOL! LOL! LOL! LOL!");
 vram_adr(NTADR_A(2, 14));
 vram_write("LOL! LOL! LOL! LOL! LOL! LOL!");
-vram_adr(NTADR_A(2, 18));
-vram_write("LOL! LOL! LOL! LOL! LOL! LOL!");
-vram_adr(NTADR_A(2, 22));
+vram_adr(NTADR_A(2, 20));
 vram_write("LOL! LOL! LOL! LOL! LOL! LOL!");
 vram_adr(NTADR_A(2, 26));
 vram_write("LOL! LOL! LOL! LOL! LOL! LOL!");
@@ -40,7 +36,7 @@ while (true)
 {
     // wait for next frame
     ppu_wait_frame();
-    // scroll up continuously
-    y += 1;
-    scroll(0, y);
+    // scroll up slowly (1 pixel per frame = ~4 seconds per screen)
+    scroll_y += 1;
+    scroll(0, scroll_y);
 }
