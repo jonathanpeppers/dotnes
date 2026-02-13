@@ -61,11 +61,15 @@ internal static class NESConstants
     public const ushort PPU_OAM_DMA = 0x4014;
     public const ushort PPU_FRAMECNT = 0x4017;
 
-    // Music engine zero-page state
-    public const byte MUSIC_PTR = 0x34;       // 2 bytes: current position in music data
-    public const byte MUSIC_START = 0x36;     // 2 bytes: start of music data (for looping)
-    public const byte MUSIC_DURATION = 0x38;  // 1 byte: frames until next note
-    public const byte MUSIC_CHS = 0x39;       // 1 byte: channel usage bitmask
+    // Music engine state (cc65-compatible BSS at $0300+)
+    public const ushort MUSIC_DURATION = 0x0300;  // 1 byte: frames until next note
+    public const ushort MUSIC_PTR = 0x0301;       // 2 bytes: current position in music data
+    public const ushort MUSIC_CHS = 0x0303;       // 1 byte: channel usage bitmask (static)
+    public const ushort MUSIC_TEMP = 0x0329;      // 1 byte: temp note value
+    public const ushort MUSIC_PERIOD_LO = 0x032A; // 1 byte: temp period low
+    public const ushort MUSIC_PERIOD_HI = 0x032B; // 1 byte: temp period high
+    public const ushort MUSIC_TRI_PERIOD_LO = 0x032C; // 1 byte: triangle period low
+    public const ushort MUSIC_TRI_PERIOD_HI = 0x032D; // 1 byte: triangle period high
 
     // Built-in subroutine addresses (resolved after linking)
     public const ushort skipNtsc = 0x81F9;

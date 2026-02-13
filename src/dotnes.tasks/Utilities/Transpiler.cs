@@ -189,21 +189,12 @@ class Transpiler : IDisposable
         // Get local count from writer
         locals = checked((byte)writer.LocalCount);
 
-        // Split named ushort[] arrays (note tables) into lo/hi byte tables
+        // Store named ushort[] arrays (note tables) as interleaved 16-bit data (cc65 compatible)
         var noteTableData = new List<(string label, byte[] data)>();
         foreach (var kvp in writer.UShortArrays)
         {
-            var rawBytes = kvp.Value;
-            int count = rawBytes.Length / 2; // 2 bytes per ushort (little-endian)
-            var lo = new byte[count];
-            var hi = new byte[count];
-            for (int j = 0; j < count; j++)
-            {
-                lo[j] = rawBytes[j * 2];       // low byte
-                hi[j] = rawBytes[j * 2 + 1];   // high byte
-            }
-            noteTableData.Add(($"{kvp.Key}_lo", lo));
-            noteTableData.Add(($"{kvp.Key}_hi", hi));
+            // Keep raw bytes as-is: interleaved lo/hi pairs (little-endian 16-bit)
+            noteTableData.Add((kvp.Key, kvp.Value.ToArray()));
         }
 
         // Calculate byte array table size

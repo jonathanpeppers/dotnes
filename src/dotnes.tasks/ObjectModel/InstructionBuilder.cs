@@ -234,6 +234,12 @@ public static class Asm
     public static Instruction DEC_abs(ushort address) =>
         new(Opcode.DEC, AddressMode.Absolute, new AbsoluteOperand(address));
 
+    public static Instruction ORA_abs(ushort address) =>
+        new(Opcode.ORA, AddressMode.Absolute, new AbsoluteOperand(address));
+
+    public static Instruction AND_abs(ushort address) =>
+        new(Opcode.AND, AddressMode.Absolute, new AbsoluteOperand(address));
+
     public static Instruction BIT_abs(ushort address) =>
         new(Opcode.BIT, AddressMode.Absolute, new AbsoluteOperand(address));
 
@@ -338,6 +344,9 @@ public static class Asm
 
     public static Instruction LDA_abs_Y(string label) =>
         new(Opcode.LDA, AddressMode.AbsoluteY, new LabelOperand(label, OperandSize.Word));
+
+    public static Instruction LDA_abs_Y(string label, int offset) =>
+        new(Opcode.LDA, AddressMode.AbsoluteY, new LabelOffsetOperand(label, offset));
 
     #endregion
 
