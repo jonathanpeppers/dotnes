@@ -530,12 +530,24 @@ class IL2NESWriter : NESWriter
                 _lastLoadedLocalIndex = operand;
                 break;
             case ILOpCode.Bne_un_s:
-                // Remove the previous comparison value loading
-                // This is typically JSR pusha (3 bytes) + LDA #imm (2 bytes) = 5 bytes, 2 instructions
-                RemoveLastInstructions(2);
-                Emit(Opcode.CMP, AddressMode.Immediate, checked((byte)Stack.Pop()));
-                Emit(Opcode.BNE, AddressMode.Relative, NumberOfInstructionsForBranch(instruction.Offset + operand + 2));
-                _runtimeValueInA = false;
+                // Branch if not equal (unsigned)
+                {
+                    operand = (sbyte)(byte)operand;
+                    RemoveLastInstructions(2);
+                    Emit(Opcode.CMP, AddressMode.Immediate, checked((byte)Stack.Pop()));
+                    if (operand < 0)
+                    {
+                        // Backward branch: use label-based resolution
+                        var labelName = $"instruction_{instruction.Offset + operand + 2:X2}";
+                        EmitWithLabel(Opcode.BNE, AddressMode.Relative, labelName);
+                    }
+                    else
+                    {
+                        // Forward branch: read ahead to compute byte offset
+                        Emit(Opcode.BNE, AddressMode.Relative, NumberOfInstructionsForBranch(instruction.Offset + operand + 2));
+                    }
+                    _runtimeValueInA = false;
+                }
                 break;
             case ILOpCode.Brfalse_s:
                 // Branch if value is zero/false (after AND test)
@@ -546,7 +558,18 @@ class IL2NESWriter : NESWriter
                     EmitWithLabel(Opcode.BEQ, AddressMode.Relative, labelName);
                     if (Stack.Count > 0)
                         Stack.Pop();
-                    _runtimeValueInA = false; // Branch taken/not taken — A state is indeterminate
+                    _runtimeValueInA = false;
+                }
+                break;
+            case ILOpCode.Brtrue_s:
+                // Branch if value is non-zero/true — inverse of Brfalse_s
+                {
+                    operand = (sbyte)(byte)operand;
+                    var labelName = $"instruction_{instruction.Offset + operand + 2:X2}";
+                    EmitWithLabel(Opcode.BNE, AddressMode.Relative, labelName);
+                    if (Stack.Count > 0)
+                        Stack.Pop();
+                    _runtimeValueInA = false;
                 }
                 break;
             case ILOpCode.Blt_s:

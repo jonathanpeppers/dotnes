@@ -52,12 +52,9 @@
 
 ### scroll.c
 - **Description:** Demonstrates vertical scrolling by writing text to two nametables and smoothly scrolling between them.
-- **Status:** 🟡 Feasible
-- **Missing Features:**
-  - User-defined functions (`put_str`, `scroll_demo`) — must be inlined as top-level code
-  - `strlen()` — would need to pass length explicitly to `vram_write`
-  - `int` local variables (signed 16-bit) — `scroll()` already implemented
-  - `NTADR_C` is implemented
+- **Status:** ✅ Already Implemented
+- **dotnes sample:** `scroll`
+- **Missing Features:** None — uses `pal_col`, `vram_adr`, `vram_write`, `NTADR_A`, `NTADR_C`, `ppu_on_all`, `ppu_wait_nmi`, `scroll`. The C# version uses byte arithmetic to bounce within 0-239 range.
 
 ### rletitle.c
 - **Description:** Unpacks RLE-compressed nametable data and fades in using `pal_bright`.
@@ -366,8 +363,8 @@
 
 | Status | Count | Samples |
 |--------|-------|---------|
-| ✅ Already Implemented | 6 | hello, attributes, flicker, metasprites, music, tint |
-| 🟡 Feasible | 3 | scroll, rletitle, tileset1 |
+| ✅ Already Implemented | 7 | hello, attributes, flicker, metasprites, music, tint, scroll |
+| 🟡 Feasible | 2 | rletitle, tileset1 |
 | 🟠 Moderate | 8 | sprites, metacursor, metatrigger, apu, bcd, statusbar, vrambuffer, vrambuf |
 | 🔴 Complex | 14 | aputest, ppuhello, fami, horizscroll, horizmask, bankswitch, monobitmap, conio, crypto, climber, transtable, irq, shoot2, siegegame |
 
