@@ -727,6 +727,7 @@ class IL2NESWriter : NESWriter
                 }
                 break;
             case ILOpCode.Call:
+                bool argsAlreadyPopped = false;
                 switch (operand)
                 {
                     case nameof(NTADR_A):
@@ -750,6 +751,7 @@ class IL2NESWriter : NESWriter
                         Emit(Opcode.LDA, AddressMode.Immediate, checked((byte)(address & 0xFF)));
                         Stack.Push(address);
                         _runtimeValueInA = false; // Value is compile-time constant
+                        argsAlreadyPopped = true;
                         break;
                     case "pad_poll":
                         // pad_poll returns result in A - emit JSR then store to tempVar for multiple tests
@@ -884,12 +886,15 @@ class IL2NESWriter : NESWriter
                         _immediateInA = null;
                         break;
                 }
-                // Pop N times
-                int args = _reflectionCache.GetNumberOfArguments(operand);
-                for (int i = 0; i < args; i++)
+                // Pop N times (unless handler already popped)
+                if (!argsAlreadyPopped)
                 {
-                    if (Stack.Count > 0)
-                        Stack.Pop();
+                    int args = _reflectionCache.GetNumberOfArguments(operand);
+                    for (int i = 0; i < args; i++)
+                    {
+                        if (Stack.Count > 0)
+                            Stack.Pop();
+                    }
                 }
                 // Clear byte array label if it was consumed by this call
                 // Only clear if this call actually takes arguments (consumes the array)
@@ -1159,6 +1164,22 @@ class IL2NESWriter : NESWriter
         ILOpCode.Ldloc_2 => 2,
         ILOpCode.Ldloc_3 => 3,
         ILOpCode.Ldloc_s => instr.Integer,
+        _ => null
+    };
+
+    static int? GetLdcValue(ILInstruction instr) => instr.OpCode switch
+    {
+        ILOpCode.Ldc_i4_0 => 0,
+        ILOpCode.Ldc_i4_1 => 1,
+        ILOpCode.Ldc_i4_2 => 2,
+        ILOpCode.Ldc_i4_3 => 3,
+        ILOpCode.Ldc_i4_4 => 4,
+        ILOpCode.Ldc_i4_5 => 5,
+        ILOpCode.Ldc_i4_6 => 6,
+        ILOpCode.Ldc_i4_7 => 7,
+        ILOpCode.Ldc_i4_8 => 8,
+        ILOpCode.Ldc_i4_s => instr.Integer,
+        ILOpCode.Ldc_i4 => instr.Integer,
         _ => null
     };
 
@@ -1930,6 +1951,7 @@ class IL2NESWriter : NESWriter
         // - The value expression type
         int targetArrayLocalIdx = -1;
         int targetIndexLocalIdx = -1;
+        int constantIndex = -1; // For constant-index stores like actor_dx[0] = 254
         int targetArrayILOffset = -1;
 
         // Collect the value expression info
@@ -1960,7 +1982,8 @@ class IL2NESWriter : NESWriter
                 case ILOpCode.Ldc_i4_4: case ILOpCode.Ldc_i4_5: case ILOpCode.Ldc_i4_6: case ILOpCode.Ldc_i4_7:
                 case ILOpCode.Ldc_i4_8: case ILOpCode.Ldc_i4_s: case ILOpCode.Ldc_i4:
                     push = 1; break;
-                case ILOpCode.Add: case ILOpCode.Sub: case ILOpCode.And: case ILOpCode.Or: case ILOpCode.Xor:
+                case ILOpCode.Add: case ILOpCode.Sub: case ILOpCode.Mul: case ILOpCode.Div:
+                case ILOpCode.And: case ILOpCode.Or: case ILOpCode.Xor:
                     pop = 2; push = 1; break;
                 case ILOpCode.Ldelem_u1:
                     pop = 2; push = 1; break;
@@ -1989,13 +2012,20 @@ class IL2NESWriter : NESWriter
                     targetArrayLocalIdx = locIdx.Value;
                     targetArrayILOffset = il.Offset;
                     
-                    // The next instruction should be the index ldloc
+                    // The next instruction should be the index (ldloc or constant)
                     if (i + 1 < Index)
                     {
                         var nextIl = Instructions[i + 1];
                         var nextLocIdx = GetLdlocIndex(nextIl);
                         if (nextLocIdx != null)
                             targetIndexLocalIdx = nextLocIdx.Value;
+                        else
+                        {
+                            // Check for constant index (ldc_i4_0, ldc_i4_1, etc.)
+                            int? constIdx = GetLdcValue(nextIl);
+                            if (constIdx != null)
+                                constantIndex = constIdx.Value;
+                        }
                     }
                     
                     valueStart = i + 2; // Value expression starts after arr + idx
@@ -2004,13 +2034,52 @@ class IL2NESWriter : NESWriter
             }
         }
 
-        if (targetArrayLocalIdx < 0 || targetIndexLocalIdx < 0)
+        if (targetArrayLocalIdx < 0 || (targetIndexLocalIdx < 0 && constantIndex < 0))
         {
-            // Constant-index stelem (from array initialization) — no runtime code needed
+            // Constant-index stelem from array initialization — no runtime code needed
             return;
         }
 
         var targetArray = Locals[targetArrayLocalIdx];
+
+        // Handle constant-index stores (e.g., actor_dx[0] = 254)
+        if (constantIndex >= 0)
+        {
+            // ROM arrays (LabelName-based) — constant-index stores are initialization
+            // artifacts handled at the Transpiler level, no runtime code needed
+            if (targetArray.Address is null)
+                return;
+
+            // Runtime arrays — emit LDA #value; STA array+offset
+            // Remove ALL previously emitted instructions for this stelem sequence
+            if (_blockCountAtILOffset.TryGetValue(targetArrayILOffset, out int blockCountConst))
+            {
+                int instrToRemove = GetBufferedBlockCount() - blockCountConst;
+                if (instrToRemove > 0)
+                    RemoveLastInstructions(instrToRemove);
+            }
+
+            // Determine the value to store from the value expression
+            int? constValue = null;
+            for (int i = valueStart; i < Index; i++)
+            {
+                int? val = GetLdcValue(Instructions[i]);
+                if (val != null)
+                    constValue = val;
+            }
+
+            if (constValue != null)
+                Emit(Opcode.LDA, AddressMode.Immediate, checked((byte)constValue.Value));
+
+            Emit(Opcode.STA, AddressMode.Absolute, (ushort)(targetArray.Address + constantIndex));
+
+            _immediateInA = null;
+            _lastLoadedLocalIndex = null;
+            _runtimeValueInA = false;
+            _savedRuntimeToTemp = false;
+            return;
+        }
+
         var targetIndex = Locals[targetIndexLocalIdx];
 
         if (targetIndex.Address is null)
