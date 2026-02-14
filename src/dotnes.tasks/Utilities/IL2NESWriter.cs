@@ -1061,6 +1061,9 @@ class IL2NESWriter : NESWriter
         if (local.Address is null)
             throw new ArgumentNullException(nameof(local.Address));
 
+        // Storing a local clobbers A, so pad_poll result is no longer in A
+        _firstAndAfterPadPoll = false;
+
         if (_runtimeValueInA)
         {
             // A has the runtime value — just store it
