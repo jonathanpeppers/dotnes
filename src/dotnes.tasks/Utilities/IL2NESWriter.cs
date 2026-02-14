@@ -112,6 +112,12 @@ class IL2NESWriter : NESWriter
     bool _byteArrayAddressEmitted;
 
     /// <summary>
+    /// Set by WriteLdloc when loading a byte array local. The address was pushed via pushax;
+    /// fastcall functions (pal_bg, pal_spr, pal_all) need popax to retrieve it into A:X.
+    /// </summary>
+    string? _ldlocByteArrayLabel;
+
+    /// <summary>
     /// True when A holds a runtime-computed value (from Ldelem, function return, etc.)
     /// that cannot be known at compile time. Used by HandleAddSub to emit runtime CLC+ADC/SEC+SBC.
     /// </summary>
@@ -176,6 +182,11 @@ class IL2NESWriter : NESWriter
 
     public void Write(ILInstruction instruction)
     {
+        // Clear ldloc byte array label for non-ldloc instructions
+        if (instruction.OpCode is not (ILOpCode.Ldloc_0 or ILOpCode.Ldloc_1
+            or ILOpCode.Ldloc_2 or ILOpCode.Ldloc_3 or ILOpCode.Ldloc_s))
+            _ldlocByteArrayLabel = null;
+
         switch (instruction.OpCode)
         {
             case ILOpCode.Nop:
@@ -443,6 +454,7 @@ class IL2NESWriter : NESWriter
 
     public void Write(ILInstruction instruction, int operand)
     {
+        _ldlocByteArrayLabel = null;
         switch (instruction.OpCode)
         {
             case ILOpCode.Nop:
@@ -813,16 +825,33 @@ class IL2NESWriter : NESWriter
                         _immediateInA = null;
                         break;
                     default:
+                        // Handle byte array locals loaded via ldloc (pushax pattern).
+                        // Fastcall functions (pal_bg, pal_spr, pal_all, vram_unrle) expect
+                        // pointer in A:X, not on cc65 stack. Replace pushax+size with just LDA/LDX.
+                        if (_ldlocByteArrayLabel != null && operand is nameof(NESLib.pal_bg)
+                            or nameof(NESLib.pal_spr) or nameof(NESLib.pal_all) or nameof(NESLib.vram_unrle))
+                        {
+                            // WriteLdloc emitted: LDA #lo, LDX #hi, JSR pushax, LDX #$00, LDA #size
+                            RemoveLastInstructions(5);
+                            EmitWithLabel(Opcode.LDA, AddressMode.Immediate_LowByte, _ldlocByteArrayLabel);
+                            EmitWithLabel(Opcode.LDX, AddressMode.Immediate_HighByte, _ldlocByteArrayLabel);
+                        }
+                        _ldlocByteArrayLabel = null;
                         if (_lastByteArrayLabel != null && previous != ILOpCode.Ldtoken
                             && !_byteArrayAddressEmitted)
                         {
                             bool needsLoad = _needsByteArrayLoadInCall;
-                            // Check for unconsumed byte array marker on the stack
-                            if (!needsLoad && _reflectionCache.GetNumberOfArguments(operand) > 0)
+                            // Check if THIS call's arguments include the byte array marker
+                            // Only look at the top N stack items that this call will consume
+                            int argCount = _reflectionCache.GetNumberOfArguments(operand);
+                            if (!needsLoad && argCount > 0)
                             {
+                                int checked_ = 0;
                                 foreach (var val in Stack)
                                 {
+                                    if (checked_ >= argCount) break;
                                     if (val < 0) { needsLoad = true; break; }
+                                    checked_++;
                                 }
                             }
                             if (needsLoad)
@@ -844,8 +873,11 @@ class IL2NESWriter : NESWriter
                     if (Stack.Count > 0)
                         Stack.Pop();
                 }
-                // Clear byte array label if it was consumed by Ldtoken→Call path
-                if (_lastByteArrayLabel != null && previous == ILOpCode.Ldtoken)
+                // Clear byte array label if it was consumed by this call
+                // Only clear if this call actually takes arguments (consumes the array)
+                // Don't clear for 0-arg calls like ppu_off that follow ldtoken
+                if (_lastByteArrayLabel != null && previous == ILOpCode.Ldtoken
+                    && _reflectionCache.GetNumberOfArguments(operand) > 0)
                     _lastByteArrayLabel = null;
                 // Return value handling
                 if (_reflectionCache.HasReturnValue(operand))
@@ -938,13 +970,21 @@ class IL2NESWriter : NESWriter
                 string byteArrayLabel = $"bytearray_{_byteArrayLabelIndex}";
                 _byteArrayLabelIndex++;
                 
-                // HACK: write these if next instruction is Call
+                // HACK: write these if next instruction is a Call that consumes this array
+                // Don't emit if the next Call is a 0-arg function (e.g., ppu_off)
+                // that just happens to follow the ldtoken — the address would get clobbered.
                 _byteArrayAddressEmitted = false;
                 if (Instructions is not null && Instructions[Index + 1].OpCode == ILOpCode.Call)
                 {
-                    EmitWithLabel(Opcode.LDA, AddressMode.Immediate_LowByte, byteArrayLabel);
-                    EmitWithLabel(Opcode.LDX, AddressMode.Immediate_HighByte, byteArrayLabel);
-                    _byteArrayAddressEmitted = true;
+                    var nextCallName = Instructions[Index + 1].String;
+                    bool nextCallConsumesArray = nextCallName != null 
+                        && _reflectionCache.GetNumberOfArguments(nextCallName) > 0;
+                    if (nextCallConsumesArray)
+                    {
+                        EmitWithLabel(Opcode.LDA, AddressMode.Immediate_LowByte, byteArrayLabel);
+                        EmitWithLabel(Opcode.LDX, AddressMode.Immediate_HighByte, byteArrayLabel);
+                        _byteArrayAddressEmitted = true;
+                    }
                 }
                 _byteArrays.Add(operand);
                 
@@ -1207,6 +1247,7 @@ class IL2NESWriter : NESWriter
             Emit(Opcode.LDX, AddressMode.Immediate, 0x00);
             Emit(Opcode.LDA, AddressMode.Immediate, (byte)local.Value); // Size of array
             _immediateInA = (byte)local.Value;
+            _ldlocByteArrayLabel = local.LabelName;
         }
         else if (local.Address is not null)
         {
