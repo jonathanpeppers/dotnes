@@ -76,15 +76,15 @@
 
 ### metacursor.c
 - **Description:** Reads controller input to move metasprites, demonstrating `pad_poll` for two players.
-- **Status:** 🟠 Moderate
-- **Missing Features:**
-  - User-defined functions (`setup_graphics`) — must be inlined
-  - `for` loops → must use `while`
-  - Global/static arrays (`actor_x[16]`, `actor_y[16]`, etc.)
-  - `sbyte` signed byte type support
-  - Pointer-to-const-array table (`playerRunSeq[16]`) — array of array references
-  - C preprocessor macros for metasprite definitions (`DEF_METASPRITE_2x2`)
-  - `#include <nes.h>` / `OAM_FLIP_H` constant
+- **Status:** ✅ Implemented
+- **Simplifications:**
+  - Reduced from 16 to 8 actors (zero-page memory limits)
+  - Uses single metasprite for all actors (no animation frame cycling, which requires array-of-pointers)
+  - Removed boundary checks (`actor_x[i] > 0`, `actor_x[i] < 240`) — actors wrap around screen edges
+  - Inlined `setup_graphics()` into main body
+  - Used `while` loops instead of `for`
+  - Expanded C macros to byte array literals
+  - Used `0x40` constant instead of `OAM_FLIP_H`
 
 ### metatrigger.c
 - **Description:** Similar to metacursor but uses `pad_trigger()` and `pad_state()` for input, plus `pal_bright()` for brightness control.
@@ -348,9 +348,9 @@
 
 | Status | Count | Samples |
 |--------|-------|---------|
-| ✅ Already Implemented | 11 | hello, attributes, flicker, metasprites, music, tint, scroll, rletitle, tileset1, sprites |
+| ✅ Already Implemented | 12 | hello, attributes, flicker, metasprites, music, tint, scroll, rletitle, tileset1, sprites, metacursor |
 | 🟡 Feasible | 0 | |
-| 🟠 Moderate | 7 | metacursor, metatrigger, apu, bcd, statusbar, vrambuffer, vrambuf |
+| 🟠 Moderate | 6 | metatrigger, apu, bcd, statusbar, vrambuffer, vrambuf |
 | 🔴 Complex | 14 | aputest, ppuhello, fami, horizscroll, horizmask, bankswitch, monobitmap, conio, crypto, climber, transtable, irq, shoot2, siegegame |
 
 ### Key Blockers (by frequency)
