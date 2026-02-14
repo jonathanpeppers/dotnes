@@ -19,6 +19,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "metasprites", "metasprites\
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "flicker", "flicker\flicker.csproj", "{37A7AB86-2AF0-4291-9231-DBAED03340E0}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "tint", "tint\tint.csproj", "{B3AEB62B-C0BA-4B81-81EC-B5442498DD4A}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -125,6 +127,18 @@ Global
 		{37A7AB86-2AF0-4291-9231-DBAED03340E0}.Release|x64.Build.0 = Release|Any CPU
 		{37A7AB86-2AF0-4291-9231-DBAED03340E0}.Release|x86.ActiveCfg = Release|Any CPU
 		{37A7AB86-2AF0-4291-9231-DBAED03340E0}.Release|x86.Build.0 = Release|Any CPU
+		{B3AEB62B-C0BA-4B81-81EC-B5442498DD4A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B3AEB62B-C0BA-4B81-81EC-B5442498DD4A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B3AEB62B-C0BA-4B81-81EC-B5442498DD4A}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{B3AEB62B-C0BA-4B81-81EC-B5442498DD4A}.Debug|x64.Build.0 = Debug|Any CPU
+		{B3AEB62B-C0BA-4B81-81EC-B5442498DD4A}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{B3AEB62B-C0BA-4B81-81EC-B5442498DD4A}.Debug|x86.Build.0 = Debug|Any CPU
+		{B3AEB62B-C0BA-4B81-81EC-B5442498DD4A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B3AEB62B-C0BA-4B81-81EC-B5442498DD4A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B3AEB62B-C0BA-4B81-81EC-B5442498DD4A}.Release|x64.ActiveCfg = Release|Any CPU
+		{B3AEB62B-C0BA-4B81-81EC-B5442498DD4A}.Release|x64.Build.0 = Release|Any CPU
+		{B3AEB62B-C0BA-4B81-81EC-B5442498DD4A}.Release|x86.ActiveCfg = Release|Any CPU
+		{B3AEB62B-C0BA-4B81-81EC-B5442498DD4A}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

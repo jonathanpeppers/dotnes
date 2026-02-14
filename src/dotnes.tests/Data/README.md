@@ -15,6 +15,7 @@
 * `flicker`: `samples/flicker` in repo — flicker demo with 24 actors and sprite cycling
 * `metasprites`: `samples/metasprites` in repo — metasprite rendering demo
 * `music`: `samples/music` in repo — APU music playback demo
+* `tint`: `samples/tint` in repo — PPU tint/monochrome demo with controller input
 
 ## `onelocal`
 

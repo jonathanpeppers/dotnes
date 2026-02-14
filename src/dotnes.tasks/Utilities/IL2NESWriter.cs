@@ -397,7 +397,35 @@ class IL2NESWriter : NESWriter
                 }
                 break;
             case ILOpCode.Or:
-                Stack.Push(Stack.Pop() | Stack.Pop());
+                {
+                    int orMask = Stack.Pop();
+                    int orValue = Stack.Count > 0 ? Stack.Pop() : 0;
+
+                    // Check if the value came from a local variable load (runtime value)
+                    bool orLocalInA = _lastLoadedLocalIndex.HasValue &&
+                        Locals.TryGetValue(_lastLoadedLocalIndex.Value, out var orLocal) && orLocal.Address != null;
+
+                    if (_runtimeValueInA || orLocalInA)
+                    {
+                        // Remove the LDA #mask emitted by WriteLdc
+                        if (!_runtimeValueInA
+                            && previous is ILOpCode.Ldc_i4_s or ILOpCode.Ldc_i4
+                            or ILOpCode.Ldc_i4_0 or ILOpCode.Ldc_i4_1 or ILOpCode.Ldc_i4_2
+                            or ILOpCode.Ldc_i4_3 or ILOpCode.Ldc_i4_4 or ILOpCode.Ldc_i4_5
+                            or ILOpCode.Ldc_i4_6 or ILOpCode.Ldc_i4_7 or ILOpCode.Ldc_i4_8)
+                        {
+                            RemoveLastInstructions(1);
+                        }
+
+                        Emit(Opcode.ORA, AddressMode.Immediate, checked((byte)orMask));
+                        _runtimeValueInA = true;
+                        Stack.Push(0); // Runtime placeholder
+                    }
+                    else
+                    {
+                        Stack.Push(orValue | orMask);
+                    }
+                }
                 break;
             case ILOpCode.Xor:
                 Stack.Push(Stack.Pop() ^ Stack.Pop());

@@ -40,17 +40,15 @@
 - **dotnes sample:** `music` (uses dotnes's own music engine with `start_music`, `play_music`, `set_music_pulse_table`, `set_music_triangle_table`)
 - **Missing Features:** The 8bitworkshop version uses direct APU register macros (`APU_PULSE_DECAY`, `APU_TRIANGLE_LENGTH`, etc.) which dotnes does not support, but dotnes has its own equivalent music system.
 
+### tint.c
+- **Description:** Demonstrates PPU tint and monochrome bits via controller input and `ppu_mask()`.
+- **Status:** ✅ Already Implemented
+- **dotnes sample:** `tint`
+- **Missing Features:** None — uses `pal_all`, `oam_clear`, `vram_adr`, `vram_write`, `vram_fill`, `ppu_on_all`, `pad_poll`, `ppu_mask`, and `MASK.*` constants.
+
 ---
 
 ## 🟡 Feasible (Minor Additions Needed)
-
-### tint.c
-- **Description:** Demonstrates PPU tint and monochrome bits via controller input and `ppu_mask()`.
-- **Status:** 🟡 Feasible
-- **Missing Features:**
-  - `MASK_BG`, `MASK_TINT_RED`, `MASK_TINT_GREEN`, `MASK_TINT_BLUE`, `MASK_MONO` constants (need to be defined in NESLib; `ppu_mask()` itself is implemented)
-  - `for` loops → must use `while` loops
-  - `PAD_A`, `PAD_B`, `PAD_LEFT`, `PAD_RIGHT`, `PAD_UP`, `PAD_DOWN` constants for bitwise checks on `pad_poll()` result
 
 ### scroll.c
 - **Description:** Demonstrates vertical scrolling by writing text to two nametables and smoothly scrolling between them.
@@ -368,8 +366,8 @@
 
 | Status | Count | Samples |
 |--------|-------|---------|
-| ✅ Already Implemented | 5 | hello, attributes, flicker, metasprites, music |
-| 🟡 Feasible | 4 | tint, scroll, rletitle, tileset1 |
+| ✅ Already Implemented | 6 | hello, attributes, flicker, metasprites, music, tint |
+| 🟡 Feasible | 3 | scroll, rletitle, tileset1 |
 | 🟠 Moderate | 8 | sprites, metacursor, metatrigger, apu, bcd, statusbar, vrambuffer, vrambuf |
 | 🔴 Complex | 14 | aputest, ppuhello, fami, horizscroll, horizmask, bankswitch, monobitmap, conio, crypto, climber, transtable, irq, shoot2, siegegame |
 
