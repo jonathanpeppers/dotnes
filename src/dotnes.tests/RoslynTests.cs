@@ -296,21 +296,26 @@ public class RoslynTests
                 """,
             expectedAssembly:
                 """
-                A900
-                A286
+                A9E1
+                A285
                 201182  ; JSR pal_all
+                206385  ; JSR decsp4
                 A928
-                208585  ; JSR popa
+                A003    ; LDY #$03
+                9122    ; STA ($22),Y
                 A928
-                208585  ; JSR popa
+                88      ; DEY
+                9122    ; STA ($22),Y
                 A910
-                208585  ; JSR popa
+                88      ; DEY
+                9122    ; STA ($22),Y
                 A903
-                208585  ; JSR popa
+                88      ; DEY
+                9122    ; STA ($22),Y
                 A900
-                20D485  ; JSR oam_spr
+                20B585  ; JSR oam_spr
                 208982  ; JSR ppu_on_all
-                4C2385  ; JMP $8523
+                4C2785  ; JMP loop
                 """);
     }
 
@@ -340,26 +345,32 @@ public class RoslynTests
                 """,
             expectedAssembly:
                 """
-                A90B
-                A286
-                201182  ; JSR pal_all
-                A928
-                8D2503  ; STA M0001
-                A922
-                A286
-                C928    ; CMP #$28
-                D01A    ; BNE skip
-                AD2503  ; LDA M0001
-                A928
-                209085  ; JSR popa
-                A910
-                209085  ; JSR popa
-                A903
-                209085  ; JSR popa
-                A900
-                20DF85  ; JSR oam_spr
+                207085  ; JSR pal_all
+                A920    ; LDA #$20 (array size)
+                A003    ; LDY #$03
+                9122    ; STA ($22),Y
+                A928    ; LDA #$28
+                88      ; DEY
+                9122    ; STA ($22),Y
+                AD2503  ; LDA M0001 (x)
+                D00D    ; BNE skip
+                207085  ; JSR decsp4
+                AD2503  ; LDA M0001 (x)
+                A003    ; LDY #$03
+                9122    ; STA ($22),Y
+                A928    ; LDA #$28
+                88      ; DEY
+                9122    ; STA ($22),Y
+                A910    ; LDA #$10
+                88      ; DEY
+                9122    ; STA ($22),Y
+                A903    ; LDA #$03
+                88      ; DEY
+                9122    ; STA ($22),Y
+                A900    ; LDA #$00
+                20C285  ; JSR oam_spr
                 208982  ; JSR ppu_on_all
-                4C2E85
+                4C3485  ; JMP loop
                 """);
     }
 

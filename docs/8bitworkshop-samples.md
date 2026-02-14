@@ -4,7 +4,7 @@
 >
 > Analysis based on dotnes transpiler capabilities and the `NESLib.cs` API surface.
 >
-> Existing dotnes samples: `hello`, `hellofs`, `staticsprite`, `movingsprite`, `attributetable`, `flicker`, `metasprites`, `music`, `lols`, `tint`, `scroll`, `rletitle`, `tileset1`
+> Existing dotnes samples: `hello`, `hellofs`, `staticsprite`, `movingsprite`, `attributetable`, `flicker`, `metasprites`, `music`, `lols`, `tint`, `scroll`, `rletitle`, `tileset1`, `sprites`
 
 ---
 
@@ -64,19 +64,15 @@
 - **dotnes sample:** `tileset1`
 - **Missing Features:** None — uses `pal_bg`, `vram_adr`, `vram_write`, `ppu_on_all`. The CHR RAM approach is replaced with CHR ROM containing the same tileset data, padded so ASCII codes map directly to tile indices.
 
+### sprites.c
+- **Description:** Animates 32 hardware sprites moving around the screen with random velocities, wrapping at screen edges.
+- **Status:** ✅ Already Implemented
+- **dotnes sample:** `sprites`
+- **Missing Features:** None — uses `pal_all`, `oam_clear`, `oam_spr`, `oam_hide_rest`, `ppu_on_all`, `ppu_wait_frame`, `rand8()`. Reduced from 64 to 32 actors due to NES zero-page memory constraints.
+
 ---
 
 ## 🟠 Moderate (Significant Work Needed)
-
-### sprites.c
-- **Description:** Animates all 64 hardware sprites bouncing around the screen with random velocities.
-- **Status:** 🟠 Moderate
-- **Missing Features:**
-  - User-defined functions (`setup_graphics`) — must be inlined
-  - `for` loops → must use `while` loops
-  - `sbyte` (signed byte) arrays and signed arithmetic (`actor_dx`, `actor_dy`)
-  - Global arrays of fixed size (`byte actor_x[64]`, etc.) — dotnes only supports local arrays
-  - `ppu_wait_frame()` — may lack transpiler support
 
 ### metacursor.c
 - **Description:** Reads controller input to move metasprites, demonstrating `pad_poll` for two players.
@@ -352,9 +348,9 @@
 
 | Status | Count | Samples |
 |--------|-------|---------|
-| ✅ Already Implemented | 10 | hello, attributes, flicker, metasprites, music, tint, scroll, rletitle, tileset1 |
+| ✅ Already Implemented | 11 | hello, attributes, flicker, metasprites, music, tint, scroll, rletitle, tileset1, sprites |
 | 🟡 Feasible | 0 | |
-| 🟠 Moderate | 8 | sprites, metacursor, metatrigger, apu, bcd, statusbar, vrambuffer, vrambuf |
+| 🟠 Moderate | 7 | metacursor, metatrigger, apu, bcd, statusbar, vrambuffer, vrambuf |
 | 🔴 Complex | 14 | aputest, ppuhello, fami, horizscroll, horizmask, bankswitch, monobitmap, conio, crypto, climber, transtable, irq, shoot2, siegegame |
 
 ### Key Blockers (by frequency)
