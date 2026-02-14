@@ -762,15 +762,7 @@ class IL2NESWriter : NESWriter
                             LocalCount += 1; // tempVar counts as a local for zerobss
                         break;
                     case "oam_spr":
-                        if (DeferredByteArrayMode)
-                        {
-                            EmitOamSprDecsp4();
-                        }
-                        else
-                        {
-                            EmitWithLabel(Opcode.JSR, AddressMode.Absolute, operand);
-                            _immediateInA = null;
-                        }
+                        EmitOamSprDecsp4();
                         break;
                     case nameof(NESLib.oam_meta_spr):
                         EmitOamMetaSpr();
@@ -1352,34 +1344,64 @@ class IL2NESWriter : NESWriter
             throw new InvalidOperationException("EmitOamSprDecsp4 requires Instructions");
 
         // oam_spr has 5 args: x, y, tile, attr, id
-        // Walk back through IL to find the 5 argument-producing IL instructions
-        // and determine the first argument's IL offset for instruction removal
-        var argInfos = new List<(bool isLocal, int localIndex, int constValue, bool hasAdd, int addValue)>();
+        // Walk back through IL to find the 5 argument-producing IL instructions.
+        // Args can be: constants, locals, or array elements (ldloc_arr + ldloc_idx + ldelem_u1).
+        var argInfos = new List<(bool isLocal, int localIndex, int constValue, bool hasAdd, int addValue, bool isArrayElem, int arrayLocIdx, int indexLocIdx)>();
         int ilIdx = Index - 1;
         int needed = 5;
         int firstArgIlIdx = -1;
-        int? pendingAddValue = null; // Tracks Ldc value that's consumed by Add (part of Ldloc+N expression)
+        int? pendingAddValue = null;
 
         while (needed > 0 && ilIdx >= 0)
         {
             var il = Instructions[ilIdx];
             switch (il.OpCode)
             {
+                case ILOpCode.Ldelem_u1:
+                {
+                    // Array element: walk back to find index + array locals
+                    ilIdx--;
+                    int idxLoc = -1, arrLoc = -1;
+                    if (ilIdx >= 0) { idxLoc = GetLdlocIndex(Instructions[ilIdx]) ?? -1; ilIdx--; }
+                    if (ilIdx >= 0) { arrLoc = GetLdlocIndex(Instructions[ilIdx]) ?? -1; }
+                    argInfos.Add((false, 0, 0, false, 0, true, arrLoc, idxLoc));
+                    needed--;
+                    firstArgIlIdx = ilIdx;
+                    break;
+                }
                 case ILOpCode.Ldloc_0: case ILOpCode.Ldloc_1:
                 case ILOpCode.Ldloc_2: case ILOpCode.Ldloc_3:
+                {
                     int locIdx = il.OpCode - ILOpCode.Ldloc_0;
                     if (pendingAddValue != null)
                     {
-                        argInfos.Add((true, locIdx, 0, true, pendingAddValue.Value));
+                        argInfos.Add((true, locIdx, 0, true, pendingAddValue.Value, false, 0, 0));
                         pendingAddValue = null;
                     }
                     else
                     {
-                        argInfos.Add((true, locIdx, 0, false, 0));
+                        argInfos.Add((true, locIdx, 0, false, 0, false, 0, 0));
                     }
                     needed--;
                     firstArgIlIdx = ilIdx;
                     break;
+                }
+                case ILOpCode.Ldloc_s:
+                {
+                    int locIdx = il.Integer ?? 0;
+                    if (pendingAddValue != null)
+                    {
+                        argInfos.Add((true, locIdx, 0, true, pendingAddValue.Value, false, 0, 0));
+                        pendingAddValue = null;
+                    }
+                    else
+                    {
+                        argInfos.Add((true, locIdx, 0, false, 0, false, 0, 0));
+                    }
+                    needed--;
+                    firstArgIlIdx = ilIdx;
+                    break;
+                }
                 case ILOpCode.Ldc_i4_0: case ILOpCode.Ldc_i4_1: case ILOpCode.Ldc_i4_2:
                 case ILOpCode.Ldc_i4_3: case ILOpCode.Ldc_i4_4: case ILOpCode.Ldc_i4_5:
                 case ILOpCode.Ldc_i4_6: case ILOpCode.Ldc_i4_7: case ILOpCode.Ldc_i4_8:
@@ -1391,7 +1413,7 @@ class IL2NESWriter : NESWriter
                     }
                     else
                     {
-                        argInfos.Add((false, 0, val, false, 0));
+                        argInfos.Add((false, 0, val, false, 0, false, 0, 0));
                         needed--;
                         firstArgIlIdx = ilIdx;
                     }
@@ -1407,7 +1429,7 @@ class IL2NESWriter : NESWriter
                     }
                     else
                     {
-                        argInfos.Add((false, 0, val, false, 0));
+                        argInfos.Add((false, 0, val, false, 0, false, 0, 0));
                         needed--;
                         firstArgIlIdx = ilIdx;
                     }
@@ -1449,7 +1471,17 @@ class IL2NESWriter : NESWriter
         for (int i = 0; i < 4 && i < argInfos.Count; i++)
         {
             var arg = argInfos[i];
-            if (arg.isLocal)
+            if (arg.isArrayElem)
+            {
+                // Array element: LDX index, LDA array,X
+                var idxLocal = Locals[arg.indexLocIdx];
+                var arrLocal = Locals[arg.arrayLocIdx];
+                if (idxLocal.Address != null)
+                    Emit(Opcode.LDX, AddressMode.Absolute, (ushort)idxLocal.Address);
+                if (arrLocal.Address != null)
+                    Emit(Opcode.LDA, AddressMode.AbsoluteX, (ushort)arrLocal.Address);
+            }
+            else if (arg.isLocal)
             {
                 var loc = Locals[arg.localIndex];
                 Emit(Opcode.LDA, AddressMode.Absolute, (ushort)loc.Address!);
@@ -1472,26 +1504,45 @@ class IL2NESWriter : NESWriter
             Emit(Opcode.STA, AddressMode.IndirectIndexed, (byte)0x22);
         }
 
-        // 5th arg (id) stays in A - check if we can skip LDA (STA doesn't change A)
+        // 5th arg (id) stays in A
         if (argInfos.Count >= 5)
         {
             var idArg = argInfos[4];
-            byte idVal = checked((byte)idArg.constValue);
-            if (argInfos.Count >= 4)
+            if (idArg.isLocal)
             {
-                var attrArg = argInfos[3];
-                if (!attrArg.isLocal && !idArg.isLocal && attrArg.constValue == idArg.constValue)
+                var loc = Locals[idArg.localIndex];
+                Emit(Opcode.LDA, AddressMode.Absolute, (ushort)loc.Address!);
+            }
+            else if (idArg.isArrayElem)
+            {
+                var idxLocal = Locals[idArg.indexLocIdx];
+                var arrLocal = Locals[idArg.arrayLocIdx];
+                if (idxLocal.Address != null)
+                    Emit(Opcode.LDX, AddressMode.Absolute, (ushort)idxLocal.Address);
+                if (arrLocal.Address != null)
+                    Emit(Opcode.LDA, AddressMode.AbsoluteX, (ushort)arrLocal.Address);
+            }
+            else
+            {
+                byte idVal = checked((byte)idArg.constValue);
+                // Check if A already has the right value from the 4th arg STA
+                if (argInfos.Count >= 4)
                 {
-                    // A already has the right value from attr
+                    var attrArg = argInfos[3];
+                    if (!attrArg.isLocal && !attrArg.isArrayElem && !idArg.isLocal
+                        && attrArg.constValue == idArg.constValue)
+                    {
+                        // A already has the right value from attr
+                    }
+                    else
+                    {
+                        Emit(Opcode.LDA, AddressMode.Immediate, idVal);
+                    }
                 }
                 else
                 {
                     Emit(Opcode.LDA, AddressMode.Immediate, idVal);
                 }
-            }
-            else
-            {
-                Emit(Opcode.LDA, AddressMode.Immediate, idVal);
             }
         }
 
