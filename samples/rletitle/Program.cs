@@ -50,29 +50,29 @@ byte[] climbr_title_rle = [
     0x00, 0x01, 0x02, 0x05, 0x01, 0x03, 0x05, 0x01, 0x00
 ];
 
-// show_title_screen (inlined)
-// disable rendering
+// show_title_screen (inlined - captures byte arrays)
 ppu_off();
-// set palette, virtual bright to 0 (total black)
 pal_bg(climbr_title_pal);
 pal_bright(0);
-// unpack nametable into VRAM
 vram_adr(0x2000);
 vram_unrle(climbr_title_rle);
-// enable rendering
 ppu_on_all();
 
-// fade_in (inlined)
-byte vb = 0;
-while (vb <= 4)
-{
-    pal_bright(vb);
-    ppu_wait_frame();
-    ppu_wait_frame();
-    ppu_wait_frame();
-    ppu_wait_frame();
-    vb = (byte)(vb + 1);
-}
+fade_in();
 
 // do nothing, infinite loop
 while (true) ;
+
+static void fade_in()
+{
+    byte vb = 0;
+    while (vb <= 4)
+    {
+        pal_bright(vb);
+        ppu_wait_frame();
+        ppu_wait_frame();
+        ppu_wait_frame();
+        ppu_wait_frame();
+        vb = (byte)(vb + 1);
+    }
+}

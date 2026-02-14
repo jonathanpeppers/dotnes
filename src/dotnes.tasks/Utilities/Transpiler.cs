@@ -21,6 +21,18 @@ class Transpiler : IDisposable
     /// </summary>
     public HashSet<string> UsedMethods { get; private set; } = new(StringComparer.Ordinal);
 
+    /// <summary>
+    /// User-defined methods (name -> IL instructions).
+    /// Populated by ReadStaticVoidMain().
+    /// </summary>
+    public Dictionary<string, ILInstruction[]> UserMethods { get; } = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// User-defined method metadata (name -> arg count, has return value).
+    /// Populated by ReadStaticVoidMain().
+    /// </summary>
+    public Dictionary<string, (int argCount, bool hasReturnValue)> UserMethodMetadata { get; } = new(StringComparer.Ordinal);
+
     public Transpiler(Stream stream, IList<AssemblyReader> assemblyFiles, ILogger? logger = null)
     {
         _pe = new PEReader(stream);
@@ -129,11 +141,19 @@ class Transpiler : IDisposable
         // Create the base program with built-ins
         var program = Program6502.CreateWithBuiltIns();
 
+        // Register user methods with the reflection cache so Call handler knows about them
+        var reflectionCache = new ReflectionCache();
+        foreach (var kvp in UserMethodMetadata)
+        {
+            reflectionCache.RegisterUserMethod(kvp.Key, kvp.Value.argCount, kvp.Value.hasReturnValue);
+        }
+
         // Build main program block using label references (addresses resolved later)
-        using var writer = new IL2NESWriter(new MemoryStream(), logger: _logger)
+        using var writer = new IL2NESWriter(new MemoryStream(), logger: _logger, reflectionCache: reflectionCache)
         {
             Instructions = instructions,
             UsedMethods = UsedMethods,
+            UserMethodNames = new HashSet<string>(UserMethods.Keys, StringComparer.Ordinal),
         };
 
         writer.StartBlockBuffering();
@@ -190,6 +210,57 @@ class Transpiler : IDisposable
             sizeOfMain = 0;
         }
 
+        // Transpile user-defined methods into separate blocks
+        int userMethodsTotalSize = 0;
+        foreach (var kvp in UserMethods)
+        {
+            var methodName = kvp.Key;
+            var methodIL = kvp.Value;
+            using var methodWriter = new IL2NESWriter(new MemoryStream(), logger: _logger, reflectionCache: reflectionCache)
+            {
+                Instructions = methodIL,
+                UsedMethods = UsedMethods,
+                UserMethodNames = new HashSet<string>(UserMethods.Keys, StringComparer.Ordinal),
+            };
+            methodWriter.StartBlockBuffering();
+
+            for (int i = 0; i < methodWriter.Instructions.Length; i++)
+            {
+                methodWriter.Index = i;
+                var instruction = methodWriter.Instructions[i];
+
+                var labelName = $"instruction_{instruction.Offset:X2}";
+                if (methodWriter.CurrentBlock != null)
+                    methodWriter.CurrentBlock.SetNextLabel(labelName);
+                methodWriter.RecordBlockCount(instruction.Offset);
+
+                if (instruction.Integer != null)
+                    methodWriter.Write(instruction, instruction.Integer.Value);
+                else if (instruction.String != null)
+                    methodWriter.Write(instruction, instruction.String);
+                else if (instruction.Bytes != null)
+                    methodWriter.Write(instruction, instruction.Bytes.Value);
+                else
+                    methodWriter.Write(instruction);
+            }
+
+            var methodBlock = methodWriter.GetMainBlock(methodName);
+            if (methodBlock != null)
+            {
+                // Append RTS at end of user method
+                methodBlock.Emit(new Instruction(Opcode.RTS, AddressMode.Implied));
+                program.AddMainProgram(methodBlock);
+                userMethodsTotalSize += methodBlock.Size;
+                _logger.WriteLine($"User method '{methodName}': {methodBlock.Size} bytes");
+            }
+
+            // Collect string/byte array data from user method writers
+            foreach (var (label, data) in methodWriter.StringTable)
+                writer.MergeStringTableEntry(label, data);
+            foreach (var bytes in methodWriter.ByteArrays)
+                writer.MergeByteArray(bytes);
+        }
+
         // Get local count from writer
         locals = checked((byte)writer.LocalCount);
 
@@ -233,7 +304,7 @@ class Transpiler : IDisposable
         int standardSize = Program6502.CalculateFinalBuiltInsSize(0, null);
         int actualSize = Program6502.CalculateFinalBuiltInsSize(locals, UsedMethods);
         int finalBuiltInsOffset = actualSize - standardSize;
-        ushort totalSize = (ushort)(PRG_LAST.GetAddressAfterMain(sizeOfMain) + finalBuiltInsOffset + musicSubroutinesSize + byteArrayTableSize + stringTableSize);
+        ushort totalSize = (ushort)(PRG_LAST.GetAddressAfterMain(sizeOfMain) + finalBuiltInsOffset + musicSubroutinesSize + userMethodsTotalSize + byteArrayTableSize + stringTableSize);
         
         program.AddFinalBuiltIns(totalSize, locals, UsedMethods);
 
@@ -279,125 +350,177 @@ class Transpiler : IDisposable
 
         foreach (var h in _reader.MethodDefinitions)
         {
-            var mainMethod = _reader.GetMethodDefinition(h);
-            if ((mainMethod.Attributes & MethodAttributes.Static) == 0)
+            var methodDef = _reader.GetMethodDefinition(h);
+            if ((methodDef.Attributes & MethodAttributes.Static) == 0)
                 continue;
 
-            var mainMethodName = _reader.GetString(mainMethod.Name);
-            if (mainMethodName == "Main" || mainMethodName == "<Main>$")
+            var methodName = _reader.GetString(methodDef.Name);
+
+            if (methodName == "Main" || methodName == "<Main>$")
             {
-                var body = _pe.GetMethodBody(mainMethod.RelativeVirtualAddress);
-                var blob = body.GetILReader();
-
-                while (blob.RemainingBytes > 0)
+                // Yield main method instructions
+                foreach (var instruction in ReadMethodBody(methodDef, arrayValues))
+                    yield return instruction;
+            }
+            else if (!methodName.StartsWith("."))
+            {
+                // Extract clean name for user-defined methods
+                // Normal methods: use name as-is
+                // Local functions: compiler generates names like <<Main>$>g__fade_in|0_0
+                string cleanName;
+                if (methodName.StartsWith("<"))
                 {
-                    int offset = blob.Offset;
-                    ILOpCode opCode = DecodeOpCode(ref blob);
+                    // Try to extract local function name: pattern is >g__NAME|
+                    int gIdx = methodName.IndexOf(">g__");
+                    if (gIdx < 0) continue; // skip compiler-generated methods that aren't local functions
+                    int nameStart = gIdx + 4;
+                    int pipeIdx = methodName.IndexOf('|', nameStart);
+                    cleanName = pipeIdx > nameStart ? methodName.Substring(nameStart, pipeIdx - nameStart) : methodName.Substring(nameStart);
+                }
+                else
+                {
+                    cleanName = methodName;
+                }
 
-                    OperandType operandType = GetOperandType(opCode);
-                    string? stringValue = null;
-                    int? intValue = null;
-                    ImmutableArray<byte>? byteValue = null;
+                // User-defined method: read and store its IL
+                var instructions = ReadMethodBody(methodDef, arrayValues).ToArray();
+                UserMethods[cleanName] = instructions;
 
-                    switch (operandType)
+                // Extract metadata from method signature blob
+                var sig = _reader.GetBlobReader(methodDef.Signature);
+                sig.ReadByte(); // calling convention
+                int paramCount = sig.ReadCompressedInteger();
+                byte retTypeByte = sig.ReadByte(); // ELEMENT_TYPE_VOID = 0x01
+                bool hasReturnValue = retTypeByte != 0x01;
+                UserMethodMetadata[cleanName] = (paramCount, hasReturnValue);
+            }
+        }
+    }
+
+    IEnumerable<ILInstruction> ReadMethodBody(MethodDefinition methodDef, Dictionary<string, ArrayValue> arrayValues)
+    {
+        var body = _pe.GetMethodBody(methodDef.RelativeVirtualAddress);
+        var blob = body.GetILReader();
+
+        while (blob.RemainingBytes > 0)
+        {
+            int offset = blob.Offset;
+            ILOpCode opCode = DecodeOpCode(ref blob);
+
+            OperandType operandType = GetOperandType(opCode);
+            string? stringValue = null;
+            int? intValue = null;
+            ImmutableArray<byte>? byteValue = null;
+
+            switch (operandType)
+            {
+                case OperandType.Field:
+                case OperandType.Method:
+                case OperandType.Sig:
+                case OperandType.Tok:
+                    var entity = MetadataTokens.EntityHandle(blob.ReadInt32());
+                    if (entity.IsNil)
+                        continue;
+
+                    switch (entity.Kind)
                     {
-                        case OperandType.Field:
-                        case OperandType.Method:
-                        case OperandType.Sig:
-                        case OperandType.Tok:
-                            var entity = MetadataTokens.EntityHandle(blob.ReadInt32());
-                            if (entity.IsNil)
-                                continue;
-
-                            switch (entity.Kind)
-                            {
-                                case HandleKind.TypeDefinition:
-                                    stringValue = _reader.GetString(_reader.GetTypeDefinition((TypeDefinitionHandle)entity).Name);
-                                    break;
-                                case HandleKind.TypeReference:
-                                    stringValue = _reader.GetString(_reader.GetTypeReference((TypeReferenceHandle)entity).Name);
-                                    break;
-                                case HandleKind.MethodDefinition:
-                                    var method = _reader.GetMethodDefinition((MethodDefinitionHandle)entity);
-                                    stringValue = _reader.GetString(method.Name);
-                                    break;
-                                case HandleKind.MemberReference:
-                                    var member = _reader.GetMemberReference((MemberReferenceHandle)entity);
-                                    stringValue = _reader.GetString(member.Name);
-                                    if (stringValue == "InitializeArray")
-                                    {
-                                        // HACK: skip for now
-                                        continue;
-                                    }
-                                    break;
-                                case HandleKind.FieldDefinition:
-                                    var field = _reader.GetFieldDefinition((FieldDefinitionHandle)entity);
-                                    var fieldName = _reader.GetString(field.Name);
-                                    if ((field.Attributes & FieldAttributes.HasFieldRVA) != 0)
-                                    {
-                                        if (arrayValues.TryGetValue (fieldName, out var value))
-                                        {
-                                            byteValue = value.Value;
-                                            break;
-                                        }
-                                    }
-                                    // Non-RVA fields (e.g., oam_off) are passed as string operands
-                                    stringValue = fieldName;
-                                    break;
-                            }
+                        case HandleKind.TypeDefinition:
+                            stringValue = _reader.GetString(_reader.GetTypeDefinition((TypeDefinitionHandle)entity).Name);
                             break;
-                        // 64-bit
-                        case OperandType.I8:
-                        case OperandType.R:
-                            goto default;
-                        // 32-bit
-                        case OperandType.BrTarget:
-                        case OperandType.I:
-                        case OperandType.ShortR:
-                            intValue = blob.ReadInt32();
+                        case HandleKind.TypeReference:
+                            stringValue = _reader.GetString(_reader.GetTypeReference((TypeReferenceHandle)entity).Name);
                             break;
-                        case OperandType.Type:
+                        case HandleKind.MethodDefinition:
+                            var method = _reader.GetMethodDefinition((MethodDefinitionHandle)entity);
+                            stringValue = _reader.GetString(method.Name);
+                            // Clean up compiler-generated local function names
+                            // Pattern: <<Main>$>g__fade_in|0_0 → fade_in
+                            if (stringValue.StartsWith("<"))
                             {
-                                var token = blob.ReadInt32();
-                                intValue = token;
-                                // Resolve type name for Newarr (e.g. "Byte", "UInt16")
-                                if (opCode == ILOpCode.Newarr)
+                                int gIdx = stringValue.IndexOf(">g__");
+                                if (gIdx >= 0)
                                 {
-                                    var handle = MetadataTokens.EntityHandle(token);
-                                    if (handle.Kind == HandleKind.TypeReference)
-                                        stringValue = _reader.GetString(_reader.GetTypeReference((TypeReferenceHandle)handle).Name);
-                                    else if (handle.Kind == HandleKind.TypeDefinition)
-                                        stringValue = _reader.GetString(_reader.GetTypeDefinition((TypeDefinitionHandle)handle).Name);
+                                    int nameStart = gIdx + 4;
+                                    int pipeIdx = stringValue.IndexOf('|', nameStart);
+                                    stringValue = pipeIdx > nameStart ? stringValue.Substring(nameStart, pipeIdx - nameStart) : stringValue.Substring(nameStart);
                                 }
                             }
                             break;
-                        case OperandType.String:
-                            stringValue = _reader.GetUserString(MetadataTokens.UserStringHandle(blob.ReadInt32()));
+                        case HandleKind.MemberReference:
+                            var member = _reader.GetMemberReference((MemberReferenceHandle)entity);
+                            stringValue = _reader.GetString(member.Name);
+                            if (stringValue == "InitializeArray")
+                            {
+                                // HACK: skip for now
+                                continue;
+                            }
                             break;
-                        // (n + 1) * 32-bit
-                        case OperandType.Switch:
-                            //uint n = blob.ReadUInt32();
-                            //blob.Offset += (int)(n * 4);
-                            goto default;
-                        // 16-bit
-                        case OperandType.Variable:
-                            intValue = blob.ReadInt16();
+                        case HandleKind.FieldDefinition:
+                            var field = _reader.GetFieldDefinition((FieldDefinitionHandle)entity);
+                            var fieldName = _reader.GetString(field.Name);
+                            if ((field.Attributes & FieldAttributes.HasFieldRVA) != 0)
+                            {
+                                if (arrayValues.TryGetValue (fieldName, out var value))
+                                {
+                                    byteValue = value.Value;
+                                    break;
+                                }
+                            }
+                            // Non-RVA fields (e.g., oam_off) are passed as string operands
+                            stringValue = fieldName;
                             break;
-                        // 8-bit
-                        case OperandType.ShortVariable:
-                        case OperandType.ShortBrTarget:
-                        case OperandType.ShortI:
-                            intValue = blob.ReadByte();
-                            break;
-                        case OperandType.None:
-                            break;
-                        default:
-                            throw new NotSupportedException($"{opCode}, OperandType={operandType} is not supported.");
                     }
-
-                    yield return new ILInstruction(opCode, offset, intValue, stringValue, byteValue);
-                }
+                    break;
+                // 64-bit
+                case OperandType.I8:
+                case OperandType.R:
+                    goto default;
+                // 32-bit
+                case OperandType.BrTarget:
+                case OperandType.I:
+                case OperandType.ShortR:
+                    intValue = blob.ReadInt32();
+                    break;
+                case OperandType.Type:
+                    {
+                        var token = blob.ReadInt32();
+                        intValue = token;
+                        // Resolve type name for Newarr (e.g. "Byte", "UInt16")
+                        if (opCode == ILOpCode.Newarr)
+                        {
+                            var handle = MetadataTokens.EntityHandle(token);
+                            if (handle.Kind == HandleKind.TypeReference)
+                                stringValue = _reader.GetString(_reader.GetTypeReference((TypeReferenceHandle)handle).Name);
+                            else if (handle.Kind == HandleKind.TypeDefinition)
+                                stringValue = _reader.GetString(_reader.GetTypeDefinition((TypeDefinitionHandle)handle).Name);
+                        }
+                    }
+                    break;
+                case OperandType.String:
+                    stringValue = _reader.GetUserString(MetadataTokens.UserStringHandle(blob.ReadInt32()));
+                    break;
+                // (n + 1) * 32-bit
+                case OperandType.Switch:
+                    //uint n = blob.ReadUInt32();
+                    //blob.Offset += (int)(n * 4);
+                    goto default;
+                // 16-bit
+                case OperandType.Variable:
+                    intValue = blob.ReadInt16();
+                    break;
+                // 8-bit
+                case OperandType.ShortVariable:
+                case OperandType.ShortBrTarget:
+                case OperandType.ShortI:
+                    intValue = blob.ReadByte();
+                    break;
+                case OperandType.None:
+                    break;
+                default:
+                    throw new NotSupportedException($"{opCode}, OperandType={operandType} is not supported.");
             }
+
+            yield return new ILInstruction(opCode, offset, intValue, stringValue, byteValue);
         }
     }
 

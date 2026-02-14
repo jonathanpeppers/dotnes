@@ -10,9 +10,11 @@ namespace dotnes;
 
 class IL2NESWriter : NESWriter
 {
-    public IL2NESWriter(Stream stream, bool leaveOpen = false, ILogger? logger = null)
+    public IL2NESWriter(Stream stream, bool leaveOpen = false, ILogger? logger = null, ReflectionCache? reflectionCache = null)
         : base(stream, leaveOpen, logger)
     {
+        if (reflectionCache != null)
+            _reflectionCache = reflectionCache;
     }
 
     /// <summary>
@@ -151,6 +153,28 @@ class IL2NESWriter : NESWriter
     /// </summary>
     public int LocalCount { get; private set; }
 
+    /// <summary>
+    /// Set of user-defined method names (for detecting user method calls).
+    /// </summary>
+    public HashSet<string> UserMethodNames { get; init; } = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// Merges a string table entry from a user method writer into this writer.
+    /// </summary>
+    public void MergeStringTableEntry(string label, byte[] data)
+    {
+        if (!_stringTable.Any(s => s.Label == label))
+            _stringTable.Add((label, data));
+    }
+
+    /// <summary>
+    /// Merges a byte array from a user method writer into this writer.
+    /// </summary>
+    public void MergeByteArray(ImmutableArray<byte> data)
+    {
+        _byteArrays.Add(data);
+    }
+
     record Local(int Value, int? Address = null, string? LabelName = null, int ArraySize = 0);
 
     /// <summary>
@@ -190,6 +214,8 @@ class IL2NESWriter : NESWriter
         switch (instruction.OpCode)
         {
             case ILOpCode.Nop:
+            case ILOpCode.Ret:
+                // Ret is handled at block level (RTS appended to user method blocks)
                 break;
             case ILOpCode.Dup:
                 if (Stack.Count > 0)
