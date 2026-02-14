@@ -727,6 +727,7 @@ class IL2NESWriter : NESWriter
                 }
                 break;
             case ILOpCode.Call:
+                bool argsAlreadyPopped = false;
                 switch (operand)
                 {
                     case nameof(NTADR_A):
@@ -750,6 +751,7 @@ class IL2NESWriter : NESWriter
                         Emit(Opcode.LDA, AddressMode.Immediate, checked((byte)(address & 0xFF)));
                         Stack.Push(address);
                         _runtimeValueInA = false; // Value is compile-time constant
+                        argsAlreadyPopped = true;
                         break;
                     case "pad_poll":
                         // pad_poll returns result in A - emit JSR then store to tempVar for multiple tests
@@ -884,12 +886,15 @@ class IL2NESWriter : NESWriter
                         _immediateInA = null;
                         break;
                 }
-                // Pop N times
-                int args = _reflectionCache.GetNumberOfArguments(operand);
-                for (int i = 0; i < args; i++)
+                // Pop N times (unless handler already popped)
+                if (!argsAlreadyPopped)
                 {
-                    if (Stack.Count > 0)
-                        Stack.Pop();
+                    int args = _reflectionCache.GetNumberOfArguments(operand);
+                    for (int i = 0; i < args; i++)
+                    {
+                        if (Stack.Count > 0)
+                            Stack.Pop();
+                    }
                 }
                 // Clear byte array label if it was consumed by this call
                 // Only clear if this call actually takes arguments (consumes the array)
@@ -1960,7 +1965,8 @@ class IL2NESWriter : NESWriter
                 case ILOpCode.Ldc_i4_4: case ILOpCode.Ldc_i4_5: case ILOpCode.Ldc_i4_6: case ILOpCode.Ldc_i4_7:
                 case ILOpCode.Ldc_i4_8: case ILOpCode.Ldc_i4_s: case ILOpCode.Ldc_i4:
                     push = 1; break;
-                case ILOpCode.Add: case ILOpCode.Sub: case ILOpCode.And: case ILOpCode.Or: case ILOpCode.Xor:
+                case ILOpCode.Add: case ILOpCode.Sub: case ILOpCode.Mul: case ILOpCode.Div:
+                case ILOpCode.And: case ILOpCode.Or: case ILOpCode.Xor:
                     pop = 2; push = 1; break;
                 case ILOpCode.Ldelem_u1:
                     pop = 2; push = 1; break;
