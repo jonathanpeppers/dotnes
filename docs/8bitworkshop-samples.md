@@ -4,7 +4,7 @@
 >
 > Analysis based on dotnes transpiler capabilities and the `NESLib.cs` API surface.
 >
-> Existing dotnes samples: `hello`, `hellofs`, `staticsprite`, `movingsprite`, `attributetable`, `flicker`, `metasprites`, `music`, `lols`, `tint`, `scroll`, `rletitle`
+> Existing dotnes samples: `hello`, `hellofs`, `staticsprite`, `movingsprite`, `attributetable`, `flicker`, `metasprites`, `music`, `lols`, `tint`, `scroll`, `rletitle`, `tileset1`
 
 ---
 
@@ -58,18 +58,11 @@
 - **dotnes sample:** `rletitle`
 - **Missing Features:** None — uses `ppu_off`, `pal_bg`, `pal_bright`, `vram_adr`, `vram_unrle`, `ppu_on_all`, `ppu_wait_frame`. User-defined functions inlined, `for` loop rewritten as `while`.
 
----
-
-## 🟡 Feasible (Minor Additions Needed)
-
 ### tileset1.c
 - **Description:** Loads a custom CHR tileset into CHR RAM and displays text using custom tile mapping.
-- **Status:** 🟡 Feasible
-- **Missing Features:**
-  - CHR RAM mapper support (`NES_CHR_BANKS 0` / UxROM) — dotnes currently only supports CHR ROM
-  - `#pragma charmap` / character translation tables — C#'s string encoding differs
-  - Large `const byte[]` tileset data (768 bytes) — should work if inline byte arrays are supported at this size
-  - User-defined function (`put_str`) — must be inlined
+- **Status:** ✅ Already Implemented
+- **dotnes sample:** `tileset1`
+- **Missing Features:** None — uses `pal_bg`, `vram_adr`, `vram_write`, `ppu_on_all`. The CHR RAM approach is replaced with CHR ROM containing the same tileset data, padded so ASCII codes map directly to tile indices.
 
 ---
 
@@ -359,8 +352,8 @@
 
 | Status | Count | Samples |
 |--------|-------|---------|
-| ✅ Already Implemented | 9 | hello, attributes, flicker, metasprites, music, tint, scroll, rletitle |
-| 🟡 Feasible | 1 | tileset1 |
+| ✅ Already Implemented | 10 | hello, attributes, flicker, metasprites, music, tint, scroll, rletitle, tileset1 |
+| 🟡 Feasible | 0 | |
 | 🟠 Moderate | 8 | sprites, metacursor, metatrigger, apu, bcd, statusbar, vrambuffer, vrambuf |
 | 🔴 Complex | 14 | aputest, ppuhello, fami, horizscroll, horizmask, bankswitch, monobitmap, conio, crypto, climber, transtable, irq, shoot2, siegegame |
 
