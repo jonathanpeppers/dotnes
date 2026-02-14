@@ -58,6 +58,8 @@ public class TranspilerTests
     [InlineData("tint", false)]
     [InlineData("scroll", true)]
     [InlineData("scroll", false)]
+    [InlineData("rletitle", true)]
+    [InlineData("rletitle", false)]
     public Task Write(string name, bool debug)
     {
         var configuration = debug ? "debug" : "release";

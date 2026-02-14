@@ -28,6 +28,10 @@ internal static class NESConstants
     public const int ptr1 = 0x2A;
     public const int ptr2 = 0x2C;
     public const int tmp1 = 0x32;
+    public const int RLE_LOW = 0x2E;
+    public const int RLE_HIGH = 0x2F;
+    public const int RLE_TAG = 0x30;
+    public const int RLE_BYTE = 0x31;
     public const int PRG_FILEOFFS = 0x10;
     public const int PPU_MASK_VAR = 0x12;
 

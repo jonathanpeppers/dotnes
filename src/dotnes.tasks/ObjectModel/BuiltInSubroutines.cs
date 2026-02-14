@@ -891,6 +891,55 @@ internal static class BuiltInSubroutines
     }
 
     /// <summary>
+    /// _vram_unrle - Unpack RLE data to VRAM
+    /// RLE format: first byte is tag, then data stream:
+    ///   non-tag byte → write to VRAM
+    ///   tag byte → next byte is count (0=end), then repeat last byte count times
+    /// Input: A=low byte of data pointer, X=high byte
+    /// </summary>
+    public static Block VramUnrle()
+    {
+        var block = new Block(nameof(NESLib.vram_unrle));
+        block.Emit(TAY())
+             .Emit(STX_zpg(RLE_HIGH))
+             .Emit(LDA(0x00))
+             .Emit(STA_zpg(RLE_LOW))
+             // Read tag byte (first byte of RLE data)
+             .Emit(LDA_ind_Y(RLE_LOW))
+             .Emit(STA_zpg(RLE_TAG))
+             .Emit(INY())
+             .Emit(BNE("@read_byte"))
+             .Emit(INC_zpg(RLE_HIGH))
+             // Read next data byte
+             .Emit(LDA_ind_Y(RLE_LOW), "@read_byte")
+             .Emit(INY())
+             .Emit(BNE("@check_tag"))
+             .Emit(INC_zpg(RLE_HIGH))
+             // Compare with tag
+             .Emit(CMP_zpg(RLE_TAG), "@check_tag")
+             .Emit(BEQ("@is_tag"))
+             .Emit(STA_abs(PPU_DATA))
+             .Emit(STA_zpg(RLE_BYTE))
+             .Emit(BNE("@read_byte"))
+             // Tag found: read run length
+             .Emit(LDA_ind_Y(RLE_LOW), "@is_tag")
+             .Emit(BEQ("@done"))
+             .Emit(INY())
+             .Emit(BNE("@run_loop"))
+             .Emit(INC_zpg(RLE_HIGH))
+             // Repeat last byte count times
+             .Emit(TAX(), "@run_loop")
+             .Emit(LDA_zpg(RLE_BYTE))
+             .Emit(STA_abs(PPU_DATA), "@run_write")
+             .Emit(DEX())
+             .Emit(BNE("@run_write"))
+             .Emit(BEQ("@read_byte"))
+             // Done
+             .Emit(RTS(), "@done");
+        return block;
+    }
+
+    /// <summary>
     /// _vram_inc - Set VRAM increment mode (0=+1, 1=+32)
     /// </summary>
     public static Block VramInc()

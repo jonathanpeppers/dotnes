@@ -4,7 +4,7 @@
 >
 > Analysis based on dotnes transpiler capabilities and the `NESLib.cs` API surface.
 >
-> Existing dotnes samples: `hello`, `hellofs`, `staticsprite`, `movingsprite`, `attributetable`, `flicker`, `metasprites`, `music`, `lols`
+> Existing dotnes samples: `hello`, `hellofs`, `staticsprite`, `movingsprite`, `attributetable`, `flicker`, `metasprites`, `music`, `lols`, `tint`, `scroll`, `rletitle`
 
 ---
 
@@ -46,10 +46,6 @@
 - **dotnes sample:** `tint`
 - **Missing Features:** None — uses `pal_all`, `oam_clear`, `vram_adr`, `vram_write`, `vram_fill`, `ppu_on_all`, `pad_poll`, `ppu_mask`, and `MASK.*` constants.
 
----
-
-## 🟡 Feasible (Minor Additions Needed)
-
 ### scroll.c
 - **Description:** Demonstrates vertical scrolling by writing text to two nametables and smoothly scrolling between them.
 - **Status:** ✅ Already Implemented
@@ -58,13 +54,13 @@
 
 ### rletitle.c
 - **Description:** Unpacks RLE-compressed nametable data and fades in using `pal_bright`.
-- **Status:** 🟡 Feasible
-- **Missing Features:**
-  - `vram_unrle()` — declared in NESLib but not yet transpiler-supported (no built-in subroutine)
-  - User-defined functions (`fade_in`, `show_title_screen`) — must be inlined
-  - `for` loops → must use `while` loops
-  - External linked assembly data (`climbr_title.s`) — would need byte arrays instead
-  - `ppu_wait_frame()` — declared but may lack transpiler support
+- **Status:** ✅ Already Implemented
+- **dotnes sample:** `rletitle`
+- **Missing Features:** None — uses `ppu_off`, `pal_bg`, `pal_bright`, `vram_adr`, `vram_unrle`, `ppu_on_all`, `ppu_wait_frame`. User-defined functions inlined, `for` loop rewritten as `while`.
+
+---
+
+## 🟡 Feasible (Minor Additions Needed)
 
 ### tileset1.c
 - **Description:** Loads a custom CHR tileset into CHR RAM and displays text using custom tile mapping.
@@ -363,8 +359,8 @@
 
 | Status | Count | Samples |
 |--------|-------|---------|
-| ✅ Already Implemented | 7 | hello, attributes, flicker, metasprites, music, tint, scroll |
-| 🟡 Feasible | 2 | rletitle, tileset1 |
+| ✅ Already Implemented | 9 | hello, attributes, flicker, metasprites, music, tint, scroll, rletitle |
+| 🟡 Feasible | 1 | tileset1 |
 | 🟠 Moderate | 8 | sprites, metacursor, metatrigger, apu, bcd, statusbar, vrambuffer, vrambuf |
 | 🔴 Complex | 14 | aputest, ppuhello, fami, horizscroll, horizmask, bankswitch, monobitmap, conio, crypto, climber, transtable, irq, shoot2, siegegame |
 
@@ -381,7 +377,7 @@
 | FamiTone2 library | 3 samples |
 | Direct APU/PPU register access | 5 samples |
 | `pad_trigger()` / `pad_state()` | 4 samples |
-| `vram_unrle()` | 2 samples |
+| `vram_unrle()` | 1 sample (rletitle now implemented) |
 | `delay()` | 3 samples |
 | `signed byte` (sbyte) type | 4 samples |
 | Mapper support (MMC3, UxROM) | 3 samples |

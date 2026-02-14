@@ -587,6 +587,20 @@ class IL2NESWriter : NESWriter
                     EmitWithLabel(Opcode.BCC, AddressMode.Relative, labelName);
                 }
                 break;
+            case ILOpCode.Ble_s:
+                // Branch if less than or equal (signed): value1 <= value2
+                // IL stack: ..., value1, value2 → ...
+                // CMP #(value2+1) + BCC — A < value2+1 is equivalent to A <= value2
+                {
+                    operand = (sbyte)(byte)operand;
+                    byte cmpValue = checked((byte)Stack.Pop()); // value2 (comparison target)
+                    if (Stack.Count > 0) Stack.Pop(); // value1
+                    RemoveLastInstructions(1); // Remove LDA #imm from Ldc
+                    Emit(Opcode.CMP, AddressMode.Immediate, (byte)(cmpValue + 1));
+                    var labelName = $"instruction_{instruction.Offset + operand + 2:X2}";
+                    EmitWithLabel(Opcode.BCC, AddressMode.Relative, labelName);
+                }
+                break;
             default:
                 throw new NotImplementedException($"OpCode {instruction.OpCode} with Int32 operand is not implemented!");
         }

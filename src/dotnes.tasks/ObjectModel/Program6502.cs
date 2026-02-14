@@ -559,6 +559,8 @@ public class Program6502
                 size += BuiltInSubroutines.OamMetaSprPal().ByteSize;
             if (usedMethods.Contains("apu_init"))
                 size += BuiltInSubroutines.ApuInit().ByteSize;
+            if (usedMethods.Contains("vram_unrle"))
+                size += BuiltInSubroutines.VramUnrle().ByteSize;
         }
         return size;
     }
@@ -610,6 +612,8 @@ public class Program6502
                 AddBlock(BuiltInSubroutines.OamMetaSprPal());
             if (usedMethods.Contains("apu_init"))
                 AddBlock(BuiltInSubroutines.ApuInit());
+            if (usedMethods.Contains("vram_unrle"))
+                AddBlock(BuiltInSubroutines.VramUnrle());
         }
     }
 
