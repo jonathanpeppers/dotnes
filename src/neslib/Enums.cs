@@ -26,6 +26,6 @@ public static class MASK
     public const byte BG = 0x08;
     public const byte SPR = 0x10;
     public const byte TINT_RED = 0x20;
-    public const byte TINT_BLUE = 0x40;
-    public const byte TINT_GREEN = 0x80;
+    public const byte TINT_GREEN = 0x40;
+    public const byte TINT_BLUE = 0x80;
 }

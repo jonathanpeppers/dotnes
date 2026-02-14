@@ -17,11 +17,10 @@ byte[] PALETTE = [
 ];
 
 // setup
-oam_clear();
 pal_all(PALETTE);
+oam_clear();
 
 // fill nametable with the message text on every row
-// write starting at top-left, 32 chars per row (includes column 0 and 31)
 vram_adr(NTADR_A(0, 0));
 byte i = 0;
 while (i < 30)
@@ -43,26 +42,24 @@ vram_fill(0xdd, 8);
 // enable rendering
 ppu_on_all();
 
-// infinite loop
+// main loop
+byte mask = MASK.BG;
 while (true)
 {
+    ppu_wait_nmi();
     PAD pad = pad_poll(0);
-    byte mask = MASK.BG;
     if ((pad & PAD.A) != 0)
-    {
         mask = (byte)(mask | MASK.TINT_RED);
-    }
     if ((pad & PAD.B) != 0)
-    {
         mask = (byte)(mask | MASK.TINT_GREEN);
-    }
-    if ((pad & (PAD.LEFT | PAD.RIGHT)) != 0)
-    {
+    if ((pad & PAD.LEFT) != 0)
         mask = (byte)(mask | MASK.TINT_BLUE);
-    }
-    if ((pad & (PAD.UP | PAD.DOWN)) != 0)
-    {
+    if ((pad & PAD.RIGHT) != 0)
+        mask = (byte)(mask | MASK.TINT_BLUE);
+    if ((pad & PAD.UP) != 0)
         mask = (byte)(mask | MASK.MONO);
-    }
+    if ((pad & PAD.DOWN) != 0)
+        mask = (byte)(mask | MASK.MONO);
     ppu_mask(mask);
+    mask = MASK.BG;
 }

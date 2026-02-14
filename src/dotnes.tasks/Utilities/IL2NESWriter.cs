@@ -764,6 +764,17 @@ class IL2NESWriter : NESWriter
                             _immediateInA = null;
                         }
                         break;
+                    case nameof(NESLib.vram_fill):
+                        // vram_fill(value, count) — count is passed in A:X (16-bit).
+                        // WriteLdc(ushort) already sets both A and X.
+                        // WriteLdc(byte) only sets A, so X may be garbage — clear it.
+                        if (Stack.Count > 0 && Stack.Peek() <= byte.MaxValue)
+                        {
+                            Emit(Opcode.LDX, AddressMode.Immediate, 0x00);
+                        }
+                        EmitWithLabel(Opcode.JSR, AddressMode.Absolute, operand);
+                        _immediateInA = null;
+                        break;
                     default:
                         if (_lastByteArrayLabel != null && previous != ILOpCode.Ldtoken
                             && !_byteArrayAddressEmitted)
