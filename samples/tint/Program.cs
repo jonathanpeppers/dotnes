@@ -20,12 +20,13 @@ byte[] PALETTE = [
 oam_clear();
 pal_all(PALETTE);
 
-// draw message on all rows
+// fill nametable with the message text on every row
+// write starting at top-left, 32 chars per row (includes column 0 and 31)
+vram_adr(NTADR_A(0, 0));
 byte i = 0;
 while (i < 30)
 {
-    vram_adr(NTADR_A(1, i));
-    vram_write(" A:red B:green \x1e\x1f:blue \x1c\x1d:mono");
+    vram_write("  A:red B:green \x1e\x1f:blue \x1c\x1d:mono ");
     i = (byte)(i + 1);
 }
 
