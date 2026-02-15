@@ -540,13 +540,16 @@ public class Program6502
         size += BuiltInSubroutines.Zerobss(locals).ByteSize;
         if (usedMethods != null)
         {
-            if (usedMethods.Contains("pad_poll"))
+            // pad_poll is needed directly or as a dependency of pad_trigger/pad_state
+            if (usedMethods.Contains("pad_poll") || usedMethods.Contains("pad_trigger") || usedMethods.Contains("pad_state"))
                 size += BuiltInSubroutines.PadPoll().ByteSize;
-            if (needsDecsp4 && usedMethods.Contains("pad_poll"))
-            {
+            // pad_trigger/pad_state: included when directly called OR via oam_spr+pad_poll pattern
+            bool includePadTrigger = usedMethods.Contains("pad_trigger") || (needsDecsp4 && usedMethods.Contains("pad_poll"));
+            bool includePadState = usedMethods.Contains("pad_state") || (needsDecsp4 && usedMethods.Contains("pad_poll"));
+            if (includePadTrigger)
                 size += BuiltInSubroutines.PadTrigger().ByteSize;
+            if (includePadState)
                 size += BuiltInSubroutines.PadState().ByteSize;
-            }
             if (usedMethods.Contains("oam_spr"))
                 size += BuiltInSubroutines.OamSpr().ByteSize;
             if (usedMethods.Contains("rand8"))
@@ -593,13 +596,16 @@ public class Program6502
         // Optional methods
         if (usedMethods != null)
         {
-            if (usedMethods.Contains("pad_poll"))
+            // pad_poll is needed directly or as a dependency of pad_trigger/pad_state
+            if (usedMethods.Contains("pad_poll") || usedMethods.Contains("pad_trigger") || usedMethods.Contains("pad_state"))
                 AddBlock(BuiltInSubroutines.PadPoll());
-            if (needsDecsp4 && usedMethods.Contains("pad_poll"))
-            {
+            // pad_trigger/pad_state: included when directly called OR via oam_spr+pad_poll pattern
+            bool includePadTrigger = usedMethods.Contains("pad_trigger") || (needsDecsp4 && usedMethods.Contains("pad_poll"));
+            bool includePadState = usedMethods.Contains("pad_state") || (needsDecsp4 && usedMethods.Contains("pad_poll"));
+            if (includePadTrigger)
                 AddBlock(BuiltInSubroutines.PadTrigger());
+            if (includePadState)
                 AddBlock(BuiltInSubroutines.PadState());
-            }
             if (usedMethods.Contains("oam_spr"))
                 AddBlock(BuiltInSubroutines.OamSpr());
             if (usedMethods.Contains("rand8"))
