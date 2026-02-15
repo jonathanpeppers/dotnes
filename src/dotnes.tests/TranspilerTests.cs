@@ -66,6 +66,8 @@ public class TranspilerTests
     [InlineData("sprites", false)]
     [InlineData("metacursor", true)]
     [InlineData("metacursor", false)]
+    [InlineData("metatrigger", true)]
+    [InlineData("metatrigger", false)]
     public Task Write(string name, bool debug)
     {
         var configuration = debug ? "debug" : "release";

@@ -29,6 +29,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "sprites", "sprites\sprites.
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "metacursor", "metacursor\metacursor.csproj", "{608C5DAF-8889-49AF-9391-B6F23F12D9DF}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "metatrigger", "metatrigger\metatrigger.csproj", "{5352CC41-37AC-4823-AF3D-BF397EC62497}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -195,6 +197,18 @@ Global
 		{608C5DAF-8889-49AF-9391-B6F23F12D9DF}.Release|x64.Build.0 = Release|Any CPU
 		{608C5DAF-8889-49AF-9391-B6F23F12D9DF}.Release|x86.ActiveCfg = Release|Any CPU
 		{608C5DAF-8889-49AF-9391-B6F23F12D9DF}.Release|x86.Build.0 = Release|Any CPU
+		{5352CC41-37AC-4823-AF3D-BF397EC62497}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5352CC41-37AC-4823-AF3D-BF397EC62497}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5352CC41-37AC-4823-AF3D-BF397EC62497}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{5352CC41-37AC-4823-AF3D-BF397EC62497}.Debug|x64.Build.0 = Debug|Any CPU
+		{5352CC41-37AC-4823-AF3D-BF397EC62497}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{5352CC41-37AC-4823-AF3D-BF397EC62497}.Debug|x86.Build.0 = Debug|Any CPU
+		{5352CC41-37AC-4823-AF3D-BF397EC62497}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5352CC41-37AC-4823-AF3D-BF397EC62497}.Release|Any CPU.Build.0 = Release|Any CPU
+		{5352CC41-37AC-4823-AF3D-BF397EC62497}.Release|x64.ActiveCfg = Release|Any CPU
+		{5352CC41-37AC-4823-AF3D-BF397EC62497}.Release|x64.Build.0 = Release|Any CPU
+		{5352CC41-37AC-4823-AF3D-BF397EC62497}.Release|x86.ActiveCfg = Release|Any CPU
+		{5352CC41-37AC-4823-AF3D-BF397EC62497}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

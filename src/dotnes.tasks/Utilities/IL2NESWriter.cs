@@ -1485,8 +1485,6 @@ class IL2NESWriter : NESWriter
 
         // Mark decsp4 as used
         UsedMethods?.Add("decsp4");
-        UsedMethods?.Add("pad_trigger");
-        UsedMethods?.Add("pad_state");
 
         // Emit: JSR decsp4
         EmitJSR("decsp4");
