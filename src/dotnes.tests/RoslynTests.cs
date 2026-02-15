@@ -414,7 +414,7 @@ public class RoslynTests
                 20F082      ; JSR ppu_wait_nmi (loop start)
                 A900        ; LDA #$00 (pad_poll argument)
                 20CB85      ; JSR pad_poll
-                8D2703      ; STA $0327 (store pad for reuse)
+                8D2603      ; STA $0326 (store pad for reuse)
                 2940        ; AND #$40 (PAD.LEFT)
                 F003        ; BEQ +3 (skip DEC if zero)
                 CE2503      ; DEC $0325 (x--)

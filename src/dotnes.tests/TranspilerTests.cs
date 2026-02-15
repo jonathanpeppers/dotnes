@@ -64,6 +64,8 @@ public class TranspilerTests
     [InlineData("tileset1", false)]
     [InlineData("sprites", true)]
     [InlineData("sprites", false)]
+    [InlineData("metacursor", true)]
+    [InlineData("metacursor", false)]
     public Task Write(string name, bool debug)
     {
         var configuration = debug ? "debug" : "release";
