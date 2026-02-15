@@ -46,21 +46,21 @@ class IL2NESWriter : NESWriter
     int _stringLabelIndex;
 
     readonly ushort local = 0x325;
-    readonly ushort tempVar = 0x327; // Temp variable for pad_poll result storage
+    ushort _padReloadAddress; // Address to reload pad_poll result from (set by stloc after pad_poll)
     readonly ReflectionCache _reflectionCache = new();
     ILOpCode previous;
     string? _pendingArrayType;
     ImmutableArray<byte>? _pendingUShortArray;
     
     /// <summary>
-    /// Tracks if pad_poll was called and the result is available in A or tempVar.
+    /// Tracks if pad_poll was called and the result is available in A or _padReloadAddress.
     /// When true, AND operations should emit actual 6502 AND instruction.
     /// </summary>
     bool _padPollResultAvailable;
 
     /// <summary>
     /// Tracks if this is the first AND after pad_poll (A still has value) or
-    /// subsequent AND (need to reload from tempVar first).
+    /// subsequent AND (need to reload from _padReloadAddress first).
     /// </summary>
     bool _firstAndAfterPadPoll;
 
@@ -224,6 +224,7 @@ class IL2NESWriter : NESWriter
             case ILOpCode.Pop:
                 if (Stack.Count > 0)
                     Stack.Pop();
+                _runtimeValueInA = false;
                 break;
             case ILOpCode.Ldc_i4_0:
                 WriteLdc(0);
@@ -416,10 +417,10 @@ class IL2NESWriter : NESWriter
                             RemoveLastInstructions(1);
                         }
 
-                        // If not first AND after pad_poll, need to reload pad value from temp
+                        // If not first AND after pad_poll, need to reload pad value
                         if (_padPollResultAvailable && !_firstAndAfterPadPoll)
                         {
-                            Emit(Opcode.LDA, AddressMode.Absolute, tempVar);
+                            Emit(Opcode.LDA, AddressMode.Absolute, _padReloadAddress);
                         }
                         _firstAndAfterPadPoll = false;
 
@@ -754,14 +755,17 @@ class IL2NESWriter : NESWriter
                         argsAlreadyPopped = true;
                         break;
                     case "pad_poll":
-                        // pad_poll returns result in A - emit JSR then store to tempVar for multiple tests
+                        // pad_poll returns result in A — store to dynamically allocated temp
                         EmitWithLabel(Opcode.JSR, AddressMode.Absolute, operand);
-                        Emit(Opcode.STA, AddressMode.Absolute, tempVar);
+                        if (_padReloadAddress == 0)
+                        {
+                            _padReloadAddress = (ushort)(local + LocalCount);
+                            LocalCount += 1;
+                        }
+                        Emit(Opcode.STA, AddressMode.Absolute, _padReloadAddress);
                         _padPollResultAvailable = true;
                         _firstAndAfterPadPoll = true;
                         _immediateInA = null;
-                        if (DeferredByteArrayMode)
-                            LocalCount += 1; // tempVar counts as a local for zerobss
                         break;
                     case "oam_spr":
                         EmitOamSprDecsp4();
@@ -906,9 +910,8 @@ class IL2NESWriter : NESWriter
                 if (_reflectionCache.HasReturnValue(operand))
                 {
                     // Only set _runtimeValueInA for methods that produce true runtime values
-                    // Skip: NTADR_* (compile-time computed), pad_poll (has its own mechanism)
-                    if (operand is not (nameof(NTADR_A) or nameof(NTADR_B) or nameof(NTADR_C) or nameof(NTADR_D))
-                        && operand != "pad_poll")
+                    // Skip: NTADR_* (compile-time computed)
+                    if (operand is not (nameof(NTADR_A) or nameof(NTADR_B) or nameof(NTADR_C) or nameof(NTADR_D)))
                     {
                         _runtimeValueInA = true;
                     }
@@ -2102,6 +2105,10 @@ class IL2NESWriter : NESWriter
         bool hasSub = false;
         int subValue = 0;
         bool hasAdd = false;
+        int addValue = 0;
+        bool hasMul = false;
+        int mulValue = 0;
+        int mulLocalIdx = -1;
         bool hasTwoLdelems = false;
         int sourceArray1Idx = -1;
         int sourceArray2Idx = -1;
@@ -2123,6 +2130,9 @@ class IL2NESWriter : NESWriter
                     break;
                 case ILOpCode.Add:
                     hasAdd = true;
+                    break;
+                case ILOpCode.Mul:
+                    hasMul = true;
                     break;
                 case ILOpCode.Ldelem_u1:
                     if (sourceArray1Idx < 0)
@@ -2162,13 +2172,20 @@ class IL2NESWriter : NESWriter
                         if (i + 1 < Index)
                         {
                             if (Instructions[i + 1].OpCode == ILOpCode.And)
-                            {
                                 andMask = val;
-                            }
                             else if (Instructions[i + 1].OpCode == ILOpCode.Sub)
-                            {
                                 subValue = val;
+                            else if (Instructions[i + 1].OpCode == ILOpCode.Mul)
+                            {
+                                mulValue = val;
+                                if (i - 1 >= valueStart)
+                                {
+                                    var locIdx = GetLdlocIndex(Instructions[i - 1]);
+                                    if (locIdx != null) mulLocalIdx = locIdx.Value;
+                                }
                             }
+                            else if (Instructions[i + 1].OpCode == ILOpCode.Add)
+                                addValue = val;
                         }
                     }
                     break;
@@ -2178,13 +2195,20 @@ class IL2NESWriter : NESWriter
                         if (i + 1 < Index)
                         {
                             if (Instructions[i + 1].OpCode == ILOpCode.And)
-                            {
                                 andMask = val;
-                            }
                             else if (Instructions[i + 1].OpCode == ILOpCode.Sub)
-                            {
                                 subValue = val;
+                            else if (Instructions[i + 1].OpCode == ILOpCode.Mul)
+                            {
+                                mulValue = val;
+                                if (i - 1 >= valueStart)
+                                {
+                                    var locIdx = GetLdlocIndex(Instructions[i - 1]);
+                                    if (locIdx != null) mulLocalIdx = locIdx.Value;
+                                }
                             }
+                            else if (Instructions[i + 1].OpCode == ILOpCode.Add)
+                                addValue = val;
                         }
                     }
                     break;
@@ -2219,10 +2243,33 @@ class IL2NESWriter : NESWriter
                 Emit(Opcode.SBC, AddressMode.Immediate, checked((byte)subValue));
             }
         }
+        else if (hasMul && mulLocalIdx >= 0)
+        {
+            // Pattern: arr[i] = local * constant (+ optional constant)
+            // Multiply by power of 2 using ASL shifts
+            var mulLocal = Locals[mulLocalIdx];
+            Emit(Opcode.LDA, AddressMode.Absolute, (ushort)mulLocal.Address!);
+            int shifts = 0;
+            for (int v = mulValue; v > 1; v >>= 1) shifts++;
+            for (int s = 0; s < shifts; s++)
+                Emit(Opcode.ASL, AddressMode.Accumulator);
+            if (addValue != 0)
+            {
+                Emit(Opcode.CLC, AddressMode.Implied);
+                Emit(Opcode.ADC, AddressMode.Immediate, checked((byte)addValue));
+            }
+        }
         else
         {
-            // Unknown pattern — the value should already be in A from previous code
-            // This shouldn't happen for our patterns
+            // Simple constant or unknown — find the last constant in value expression
+            int? constVal = null;
+            for (int i = valueStart; i < Index; i++)
+            {
+                int? val = GetLdcValue(Instructions[i]);
+                if (val != null) constVal = val;
+            }
+            if (constVal != null)
+                Emit(Opcode.LDA, AddressMode.Immediate, checked((byte)constVal.Value));
         }
 
         // Store to target array
