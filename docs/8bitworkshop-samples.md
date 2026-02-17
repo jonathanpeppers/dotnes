@@ -114,6 +114,7 @@
 ### bcd.c
 - **Description:** Binary-Coded Decimal addition utility function.
 - **Status:** 🟠 Moderate
+- **Used by:** `climber.c`, `shoot2.c`
 - **Missing Features:**
   - User-defined functions with return values (`bcd_add`)
   - `word` (16-bit) arithmetic with bitwise NOT (`~`), shift, XOR
