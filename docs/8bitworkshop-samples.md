@@ -4,7 +4,7 @@
 >
 > Analysis based on dotnes transpiler capabilities and the `NESLib.cs` API surface.
 >
-> Existing dotnes samples: `hello`, `hellofs`, `staticsprite`, `movingsprite`, `attributetable`, `flicker`, `metasprites`, `music`, `lols`, `tint`, `scroll`, `rletitle`, `tileset1`, `sprites`
+> Existing dotnes samples: `hello`, `hellofs`, `staticsprite`, `movingsprite`, `attributetable`, `flicker`, `metasprites`, `music`, `lols`, `tint`, `scroll`, `rletitle`, `tileset1`, `sprites`, `metacursor`, `metatrigger`
 
 ---
 
@@ -70,13 +70,10 @@
 - **dotnes sample:** `sprites`
 - **Missing Features:** None — uses `pal_all`, `oam_clear`, `oam_spr`, `oam_hide_rest`, `ppu_on_all`, `ppu_wait_frame`, `rand8()`. Reduced from 64 to 32 actors due to NES zero-page memory constraints.
 
----
-
-## 🟠 Moderate (Significant Work Needed)
-
 ### metacursor.c
 - **Description:** Reads controller input to move metasprites, demonstrating `pad_poll` for two players.
-- **Status:** ✅ Implemented
+- **Status:** ✅ Already Implemented
+- **dotnes sample:** `metacursor`
 - **Simplifications:**
   - Reduced from 16 to 8 actors (zero-page memory limits)
   - Uses single metasprite for all actors (no animation frame cycling, which requires array-of-pointers)
@@ -88,15 +85,18 @@
 
 ### metatrigger.c
 - **Description:** Similar to metacursor but uses `pad_trigger()` and `pad_state()` for input, plus `pal_bright()` for brightness control.
-- **Status:** 🟠 Moderate
-- **Missing Features:**
-  - `pad_trigger()` and `pad_state()` — declared in NESLib but not transpiler-supported
-  - User-defined functions — must be inlined
-  - `for` loops → must use `while`
-  - Global/static arrays, signed byte support
-  - `OAMBUF[i].attr` — direct OAM buffer manipulation
-  - `OAM_BEHIND` constant and bitfield operations on sprite attributes
-  - Pointer-to-const-array table (`playerRunSeq`)
+- **Status:** ✅ Already Implemented
+- **dotnes sample:** `metatrigger`
+- **Simplifications:**
+  - Reduced from 16 to 8 actors (zero-page memory limits)
+  - Uses single metasprite for all actors (no animation frame cycling)
+  - Removed OAM buffer attribute manipulation
+  - Inlined all setup code into main body
+  - Used `while` loops instead of `for`
+
+---
+
+## 🟠 Moderate (Significant Work Needed)
 
 ### apu.c
 - **Description:** Initializes the APU by writing to hardware registers at `$4000`–`$4017` using `memcpy` and direct struct access.
@@ -348,9 +348,9 @@
 
 | Status | Count | Samples |
 |--------|-------|---------|
-| ✅ Already Implemented | 12 | hello, attributes, flicker, metasprites, music, tint, scroll, rletitle, tileset1, sprites, metacursor |
+| ✅ Already Implemented | 13 | hello, attributes, flicker, metasprites, music, tint, scroll, rletitle, tileset1, sprites, metacursor, metatrigger |
 | 🟡 Feasible | 0 | |
-| 🟠 Moderate | 6 | metatrigger, apu, bcd, statusbar, vrambuffer, vrambuf |
+| 🟠 Moderate | 5 | apu, bcd, statusbar, vrambuffer, vrambuf |
 | 🔴 Complex | 14 | aputest, ppuhello, fami, horizscroll, horizmask, bankswitch, monobitmap, conio, crypto, climber, transtable, irq, shoot2, siegegame |
 
 ### Key Blockers (by frequency)
@@ -365,7 +365,7 @@
 | `split()` | 5 samples |
 | FamiTone2 library | 3 samples |
 | Direct APU/PPU register access | 5 samples |
-| `pad_trigger()` / `pad_state()` | 4 samples |
+| `pad_trigger()` / `pad_state()` | 2 samples (aputest, monobitmap) |
 | `vram_unrle()` | 1 sample (rletitle now implemented) |
 | `delay()` | 3 samples |
 | `signed byte` (sbyte) type | 4 samples |
