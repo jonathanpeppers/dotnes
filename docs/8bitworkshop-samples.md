@@ -98,15 +98,6 @@
 
 ## 🟠 Moderate (Significant Work Needed)
 
-### apu.c
-- **Description:** Initializes the APU by writing to hardware registers at `$4000`–`$4017` using `memcpy` and direct struct access.
-- **Status:** 🟠 Moderate
-- **Missing Features:**
-  - Direct memory writes via `memcpy` to hardware addresses (`(void*)0x4000`)
-  - `APU.fcontrol` and `APU.status` — direct APU register struct access
-  - Pointer casts and raw memory manipulation
-  - Note: dotnes has its own `apu_init()` built-in subroutine, so this specific file may not need porting
-
 ### bcd.c
 - **Description:** Binary-Coded Decimal addition utility function.
 - **Status:** 🟠 Moderate
@@ -153,6 +144,7 @@
 ### aputest.c
 - **Description:** Generates random APU sounds and prints parameters to screen, showing channel status with vrambuf.
 - **Status:** 🔴 Complex
+- **Note:** Uses `apu.c` for APU initialization — already covered by dotnes's built-in `apu_init()` subroutine.
 - **Missing Features:**
   - Direct APU register macros (`APU_PULSE_DECAY`, `APU_PULSE_SWEEP`, `APU_TRIANGLE_LENGTH`, `APU_NOISE_DECAY`, `APU_ENABLE`)
   - `APU.status` — direct hardware register reading
@@ -312,6 +304,7 @@
 ### shoot2.c
 - **Description:** A shoot-em-up game with CHR RAM, sprite shifting, formation AI, and custom sound effects.
 - **Status:** 🔴 Complex
+- **Note:** Uses `apu.c` for APU initialization — already covered by dotnes's built-in `apu_init()` subroutine.
 - **Missing Features:**
   - UxROM mapper (`NES_MAPPER 2`) with CHR RAM
   - Direct APU register macros (`APU_PULSE_DECAY`, `APU_PULSE_SUSTAIN`, `APU_NOISE_DECAY`, `APU_TRIANGLE_SUSTAIN`, `APU_ENABLE`)
@@ -350,8 +343,10 @@
 |--------|-------|---------|
 | ✅ Already Implemented | 13 | hello, attributes, flicker, metasprites, music, tint, scroll, rletitle, tileset1, sprites, metacursor, metatrigger |
 | 🟡 Feasible | 0 | |
-| 🟠 Moderate | 5 | apu, bcd, statusbar, vrambuffer, vrambuf |
+| 🟠 Moderate | 4 | bcd, statusbar, vrambuffer, vrambuf |
 | 🔴 Complex | 14 | aputest, ppuhello, fami, horizscroll, horizmask, bankswitch, monobitmap, conio, crypto, climber, transtable, irq, shoot2, siegegame |
+
+> **Note:** `apu.c` is a library file (not a demo) that initializes APU registers. It is already covered by dotnes's built-in `apu_init()` subroutine and is not counted separately. Samples that use it: aputest, shoot2, music.
 
 ### Key Blockers (by frequency)
 
@@ -364,7 +359,7 @@
 | `typedef struct` / struct support | 8 samples |
 | `split()` | 5 samples |
 | FamiTone2 library | 3 samples |
-| Direct APU/PPU register access | 5 samples |
+| Direct APU/PPU register access | 5 samples (apu.c already covered by built-in `apu_init()`) |
 | `pad_trigger()` / `pad_state()` | 2 samples (aputest, monobitmap) |
 | `vram_unrle()` | 1 sample (rletitle now implemented) |
 | `delay()` | 3 samples |
