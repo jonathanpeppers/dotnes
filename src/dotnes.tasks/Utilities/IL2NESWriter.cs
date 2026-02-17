@@ -822,6 +822,7 @@ class IL2NESWriter : NESWriter
                             }
                         }
                         break;
+                    case "split":
                     case "scroll":
                         // scroll() takes unsigned int params, which use popax (2-byte pop).
                         // The preceding instructions are: JSR pusha, LDA $addr.

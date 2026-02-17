@@ -31,6 +31,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "metacursor", "metacursor\me
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "metatrigger", "metatrigger\metatrigger.csproj", "{5352CC41-37AC-4823-AF3D-BF397EC62497}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "statusbar", "statusbar\statusbar.csproj", "{71E40755-6960-49AE-B64A-41478D1CA00E}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -209,6 +211,18 @@ Global
 		{5352CC41-37AC-4823-AF3D-BF397EC62497}.Release|x64.Build.0 = Release|Any CPU
 		{5352CC41-37AC-4823-AF3D-BF397EC62497}.Release|x86.ActiveCfg = Release|Any CPU
 		{5352CC41-37AC-4823-AF3D-BF397EC62497}.Release|x86.Build.0 = Release|Any CPU
+		{71E40755-6960-49AE-B64A-41478D1CA00E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{71E40755-6960-49AE-B64A-41478D1CA00E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{71E40755-6960-49AE-B64A-41478D1CA00E}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{71E40755-6960-49AE-B64A-41478D1CA00E}.Debug|x64.Build.0 = Debug|Any CPU
+		{71E40755-6960-49AE-B64A-41478D1CA00E}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{71E40755-6960-49AE-B64A-41478D1CA00E}.Debug|x86.Build.0 = Debug|Any CPU
+		{71E40755-6960-49AE-B64A-41478D1CA00E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{71E40755-6960-49AE-B64A-41478D1CA00E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{71E40755-6960-49AE-B64A-41478D1CA00E}.Release|x64.ActiveCfg = Release|Any CPU
+		{71E40755-6960-49AE-B64A-41478D1CA00E}.Release|x64.Build.0 = Release|Any CPU
+		{71E40755-6960-49AE-B64A-41478D1CA00E}.Release|x86.ActiveCfg = Release|Any CPU
+		{71E40755-6960-49AE-B64A-41478D1CA00E}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

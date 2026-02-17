@@ -4,7 +4,7 @@
 >
 > Analysis based on dotnes transpiler capabilities and the `NESLib.cs` API surface.
 >
-> Existing dotnes samples: `hello`, `hellofs`, `staticsprite`, `movingsprite`, `attributetable`, `flicker`, `metasprites`, `music`, `lols`, `tint`, `scroll`, `rletitle`, `tileset1`, `sprites`, `metacursor`, `metatrigger`
+> Existing dotnes samples: `hello`, `hellofs`, `staticsprite`, `movingsprite`, `attributetable`, `flicker`, `metasprites`, `music`, `lols`, `tint`, `scroll`, `rletitle`, `tileset1`, `sprites`, `metacursor`, `metatrigger`, `statusbar`
 
 ---
 
@@ -94,6 +94,19 @@
   - Inlined all setup code into main body
   - Used `while` loops instead of `for`
 
+### statusbar.c
+- **Description:** Demonstrates a split-screen status bar by using sprite 0 hit detection and the `split()` function for horizontal scrolling.
+- **Status:** ✅ Already Implemented
+- **dotnes sample:** `statusbar`
+- **Simplifications:**
+  - User-defined functions (`put_str`, `scroll_demo`) inlined into main body
+  - `strlen()` replaced by `string.Length` (implicit via `vram_write(string)`)
+  - Scroll range reduced from 0–479 to 0–255 (byte range, single nametable width)
+  - Vertical mirroring configured via `<NESVerticalMirroring>true</NESVerticalMirroring>` MSBuild property
+- **New Features Added:**
+  - `split()` transpiler support (6502 subroutine + IL handler)
+  - `<NESVerticalMirroring>` MSBuild property for vertical mirroring (iNES Flags6 bit 0)
+
 ---
 
 ## 🟠 Moderate (Significant Work Needed)
@@ -106,15 +119,6 @@
   - `word` (16-bit) arithmetic with bitwise NOT (`~`), shift, XOR
   - `register` keyword (optimization hint, can be ignored)
   - This is a utility; dotnes would need a built-in BCD helper or function support
-
-### statusbar.c
-- **Description:** Demonstrates a split-screen status bar by using sprite 0 hit detection and the `split()` function for horizontal scrolling.
-- **Status:** 🟠 Moderate
-- **Missing Features:**
-  - `split()` — declared in NESLib but not transpiler-supported
-  - User-defined functions (`put_str`, `scroll_demo`)
-  - `strlen()` standard library function
-  - Vertical mirroring configuration (`NES_MIRRORING 1`)
 
 ### vrambuffer.c
 - **Description:** Demonstrates the VRAM update buffer system for writing to VRAM during rendering, with scrolling and `sprintf`.
@@ -341,9 +345,9 @@
 
 | Status | Count | Samples |
 |--------|-------|---------|
-| ✅ Already Implemented | 13 | hello, attributes, flicker, metasprites, music, tint, scroll, rletitle, tileset1, sprites, metacursor, metatrigger |
+| ✅ Already Implemented | 14 | hello, attributes, flicker, metasprites, music, tint, scroll, rletitle, tileset1, sprites, metacursor, metatrigger, statusbar |
 | 🟡 Feasible | 0 | |
-| 🟠 Moderate | 4 | bcd, statusbar, vrambuffer, vrambuf |
+| 🟠 Moderate | 3 | bcd, vrambuffer, vrambuf |
 | 🔴 Complex | 14 | aputest, ppuhello, fami, horizscroll, horizmask, bankswitch, monobitmap, conio, crypto, climber, transtable, irq, shoot2, siegegame |
 
 > **Note:** `apu.c` is a library file (not a demo) that initializes APU registers. It is already covered by dotnes's built-in `apu_init()` subroutine and is not counted separately. Samples that use it: aputest, shoot2, music.
@@ -357,7 +361,7 @@
 | Global/static arrays | 15+ samples |
 | vrambuf module (`vrambuf_clear`, `vrambuf_put`, etc.) | 9 samples |
 | `typedef struct` / struct support | 8 samples |
-| `split()` | 5 samples |
+| `split()` | 4 samples (statusbar now implemented) |
 | FamiTone2 library | 3 samples |
 | Direct APU/PPU register access | 5 samples (apu.c already covered by built-in `apu_init()`) |
 | `pad_trigger()` / `pad_state()` | 2 samples (aputest, monobitmap) |

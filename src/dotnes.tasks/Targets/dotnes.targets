@@ -11,6 +11,7 @@
         AssemblyFiles="@(NESAssembly)"
         OutputPath="$(NESTargetPath)"
         DiagnosticLogging="$(NESDiagnosticLogging)"
+        NESVerticalMirroring="$(NESVerticalMirroring)"
     />
     <ItemGroup>
       <FileWrites Include="$(NESTargetPath)" />

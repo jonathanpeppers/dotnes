@@ -68,7 +68,9 @@ public class TranspilerTests
     [InlineData("metacursor", false)]
     [InlineData("metatrigger", true)]
     [InlineData("metatrigger", false)]
-    public Task Write(string name, bool debug)
+    [InlineData("statusbar", true, true)]
+    [InlineData("statusbar", false, true)]
+    public Task Write(string name, bool debug, bool verticalMirroring = false)
     {
         var configuration = debug ? "debug" : "release";
         var chrName = $"chr_{name}.s";
@@ -76,7 +78,7 @@ public class TranspilerTests
         var chr_generic = new StreamReader(chrStream ?? Utilities.GetResource("chr_generic.s"));
 
         using var dll = Utilities.GetResource($"{name}.{configuration}.dll");
-        using var il = new Transpiler(dll, [new AssemblyReader(chr_generic)], _logger);
+        using var il = new Transpiler(dll, [new AssemblyReader(chr_generic)], _logger, verticalMirroring);
         using var ms = new MemoryStream();
         il.Write(ms);
 

@@ -15,6 +15,7 @@ class Transpiler : IDisposable
     readonly MetadataReader _reader;
     readonly IList<AssemblyReader> _assemblyFiles;
     readonly ILogger _logger;
+    readonly bool _verticalMirroring;
 
     /// <summary>
     /// A list of methods that were found to be used in the IL code
@@ -33,12 +34,13 @@ class Transpiler : IDisposable
     /// </summary>
     public Dictionary<string, (int argCount, bool hasReturnValue)> UserMethodMetadata { get; } = new(StringComparer.Ordinal);
 
-    public Transpiler(Stream stream, IList<AssemblyReader> assemblyFiles, ILogger? logger = null)
+    public Transpiler(Stream stream, IList<AssemblyReader> assemblyFiles, ILogger? logger = null, bool verticalMirroring = false)
     {
         _pe = new PEReader(stream);
         _reader = _pe.GetMetadataReader();
         _assemblyFiles = assemblyFiles;
         _logger = logger ?? new NullLogger();
+        _verticalMirroring = verticalMirroring;
     }
 
     public void Write(Stream stream)
@@ -69,7 +71,7 @@ class Transpiler : IDisposable
         writer.Write((byte)0x1A);
         writer.Write((byte)2); // PRG_ROM_SIZE (2 * 16KB = 32KB)
         writer.Write((byte)1); // CHR_ROM_SIZE (1 * 8KB)
-        writer.Write((byte)0); // Flags6
+        writer.Write((byte)(_verticalMirroring ? 1 : 0)); // Flags6 (bit 0: 0=horizontal, 1=vertical mirroring)
         writer.Write((byte)0); // Flags7
         writer.Write((byte)0); // Flags8
         writer.Write((byte)0); // Flags9

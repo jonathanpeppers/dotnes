@@ -782,6 +782,59 @@ internal static class BuiltInSubroutines
     }
 
     /// <summary>
+    /// _split - Set scroll after sprite 0 hit (mid-frame split)
+    /// Waits for sprite 0 hit, then changes X scroll register.
+    /// </summary>
+    public static Block Split()
+    {
+        // _split:
+        //   JSR popax          ; pop x scroll from stack
+        //   STA SCROLL_X1      ; save low byte
+        //   TXA
+        //   AND #$01           ; nametable select bit
+        //   STA TEMP
+        //   LDA PPU_CTRL_VAR
+        //   AND #$FC           ; clear nametable bits
+        //   ORA TEMP
+        //   STA PPU_CTRL_VAR1  ; save modified ctrl
+        // @3:
+        //   BIT PPU_STATUS     ; wait for sprite 0 hit to clear
+        //   BVS @3
+        // @4:
+        //   BIT PPU_STATUS     ; wait for sprite 0 hit to set
+        //   BVC @4
+        //   LDA SCROLL_X1
+        //   STA PPU_SCROLL
+        //   LDA #$00
+        //   STA PPU_SCROLL
+        //   LDA PPU_CTRL_VAR1
+        //   STA PPU_CTRL
+        //   RTS
+        var block = new Block(nameof(NESLib.split));
+        block.Emit(JSR(nameof(NESConstants.popax)))
+             .Emit(STA_zpg(SCROLL_X1))
+             .Emit(TXA())
+             .Emit(AND(0x01))
+             .Emit(STA_zpg(TEMP))
+             .Emit(LDA_zpg(PRG_FILEOFFS))
+             .Emit(AND(0xFC))
+             .Emit(ORA_zpg(TEMP))
+             .Emit(STA_zpg(PPU_CTRL_VAR1))
+             .Emit(BIT_abs(PPU_STATUS), "@3")
+             .Emit(BVS(0xFB))    // branch back to @3 (-5)
+             .Emit(BIT_abs(PPU_STATUS), "@4")
+             .Emit(BVC(0xFB))    // branch back to @4 (-5)
+             .Emit(LDA_zpg(SCROLL_X1))
+             .Emit(STA_abs(PPU_SCROLL))
+             .Emit(LDA(0x00))
+             .Emit(STA_abs(PPU_SCROLL))
+             .Emit(LDA_zpg(PPU_CTRL_VAR1))
+             .Emit(STA_abs(PPU_CTRL))
+             .Emit(RTS());
+        return block;
+    }
+
+    /// <summary>
     /// _bank_spr - Set sprite CHR bank
     /// </summary>
     public static Block BankSpr()

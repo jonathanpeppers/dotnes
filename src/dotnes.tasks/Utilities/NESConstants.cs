@@ -18,6 +18,8 @@ internal static class NESConstants
     public const int PAL_SPR_PTR = 0x0A;
     public const int SCROLL_X = 0x0C;
     public const int SCROLL_Y = 0x0D;
+    public const int SCROLL_X1 = 0x0E;       // split() saved X scroll
+    public const int PPU_CTRL_VAR1 = 0x0F;   // split() saved PPU_CTRL
     public const int NMI_CALLBACK = 0x14;  // 3 bytes: JMP opcode + address ($14-$16)
     public const int TEMP = 0x17;
     public const int RAND_SEED = 0x3C;  // 1 byte: random seed for LFSR PRNG (cc65 compatible)

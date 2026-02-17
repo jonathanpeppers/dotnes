@@ -537,6 +537,12 @@ public class Program6502
             size += BuiltInSubroutines.Pusha().ByteSize;
             size += BuiltInSubroutines.Pushax().ByteSize;
         }
+        else if (usedMethods != null && (usedMethods.Contains("scroll") || usedMethods.Contains("split")))
+        {
+            // scroll/split handlers emit JSR pushax for 16-bit argument passing
+            size += BuiltInSubroutines.Pusha().ByteSize;
+            size += BuiltInSubroutines.Pushax().ByteSize;
+        }
         size += BuiltInSubroutines.Zerobss(locals).ByteSize;
         if (usedMethods != null)
         {
@@ -564,6 +570,8 @@ public class Program6502
                 size += BuiltInSubroutines.ApuInit().ByteSize;
             if (usedMethods.Contains("vram_unrle"))
                 size += BuiltInSubroutines.VramUnrle().ByteSize;
+            if (usedMethods.Contains("split"))
+                size += BuiltInSubroutines.Split().ByteSize;
         }
         return size;
     }
@@ -585,8 +593,11 @@ public class Program6502
         AddBlock(BuiltInSubroutines.Incsp2());
         AddBlock(BuiltInSubroutines.Popa());
 
-        // Pusha/Pushax only needed for old code gen pattern (not decsp4)
-        if (!needsDecsp4)
+        // Pusha/Pushax needed for standard calling convention (not decsp4),
+        // but also needed when scroll/split handlers emit JSR pushax
+        bool needsPushaPushax = !needsDecsp4
+            || (usedMethods != null && (usedMethods.Contains("scroll") || usedMethods.Contains("split")));
+        if (needsPushaPushax)
         {
             AddBlock(BuiltInSubroutines.Pusha());
             AddBlock(BuiltInSubroutines.Pushax());
@@ -620,6 +631,8 @@ public class Program6502
                 AddBlock(BuiltInSubroutines.ApuInit());
             if (usedMethods.Contains("vram_unrle"))
                 AddBlock(BuiltInSubroutines.VramUnrle());
+            if (usedMethods.Contains("split"))
+                AddBlock(BuiltInSubroutines.Split());
         }
     }
 
