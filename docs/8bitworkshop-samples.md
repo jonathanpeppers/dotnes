@@ -4,7 +4,7 @@
 >
 > Analysis based on dotnes transpiler capabilities and the `NESLib.cs` API surface.
 >
-> Existing dotnes samples: `hello`, `hellofs`, `staticsprite`, `movingsprite`, `attributetable`, `flicker`, `metasprites`, `music`, `lols`, `tint`, `scroll`, `rletitle`, `tileset1`, `sprites`, `metacursor`, `metatrigger`, `statusbar`
+> Existing dotnes samples: `hello`, `hellofs`, `staticsprite`, `movingsprite`, `attributetable`, `flicker`, `metasprites`, `music`, `lols`, `tint`, `scroll`, `rletitle`, `tileset1`, `sprites`, `metacursor`, `metatrigger`, `statusbar`, `vrambuffer`
 
 ---
 
@@ -134,16 +134,6 @@
   - `word` (16-bit) arithmetic with bitwise NOT (`~`), shift, XOR
   - `register` keyword (optimization hint, can be ignored)
   - This is a utility; dotnes would need a built-in BCD helper or function support
-
-### vrambuf.c
-- **Description:** Implementation of the VRAM update buffer module itself — manages a buffer that gets flushed during NMI.
-- **Status:** 🟠 Moderate
-- **Missing Features:**
-  - This is a library implementation file, not a demo
-  - `vrambuf_clear()`, `vrambuf_put()`, `vrambuf_flush()`, `vrambuf_end()` — all need built-in subroutines
-  - `VRAMBUF_SET`, `VRAMBUF_ADD` macros with global buffer management
-  - `memcpy()`, `set_vram_update()`, `ppu_wait_frame()`
-  - `NT_UPD_EOF`, `NT_UPD_HORZ`, `VBUFSIZE` constants
 
 ---
 
@@ -349,12 +339,12 @@
 
 | Status | Count | Samples |
 |--------|-------|---------|
-| ✅ Already Implemented | 14 | hello, attributes, flicker, metasprites, music, tint, scroll, rletitle, tileset1, sprites, metacursor, metatrigger, statusbar |
+| ✅ Already Implemented | 15 | hello, attributes, flicker, metasprites, music, tint, scroll, rletitle, tileset1, sprites, metacursor, metatrigger, statusbar, vrambuffer |
 | 🟡 Feasible | 0 | |
-| 🟠 Moderate | 3 | bcd, vrambuffer, vrambuf |
+| 🟠 Moderate | 1 | bcd |
 | 🔴 Complex | 14 | aputest, ppuhello, fami, horizscroll, horizmask, bankswitch, monobitmap, conio, crypto, climber, transtable, irq, shoot2, siegegame |
 
-> **Note:** `apu.c` is a library file (not a demo) that initializes APU registers. It is already covered by dotnes's built-in `apu_init()` subroutine and is not counted separately. Samples that use it: aputest, shoot2, music.
+> **Note:** `apu.c` and `vrambuf.c` are library files (not demos). `apu.c` is covered by dotnes's built-in `apu_init()` subroutine. `vrambuf.c` is covered by built-in `vrambuf_clear()`, `vrambuf_put()`, and `set_vram_update()` subroutines. Neither is counted separately.
 
 ### Key Blockers (by frequency)
 
@@ -363,9 +353,9 @@
 | User-defined functions | 25+ samples |
 | `for` loops (must use `while`) | 20+ samples |
 | Global/static arrays | 15+ samples |
-| vrambuf module (`vrambuf_clear`, `vrambuf_put`, etc.) | 9 samples |
+| vrambuf module (`vrambuf_clear`, `vrambuf_put`, etc.) | 9 samples (core now implemented) |
 | `typedef struct` / struct support | 8 samples |
-| `split()` | 4 samples (statusbar now implemented) |
+| `split()` | 4 samples (`split()` now implemented) |
 | FamiTone2 library | 3 samples |
 | Direct APU/PPU register access | 5 samples (apu.c already covered by built-in `apu_init()`) |
 | `pad_trigger()` / `pad_state()` | 2 samples (aputest, monobitmap) |
