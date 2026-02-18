@@ -835,6 +835,57 @@ internal static class BuiltInSubroutines
     }
 
     /// <summary>
+    /// vrambuf_clear - Clear VRAM update buffer and write EOF marker
+    /// </summary>
+    public static Block VrambufClear()
+    {
+        var block = new Block(nameof(NESLib.vrambuf_clear));
+        block.Emit(LDA(0x00))
+             .Emit(STA_zpg(UPDPTR))
+             .Emit(TAX())
+             .Emit(LDA(0xFF))
+             .Emit(STA_abs_X(0x0100))
+             .Emit(RTS());
+        return block;
+    }
+
+    /// <summary>
+    /// vrambuf_put - Write horizontal sequence to VRAM update buffer
+    /// Entry: A = data length, TEMP = addr_hi|HORZ, TEMP2 = addr_lo, ptr1 = data source
+    /// </summary>
+    public static Block VrambufPut()
+    {
+        var block = new Block(nameof(NESLib.vrambuf_put));
+        // Save length
+        block.Emit(STA_zpg(TEMP3))       // TEMP3 = len
+             // Write header to buffer
+             .Emit(LDX_zpg(UPDPTR))       // X = buffer index
+             .Emit(LDA_zpg(TEMP))         // addr_hi | HORZ
+             .Emit(STA_abs_X(0x0100))
+             .Emit(INX())
+             .Emit(LDA_zpg(TEMP2))        // addr_lo
+             .Emit(STA_abs_X(0x0100))
+             .Emit(INX())
+             .Emit(LDA_zpg(TEMP3))        // len
+             .Emit(STA_abs_X(0x0100))
+             .Emit(INX())
+             // Copy data from (ptr1) to buffer
+             .Emit(LDY(0x00))
+             .Emit(LDA_ind_Y(ptr1), "@loop")
+             .Emit(STA_abs_X(0x0100))
+             .Emit(INX())
+             .Emit(INY())
+             .Emit(CPY_zpg(TEMP3))
+             .Emit(BNE("@loop"))
+             // Write EOF marker and update pointer
+             .Emit(LDA(0xFF))
+             .Emit(STA_abs_X(0x0100))
+             .Emit(STX_zpg(UPDPTR))
+             .Emit(RTS());
+        return block;
+    }
+
+    /// <summary>
     /// _bank_spr - Set sprite CHR bank
     /// </summary>
     public static Block BankSpr()

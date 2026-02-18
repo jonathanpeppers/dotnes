@@ -70,6 +70,8 @@ public class TranspilerTests
     [InlineData("metatrigger", false)]
     [InlineData("statusbar", true, true)]
     [InlineData("statusbar", false, true)]
+    [InlineData("vrambuffer", true)]
+    [InlineData("vrambuffer", false)]
     public Task Write(string name, bool debug, bool verticalMirroring = false)
     {
         var configuration = debug ? "debug" : "release";

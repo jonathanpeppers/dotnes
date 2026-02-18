@@ -26,6 +26,7 @@ internal static class NESConstants
     public const int TEMP2 = 0x19;  // Additional temporary variable
     public const int TEMP3 = 0x1A;  // Additional temporary variable
     public const int OAM_OFF = 0x1B; // OAM buffer offset (neslib oam_off global)
+    public const int UPDPTR = 0x1C;  // VRAM update buffer index (vrambuf module)
     public const int sp = 0x22;
     public const int ptr1 = 0x2A;
     public const int ptr2 = 0x2C;

@@ -107,6 +107,20 @@
   - `split()` transpiler support (6502 subroutine + IL handler)
   - `<NESVerticalMirroring>` MSBuild property for vertical mirroring (iNES Flags6 bit 0)
 
+### vrambuffer.c
+- **Description:** Demonstrates the VRAM update buffer system for writing to VRAM during rendering, with scrolling and `sprintf`.
+- **Status:** ✅ Already Implemented
+- **dotnes sample:** `vrambuffer`
+- **Simplifications:**
+  - User-defined function (`scroll_demo`) inlined into main body
+  - `sprintf()`/`memset()` replaced with fixed string literal
+  - Uses `vrambuf_put(NTADR_A(x,y), "string")` instead of `vrambuf_put(addr, str, len)`
+  - Simplified scroll demo: writes text lines vertically and stops (no bi-directional scrolling)
+- **New Features Added:**
+  - `vrambuf_clear()` and `vrambuf_put()` 6502 subroutines (VRAM update buffer at $0100)
+  - `set_vram_update(ushort)` overload for raw address parameter
+  - `NT_UPD_HORZ`, `NT_UPD_VERT`, `NT_UPD_EOF` constants in NESLib
+
 ---
 
 ## 🟠 Moderate (Significant Work Needed)
@@ -120,17 +134,6 @@
   - `word` (16-bit) arithmetic with bitwise NOT (`~`), shift, XOR
   - `register` keyword (optimization hint, can be ignored)
   - This is a utility; dotnes would need a built-in BCD helper or function support
-
-### vrambuffer.c
-- **Description:** Demonstrates the VRAM update buffer system for writing to VRAM during rendering, with scrolling and `sprintf`.
-- **Status:** 🟠 Moderate
-- **Missing Features:**
-  - `vrambuf_clear()`, `vrambuf_put()` — vrambuf module not implemented
-  - `set_vram_update()` — declared but not transpiler-supported
-  - `sprintf()` — standard library formatting function
-  - `memset()` — standard library function
-  - `scroll()` is implemented, but the vrambuf dependency is the main blocker
-  - User-defined functions
 
 ### vrambuf.c
 - **Description:** Implementation of the VRAM update buffer module itself — manages a buffer that gets flushed during NMI.

@@ -33,6 +33,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "metatrigger", "metatrigger\
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "statusbar", "statusbar\statusbar.csproj", "{71E40755-6960-49AE-B64A-41478D1CA00E}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "vrambuffer", "vrambuffer\vrambuffer.csproj", "{AA7BBF01-99D9-4674-BD53-384026D4EB27}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -223,6 +225,18 @@ Global
 		{71E40755-6960-49AE-B64A-41478D1CA00E}.Release|x64.Build.0 = Release|Any CPU
 		{71E40755-6960-49AE-B64A-41478D1CA00E}.Release|x86.ActiveCfg = Release|Any CPU
 		{71E40755-6960-49AE-B64A-41478D1CA00E}.Release|x86.Build.0 = Release|Any CPU
+		{AA7BBF01-99D9-4674-BD53-384026D4EB27}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{AA7BBF01-99D9-4674-BD53-384026D4EB27}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{AA7BBF01-99D9-4674-BD53-384026D4EB27}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{AA7BBF01-99D9-4674-BD53-384026D4EB27}.Debug|x64.Build.0 = Debug|Any CPU
+		{AA7BBF01-99D9-4674-BD53-384026D4EB27}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{AA7BBF01-99D9-4674-BD53-384026D4EB27}.Debug|x86.Build.0 = Debug|Any CPU
+		{AA7BBF01-99D9-4674-BD53-384026D4EB27}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{AA7BBF01-99D9-4674-BD53-384026D4EB27}.Release|Any CPU.Build.0 = Release|Any CPU
+		{AA7BBF01-99D9-4674-BD53-384026D4EB27}.Release|x64.ActiveCfg = Release|Any CPU
+		{AA7BBF01-99D9-4674-BD53-384026D4EB27}.Release|x64.Build.0 = Release|Any CPU
+		{AA7BBF01-99D9-4674-BD53-384026D4EB27}.Release|x86.ActiveCfg = Release|Any CPU
+		{AA7BBF01-99D9-4674-BD53-384026D4EB27}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

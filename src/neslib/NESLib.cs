@@ -360,12 +360,33 @@ public static class NESLib
     /// </summary>
     public static void set_vram_update(byte[] buf) => throw null!;
 
+    /// <summary>
+    /// set_vram_update with a raw address (e.g., 0x0100 for the stack-page update buffer)
+    /// </summary>
+    public static void set_vram_update(ushort addr) => throw null!;
+
     // all following vram functions only work when display is disabled
 
     /// <summary>
     /// do a series of VRAM writes, the same format as for set_vram_update, but writes done right away
     /// </summary>
     public static void flush_vram_update(byte[] buf) => throw null!;
+
+    // VRAM update buffer constants
+    public const byte NT_UPD_HORZ = 0x40;
+    public const byte NT_UPD_VERT = 0x80;
+    public const byte NT_UPD_EOF = 0xFF;
+
+    /// <summary>
+    /// clear the VRAM update buffer and write EOF marker
+    /// </summary>
+    public static void vrambuf_clear() => throw null!;
+
+    /// <summary>
+    /// write a horizontal string sequence to the VRAM update buffer
+    /// the NMI handler will flush it to VRAM on the next frame
+    /// </summary>
+    public static void vrambuf_put(ushort addr, string str) => throw null!;
 
     // These are from: https://github.com/mhughson/attributes/blob/master/neslib.h
 

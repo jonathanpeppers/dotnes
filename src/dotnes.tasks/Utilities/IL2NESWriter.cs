@@ -849,6 +849,48 @@ class IL2NESWriter : NESWriter
                         EmitWithLabel(Opcode.JSR, AddressMode.Absolute, operand);
                         _immediateInA = null;
                         break;
+                    case nameof(NESLib.vrambuf_put):
+                        // vrambuf_put(NTADR_A(x,y), "string")
+                        // At this point the block has 7 instructions from NTADR + Ldstr:
+                        //   -7: LDX #addr_hi    (from NTADR)
+                        //   -6: LDA #addr_lo    (from NTADR)
+                        //   -5: LDA #<string    (from Ldstr)
+                        //   -4: LDX #>string    (from Ldstr)
+                        //   -3: JSR pushax      (from Ldstr)
+                        //   -2: LDX #$00        (from Ldstr)
+                        //   -1: LDA #len        (from Ldstr)
+                        // We need: TEMP = addr_hi|0x40, TEMP2 = addr_lo, ptr1 = string ptr, A = len
+                        {
+                            var block = CurrentBlock!;
+                            int len = checked((int)Stack.Pop());    // string length
+                            int addr = checked((int)Stack.Pop());   // NTADR result
+                            byte addrHi = (byte)(addr >> 8);
+                            byte addrLo = (byte)(addr & 0xFF);
+
+                            // Extract string label from instruction -5 (LDA #<string)
+                            var ldaStrInstr = block[block.Count - 5];
+                            string strLabel = ((LowByteOperand)ldaStrInstr.Operand!).Label;
+
+                            RemoveLastInstructions(7);
+
+                            // Set up TEMP = addr_hi | NT_UPD_HORZ
+                            Emit(Opcode.LDA, AddressMode.Immediate, (byte)(addrHi | 0x40));
+                            Emit(Opcode.STA, AddressMode.ZeroPage, TEMP);
+                            // Set up TEMP2 = addr_lo
+                            Emit(Opcode.LDA, AddressMode.Immediate, addrLo);
+                            Emit(Opcode.STA, AddressMode.ZeroPage, TEMP2);
+                            // Set up ptr1 = string address
+                            EmitWithLabel(Opcode.LDA, AddressMode.Immediate_LowByte, strLabel);
+                            Emit(Opcode.STA, AddressMode.ZeroPage, ptr1);
+                            EmitWithLabel(Opcode.LDA, AddressMode.Immediate_HighByte, strLabel);
+                            Emit(Opcode.STA, AddressMode.ZeroPage, ptr1 + 1);
+                            // A = length
+                            Emit(Opcode.LDA, AddressMode.Immediate, checked((byte)len));
+                            EmitWithLabel(Opcode.JSR, AddressMode.Absolute, operand);
+                            _immediateInA = null;
+                            argsAlreadyPopped = true;
+                        }
+                        break;
                     default:
                         // Handle byte array locals loaded via ldloc (pushax pattern).
                         // Fastcall functions (pal_bg, pal_spr, pal_all, vram_unrle) expect
