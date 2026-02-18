@@ -886,6 +886,32 @@ internal static class BuiltInSubroutines
     }
 
     /// <summary>
+    /// vrambuf_end - Write EOF marker at current buffer position (without advancing pointer)
+    /// </summary>
+    public static Block VrambufEnd()
+    {
+        var block = new Block(nameof(NESLib.vrambuf_end));
+        block.Emit(LDX_zpg(UPDPTR))
+             .Emit(LDA(0xFF))
+             .Emit(STA_abs_X(0x0100))
+             .Emit(RTS());
+        return block;
+    }
+
+    /// <summary>
+    /// vrambuf_flush - Write EOF, wait for NMI frame, then clear buffer
+    /// </summary>
+    public static Block VrambufFlush()
+    {
+        var block = new Block(nameof(NESLib.vrambuf_flush));
+        block.Emit(JSR("vrambuf_end"))
+             .Emit(JSR("ppu_wait_frame"))
+             .Emit(JSR("vrambuf_clear"))
+             .Emit(RTS());
+        return block;
+    }
+
+    /// <summary>
     /// _bank_spr - Set sprite CHR bank
     /// </summary>
     public static Block BankSpr()

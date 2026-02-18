@@ -576,6 +576,10 @@ public class Program6502
                 size += BuiltInSubroutines.VrambufClear().ByteSize;
             if (usedMethods.Contains("vrambuf_put"))
                 size += BuiltInSubroutines.VrambufPut().ByteSize;
+            if (usedMethods.Contains("vrambuf_end"))
+                size += BuiltInSubroutines.VrambufEnd().ByteSize;
+            if (usedMethods.Contains("vrambuf_flush"))
+                size += BuiltInSubroutines.VrambufFlush().ByteSize;
         }
         return size;
     }
@@ -641,6 +645,10 @@ public class Program6502
                 AddBlock(BuiltInSubroutines.VrambufClear());
             if (usedMethods.Contains("vrambuf_put"))
                 AddBlock(BuiltInSubroutines.VrambufPut());
+            if (usedMethods.Contains("vrambuf_end"))
+                AddBlock(BuiltInSubroutines.VrambufEnd());
+            if (usedMethods.Contains("vrambuf_flush"))
+                AddBlock(BuiltInSubroutines.VrambufFlush());
         }
     }
 

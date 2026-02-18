@@ -388,6 +388,16 @@ public static class NESLib
     /// </summary>
     public static void vrambuf_put(ushort addr, string str) => throw null!;
 
+    /// <summary>
+    /// write EOF marker at current buffer position (without advancing pointer)
+    /// </summary>
+    public static void vrambuf_end() => throw null!;
+
+    /// <summary>
+    /// write EOF, wait for NMI frame, then clear buffer
+    /// </summary>
+    public static void vrambuf_flush() => throw null!;
+
     // These are from: https://github.com/mhughson/attributes/blob/master/neslib.h
 
     public const ushort NAMETABLE_A = 0x2000;
