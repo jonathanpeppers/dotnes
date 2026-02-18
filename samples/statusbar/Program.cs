@@ -58,24 +58,29 @@ oam_spr(1, 30, 0xa0, 0, 0);
 // enable rendering
 ppu_on_all();
 
-// scroll demo: horizontal scroll with split screen
-byte x = 0;
-byte going_right = 1;
+// scroll window back and forth
+scroll_demo();
 
-while (true)
+static void scroll_demo()
 {
-    split(x, 0);
+    byte x = 0;
+    byte going_right = 1;
 
-    if (going_right != 0)
+    while (true)
     {
-        x = (byte)(x + 1);
-        if (x == 255)
-            going_right = 0;
-    }
-    else
-    {
-        x = (byte)(x - 1);
-        if (x == 0)
-            going_right = 1;
+        split(x, 0);
+
+        if (going_right != 0)
+        {
+            x = (byte)(x + 1);
+            if (x == 255)
+                going_right = 0;
+        }
+        else
+        {
+            x = (byte)(x - 1);
+            if (x == 0)
+                going_right = 1;
+        }
     }
 }

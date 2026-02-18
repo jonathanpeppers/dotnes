@@ -99,7 +99,7 @@
 - **Status:** ✅ Already Implemented
 - **dotnes sample:** `statusbar`
 - **Simplifications:**
-  - User-defined functions (`put_str`, `scroll_demo`) inlined into main body
+  - `put_str()` inlined (user methods don't support parameters yet); `scroll_demo()` extracted as local function
   - `strlen()` replaced by `string.Length` (implicit via `vram_write(string)`)
   - Scroll range reduced from 0–479 to 0–255 (byte range, single nametable width)
   - Vertical mirroring configured via `<NESVerticalMirroring>true</NESVerticalMirroring>` MSBuild property
