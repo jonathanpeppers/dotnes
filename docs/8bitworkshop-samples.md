@@ -135,6 +135,26 @@
   - `register` keyword (optimization hint, can be ignored)
   - This is a utility; dotnes would need a built-in BCD helper or function support
 
+### horizscroll.c
+- **Description:** Horizontal scrolling with vrambuf-based offscreen nametable updates, metatiles, and split-screen status bar.
+- **Status:** 🟠 Moderate
+- **Now Available:** `vrambuf_clear()`, `vrambuf_put()`, `vrambuf_end()`, `vrambuf_flush()`, `set_vram_update()`, `split()`, vertical mirroring, runtime `NTADR_A()`
+- **Missing Features:**
+  - Multiple user-defined functions with parameters (must inline or use static local functions)
+  - `memset()`, `memcpy()` — replace with loops
+  - Global/static variables — use top-level byte locals
+  - `word` (16-bit) scroll position tracking
+  - Metatile lookup tables (can use byte arrays)
+
+### horizmask.c
+- **Description:** Similar to horizscroll but with building generation and attribute table updates during horizontal scrolling.
+- **Status:** 🟠 Moderate
+- **Now Available:** Same as horizscroll — full vrambuf module, `split()`, vertical mirroring, runtime NTADR
+- **Missing Features:**
+  - Same as horizscroll: function inlining, loop-based `memset`/`memcpy` replacement
+  - Building generation logic must be inlined into main loop
+  - Attribute table updates via vrambuf
+
 ---
 
 ## 🔴 Complex (Major Features Needed)
@@ -142,16 +162,13 @@
 ### aputest.c
 - **Description:** Generates random APU sounds and prints parameters to screen, showing channel status with vrambuf.
 - **Status:** 🔴 Complex
-- **Note:** Uses `apu.c` for APU initialization — already covered by dotnes's built-in `apu_init()` subroutine.
+- **Note:** Uses `apu.c` for APU initialization — already covered by dotnes's built-in `apu_init()` subroutine. `vrambuf` module and `pad_trigger()`/`pad_state()` are now available.
 - **Missing Features:**
   - Direct APU register macros (`APU_PULSE_DECAY`, `APU_PULSE_SWEEP`, `APU_TRIANGLE_LENGTH`, `APU_NOISE_DECAY`, `APU_ENABLE`)
   - `APU.status` — direct hardware register reading
   - `typedef struct` — no struct support
   - `sprintf()` — no string formatting
-  - `vrambuf_clear()`, `vrambuf_put()`, `set_vram_update()` — vrambuf module
-  - `pad_trigger()`, `pad_state()` — not transpiler-supported
   - Global arrays of structs, `const` struct arrays
-  - `PAD_START` constant for pad_state bitmask
 
 ### ppuhello.c
 - **Description:** Directly programs PPU registers (`PPU.control`, `PPU.mask`, `PPU.vram.address`, `PPU.vram.data`) to display text — no neslib used.
@@ -176,31 +193,6 @@
   - `extern char[]` declarations for linked data
   - `__fastcall__` calling convention
 
-### horizscroll.c
-- **Description:** Horizontal scrolling with vrambuf-based offscreen nametable updates, metatiles, and split-screen status bar.
-- **Status:** 🔴 Complex
-- **Missing Features:**
-  - `vrambuf_clear()`, `vrambuf_put()`, `vrambuf_end()`, `vrambuf_flush()` — entire vrambuf module
-  - `set_vram_update()` — not transpiler-supported
-  - `split()` — not transpiler-supported
-  - `VRAMBUF_PUT` macro, `VRAMBUF_VERT` constant, `updbuf` global
-  - `memset()`, `memcpy()` — standard library
-  - `register` keyword, `word` type
-  - Multiple user-defined functions with parameters and return values
-  - Global/static variables, arrays
-  - Vertical mirroring configuration (`NES_MIRRORING 1`)
-
-### horizmask.c
-- **Description:** Similar to horizscroll but with building generation and attribute table updates during horizontal scrolling.
-- **Status:** 🔴 Complex
-- **Missing Features:**
-  - Same as horizscroll.c: full vrambuf module, `split()`, `set_vram_update()`
-  - `memset()`, `memcpy()` standard library
-  - `VRAMBUF_PUT` macro, `VRAMBUF_VERT` constant
-  - Multiple user-defined functions
-  - `register` keyword, `word` type
-  - Global variables and arrays
-
 ### bankswitch.c
 - **Description:** Demonstrates MMC3 mapper bank switching for PRG and CHR ROM banks using `POKE` to mapper registers.
 - **Status:** 🔴 Complex
@@ -216,13 +208,9 @@
 ### monobitmap.c
 - **Description:** Creates a monochrome framebuffer using CHR RAM with UxROM mapper, pixel-level drawing, and split-screen bank switching.
 - **Status:** 🔴 Complex
+- **Note:** `split()`, `oam_size()`, `pad_trigger()`, `bank_bg()`/`bank_spr()` are now available.
 - **Missing Features:**
   - UxROM mapper (`NES_MAPPER 2`) with CHR RAM (`NES_CHR_BANKS 0`)
-  - `bank_bg()`, `bank_spr()` — declared but not transpiler-supported
-  - `split()` — not transpiler-supported
-  - `oam_size()` — declared but not transpiler-supported
-  - `vram_read()` — declared but not transpiler-supported
-  - `pad_trigger()` — not transpiler-supported
   - Inline assembly (`__asm__`) for cycle-accurate delay loops
   - Direct PPU register manipulation (`PPU.control`)
   - `abs()` standard library function
@@ -255,21 +243,19 @@
 ### climber.c
 - **Description:** A full platform game with random level generation, enemy AI, scrolling, FamiTone2 music, and collision detection.
 - **Status:** 🔴 Complex
+- **Note:** `vrambuf` module, `delay()`, `rand8()`, and `OAM_FLIP_H` are now available.
 - **Missing Features:**
   - FamiTone2 library (`famitone_init`, `sfx_init`, `sfx_play`, `music_play`, `music_stop`)
   - `nmi_set_callback()` with `famitone_update`
   - BCD arithmetic module (`bcd.h` / `bcd.c`)
-  - vrambuf module (`vrambuf_clear`, `vrambuf_put`, `vrambuf_flush`, `set_vram_update`)
   - `typedef struct` with bitfields (`Floor`, `Actor`)
   - `typedef enum` (multiple enums)
   - Pointer arithmetic and pointer-to-struct operations
-  - `memset()`, `memcpy()`, `rand()` / `rand8()`
+  - `memset()`, `memcpy()`
   - Arrays of structs, arrays of pointers
   - `bool` type, `static` variables
-  - `delay()` — declared but not transpiler-supported
   - 20+ user-defined functions with complex control flow
   - `switch/case` with fallthrough
-  - `OAM_FLIP_H` constant and metasprite macros
 
 ### transtable.c
 - **Description:** Custom CHR tileset loaded into CHR RAM with `#pragma charmap` translation tables for text display.
@@ -302,30 +288,25 @@
 ### shoot2.c
 - **Description:** A shoot-em-up game with CHR RAM, sprite shifting, formation AI, and custom sound effects.
 - **Status:** 🔴 Complex
-- **Note:** Uses `apu.c` for APU initialization — already covered by dotnes's built-in `apu_init()` subroutine.
+- **Note:** Uses `apu.c` for APU initialization — already covered by dotnes's built-in `apu_init()` subroutine. `vrambuf` module and `oam_size()` are now available.
 - **Missing Features:**
   - UxROM mapper (`NES_MAPPER 2`) with CHR RAM
   - Direct APU register macros (`APU_PULSE_DECAY`, `APU_PULSE_SUSTAIN`, `APU_NOISE_DECAY`, `APU_TRIANGLE_SUSTAIN`, `APU_ENABLE`)
   - BCD module (`bcd_add`)
-  - vrambuf module (`vrambuf_clear`, `vrambuf_put`, `vrambuf_flush`, `set_vram_update`)
   - `typedef struct` (multiple: `FormationEnemy`, `AttackingEnemy`, `Missile`, `Sprite`)
   - Inline assembly (`asm()` statements for star animation)
-  - `#pragma codesize` compiler directive
-  - `oam_size()` — 8×16 sprite mode
   - `nesclock()` — declared but not transpiler-supported
-  - `signed char` type, `register` keyword
+  - `signed char` type
   - Extremely large tileset data (2048 bytes)
-  - Lookup tables with complex indexing
   - 30+ user-defined functions
 
 ### siegegame.c
 - **Description:** A two-player surround/Tron-style game with AI, nametable collision detection, and attract mode.
 - **Status:** 🔴 Complex
+- **Note:** `vrambuf` module and `delay()` are now available.
 - **Missing Features:**
   - CC65 joystick library (`joystick.h`): `joy_install`, `joy_read`, `JOY_1`, `JOY_START_MASK`, etc.
-  - vrambuf module (`vrambuf_clear`, `vrambuf_put`, `vrambuf_flush`, `set_vram_update`)
-  - `vram_read()` — declared but not transpiler-supported (used for collision detection)
-  - `delay()` — declared but not transpiler-supported
+  - `vram_read()` — for nametable collision detection
   - `typedef struct` with bitfields (`Player`)
   - `typedef enum` (`dir_t`)
   - `strlen()` standard library
@@ -340,28 +321,35 @@
 | Status | Count | Samples |
 |--------|-------|---------|
 | ✅ Already Implemented | 15 | hello, attributes, flicker, metasprites, music, tint, scroll, rletitle, tileset1, sprites, metacursor, metatrigger, statusbar, vrambuffer |
-| 🟡 Feasible | 0 | |
-| 🟠 Moderate | 1 | bcd |
-| 🔴 Complex | 14 | aputest, ppuhello, fami, horizscroll, horizmask, bankswitch, monobitmap, conio, crypto, climber, transtable, irq, shoot2, siegegame |
+| 🟠 Moderate | 3 | bcd, horizscroll, horizmask |
+| 🔴 Complex | 12 | aputest, ppuhello, fami, bankswitch, monobitmap, conio, crypto, climber, transtable, irq, shoot2, siegegame |
 
-> **Note:** `apu.c` and `vrambuf.c` are library files (not demos). `apu.c` is covered by dotnes's built-in `apu_init()` subroutine. `vrambuf.c` is covered by built-in `vrambuf_clear()`, `vrambuf_put()`, and `set_vram_update()` subroutines. Neither is counted separately.
+> **Note:** `apu.c` and `vrambuf.c` are library files (not demos). `apu.c` is covered by dotnes's built-in `apu_init()` subroutine. `vrambuf.c` is covered by built-in `vrambuf_clear()`, `vrambuf_put()`, `vrambuf_end()`, `vrambuf_flush()`, and `set_vram_update()` subroutines. Neither is counted separately.
 
 ### Key Blockers (by frequency)
 
 | Missing Feature | Samples Affected |
 |-----------------|-----------------|
-| User-defined functions | 25+ samples |
+| User-defined functions with parameters | 25+ samples |
 | `for` loops (must use `while`) | 20+ samples |
 | Global/static arrays | 15+ samples |
-| vrambuf module (`vrambuf_clear`, `vrambuf_put`, etc.) | 9 samples (core now implemented) |
 | `typedef struct` / struct support | 8 samples |
-| `split()` | 4 samples (`split()` now implemented) |
-| FamiTone2 library | 3 samples |
 | Direct APU/PPU register access | 5 samples (apu.c already covered by built-in `apu_init()`) |
-| `pad_trigger()` / `pad_state()` | 2 samples (aputest, monobitmap) |
-| `vram_unrle()` | 1 sample (rletitle now implemented) |
-| `delay()` | 3 samples |
-| `signed byte` (sbyte) type | 4 samples |
+| FamiTone2 library | 3 samples |
+| `delay()` | 3 samples (now implemented) |
 | Mapper support (MMC3, UxROM) | 3 samples |
-| `bank_bg()` / `bank_spr()` | 2 samples |
+| `signed byte` (sbyte) type | 4 samples |
 | CC65-specific libraries (conio, joystick) | 2 samples |
+
+### Features Now Implemented
+
+| Feature | Samples Unlocked |
+|---------|-----------------|
+| vrambuf module (`vrambuf_clear`, `vrambuf_put`, `vrambuf_end`, `vrambuf_flush`) | horizscroll, horizmask (moved to Moderate) |
+| `split()` function | horizscroll, horizmask, statusbar |
+| `pad_trigger()` / `pad_state()` | metatrigger, tint |
+| Runtime `NTADR_A/B/C/D(x, y)` | vrambuffer (runtime y coordinate) |
+| `set_vram_update(ushort)` overload | vrambuffer |
+| `Beq_s` opcode (branch if equal) | vrambuffer |
+| Vertical mirroring (`<NESVerticalMirroring>`) | statusbar, horizscroll, horizmask |
+| Static local functions | statusbar (`scroll_demo`) |
