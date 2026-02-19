@@ -132,6 +132,12 @@ class IL2NESWriter : NESWriter
     bool _savedRuntimeToTemp;
 
     /// <summary>
+    /// True when a runtime NTADR result (A=lo, X=hi) is available.
+    /// Used by vrambuf_put handler to detect runtime vs compile-time address.
+    /// </summary>
+    bool _ntadrRuntimeResult;
+
+    /// <summary>
     /// NOTE: may not be exactly correct, this is the instructions inside zerobss:
     /// A925           LDA #$25                      ; zerobss
     /// 852A STA ptr1                      
@@ -588,6 +594,22 @@ class IL2NESWriter : NESWriter
                     _runtimeValueInA = false;
                 }
                 break;
+            case ILOpCode.Beq_s:
+                // Branch if equal: value1 == value2
+                // IL stack: ..., value1, value2 → ...
+                // Pattern: Ldloc → LDA $addr, then Ldc → LDA #imm
+                // Remove the LDA #imm, emit CMP #imm + BEQ
+                {
+                    operand = (sbyte)(byte)operand;
+                    byte cmpValue = checked((byte)Stack.Pop()); // value2
+                    if (Stack.Count > 0) Stack.Pop(); // value1
+                    RemoveLastInstructions(1); // Remove LDA #imm from Ldc
+                    Emit(Opcode.CMP, AddressMode.Immediate, cmpValue);
+                    var labelName = $"instruction_{instruction.Offset + operand + 2:X2}";
+                    EmitWithLabel(Opcode.BEQ, AddressMode.Relative, labelName);
+                    _runtimeValueInA = false;
+                }
+                break;
             case ILOpCode.Brfalse_s:
                 // Branch if value is zero/false (after AND test)
                 // The AND result is in A and sets the zero flag, so use BEQ
@@ -735,24 +757,63 @@ class IL2NESWriter : NESWriter
                     case nameof(NTADR_B):
                     case nameof(NTADR_C):
                     case nameof(NTADR_D):
-                        byte y = checked((byte)Stack.Pop());
-                        byte x = checked((byte)Stack.Pop());
-                        var address = operand switch
                         {
-                            nameof(NTADR_A) => NTADR_A(x, y),
-                            nameof(NTADR_B) => NTADR_B(x, y),
-                            nameof(NTADR_C) => NTADR_C(x, y),
-                            nameof(NTADR_D) => NTADR_D(x, y),
-                            _ => throw new InvalidOperationException($"Address lookup of {operand} not implemented!"),
-                        };
-                        // Remove the two constants that were loaded
-                        // Typically: LDA #imm (2 bytes) + JSR pusha (3 bytes) + LDA #imm (2 bytes) = 7 bytes, 3 instructions
-                        RemoveLastInstructions(3);
-                        Emit(Opcode.LDX, AddressMode.Immediate, checked((byte)(address >> 8)));
-                        Emit(Opcode.LDA, AddressMode.Immediate, checked((byte)(address & 0xFF)));
-                        Stack.Push(address);
-                        _runtimeValueInA = false; // Value is compile-time constant
-                        argsAlreadyPopped = true;
+                            var block = CurrentBlock!;
+                            // Check if y (last loaded value) is runtime: LDA $abs vs LDA #imm
+                            var lastInstr = block[block.Count - 1];
+                            bool yIsRuntime = lastInstr.Mode == AddressMode.Absolute
+                                && lastInstr.Opcode == Opcode.LDA;
+
+                            if (!yIsRuntime)
+                            {
+                                // Compile-time: both args are constants
+                                byte cy = checked((byte)Stack.Pop());
+                                byte cx = checked((byte)Stack.Pop());
+                                var address = operand switch
+                                {
+                                    nameof(NTADR_A) => NTADR_A(cx, cy),
+                                    nameof(NTADR_B) => NTADR_B(cx, cy),
+                                    nameof(NTADR_C) => NTADR_C(cx, cy),
+                                    nameof(NTADR_D) => NTADR_D(cx, cy),
+                                    _ => throw new InvalidOperationException(),
+                                };
+                                RemoveLastInstructions(3);
+                                Emit(Opcode.LDX, AddressMode.Immediate, checked((byte)(address >> 8)));
+                                Emit(Opcode.LDA, AddressMode.Immediate, checked((byte)(address & 0xFF)));
+                                Stack.Push(address);
+                                _runtimeValueInA = false;
+                            }
+                            else
+                            {
+                                // Runtime y: A has the y value from LDA $addr
+                                // The block has: LDA #x, JSR pusha, LDA $addr (3 instructions)
+                                // We need: store x in TEMP, A = y, JSR nametable_{a,b,c,d}
+                                Stack.Pop(); // y placeholder
+                                byte cx = checked((byte)Stack.Pop()); // x constant
+                                string subroutine = operand switch
+                                {
+                                    nameof(NTADR_A) => "nametable_a",
+                                    nameof(NTADR_B) => "nametable_b",
+                                    nameof(NTADR_C) => "nametable_c",
+                                    nameof(NTADR_D) => "nametable_d",
+                                    _ => throw new InvalidOperationException(),
+                                };
+                                RemoveLastInstructions(3);
+                                Emit(Opcode.LDA, AddressMode.Immediate, cx);
+                                Emit(Opcode.STA, AddressMode.ZeroPage, TEMP);
+                                // Reload y from its address
+                                block.Emit(lastInstr); // re-emit LDA $addr (y)
+                                EmitWithLabel(Opcode.JSR, AddressMode.Absolute, subroutine);
+                                UsedMethods?.Add(subroutine);
+                                // Save result: A=lo→TEMP2, X=hi→TEMP (reuse for vrambuf_put)
+                                Emit(Opcode.STA, AddressMode.ZeroPage, TEMP2);
+                                Emit(Opcode.STX, AddressMode.ZeroPage, TEMP);
+                                Stack.Push(0); // placeholder for runtime address
+                                _runtimeValueInA = false;
+                                _ntadrRuntimeResult = true;
+                            }
+                            argsAlreadyPopped = true;
+                        }
                         break;
                     case "pad_poll":
                         // pad_poll returns result in A — store to dynamically allocated temp
@@ -851,34 +912,42 @@ class IL2NESWriter : NESWriter
                         break;
                     case nameof(NESLib.vrambuf_put):
                         // vrambuf_put(NTADR_A(x,y), "string")
-                        // At this point the block has 7 instructions from NTADR + Ldstr:
-                        //   -7: LDX #addr_hi    (from NTADR)
-                        //   -6: LDA #addr_lo    (from NTADR)
-                        //   -5: LDA #<string    (from Ldstr)
-                        //   -4: LDX #>string    (from Ldstr)
-                        //   -3: JSR pushax      (from Ldstr)
-                        //   -2: LDX #$00        (from Ldstr)
-                        //   -1: LDA #len        (from Ldstr)
-                        // We need: TEMP = addr_hi|0x40, TEMP2 = addr_lo, ptr1 = string ptr, A = len
                         {
                             var block = CurrentBlock!;
                             int len = checked((int)Stack.Pop());    // string length
-                            int addr = checked((int)Stack.Pop());   // NTADR result
-                            byte addrHi = (byte)(addr >> 8);
-                            byte addrLo = (byte)(addr & 0xFF);
+                            int addr = checked((int)Stack.Pop());   // NTADR result (constant or 0 placeholder)
 
-                            // Extract string label from instruction -5 (LDA #<string)
+                            // Extract string label: always at -5 from end (Ldstr pattern)
                             var ldaStrInstr = block[block.Count - 5];
                             string strLabel = ((LowByteOperand)ldaStrInstr.Operand!).Label;
 
-                            RemoveLastInstructions(7);
-
-                            // Set up TEMP = addr_hi | NT_UPD_HORZ
-                            Emit(Opcode.LDA, AddressMode.Immediate, (byte)(addrHi | 0x40));
-                            Emit(Opcode.STA, AddressMode.ZeroPage, TEMP);
-                            // Set up TEMP2 = addr_lo
-                            Emit(Opcode.LDA, AddressMode.Immediate, addrLo);
-                            Emit(Opcode.STA, AddressMode.ZeroPage, TEMP2);
+                            if (_ntadrRuntimeResult)
+                            {
+                                // Runtime NTADR: block has 11 instructions
+                                // Save the 6 NTADR instructions, remove all 11, re-emit
+                                var ntadrInstrs = new Instruction[6];
+                                for (int ri = 0; ri < 6; ri++)
+                                    ntadrInstrs[ri] = block[block.Count - 11 + ri];
+                                RemoveLastInstructions(11);
+                                foreach (var instr in ntadrInstrs)
+                                    block.Emit(instr);
+                                // TEMP = hi, TEMP2 = lo (saved by NTADR handler)
+                                // OR TEMP (hi) with NT_UPD_HORZ (0x40)
+                                Emit(Opcode.LDA, AddressMode.ZeroPage, TEMP);
+                                Emit(Opcode.ORA, AddressMode.Immediate, 0x40);
+                                Emit(Opcode.STA, AddressMode.ZeroPage, TEMP);
+                            }
+                            else
+                            {
+                                // Compile-time NTADR: block has 7 instructions
+                                byte addrHi = (byte)(addr >> 8);
+                                byte addrLo = (byte)(addr & 0xFF);
+                                RemoveLastInstructions(7);
+                                Emit(Opcode.LDA, AddressMode.Immediate, (byte)(addrHi | 0x40));
+                                Emit(Opcode.STA, AddressMode.ZeroPage, TEMP);
+                                Emit(Opcode.LDA, AddressMode.Immediate, addrLo);
+                                Emit(Opcode.STA, AddressMode.ZeroPage, TEMP2);
+                            }
                             // Set up ptr1 = string address
                             EmitWithLabel(Opcode.LDA, AddressMode.Immediate_LowByte, strLabel);
                             Emit(Opcode.STA, AddressMode.ZeroPage, ptr1);
@@ -888,6 +957,7 @@ class IL2NESWriter : NESWriter
                             Emit(Opcode.LDA, AddressMode.Immediate, checked((byte)len));
                             EmitWithLabel(Opcode.JSR, AddressMode.Absolute, operand);
                             _immediateInA = null;
+                            _ntadrRuntimeResult = false;
                             argsAlreadyPopped = true;
                         }
                         break;

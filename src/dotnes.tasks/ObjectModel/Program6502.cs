@@ -580,6 +580,14 @@ public class Program6502
                 size += BuiltInSubroutines.VrambufEnd().ByteSize;
             if (usedMethods.Contains("vrambuf_flush"))
                 size += BuiltInSubroutines.VrambufFlush().ByteSize;
+            if (usedMethods.Contains("nametable_a"))
+                size += BuiltInSubroutines.NametableA().ByteSize;
+            if (usedMethods.Contains("nametable_b"))
+                size += BuiltInSubroutines.NametableB().ByteSize;
+            if (usedMethods.Contains("nametable_c"))
+                size += BuiltInSubroutines.NametableC().ByteSize;
+            if (usedMethods.Contains("nametable_d"))
+                size += BuiltInSubroutines.NametableD().ByteSize;
         }
         return size;
     }
@@ -649,6 +657,14 @@ public class Program6502
                 AddBlock(BuiltInSubroutines.VrambufEnd());
             if (usedMethods.Contains("vrambuf_flush"))
                 AddBlock(BuiltInSubroutines.VrambufFlush());
+            if (usedMethods.Contains("nametable_a"))
+                AddBlock(BuiltInSubroutines.NametableA());
+            if (usedMethods.Contains("nametable_b"))
+                AddBlock(BuiltInSubroutines.NametableB());
+            if (usedMethods.Contains("nametable_c"))
+                AddBlock(BuiltInSubroutines.NametableC());
+            if (usedMethods.Contains("nametable_d"))
+                AddBlock(BuiltInSubroutines.NametableD());
         }
     }
 

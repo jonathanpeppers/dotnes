@@ -912,6 +912,48 @@ internal static class BuiltInSubroutines
     }
 
     /// <summary>
+    /// _nametable_{a,b,c,d} - Compute NTADR_{A,B,C,D}(x, y) at runtime
+    /// Entry: A = y, TEMP = x
+    /// Returns: A = lo byte, X = hi byte
+    /// Formula: addr = base | (y &lt;&lt; 5) | x
+    /// </summary>
+    public static Block NametableA() => Nametable("nametable_a", 0x20);
+    public static Block NametableB() => Nametable("nametable_b", 0x24);
+    public static Block NametableC() => Nametable("nametable_c", 0x28);
+    public static Block NametableD() => Nametable("nametable_d", 0x2C);
+
+    static Block Nametable(string label, byte baseHi)
+    {
+        var block = new Block(label);
+        // Entry: A = y, TEMP = x
+        // Returns: A = lo byte, X = hi byte
+        // Formula: addr = base | (y << 5) | x
+        block.Emit(STA_zpg(TEMP2))        // save y
+             .Emit(LDA(0x00))
+             .Emit(STA_zpg(TEMP3))         // TEMP3 = hi accumulator (start at 0)
+             .Emit(LDA_zpg(TEMP2))         // A = y
+             .Emit(CLC())
+             .Emit(ASL_A())                // y << 1
+             .Emit(ROL_zpg(TEMP3))
+             .Emit(ASL_A())                // y << 2
+             .Emit(ROL_zpg(TEMP3))
+             .Emit(ASL_A())                // y << 3
+             .Emit(ROL_zpg(TEMP3))
+             .Emit(ASL_A())                // y << 4
+             .Emit(ROL_zpg(TEMP3))
+             .Emit(ASL_A())                // y << 5
+             .Emit(ROL_zpg(TEMP3))
+             .Emit(ORA_zpg(TEMP))          // A = (y<<5)_lo | x
+             .Emit(PHA())                  // save lo on stack
+             .Emit(LDA_zpg(TEMP3))         // A = (y<<5)_hi
+             .Emit(ORA(baseHi))            // A = (y<<5)_hi | baseHi
+             .Emit(TAX())                  // X = hi byte
+             .Emit(PLA())                  // A = lo byte
+             .Emit(RTS());
+        return block;
+    }
+
+    /// <summary>
     /// _bank_spr - Set sprite CHR bank
     /// </summary>
     public static Block BankSpr()
