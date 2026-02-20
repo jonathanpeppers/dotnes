@@ -2503,6 +2503,7 @@ class IL2NESWriter : NESWriter
         bool hasTwoLdelems = false;
         int sourceArray1Idx = -1;
         int sourceArray2Idx = -1;
+        int valueLocalIdx = -1;
 
         for (int i = valueStart; i < Index; i++)
         {
@@ -2551,6 +2552,25 @@ class IL2NESWriter : NESWriter
                                 sourceArray2Idx = arrIdx.Value;
                                 break;
                             }
+                        }
+                    }
+                    break;
+                case ILOpCode.Ldloc_0: case ILOpCode.Ldloc_1: case ILOpCode.Ldloc_2: case ILOpCode.Ldloc_3:
+                case ILOpCode.Ldloc_s:
+                    {
+                        // Detect standalone value local (not part of arr[idx] ldelem pattern)
+                        bool isLdelemPart = false;
+                        if (i + 1 < Index && Instructions[i + 1].OpCode == ILOpCode.Ldelem_u1)
+                            isLdelemPart = true; // This is the index before ldelem
+                        else if (i + 2 < Index
+                            && Instructions[i + 1].OpCode is ILOpCode.Ldloc_0 or ILOpCode.Ldloc_1 or ILOpCode.Ldloc_2 or ILOpCode.Ldloc_3 or ILOpCode.Ldloc_s
+                            && Instructions[i + 2].OpCode == ILOpCode.Ldelem_u1)
+                            isLdelemPart = true; // This is the array before ldloc+ldelem
+                        if (!isLdelemPart)
+                        {
+                            var locIdx = GetLdlocIndex(il);
+                            if (locIdx != null)
+                                valueLocalIdx = locIdx.Value;
                         }
                     }
                     break;
@@ -2648,6 +2668,24 @@ class IL2NESWriter : NESWriter
             {
                 Emit(Opcode.CLC, AddressMode.Implied);
                 Emit(Opcode.ADC, AddressMode.Immediate, checked((byte)addValue));
+            }
+        }
+        else if (valueLocalIdx >= 0)
+        {
+            // Pattern: arr[i] = local, arr[i] = (local & N), arr[i] = (local + N), etc.
+            var valueLoc = Locals[valueLocalIdx];
+            Emit(Opcode.LDA, AddressMode.Absolute, (ushort)valueLoc.Address!);
+            if (hasAnd)
+                Emit(Opcode.AND, AddressMode.Immediate, checked((byte)andMask));
+            if (hasAdd)
+            {
+                Emit(Opcode.CLC, AddressMode.Implied);
+                Emit(Opcode.ADC, AddressMode.Immediate, checked((byte)addValue));
+            }
+            if (hasSub)
+            {
+                Emit(Opcode.SEC, AddressMode.Implied);
+                Emit(Opcode.SBC, AddressMode.Immediate, checked((byte)subValue));
             }
         }
         else
