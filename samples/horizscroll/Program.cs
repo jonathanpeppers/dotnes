@@ -4,8 +4,6 @@ Based on: https://github.com/sehugg/8bitworkshop/blob/master/presets/nes/horizsc
 Simplified: uses byte scroll counter (0-255), continuous left scroll.
 */
 
-using static NES.NESLib;
-
 // palette
 byte[] PALETTE = {
     0x03,                       // background color

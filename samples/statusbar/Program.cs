@@ -7,8 +7,6 @@ X scroll register in the PPU.
 Based on: https://github.com/sehugg/8bitworkshop/blob/master/presets/nes/statusbar.c
 */
 
-using static NES.NESLib;
-
 // set palette colors
 pal_col(0, 0x00);   // black
 pal_col(1, 0x04);   // dark purple
