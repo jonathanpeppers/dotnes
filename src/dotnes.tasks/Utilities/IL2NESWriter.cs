@@ -910,28 +910,39 @@ class IL2NESWriter : NESWriter
                     case "split":
                     case "scroll":
                         // scroll()/split() takes unsigned int params, which use popax (2-byte pop).
-                        // Two possible patterns:
-                        // 1. Byte arg: ..., LDA #xx, JSR pusha, LDA #yy → rewrite pusha→pushax
-                        // 2. Ushort arg: ..., LDA $lo, LDX $hi, JSR pushax, LDA #yy → already correct
+                        // Three possible patterns for the first arg:
+                        // 1. Byte constant: ..., LDA #xx, JSR pusha, LDA #yy → rewrite pusha→pushax
+                        // 2. Ushort arg: ..., LDX $hi, JSR pushax, LDA #yy → already correct
+                        // 3. Local var: ..., LDA $addr, LDA #yy → no pusha, just insert LDX #0 + pushax
                         {
                             var block = CurrentBlock!;
                             var ldaInstr = block[block.Count - 1]; // LDA (second arg)
-                            var pushInstr = block[block.Count - 2]; // JSR pusha or JSR pushax
-                            bool alreadyPushax = pushInstr.Opcode == Opcode.JSR
-                                && pushInstr.Operand is LabelOperand lbl && lbl.Label == "pushax";
+                            var prevInstr = block[block.Count - 2];
+                            bool alreadyPushax = prevInstr.Opcode == Opcode.JSR
+                                && prevInstr.Operand is LabelOperand lbl && lbl.Label == "pushax";
+                            bool hasPusha = prevInstr.Opcode == Opcode.JSR
+                                && prevInstr.Operand is LabelOperand lbl2 && lbl2.Label == "pusha";
                             if (alreadyPushax)
                             {
                                 // Ushort arg already pushed correctly via pushax
                                 RemoveLastInstructions(1); // Remove just LDA (second arg)
                                 block.Emit(ldaInstr); // Re-emit LDA for second arg
                             }
-                            else
+                            else if (hasPusha)
                             {
-                                // Byte arg: replace pusha with LDX #$00 + pushax
+                                // Byte constant: replace pusha with LDX #$00 + pushax
                                 RemoveLastInstructions(2); // Remove JSR pusha + LDA
                                 Emit(Opcode.LDX, AddressMode.Immediate, 0x00);
                                 EmitJSR("pushax");
                                 block.Emit(ldaInstr); // Re-emit LDA for second arg
+                            }
+                            else
+                            {
+                                // Local var or runtime value: A has the value, just push it
+                                RemoveLastInstructions(1); // Remove only the second arg's LDA
+                                Emit(Opcode.LDX, AddressMode.Immediate, 0x00);
+                                EmitJSR("pushax");
+                                block.Emit(ldaInstr); // Re-emit second arg LDA
                             }
                             EmitWithLabel(Opcode.JSR, AddressMode.Absolute, operand);
                             _immediateInA = null;
