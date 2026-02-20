@@ -1452,6 +1452,38 @@ internal static class BuiltInSubroutines
         return block;
     }
 
+    /// <summary>
+    /// incsp1 - Increment stack pointer by 1 (pop 1 byte)
+    /// </summary>
+    public static Block Incsp1()
+    {
+        var block = new Block(nameof(incsp1));
+        block.Emit(INC_zpg(sp))
+             .Emit(BNE(3))     // BNE to RTS
+             .Emit(INC_zpg(sp + 1))
+             .Emit(RTS());
+        return block;
+    }
+
+    /// <summary>
+    /// addysp - Add Y to the stack pointer (pop Y bytes)
+    /// </summary>
+    public static Block Addysp()
+    {
+        // Adds Y to the 16-bit stack pointer at sp/sp+1
+        var block = new Block(nameof(addysp));
+        block.Emit(PHA())               // save A
+             .Emit(CLC())
+             .Emit(TYA())
+             .Emit(ADC_zpg(sp))
+             .Emit(STA_zpg(sp))
+             .Emit(BCC(2))              // BCC to PLA/RTS
+             .Emit(INC_zpg(sp + 1))
+             .Emit(PLA())               // restore A
+             .Emit(RTS());
+        return block;
+    }
+
     #endregion
 
     #region Initialization

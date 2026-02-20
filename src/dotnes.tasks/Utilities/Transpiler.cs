@@ -6,6 +6,7 @@ using System.Reflection.Metadata.Ecma335;
 using System.Reflection.PortableExecutable;
 using System.Text;
 using dotnes.ObjectModel;
+using static dotnes.ObjectModel.Asm;
 
 namespace dotnes;
 
@@ -218,13 +219,21 @@ class Transpiler : IDisposable
         {
             var methodName = kvp.Key;
             var methodIL = kvp.Value;
+            int paramCount = UserMethodMetadata.TryGetValue(methodName, out var meta) ? meta.argCount : 0;
             using var methodWriter = new IL2NESWriter(new MemoryStream(), logger: _logger, reflectionCache: reflectionCache)
             {
                 Instructions = methodIL,
                 UsedMethods = UsedMethods,
                 UserMethodNames = new HashSet<string>(UserMethods.Keys, StringComparer.Ordinal),
+                MethodParamCount = paramCount,
             };
             methodWriter.StartBlockBuffering();
+
+            // If method has parameters, emit prologue to push last arg onto cc65 stack
+            if (paramCount > 0)
+            {
+                methodWriter.EmitJSR("pusha");
+            }
 
             for (int i = 0; i < methodWriter.Instructions.Length; i++)
             {
@@ -249,11 +258,29 @@ class Transpiler : IDisposable
             var methodBlock = methodWriter.GetMainBlock(methodName);
             if (methodBlock != null)
             {
-                // Append RTS at end of user method
+                // Clean up cc65 stack for params, then return
+                if (paramCount > 0)
+                {
+                    switch (paramCount)
+                    {
+                        case 1:
+                            methodBlock.Emit(JSR("incsp1"));
+                            UsedMethods.Add("incsp1");
+                            break;
+                        case 2:
+                            methodBlock.Emit(JSR("incsp2"));
+                            break;
+                        default:
+                            methodBlock.Emit(LDY((byte)paramCount));
+                            methodBlock.Emit(JSR("addysp"));
+                            UsedMethods.Add("addysp");
+                            break;
+                    }
+                }
                 methodBlock.Emit(new Instruction(Opcode.RTS, AddressMode.Implied));
                 program.AddMainProgram(methodBlock);
                 userMethodsTotalSize += methodBlock.Size;
-                _logger.WriteLine($"User method '{methodName}': {methodBlock.Size} bytes");
+                _logger.WriteLine($"User method '{methodName}': {methodBlock.Size} bytes ({paramCount} params)");
             }
 
             // Collect string/byte array data from user method writers

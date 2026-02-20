@@ -4,7 +4,7 @@
 >
 > Analysis based on dotnes transpiler capabilities and the `NESLib.cs` API surface.
 >
-> Existing dotnes samples: `hello`, `hellofs`, `staticsprite`, `movingsprite`, `attributetable`, `flicker`, `metasprites`, `music`, `lols`, `tint`, `scroll`, `rletitle`, `tileset1`, `sprites`, `metacursor`, `metatrigger`, `statusbar`, `vrambuffer`
+> Existing dotnes samples: `hello`, `hellofs`, `staticsprite`, `movingsprite`, `attributetable`, `flicker`, `metasprites`, `music`, `lols`, `tint`, `scroll`, `rletitle`, `tileset1`, `sprites`, `metacursor`, `metatrigger`, `statusbar`, `vrambuffer`, `horizscroll`
 
 ---
 
@@ -121,6 +121,17 @@
   - `set_vram_update(ushort)` overload for raw address parameter
   - `NT_UPD_HORZ`, `NT_UPD_VERT`, `NT_UPD_EOF` constants in NESLib
 
+### horizscroll.c
+- **Description:** Horizontal scrolling with vrambuf-based offscreen nametable updates, metatiles, and split-screen status bar.
+- **Status:** ✅ Already Implemented (simplified)
+- **dotnes sample:** `horizscroll`
+- **Notes:** Simplified port demonstrating horizontal scrolling with `split()`, `vrambuf`, and vertical mirroring. Uses byte scroll counter (0-255). Full column generation with metatiles would require additional features (16-bit locals, shift opcodes, byte array vrambuf_put).
+- **New Features Added:**
+  - `ldarg` opcodes for user functions with byte parameters
+  - `pushax` support for 16-bit argument passing
+  - `incsp1`/`addysp` stack cleanup subroutines
+  - `_ushortInAX` tracking for proper ushort argument pushing
+
 ---
 
 ## 🟠 Moderate (Significant Work Needed)
@@ -134,17 +145,6 @@
   - `word` (16-bit) arithmetic with bitwise NOT (`~`), shift, XOR
   - `register` keyword (optimization hint, can be ignored)
   - This is a utility; dotnes would need a built-in BCD helper or function support
-
-### horizscroll.c
-- **Description:** Horizontal scrolling with vrambuf-based offscreen nametable updates, metatiles, and split-screen status bar.
-- **Status:** 🟠 Moderate
-- **Now Available:** `vrambuf_clear()`, `vrambuf_put()`, `vrambuf_end()`, `vrambuf_flush()`, `set_vram_update()`, `split()`, vertical mirroring, runtime `NTADR_A()`
-- **Missing Features:**
-  - Multiple user-defined functions with parameters (must inline or use static local functions)
-  - `memset()`, `memcpy()` — replace with loops
-  - Global/static variables — use top-level byte locals
-  - `word` (16-bit) scroll position tracking
-  - Metatile lookup tables (can use byte arrays)
 
 ### horizmask.c
 - **Description:** Similar to horizscroll but with building generation and attribute table updates during horizontal scrolling.
@@ -320,8 +320,8 @@
 
 | Status | Count | Samples |
 |--------|-------|---------|
-| ✅ Already Implemented | 15 | hello, attributes, flicker, metasprites, music, tint, scroll, rletitle, tileset1, sprites, metacursor, metatrigger, statusbar, vrambuffer |
-| 🟠 Moderate | 3 | bcd, horizscroll, horizmask |
+| ✅ Already Implemented | 16 | hello, attributes, flicker, metasprites, music, tint, scroll, rletitle, tileset1, sprites, metacursor, metatrigger, statusbar, vrambuffer, horizscroll |
+| 🟠 Moderate | 2 | bcd, horizmask |
 | 🔴 Complex | 12 | aputest, ppuhello, fami, bankswitch, monobitmap, conio, crypto, climber, transtable, irq, shoot2, siegegame |
 
 > **Note:** `apu.c` and `vrambuf.c` are library files (not demos). `apu.c` is covered by dotnes's built-in `apu_init()` subroutine. `vrambuf.c` is covered by built-in `vrambuf_clear()`, `vrambuf_put()`, `vrambuf_end()`, `vrambuf_flush()`, and `set_vram_update()` subroutines. Neither is counted separately.
@@ -330,7 +330,7 @@
 
 | Missing Feature | Samples Affected |
 |-----------------|-----------------|
-| User-defined functions with parameters | 25+ samples |
+| User-defined functions with parameters | 25+ samples (byte params now supported; ushort/string params pending) |
 | `for` loops (must use `while`) | 20+ samples |
 | Global/static arrays | 15+ samples |
 | `typedef struct` / struct support | 8 samples |
@@ -352,4 +352,7 @@
 | `set_vram_update(ushort)` overload | vrambuffer |
 | `Beq_s` opcode (branch if equal) | vrambuffer |
 | Vertical mirroring (`<NESVerticalMirroring>`) | statusbar, horizscroll, horizmask |
-| Static local functions | statusbar (`scroll_demo`) |
+| Static local functions | statusbar (`scroll_demo`), horizscroll |
+| `ldarg` opcodes (function parameters) | horizscroll (infrastructure for user functions with byte params) |
+| `ushort` argument passing to built-ins (`pushax`) | horizscroll (16-bit scroll values) |
+| `incsp1`/`addysp` stack cleanup subroutines | horizscroll (parameter cleanup for user methods) |

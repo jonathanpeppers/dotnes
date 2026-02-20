@@ -588,6 +588,10 @@ public class Program6502
                 size += BuiltInSubroutines.NametableC().ByteSize;
             if (usedMethods.Contains("nametable_d"))
                 size += BuiltInSubroutines.NametableD().ByteSize;
+            if (usedMethods.Contains("incsp1"))
+                size += BuiltInSubroutines.Incsp1().ByteSize;
+            if (usedMethods.Contains("addysp"))
+                size += BuiltInSubroutines.Addysp().ByteSize;
         }
         return size;
     }
@@ -665,6 +669,10 @@ public class Program6502
                 AddBlock(BuiltInSubroutines.NametableC());
             if (usedMethods.Contains("nametable_d"))
                 AddBlock(BuiltInSubroutines.NametableD());
+            if (usedMethods.Contains("incsp1"))
+                AddBlock(BuiltInSubroutines.Incsp1());
+            if (usedMethods.Contains("addysp"))
+                AddBlock(BuiltInSubroutines.Addysp());
         }
     }
 

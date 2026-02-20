@@ -72,6 +72,8 @@ public class TranspilerTests
     [InlineData("statusbar", false, true)]
     [InlineData("vrambuffer", true)]
     [InlineData("vrambuffer", false)]
+    [InlineData("horizscroll", true, true)]
+    [InlineData("horizscroll", false, true)]
     public Task Write(string name, bool debug, bool verticalMirroring = false)
     {
         var configuration = debug ? "debug" : "release";

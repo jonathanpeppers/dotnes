@@ -138,6 +138,18 @@ class IL2NESWriter : NESWriter
     bool _ntadrRuntimeResult;
 
     /// <summary>
+    /// True when A and X hold a 16-bit value (A=lo, X=hi) from a ushort load.
+    /// Used by WriteLdc to emit pushax instead of pusha.
+    /// </summary>
+    bool _ushortInAX;
+
+    /// <summary>
+    /// Number of parameters for the current user method being transpiled (0 for main).
+    /// Used by ldarg handlers to compute cc65 stack offsets.
+    /// </summary>
+    public int MethodParamCount { get; init; }
+
+    /// <summary>
     /// NOTE: may not be exactly correct, this is the instructions inside zerobss:
     /// A925           LDA #$25                      ; zerobss
     /// 852A STA ptr1                      
@@ -181,7 +193,7 @@ class IL2NESWriter : NESWriter
         _byteArrays.Add(data);
     }
 
-    record Local(int Value, int? Address = null, string? LabelName = null, int ArraySize = 0);
+    record Local(int Value, int? Address = null, string? LabelName = null, int ArraySize = 0, bool IsWord = false);
 
     /// <summary>
     /// Tracks the buffered block instruction count at the START of processing each IL instruction.
@@ -193,7 +205,7 @@ class IL2NESWriter : NESWriter
     /// <summary>
     /// Emits a JSR to a label reference.
     /// </summary>
-    void EmitJSR(string labelName) => EmitWithLabel(Opcode.JSR, AddressMode.Absolute, labelName);
+    internal void EmitJSR(string labelName) => EmitWithLabel(Opcode.JSR, AddressMode.Absolute, labelName);
 
     /// <summary>
     /// Records the current block instruction count for an IL instruction offset.
@@ -375,6 +387,15 @@ class IL2NESWriter : NESWriter
                 WriteLdloc(Locals[3]);
                 _lastLoadedLocalIndex = 3;
                 break;
+            case ILOpCode.Ldarg_0:
+            case ILOpCode.Ldarg_1:
+            case ILOpCode.Ldarg_2:
+            case ILOpCode.Ldarg_3:
+                {
+                    int argIndex = instruction.OpCode - ILOpCode.Ldarg_0;
+                    WriteLdarg(argIndex);
+                }
+                break;
             case ILOpCode.Conv_u1:
             case ILOpCode.Conv_u2:
             case ILOpCode.Conv_u4:
@@ -491,6 +512,9 @@ class IL2NESWriter : NESWriter
         switch (instruction.OpCode)
         {
             case ILOpCode.Nop:
+                break;
+            case ILOpCode.Ldarg_s:
+                WriteLdarg(operand);
                 break;
             case ILOpCode.Ldc_i4:
             case ILOpCode.Ldc_i4_s:
@@ -885,16 +909,30 @@ class IL2NESWriter : NESWriter
                         break;
                     case "split":
                     case "scroll":
-                        // scroll() takes unsigned int params, which use popax (2-byte pop).
-                        // The preceding instructions are: JSR pusha, LDA $addr.
-                        // Replace pusha (1-byte push) with LDX #$00 + pushax (2-byte push).
+                        // scroll()/split() takes unsigned int params, which use popax (2-byte pop).
+                        // Two possible patterns:
+                        // 1. Byte arg: ..., LDA #xx, JSR pusha, LDA #yy → rewrite pusha→pushax
+                        // 2. Ushort arg: ..., LDA $lo, LDX $hi, JSR pushax, LDA #yy → already correct
                         {
                             var block = CurrentBlock!;
-                            var ldaInstr = block[block.Count - 1]; // LDA $addr (scroll_y)
-                            RemoveLastInstructions(2); // Remove JSR pusha + LDA $addr
-                            Emit(Opcode.LDX, AddressMode.Immediate, 0x00);
-                            EmitJSR("pushax");
-                            block.Emit(ldaInstr); // Re-emit LDA $addr
+                            var ldaInstr = block[block.Count - 1]; // LDA (second arg)
+                            var pushInstr = block[block.Count - 2]; // JSR pusha or JSR pushax
+                            bool alreadyPushax = pushInstr.Opcode == Opcode.JSR
+                                && pushInstr.Operand is LabelOperand lbl && lbl.Label == "pushax";
+                            if (alreadyPushax)
+                            {
+                                // Ushort arg already pushed correctly via pushax
+                                RemoveLastInstructions(1); // Remove just LDA (second arg)
+                                block.Emit(ldaInstr); // Re-emit LDA for second arg
+                            }
+                            else
+                            {
+                                // Byte arg: replace pusha with LDX #$00 + pushax
+                                RemoveLastInstructions(2); // Remove JSR pusha + LDA
+                                Emit(Opcode.LDX, AddressMode.Immediate, 0x00);
+                                EmitJSR("pushax");
+                                block.Emit(ldaInstr); // Re-emit LDA for second arg
+                            }
                             EmitWithLabel(Opcode.JSR, AddressMode.Absolute, operand);
                             _immediateInA = null;
                         }
@@ -1039,6 +1077,7 @@ class IL2NESWriter : NESWriter
                     // Void method: JSR clobbers A, clear runtime tracking
                     _runtimeValueInA = false;
                 }
+                _ushortInAX = false;
                 break;
             case ILOpCode.Stsfld:
                 if (operand == nameof(NESLib.oam_off))
@@ -1304,8 +1343,9 @@ class IL2NESWriter : NESWriter
         if (local.Address is null)
             throw new ArgumentNullException(nameof(local.Address));
 
-        // Storing a local clobbers A, so pad_poll result is no longer in A
+        // Storing a local clobbers A/X
         _firstAndAfterPadPoll = false;
+        _ushortInAX = false;
 
         if (_runtimeValueInA)
         {
@@ -1363,12 +1403,20 @@ class IL2NESWriter : NESWriter
         }
         Emit(Opcode.LDX, AddressMode.Immediate, checked((byte)(operand >> 8)));
         Emit(Opcode.LDA, AddressMode.Immediate, checked((byte)(operand & 0xff)));
+        _ushortInAX = true;
         Stack.Push(operand);
     }
 
     void WriteLdc(byte operand)
     {
-        if (LastLDA)
+        if (_ushortInAX)
+        {
+            // A:X holds a 16-bit value — push both bytes via pushax
+            EmitJSR("pushax");
+            _ushortInAX = false;
+            _immediateInA = null;
+        }
+        else if (LastLDA)
         {
             EmitJSR("pusha");
             _immediateInA = null;
@@ -1393,6 +1441,7 @@ class IL2NESWriter : NESWriter
 
     void WriteLdloc(Local local)
     {
+        _ushortInAX = false;
         if (local.LabelName is not null)
         {
             // This local holds a byte array label reference
@@ -1422,6 +1471,7 @@ class IL2NESWriter : NESWriter
                 Emit(Opcode.LDA, AddressMode.Absolute, (ushort)local.Address);
                 Emit(Opcode.LDX, AddressMode.Absolute, (ushort)(local.Address + 1));
                 _immediateInA = null;
+                _ushortInAX = true;
             }
             else
             {
@@ -1439,6 +1489,28 @@ class IL2NESWriter : NESWriter
             _immediateInA = 0x40;
         }
         Stack.Push(local.Value);
+    }
+
+    /// <summary>
+    /// Emits 6502 code to load a function parameter from the cc65 software stack.
+    /// Parameters are pushed left-to-right by the caller, with the last arg in A (pushed
+    /// by the method prologue). Stack layout: arg0 at offset (N-1), arg(N-1) at offset 0.
+    /// </summary>
+    void WriteLdarg(int argIndex)
+    {
+        if (MethodParamCount == 0)
+            throw new InvalidOperationException("ldarg used but MethodParamCount is 0");
+
+        if (LastLDA)
+            EmitJSR("pusha");
+
+        // cc65 stack offset: first arg (index 0) is deepest
+        byte offset = checked((byte)(MethodParamCount - 1 - argIndex));
+        Emit(Opcode.LDY, AddressMode.Immediate, offset);
+        Emit(Opcode.LDA, AddressMode.IndirectIndexed, (byte)sp);
+        _immediateInA = null;
+        _runtimeValueInA = true;
+        Stack.Push(0); // placeholder for runtime value
     }
 
     /// <summary>

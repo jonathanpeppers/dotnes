@@ -99,7 +99,9 @@ internal static class NESConstants
     // cc65 runtime - use nameof(pusha) etc.
     public const string pusha = nameof(pusha);
     public const string pushax = nameof(pushax);
+    public const string incsp1 = nameof(incsp1);
     public const string incsp2 = nameof(incsp2);
+    public const string addysp = nameof(addysp);
     public const string decsp4 = nameof(decsp4);
     
     // NMI/Update labels
