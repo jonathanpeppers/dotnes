@@ -4,7 +4,7 @@
 >
 > Analysis based on dotnes transpiler capabilities and the `NESLib.cs` API surface.
 >
-> Existing dotnes samples: `hello`, `hellofs`, `staticsprite`, `movingsprite`, `attributetable`, `flicker`, `metasprites`, `music`, `lols`, `tint`, `scroll`, `rletitle`, `tileset1`, `sprites`, `metacursor`, `metatrigger`, `statusbar`, `vrambuffer`, `horizscroll`
+> Existing dotnes samples: `hello`, `hellofs`, `staticsprite`, `movingsprite`, `attributetable`, `flicker`, `metasprites`, `music`, `lols`, `tint`, `scroll`, `rletitle`, `tileset1`, `sprites`, `metacursor`, `metatrigger`, `statusbar`, `vrambuffer`, `horizscroll`, `horizmask`
 
 ---
 
@@ -132,6 +132,18 @@
   - `incsp1`/`addysp` stack cleanup subroutines
   - `_ushortInAX` tracking for proper ushort argument pushing
 
+### horizmask.c
+- **Description:** Horizontal scrolling with random building generation using vertical VRAM writes to populate offscreen columns.
+- **Status:** ✅ Already Implemented (simplified)
+- **dotnes sample:** `horizmask`
+- **Notes:** Port with simplified building generation (no attribute table updates or `nt2attraddr`). Uses `vrambuf_put` byte array overload for vertical column writes, runtime `NTADR_A`/`NTADR_B` with runtime first argument, and `Bge_s`/`Brtrue`/`Brfalse` (long-form) branch opcodes.
+- **New Features Added:**
+  - `vrambuf_put(ushort, byte[], byte)` overload for vertical sequential VRAM writes
+  - Runtime division by power-of-2 (emits LSR A instructions)
+  - `NTADR_A`/`B` with runtime first argument (x) support
+  - `Bge_s` (branch if >=), `Brtrue`/`Brfalse` long-form with JMP trampoline
+  - `updbuf` and `VRAMBUF_VERT` constants in NESLib
+
 ---
 
 ## 🟠 Moderate (Significant Work Needed)
@@ -145,15 +157,6 @@
   - `word` (16-bit) arithmetic with bitwise NOT (`~`), shift, XOR
   - `register` keyword (optimization hint, can be ignored)
   - This is a utility; dotnes would need a built-in BCD helper or function support
-
-### horizmask.c
-- **Description:** Similar to horizscroll but with building generation and attribute table updates during horizontal scrolling.
-- **Status:** 🟠 Moderate
-- **Now Available:** Same as horizscroll — full vrambuf module, `split()`, vertical mirroring, runtime NTADR
-- **Missing Features:**
-  - Same as horizscroll: function inlining, loop-based `memset`/`memcpy` replacement
-  - Building generation logic must be inlined into main loop
-  - Attribute table updates via vrambuf
 
 ---
 
@@ -320,8 +323,8 @@
 
 | Status | Count | Samples |
 |--------|-------|---------|
-| ✅ Already Implemented | 16 | hello, attributes, flicker, metasprites, music, tint, scroll, rletitle, tileset1, sprites, metacursor, metatrigger, statusbar, vrambuffer, horizscroll |
-| 🟠 Moderate | 2 | bcd, horizmask |
+| ✅ Already Implemented | 17 | hello, attributes, flicker, metasprites, music, tint, scroll, rletitle, tileset1, sprites, metacursor, metatrigger, statusbar, vrambuffer, horizscroll, horizmask |
+| 🟠 Moderate | 1 | bcd |
 | 🔴 Complex | 12 | aputest, ppuhello, fami, bankswitch, monobitmap, conio, crypto, climber, transtable, irq, shoot2, siegegame |
 
 > **Note:** `apu.c` and `vrambuf.c` are library files (not demos). `apu.c` is covered by dotnes's built-in `apu_init()` subroutine. `vrambuf.c` is covered by built-in `vrambuf_clear()`, `vrambuf_put()`, `vrambuf_end()`, `vrambuf_flush()`, and `set_vram_update()` subroutines. Neither is counted separately.
@@ -345,14 +348,19 @@
 
 | Feature | Samples Unlocked |
 |---------|-----------------|
-| vrambuf module (`vrambuf_clear`, `vrambuf_put`, `vrambuf_end`, `vrambuf_flush`) | horizscroll, horizmask (moved to Moderate) |
+| vrambuf module (`vrambuf_clear`, `vrambuf_put`, `vrambuf_end`, `vrambuf_flush`) | horizscroll, horizmask |
+| `vrambuf_put(ushort, byte[], byte)` byte array overload (vertical VRAM writes) | horizmask |
 | `split()` function | horizscroll, horizmask, statusbar |
 | `pad_trigger()` / `pad_state()` | metatrigger, tint |
-| Runtime `NTADR_A/B/C/D(x, y)` | vrambuffer (runtime y coordinate) |
+| Runtime `NTADR_A/B/C/D(x, y)` with runtime x or y | vrambuffer, horizmask |
 | `set_vram_update(ushort)` overload | vrambuffer |
 | `Beq_s` opcode (branch if equal) | vrambuffer |
+| `Bge_s` opcode (branch if >=) | horizmask |
+| `Brtrue`/`Brfalse` long-form branches (JMP trampoline) | horizmask |
+| Runtime division by power-of-2 (LSR A) | horizmask |
+| `updbuf` and `VRAMBUF_VERT` constants | horizmask |
 | Vertical mirroring (`<NESVerticalMirroring>`) | statusbar, horizscroll, horizmask |
-| Static local functions | statusbar (`scroll_demo`), horizscroll |
+| Static local functions | statusbar (`scroll_demo`), horizscroll, horizmask |
 | `ldarg` opcodes (function parameters) | horizscroll (infrastructure for user functions with byte params) |
 | `ushort` argument passing to built-ins (`pushax`) | horizscroll (16-bit scroll values) |
 | `incsp1`/`addysp` stack cleanup subroutines | horizscroll (parameter cleanup for user methods) |

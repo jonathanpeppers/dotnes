@@ -378,6 +378,17 @@ public static class NESLib
     public const byte NT_UPD_EOF = 0xFF;
 
     /// <summary>
+    /// VRAM update buffer address (stack page $0100)
+    /// Pass to set_vram_update() to use the vrambuf module
+    /// </summary>
+    public const ushort updbuf = 0x0100;
+
+    /// <summary>
+    /// OR with address to select vertical sequential mode in vrambuf_put
+    /// </summary>
+    public const ushort VRAMBUF_VERT = 0x8000;
+
+    /// <summary>
     /// clear the VRAM update buffer and write EOF marker
     /// </summary>
     public static void vrambuf_clear() => throw null!;
@@ -387,6 +398,12 @@ public static class NESLib
     /// the NMI handler will flush it to VRAM on the next frame
     /// </summary>
     public static void vrambuf_put(ushort addr, string str) => throw null!;
+
+    /// <summary>
+    /// write a vertical byte array sequence to the VRAM update buffer
+    /// addr should include VRAMBUF_VERT flag for vertical writes
+    /// </summary>
+    public static void vrambuf_put(ushort addr, byte[] buf, byte len) => throw null!;
 
     /// <summary>
     /// write EOF marker at current buffer position (without advancing pointer)
