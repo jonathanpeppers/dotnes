@@ -643,6 +643,18 @@ class IL2NESWriter : NESWriter
                 {
                     operand = (sbyte)(byte)operand;
                     RemoveLastInstructions(2);
+                    
+                    // After removing 2, if the last instruction is INC/DEC (from x++ pattern),
+                    // A doesn't have the variable's value. Re-emit LDA to reload it.
+                    var bneBlock = CurrentBlock!;
+                    if (bneBlock.Count > 0)
+                    {
+                        var lastInstr = bneBlock[bneBlock.Count - 1];
+                        if (lastInstr.Opcode is Opcode.INC or Opcode.DEC
+                            && lastInstr.Operand is AbsoluteOperand absOp)
+                            Emit(Opcode.LDA, AddressMode.Absolute, absOp.Address);
+                    }
+                    
                     Emit(Opcode.CMP, AddressMode.Immediate, checked((byte)Stack.Pop()));
                     if (operand < 0)
                     {
@@ -1408,17 +1420,26 @@ class IL2NESWriter : NESWriter
         
         // Check if the value came from a local variable load (runtime value)
         // Same class of bug as AND: ldloc emits LDA $addr but doesn't set _runtimeValueInA
+        Local? lastLocal = null;
         bool localInA = _lastLoadedLocalIndex.HasValue &&
-            Locals.TryGetValue(_lastLoadedLocalIndex.Value, out var lastLocal) && lastLocal.Address.HasValue;
+            Locals.TryGetValue(_lastLoadedLocalIndex.Value, out lastLocal) && lastLocal.Address.HasValue;
 
         // Default: if we have runtime values, emit actual arithmetic
         if (_runtimeValueInA || localInA)
         {
+            // Detect whether the local was loaded SECOND (ldc then ldloc pattern)
+            // In that case, after removing 2 instructions, A has the constant,
+            // and we need to use the local's address for arithmetic (not its compile-time value)
+            bool useLocalAddress = false;
+            ushort localAddr = 0;
             if (localInA && !_runtimeValueInA)
             {
-                // WriteLdloc emitted LDA $addr (sets LastLDA=true)
-                // WriteLdc then emitted JSR pusha + LDA #imm (2 instructions)
-                // Remove the pusha + LDA #imm to restore A = local value
+                var block = CurrentBlock!;
+                var lastInstr = block[block.Count - 1];
+                useLocalAddress = lastInstr.Mode == AddressMode.Absolute && lastInstr.Opcode == Opcode.LDA;
+                if (useLocalAddress)
+                    localAddr = (ushort)lastLocal!.Address!.Value;
+                // Remove the pusha + last LDA to restore A to the first-loaded value
                 RemoveLastInstructions(2);
             }
             if (isAdd)
@@ -1428,6 +1449,12 @@ class IL2NESWriter : NESWriter
                     // Two runtime values: first in TEMP, second in A
                     Emit(Opcode.CLC, AddressMode.Implied);
                     Emit(Opcode.ADC, AddressMode.ZeroPage, (byte)NESConstants.TEMP);
+                }
+                else if (useLocalAddress)
+                {
+                    // constant + runtime_local: A = constant, add local's runtime value
+                    Emit(Opcode.CLC, AddressMode.Implied);
+                    Emit(Opcode.ADC, AddressMode.Absolute, localAddr);
                 }
                 else
                 {
@@ -1446,6 +1473,12 @@ class IL2NESWriter : NESWriter
                     Emit(Opcode.LDA, AddressMode.ZeroPage, (byte)NESConstants.TEMP);
                     Emit(Opcode.SEC, AddressMode.Implied);
                     Emit(Opcode.SBC, AddressMode.ZeroPage, (byte)(NESConstants.TEMP + 1));
+                }
+                else if (useLocalAddress)
+                {
+                    // constant - runtime_local: A = constant, subtract local's runtime value
+                    Emit(Opcode.SEC, AddressMode.Implied);
+                    Emit(Opcode.SBC, AddressMode.Absolute, localAddr);
                 }
                 else
                 {
@@ -2394,7 +2427,10 @@ class IL2NESWriter : NESWriter
 
         if (targetArrayLocalIdx < 0 || (targetIndexLocalIdx < 0 && constantIndex < 0))
         {
-            // Constant-index stelem from array initialization — no runtime code needed
+            // Stelem with expression-based index — not yet handled. Clear runtime state.
+            _runtimeValueInA = false;
+            _savedRuntimeToTemp = false;
+            _lastLoadedLocalIndex = null;
             return;
         }
 

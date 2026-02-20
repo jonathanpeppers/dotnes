@@ -108,7 +108,5 @@ set_vram_update(updbuf);
 // Turn on rendering
 ppu_on_all();
 
-// Start scrolling
+// Start scrolling (never returns)
 scroll_demo();
-
-while (true) ;
