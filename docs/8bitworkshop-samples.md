@@ -243,7 +243,7 @@
 ### climber.c
 - **Description:** A full platform game with random level generation, enemy AI, scrolling, FamiTone2 music, and collision detection.
 - **Status:** 🔴 Complex
-- **Note:** `vrambuf` module, `delay()`, `rand8()`, `OAM_FLIP_H`, `for` loops, `ushort` locals, and `enum` types are now available.
+- **Note:** `vrambuf` module, `delay()`, `rand8()`, `OAM_FLIP_H`, `for` loops, `ushort` locals, `enum` types, and basic struct field access are now available.
 - **Missing Features:**
   - FamiTone2 library (`famitone_init`, `sfx_init`, `sfx_play`, `music_play`, `music_stop`)
   - `nmi_set_callback()` with `famitone_update`
@@ -329,7 +329,7 @@
 |-----------------|-----------------|
 | User-defined functions with parameters | 25+ samples (byte params now supported; ushort/string params pending) |
 | Global/static arrays | 15+ samples |
-| `typedef struct` / struct support | 8 samples |
+| `typedef struct` / struct support | 8 samples (basic field access now supported; arrays of structs, pointers to structs pending) |
 | Direct APU/PPU register access | 5 samples (apu.c already covered by built-in `apu_init()`) |
 | FamiTone2 library | 3 samples |
 | `delay()` | 3 samples (now implemented) |
@@ -360,3 +360,4 @@
 | `for` loops | all samples (C# `for` compiles to `br_s`+`blt_s` IL pattern, fully supported) |
 | `ushort` locals (16-bit zero page variables) | horizmask (smooth 16-bit scroll counter) |
 | `enum` types (compile to plain integer IL, no transpiler changes needed) | climber, siegegame (enum values, switch on enum) |
+| Struct support (`stfld`, `ldfld`, `ldloca.s`) — byte/ushort fields on zero page | aputest, climber, shoot2, siegegame (struct field access and arithmetic) |
