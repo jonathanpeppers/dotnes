@@ -56,7 +56,7 @@
 - **Description:** Unpacks RLE-compressed nametable data and fades in using `pal_bright`.
 - **Status:** ✅ Already Implemented
 - **dotnes sample:** `rletitle`
-- **Missing Features:** None — uses `ppu_off`, `pal_bg`, `pal_bright`, `vram_adr`, `vram_unrle`, `ppu_on_all`, `ppu_wait_frame`. User-defined functions inlined, `for` loop rewritten as `while`.
+- **Missing Features:** None — uses `ppu_off`, `pal_bg`, `pal_bright`, `vram_adr`, `vram_unrle`, `ppu_on_all`, `ppu_wait_frame`. User-defined functions inlined.
 
 ### tileset1.c
 - **Description:** Loads a custom CHR tileset into CHR RAM and displays text using custom tile mapping.
@@ -79,7 +79,6 @@
   - Uses single metasprite for all actors (no animation frame cycling, which requires array-of-pointers)
   - Removed boundary checks (`actor_x[i] > 0`, `actor_x[i] < 240`) — actors wrap around screen edges
   - Inlined `setup_graphics()` into main body
-  - Used `while` loops instead of `for`
   - Expanded C macros to byte array literals
   - Used `0x40` constant instead of `OAM_FLIP_H`
 
@@ -92,7 +91,6 @@
   - Uses single metasprite for all actors (no animation frame cycling)
   - Removed OAM buffer attribute manipulation
   - Inlined all setup code into main body
-  - Used `while` loops instead of `for`
 
 ### statusbar.c
 - **Description:** Demonstrates a split-screen status bar by using sprite 0 hit detection and the `split()` function for horizontal scrolling.
@@ -165,7 +163,7 @@
 ### aputest.c
 - **Description:** Generates random APU sounds and prints parameters to screen, showing channel status with vrambuf.
 - **Status:** 🔴 Complex
-- **Note:** Uses `apu.c` for APU initialization — already covered by dotnes's built-in `apu_init()` subroutine. `vrambuf` module and `pad_trigger()`/`pad_state()` are now available.
+- **Note:** Uses `apu.c` for APU initialization — already covered by dotnes's built-in `apu_init()` subroutine. `vrambuf` module, `pad_trigger()`/`pad_state()`, and `for` loops are now available.
 - **Missing Features:**
   - Direct APU register macros (`APU_PULSE_DECAY`, `APU_PULSE_SWEEP`, `APU_TRIANGLE_LENGTH`, `APU_NOISE_DECAY`, `APU_ENABLE`)
   - `APU.status` — direct hardware register reading
@@ -180,7 +178,6 @@
   - Direct PPU register access (`PPU.control`, `PPU.mask`, `PPU.vram.address`, `PPU.vram.data`, `PPU.scroll`)
   - `#include <nes.h>` — CC65 NES hardware header
   - `waitvsync()` — CC65-specific function
-  - `for` loops
   - No neslib functions used at all — entirely hardware-register driven
 
 ### fami.c
@@ -211,7 +208,7 @@
 ### monobitmap.c
 - **Description:** Creates a monochrome framebuffer using CHR RAM with UxROM mapper, pixel-level drawing, and split-screen bank switching.
 - **Status:** 🔴 Complex
-- **Note:** `split()`, `oam_size()`, `pad_trigger()`, `bank_bg()`/`bank_spr()` are now available.
+- **Note:** `split()`, `oam_size()`, `pad_trigger()`, `bank_bg()`/`bank_spr()`, and `for` loops are now available.
 - **Missing Features:**
   - UxROM mapper (`NES_MAPPER 2`) with CHR RAM (`NES_CHR_BANKS 0`)
   - Inline assembly (`__asm__`) for cycle-accurate delay loops
@@ -246,13 +243,12 @@
 ### climber.c
 - **Description:** A full platform game with random level generation, enemy AI, scrolling, FamiTone2 music, and collision detection.
 - **Status:** 🔴 Complex
-- **Note:** `vrambuf` module, `delay()`, `rand8()`, and `OAM_FLIP_H` are now available.
+- **Note:** `vrambuf` module, `delay()`, `rand8()`, `OAM_FLIP_H`, `for` loops, `ushort` locals, and `enum` types are now available.
 - **Missing Features:**
   - FamiTone2 library (`famitone_init`, `sfx_init`, `sfx_play`, `music_play`, `music_stop`)
   - `nmi_set_callback()` with `famitone_update`
   - BCD arithmetic module (`bcd.h` / `bcd.c`)
   - `typedef struct` with bitfields (`Floor`, `Actor`)
-  - `typedef enum` (multiple enums)
   - Pointer arithmetic and pointer-to-struct operations
   - `memset()`, `memcpy()`
   - Arrays of structs, arrays of pointers
@@ -286,12 +282,11 @@
   - `set_ppu_ctrl_var()` / `get_ppu_ctrl_var()` — declared but not transpiler-supported
   - `ppu_wait_frame()` — declared but may lack transpiler support
   - User-defined functions with `__fastcall__` attribute
-  - `for` loops → must use `while`
 
 ### shoot2.c
 - **Description:** A shoot-em-up game with CHR RAM, sprite shifting, formation AI, and custom sound effects.
 - **Status:** 🔴 Complex
-- **Note:** Uses `apu.c` for APU initialization — already covered by dotnes's built-in `apu_init()` subroutine. `vrambuf` module and `oam_size()` are now available.
+- **Note:** Uses `apu.c` for APU initialization — already covered by dotnes's built-in `apu_init()` subroutine. `vrambuf` module, `oam_size()`, and `for` loops are now available.
 - **Missing Features:**
   - UxROM mapper (`NES_MAPPER 2`) with CHR RAM
   - Direct APU register macros (`APU_PULSE_DECAY`, `APU_PULSE_SUSTAIN`, `APU_NOISE_DECAY`, `APU_TRIANGLE_SUSTAIN`, `APU_ENABLE`)
@@ -306,12 +301,11 @@
 ### siegegame.c
 - **Description:** A two-player surround/Tron-style game with AI, nametable collision detection, and attract mode.
 - **Status:** 🔴 Complex
-- **Note:** `vrambuf` module and `delay()` are now available.
+- **Note:** `vrambuf` module, `delay()`, and `for` loops are now available.
 - **Missing Features:**
   - CC65 joystick library (`joystick.h`): `joy_install`, `joy_read`, `JOY_1`, `JOY_START_MASK`, etc.
   - `vram_read()` — for nametable collision detection
   - `typedef struct` with bitfields (`Player`)
-  - `typedef enum` (`dir_t`)
   - `strlen()` standard library
   - `#include <nes.h>`, `#include <joystick.h>` — CC65 headers
   - 20+ user-defined functions
@@ -323,7 +317,7 @@
 
 | Status | Count | Samples |
 |--------|-------|---------|
-| ✅ Already Implemented | 17 | hello, attributes, flicker, metasprites, music, tint, scroll, rletitle, tileset1, sprites, metacursor, metatrigger, statusbar, vrambuffer, horizscroll, horizmask |
+| ✅ Already Implemented | 16 | hello, attributes, flicker, metasprites, music, tint, scroll, rletitle, tileset1, sprites, metacursor, metatrigger, statusbar, vrambuffer, horizscroll, horizmask |
 | 🟠 Moderate | 1 | bcd |
 | 🔴 Complex | 12 | aputest, ppuhello, fami, bankswitch, monobitmap, conio, crypto, climber, transtable, irq, shoot2, siegegame |
 
@@ -365,3 +359,4 @@
 | `incsp1`/`addysp` stack cleanup subroutines | horizscroll (parameter cleanup for user methods) |
 | `for` loops | all samples (C# `for` compiles to `br_s`+`blt_s` IL pattern, fully supported) |
 | `ushort` locals (16-bit zero page variables) | horizmask (smooth 16-bit scroll counter) |
+| `enum` types (compile to plain integer IL, no transpiler changes needed) | climber, siegegame (enum values, switch on enum) |
