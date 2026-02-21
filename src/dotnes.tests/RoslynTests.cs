@@ -710,4 +710,59 @@ public class RoslynTests
         // CMP #$05 (C905) for i < 5
         Assert.Contains("C905", hex);
     }
+
+    [Fact]
+    public void StructFieldAccess()
+    {
+        // Struct with byte fields — stfld/ldfld map to STA/LDA on zero page
+        var bytes = GetProgramBytes(
+            """
+            Point p;
+            p.X = 2;
+            p.Y = 0x14;
+            pal_col(0, p.X);
+            pal_col(1, p.Y);
+            ppu_on_all();
+            while (true) ;
+
+            struct Point { public byte X; public byte Y; }
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        // LDA #$02 for p.X = 2
+        Assert.Contains("A902", hex);
+        // LDA #$14 for p.Y = 0x14
+        Assert.Contains("A914", hex);
+        // STA to zero page for stfld (85 = STA zero page)
+        Assert.Contains("85", hex);
+    }
+
+    [Fact]
+    public void StructFieldArithmetic()
+    {
+        // Read struct fields, do arithmetic, use result
+        var bytes = GetProgramBytes(
+            """
+            Vec2 p;
+            p.X = 5;
+            p.Y = 3;
+            byte sum = (byte)(p.X + p.Y);
+            pal_col(0, sum);
+            ppu_on_all();
+            while (true) ;
+
+            struct Vec2 { public byte X; public byte Y; }
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        // LDA #$05 for p.X = 5, LDA #$03 for p.Y = 3
+        Assert.Contains("A905", hex);
+        Assert.Contains("A903", hex);
+        // CLC + ADC pattern for add (18 = CLC, 65/6D = ADC)
+        Assert.Contains("18", hex);
+    }
 }

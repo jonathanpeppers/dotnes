@@ -152,12 +152,14 @@ class Transpiler : IDisposable
         }
 
         // Build main program block using label references (addresses resolved later)
+        var structLayouts = DetectStructLayouts();
         using var writer = new IL2NESWriter(new MemoryStream(), logger: _logger, reflectionCache: reflectionCache)
         {
             Instructions = instructions,
             UsedMethods = UsedMethods,
             UserMethodNames = new HashSet<string>(UserMethods.Keys, StringComparer.Ordinal),
             WordLocals = DetectWordLocals(instructions),
+            StructLayouts = structLayouts,
         };
 
         writer.StartBlockBuffering();
@@ -228,6 +230,7 @@ class Transpiler : IDisposable
                 UserMethodNames = new HashSet<string>(UserMethods.Keys, StringComparer.Ordinal),
                 MethodParamCount = paramCount,
                 WordLocals = DetectWordLocals(methodIL),
+                StructLayouts = structLayouts,
             };
             methodWriter.StartBlockBuffering();
 
@@ -691,5 +694,79 @@ class Transpiler : IDisposable
                 result.Add(idx.Value);
         }
         return result;
+    }
+
+    /// <summary>
+    /// Scans the assembly's TypeDefinitions for user-defined value types (structs)
+    /// and returns a dictionary of struct name → field list (name, size in bytes).
+    /// </summary>
+    Dictionary<string, List<(string Name, int Size)>> DetectStructLayouts()
+    {
+        var result = new Dictionary<string, List<(string Name, int Size)>>(StringComparer.Ordinal);
+
+        foreach (var t in _reader.TypeDefinitions)
+        {
+            var type = _reader.GetTypeDefinition(t);
+            var ns = _reader.GetString(type.Namespace);
+
+            // Skip types in non-empty namespaces (system types, NES namespace, etc.)
+            if (!string.IsNullOrEmpty(ns))
+                continue;
+
+            // Check if this is a value type (struct) by looking at the base type
+            var baseType = type.BaseType;
+            if (baseType.IsNil)
+                continue;
+
+            string? baseTypeName = null;
+            if (baseType.Kind == HandleKind.TypeReference)
+                baseTypeName = _reader.GetString(_reader.GetTypeReference((TypeReferenceHandle)baseType).Name);
+            else if (baseType.Kind == HandleKind.TypeDefinition)
+                baseTypeName = _reader.GetString(_reader.GetTypeDefinition((TypeDefinitionHandle)baseType).Name);
+
+            // Value types derive from System.ValueType
+            if (baseTypeName != "ValueType")
+                continue;
+
+            var typeName = _reader.GetString(type.Name);
+            // Skip compiler-generated types
+            if (typeName.StartsWith("<") || typeName.Contains("__"))
+                continue;
+
+            var fields = new List<(string Name, int Size)>();
+            foreach (var f in type.GetFields())
+            {
+                var field = _reader.GetFieldDefinition(f);
+                var fieldName = _reader.GetString(field.Name);
+                int fieldSize = DecodeFieldSize(field);
+                fields.Add((fieldName, fieldSize));
+            }
+
+            if (fields.Count > 0)
+                result[typeName] = fields;
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Decodes the size of a field from its signature blob.
+    /// </summary>
+    int DecodeFieldSize(FieldDefinition field)
+    {
+        var sig = _reader.GetBlobReader(field.Signature);
+        sig.ReadByte(); // field calling convention (0x06)
+        byte elementType = sig.ReadByte();
+        return elementType switch
+        {
+            0x02 => 1, // ELEMENT_TYPE_BOOLEAN
+            0x04 => 1, // ELEMENT_TYPE_I1 (sbyte)
+            0x05 => 1, // ELEMENT_TYPE_U1 (byte)
+            0x06 => 2, // ELEMENT_TYPE_I2 (short)
+            0x07 => 2, // ELEMENT_TYPE_U2 (ushort)
+            0x08 => 4, // ELEMENT_TYPE_I4 (int)
+            0x09 => 4, // ELEMENT_TYPE_U4 (uint)
+            _ => 1     // Default to 1 byte for unknown types
+        };
     }
 }

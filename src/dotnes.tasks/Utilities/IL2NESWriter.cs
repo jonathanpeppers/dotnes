@@ -156,6 +156,24 @@ class IL2NESWriter : NESWriter
     public HashSet<int> WordLocals { get; init; } = new();
 
     /// <summary>
+    /// Struct type layouts: type name → ordered list of (fieldName, fieldSizeInBytes).
+    /// Field offsets are cumulative from the first field.
+    /// </summary>
+    public Dictionary<string, List<(string Name, int Size)>> StructLayouts { get; init; } = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// Maps local variable index → struct type name for struct-typed locals.
+    /// Set when ldloca.s + stfld/ldfld patterns are detected.
+    /// </summary>
+    readonly Dictionary<int, string> _structLocalTypes = new();
+
+    /// <summary>
+    /// The local index targeted by the most recent ldloca.s instruction.
+    /// Used by stfld/ldfld to know which struct local to access.
+    /// </summary>
+    int? _pendingStructLocal;
+
+    /// <summary>
     /// NOTE: may not be exactly correct, this is the instructions inside zerobss:
     /// A925           LDA #$25                      ; zerobss
     /// 852A STA ptr1                      
@@ -795,6 +813,10 @@ class IL2NESWriter : NESWriter
                     _runtimeValueInA = false;
                 }
                 break;
+            case ILOpCode.Ldloca_s:
+                // Load address of local variable — used for struct field access
+                _pendingStructLocal = operand;
+                break;
             default:
                 throw new NotImplementedException($"OpCode {instruction.OpCode} with Int32 operand is not implemented!");
         }
@@ -1320,6 +1342,12 @@ class IL2NESWriter : NESWriter
                     throw new NotImplementedException($"Ldsfld for field '{operand}' is not implemented!");
                 }
                 break;
+            case ILOpCode.Stfld:
+                HandleStfld(operand);
+                break;
+            case ILOpCode.Ldfld:
+                HandleLdfld(operand);
+                break;
             default:
                 throw new NotImplementedException($"OpCode {instruction.OpCode} with String operand is not implemented!");
         }
@@ -1383,6 +1411,146 @@ class IL2NESWriter : NESWriter
                 throw new NotImplementedException($"OpCode {instruction.OpCode} with byte[] operand is not implemented!");
         }
         previous = instruction.OpCode;
+    }
+
+    /// <summary>
+    /// Gets the zero-page address and allocates storage for a struct local.
+    /// </summary>
+    ushort GetOrAllocateStructLocal(int localIndex, string structType)
+    {
+        if (Locals.TryGetValue(localIndex, out var existing) && existing.Address is not null)
+            return (ushort)existing.Address;
+
+        // Allocate struct on zero page
+        int structSize = 0;
+        if (StructLayouts.TryGetValue(structType, out var fields))
+        {
+            foreach (var f in fields)
+                structSize += f.Size;
+        }
+        if (structSize == 0)
+            structSize = 1;
+
+        ushort addr = (ushort)(local + LocalCount);
+        LocalCount += structSize;
+        Locals[localIndex] = new Local(0, addr);
+        _structLocalTypes[localIndex] = structType;
+        return addr;
+    }
+
+    /// <summary>
+    /// Gets the byte offset of a field within a struct type.
+    /// </summary>
+    int GetFieldOffset(string structType, string fieldName)
+    {
+        if (!StructLayouts.TryGetValue(structType, out var fields))
+            throw new InvalidOperationException($"Unknown struct type '{structType}'");
+
+        int offset = 0;
+        foreach (var f in fields)
+        {
+            if (f.Name == fieldName)
+                return offset;
+            offset += f.Size;
+        }
+        throw new InvalidOperationException($"Field '{fieldName}' not found in struct '{structType}'");
+    }
+
+    /// <summary>
+    /// Resolves the struct type for a local by checking _structLocalTypes or matching
+    /// the field name against known struct layouts.
+    /// </summary>
+    string ResolveStructType(int localIndex, string fieldName)
+    {
+        if (_structLocalTypes.TryGetValue(localIndex, out var knownType))
+            return knownType;
+
+        // Search all struct layouts for a matching field name
+        foreach (var kvp in StructLayouts)
+        {
+            foreach (var f in kvp.Value)
+            {
+                if (f.Name == fieldName)
+                {
+                    _structLocalTypes[localIndex] = kvp.Key;
+                    return kvp.Key;
+                }
+            }
+        }
+        throw new InvalidOperationException($"Cannot resolve struct type for local {localIndex} with field '{fieldName}'");
+    }
+
+    /// <summary>
+    /// Handles stfld: store a value to a struct field on zero page.
+    /// IL pattern: ldloca.s N, ldc.i4 value, stfld fieldName
+    /// </summary>
+    void HandleStfld(string fieldName)
+    {
+        if (_pendingStructLocal is null)
+            throw new InvalidOperationException($"stfld '{fieldName}' without preceding ldloca.s");
+
+        int localIndex = _pendingStructLocal.Value;
+        _pendingStructLocal = null;
+
+        string structType = ResolveStructType(localIndex, fieldName);
+        ushort baseAddr = GetOrAllocateStructLocal(localIndex, structType);
+        int fieldOffset = GetFieldOffset(structType, fieldName);
+        ushort fieldAddr = (ushort)(baseAddr + fieldOffset);
+
+        // The value to store was pushed by ldc before stfld
+        int value = Stack.Count > 0 ? Stack.Pop() : 0;
+
+        if (_runtimeValueInA)
+        {
+            // A has the runtime value — just store it
+            Emit(Opcode.STA, AddressMode.Absolute, fieldAddr);
+            _runtimeValueInA = false;
+        }
+        else
+        {
+            // Remove the LDA #imm that WriteLdc emitted
+            RemoveLastInstructions(1);
+            Emit(Opcode.LDA, AddressMode.Immediate, (byte)(value & 0xFF));
+            Emit(Opcode.STA, AddressMode.Absolute, fieldAddr);
+        }
+        _immediateInA = null;
+    }
+
+    /// <summary>
+    /// Handles ldfld: load a value from a struct field on zero page.
+    /// IL patterns: (ldloca.s N | ldloc.N), ldfld fieldName
+    /// </summary>
+    void HandleLdfld(string fieldName)
+    {
+        int localIndex;
+        if (_pendingStructLocal is not null)
+        {
+            localIndex = _pendingStructLocal.Value;
+            _pendingStructLocal = null;
+        }
+        else if (_lastLoadedLocalIndex is not null && _lastLoadedLocalIndex >= 0 && _structLocalTypes.ContainsKey(_lastLoadedLocalIndex.Value))
+        {
+            // ldloc loaded the struct value — undo the WriteLdloc LDA and use field access instead
+            localIndex = _lastLoadedLocalIndex.Value;
+            RemoveLastInstructions(1);
+            if (Stack.Count > 0) Stack.Pop(); // Remove the value WriteLdloc pushed
+        }
+        else
+        {
+            throw new InvalidOperationException($"ldfld '{fieldName}' without preceding ldloca.s or struct ldloc");
+        }
+
+        string structType = ResolveStructType(localIndex, fieldName);
+        ushort baseAddr = GetOrAllocateStructLocal(localIndex, structType);
+        int fieldOffset = GetFieldOffset(structType, fieldName);
+        ushort fieldAddr = (ushort)(baseAddr + fieldOffset);
+
+        Emit(Opcode.LDA, AddressMode.Absolute, fieldAddr);
+        _runtimeValueInA = true;
+        _immediateInA = null;
+
+        // Push the field value onto the IL stack (unknown at compile time)
+        Stack.Push(0);
     }
 
     /// <summary>
