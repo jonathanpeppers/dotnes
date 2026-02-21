@@ -42,14 +42,13 @@ pal_all(PALETTE);
 ppu_on_all();
 
 // initialize actors with pseudo-random values
-byte i = 0;
-while (i < 24)
+byte i;
+for (i = 0; i < 24; i = (byte)(i + 1))
 {
     actor_x[i] = rand8();
     actor_y[i] = rand8();
     actor_dx[i] = (byte)((rand8() & 7) - 3);
     actor_dy[i] = (byte)((rand8() & 7) - 3);
-    i = (byte)(i + 1);
 }
 
 // main loop - i persists across frames for flicker effect

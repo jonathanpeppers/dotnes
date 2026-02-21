@@ -39,27 +39,23 @@ pal_all(PALETTE);
 ppu_on_all();
 
 // initialize actors with pseudo-random values
-byte i = 0;
-while (i < 16)
+for (byte i = 0; i < 16; i = (byte)(i + 1))
 {
     actor_x[i] = rand8();
     actor_y[i] = rand8();
     actor_dx[i] = (byte)((rand8() & 7) - 3);
     actor_dy[i] = (byte)((rand8() & 7) - 3);
-    i = (byte)(i + 1);
 }
 
 // main loop
 while (true)
 {
     byte oam_id = 0;
-    i = 0;
-    while (i < 16)
+    for (byte i = 0; i < 16; i = (byte)(i + 1))
     {
         oam_id = oam_meta_spr(actor_x[i], actor_y[i], oam_id, metasprite);
         actor_x[i] = (byte)(actor_x[i] + actor_dx[i]);
         actor_y[i] = (byte)(actor_y[i] + actor_dy[i]);
-        i = (byte)(i + 1);
     }
     if (oam_id != 0)
         oam_hide_rest(oam_id);

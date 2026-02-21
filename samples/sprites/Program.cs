@@ -23,14 +23,12 @@ byte[] actor_dx = new byte[32];
 byte[] actor_dy = new byte[32];
 
 // initialize actors with random values
-byte i = 0;
-while (i < 32)
+for (byte i = 0; i < 32; i = (byte)(i + 1))
 {
     actor_x[i] = rand8();
     actor_y[i] = rand8();
     actor_dx[i] = (byte)((rand8() & 7) - 3);
     actor_dy[i] = (byte)((rand8() & 7) - 3);
-    i = (byte)(i + 1);
 }
 
 // setup PPU
@@ -42,13 +40,11 @@ ppu_on_all();
 while (true)
 {
     byte oam_id = 0;
-    i = 0;
-    while (i < 32)
+    for (byte i = 0; i < 32; i = (byte)(i + 1))
     {
         oam_id = oam_spr(actor_x[i], actor_y[i], i, i, oam_id);
         actor_x[i] = (byte)(actor_x[i] + actor_dx[i]);
         actor_y[i] = (byte)(actor_y[i] + actor_dy[i]);
-        i = (byte)(i + 1);
     }
     if (oam_id != 0)
         oam_hide_rest(oam_id);

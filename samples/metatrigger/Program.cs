@@ -58,14 +58,12 @@ ppu_on_all();
 byte vbright = 4;
 
 // initialize actors
-byte i = 0;
-while (i < 8)
+for (byte i = 0; i < 8; i = (byte)(i + 1))
 {
     actor_x[i] = (byte)(i * 32);
     actor_y[i] = (byte)(i * 16 + 64);
     actor_dx[i] = 0;
     actor_dy[i] = 0;
-    i = (byte)(i + 1);
 }
 
 // main loop
@@ -98,13 +96,11 @@ while (true)
         actor_dy[0] = 0;
 
     // draw and move all actors
-    i = 0;
-    while (i < 8)
+    for (byte i = 0; i < 8; i = (byte)(i + 1))
     {
         oam_id = oam_meta_spr(actor_x[i], actor_y[i], oam_id, playerRStand);
         actor_x[i] = (byte)(actor_x[i] + actor_dx[i]);
         actor_y[i] = (byte)(actor_y[i] + actor_dy[i]);
-        i = (byte)(i + 1);
     }
 
     if (oam_id != 0)

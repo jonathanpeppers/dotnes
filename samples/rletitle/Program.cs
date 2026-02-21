@@ -65,14 +65,12 @@ while (true) ;
 
 static void fade_in()
 {
-    byte vb = 0;
-    while (vb <= 4)
+    for (byte vb = 0; vb <= 4; vb = (byte)(vb + 1))
     {
         pal_bright(vb);
         ppu_wait_frame();
         ppu_wait_frame();
         ppu_wait_frame();
         ppu_wait_frame();
-        vb = (byte)(vb + 1);
     }
 }
