@@ -23,7 +23,7 @@ void scroll_demo()
     byte bldg_height = (byte)((rand8() & 7) + 2);
     byte bldg_width = (byte)((rand8() & 3) * 4 + 4);
     byte bldg_char = (byte)(rand8() & 15);
-    byte x = 0;
+    ushort x = 0;
     byte col_counter = 32; // next column to draw (tile units)
     byte sub = 0; // sub-pixel counter (0-7)
     byte[] buf = new byte[PLAYROWS];

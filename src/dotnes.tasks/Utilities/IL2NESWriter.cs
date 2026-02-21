@@ -150,6 +150,12 @@ class IL2NESWriter : NESWriter
     public int MethodParamCount { get; init; }
 
     /// <summary>
+    /// Local variable indices that are word-sized (ushort). Detected by pre-scanning
+    /// for conv.u2 + stloc patterns in the IL. Word locals get 2 bytes of zero page.
+    /// </summary>
+    public HashSet<int> WordLocals { get; init; } = new();
+
+    /// <summary>
     /// NOTE: may not be exactly correct, this is the instructions inside zerobss:
     /// A925           LDA #$25                      ; zerobss
     /// 852A STA ptr1                      
@@ -275,7 +281,7 @@ class IL2NESWriter : NESWriter
                 if (_pendingIncDecLocal == 0)
                 {
                     // INC/DEC was already emitted, just update tracking
-                    Locals[0] = new Local(Stack.Pop(), Locals[0].Address);
+                    Locals[0] = new Local(Stack.Pop(), Locals[0].Address, IsWord: Locals[0].IsWord);
                     _pendingIncDecLocal = null;
                 }
                 else if (previous == ILOpCode.Ldtoken)
@@ -290,13 +296,13 @@ class IL2NESWriter : NESWriter
                 {
                     var addr = Locals.TryGetValue(0, out var existing) && existing.Address is not null
                         ? (ushort)existing.Address : (ushort)(local + LocalCount);
-                    WriteStloc(Locals[0] = new Local(Stack.Pop(), addr));
+                    WriteStloc(Locals[0] = new Local(Stack.Pop(), addr, IsWord: WordLocals.Contains(0)));
                 }
                 break;
             case ILOpCode.Stloc_1:
                 if (_pendingIncDecLocal == 1)
                 {
-                    Locals[1] = new Local(Stack.Pop(), Locals[1].Address);
+                    Locals[1] = new Local(Stack.Pop(), Locals[1].Address, IsWord: Locals[1].IsWord);
                     _pendingIncDecLocal = null;
                 }
                 else if (previous == ILOpCode.Ldtoken)
@@ -316,13 +322,13 @@ class IL2NESWriter : NESWriter
                 {
                     var addr = Locals.TryGetValue(1, out var existing) && existing.Address is not null
                         ? (ushort)existing.Address : (ushort)(local + LocalCount);
-                    WriteStloc(Locals[1] = new Local(Stack.Pop(), addr));
+                    WriteStloc(Locals[1] = new Local(Stack.Pop(), addr, IsWord: WordLocals.Contains(1)));
                 }
                 break;
             case ILOpCode.Stloc_2:
                 if (_pendingIncDecLocal == 2)
                 {
-                    Locals[2] = new Local(Stack.Pop(), Locals[2].Address);
+                    Locals[2] = new Local(Stack.Pop(), Locals[2].Address, IsWord: Locals[2].IsWord);
                     _pendingIncDecLocal = null;
                 }
                 else if (previous == ILOpCode.Ldtoken)
@@ -342,13 +348,13 @@ class IL2NESWriter : NESWriter
                 {
                     var addr = Locals.TryGetValue(2, out var existing) && existing.Address is not null
                         ? (ushort)existing.Address : (ushort)(local + LocalCount);
-                    WriteStloc(Locals[2] = new Local(Stack.Pop(), addr));
+                    WriteStloc(Locals[2] = new Local(Stack.Pop(), addr, IsWord: WordLocals.Contains(2)));
                 }
                 break;
             case ILOpCode.Stloc_3:
                 if (_pendingIncDecLocal == 3)
                 {
-                    Locals[3] = new Local(Stack.Pop(), Locals[3].Address);
+                    Locals[3] = new Local(Stack.Pop(), Locals[3].Address, IsWord: Locals[3].IsWord);
                     _pendingIncDecLocal = null;
                 }
                 else if (previous == ILOpCode.Ldtoken)
@@ -368,7 +374,7 @@ class IL2NESWriter : NESWriter
                 {
                     var addr = Locals.TryGetValue(3, out var existing) && existing.Address is not null
                         ? (ushort)existing.Address : (ushort)(local + LocalCount);
-                    WriteStloc(Locals[3] = new Local(Stack.Pop(), addr));
+                    WriteStloc(Locals[3] = new Local(Stack.Pop(), addr, IsWord: WordLocals.Contains(3)));
                 }
                 break;
             case ILOpCode.Ldloc_0:
@@ -628,7 +634,7 @@ class IL2NESWriter : NESWriter
                     if (_pendingIncDecLocal == localIdx)
                     {
                         // INC/DEC was already emitted, just update tracking
-                        Locals[localIdx] = new Local(Stack.Pop(), Locals[localIdx].Address);
+                        Locals[localIdx] = new Local(Stack.Pop(), Locals[localIdx].Address, IsWord: Locals[localIdx].IsWord);
                         _pendingIncDecLocal = null;
                     }
                     else if (previous == ILOpCode.Newarr)
@@ -648,10 +654,10 @@ class IL2NESWriter : NESWriter
                     }
                     else
                     {
-                        // Regular byte local — allocate address and store
+                        // Regular local — allocate address and store
                         var addr = Locals.TryGetValue(localIdx, out var existing) && existing.Address is not null
                             ? (ushort)existing.Address : (ushort)(local + LocalCount);
-                        WriteStloc(Locals[localIdx] = new Local(Stack.Pop(), addr));
+                        WriteStloc(Locals[localIdx] = new Local(Stack.Pop(), addr, IsWord: WordLocals.Contains(localIdx)));
                     }
                 }
                 break;
@@ -1407,21 +1413,40 @@ class IL2NESWriter : NESWriter
                 storeLocalIndex == _lastLoadedLocalIndex)
             {
                 // This is an x++ or x-- pattern!
-                // Remove the previously emitted instructions:
-                // WriteLdloc emits: LDA $addr (1 instruction)
-                // WriteLdc(byte) emits: LDA #imm (1 instruction)
-                // Total: 2 instructions to remove
-                RemoveLastInstructions(2);
-                
-                // Emit optimized INC or DEC
                 ushort addr = (ushort)loadedLocal.Address.Value;
-                if (isAdd)
+
+                if (loadedLocal.IsWord)
                 {
-                    Emit(Opcode.INC, AddressMode.Absolute, addr);
+                    // 16-bit local: remove LDA $lo, LDX $hi, JSR pushax, LDA #1 (4 instructions)
+                    RemoveLastInstructions(4);
+                    if (isAdd)
+                    {
+                        // INC lo; BNE +3; INC hi
+                        Emit(Opcode.INC, AddressMode.Absolute, addr);
+                        Emit(Opcode.BNE, AddressMode.Relative, 0x03);
+                        Emit(Opcode.INC, AddressMode.Absolute, (ushort)(addr + 1));
+                    }
+                    else
+                    {
+                        // LDA lo; BNE +3; DEC hi; DEC lo
+                        Emit(Opcode.LDA, AddressMode.Absolute, addr);
+                        Emit(Opcode.BNE, AddressMode.Relative, 0x03);
+                        Emit(Opcode.DEC, AddressMode.Absolute, (ushort)(addr + 1));
+                        Emit(Opcode.DEC, AddressMode.Absolute, addr);
+                    }
                 }
                 else
                 {
-                    Emit(Opcode.DEC, AddressMode.Absolute, addr);
+                    // 8-bit local: remove LDA $addr + LDA #1 (2 instructions)
+                    RemoveLastInstructions(2);
+                    if (isAdd)
+                    {
+                        Emit(Opcode.INC, AddressMode.Absolute, addr);
+                    }
+                    else
+                    {
+                        Emit(Opcode.DEC, AddressMode.Absolute, addr);
+                    }
                 }
                 
                 // Signal that Stloc should be skipped
@@ -1586,6 +1611,15 @@ class IL2NESWriter : NESWriter
             _savedRuntimeToTemp = false;
             _immediateInA = null;
         }
+        else if (local.IsWord)
+        {
+            LocalCount += 2;
+            // Word local (e.g. ushort x = 0): store low byte in A, high byte = 0
+            Emit(Opcode.STA, AddressMode.Absolute, (ushort)local.Address);
+            Emit(Opcode.LDA, AddressMode.Immediate, 0x00);
+            Emit(Opcode.STA, AddressMode.Absolute, (ushort)(local.Address + 1));
+            _immediateInA = 0x00;
+        }
         else if (local.Value < byte.MaxValue)
         {
             LocalCount += 1;
@@ -1686,7 +1720,18 @@ class IL2NESWriter : NESWriter
         else if (local.Address is not null)
         {
             // This is actually a local variable
-            if (local.Value < byte.MaxValue)
+            if (local.IsWord)
+            {
+                if (LastLDA)
+                {
+                    EmitJSR("pusha");
+                }
+                Emit(Opcode.LDA, AddressMode.Absolute, (ushort)local.Address);
+                Emit(Opcode.LDX, AddressMode.Absolute, (ushort)(local.Address + 1));
+                _immediateInA = null;
+                _ushortInAX = true;
+            }
+            else if (local.Value < byte.MaxValue)
             {
                 if (LastLDA)
                 {

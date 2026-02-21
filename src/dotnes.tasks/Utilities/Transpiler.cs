@@ -157,6 +157,7 @@ class Transpiler : IDisposable
             Instructions = instructions,
             UsedMethods = UsedMethods,
             UserMethodNames = new HashSet<string>(UserMethods.Keys, StringComparer.Ordinal),
+            WordLocals = DetectWordLocals(instructions),
         };
 
         writer.StartBlockBuffering();
@@ -226,6 +227,7 @@ class Transpiler : IDisposable
                 UsedMethods = UsedMethods,
                 UserMethodNames = new HashSet<string>(UserMethods.Keys, StringComparer.Ordinal),
                 MethodParamCount = paramCount,
+                WordLocals = DetectWordLocals(methodIL),
             };
             methodWriter.StartBlockBuffering();
 
@@ -663,5 +665,31 @@ class Transpiler : IDisposable
             assembly.Dispose();
         }
         _pe.Dispose();
+    }
+
+    /// <summary>
+    /// Pre-scan IL instructions for conv.u2 + stloc patterns to detect ushort locals.
+    /// </summary>
+    static HashSet<int> DetectWordLocals(ILInstruction[] instructions)
+    {
+        var result = new HashSet<int>();
+        for (int i = 0; i < instructions.Length - 1; i++)
+        {
+            if (instructions[i].OpCode != ILOpCode.Conv_u2)
+                continue;
+            var next = instructions[i + 1];
+            int? idx = next.OpCode switch
+            {
+                ILOpCode.Stloc_0 => 0,
+                ILOpCode.Stloc_1 => 1,
+                ILOpCode.Stloc_2 => 2,
+                ILOpCode.Stloc_3 => 3,
+                ILOpCode.Stloc_s => next.Integer,
+                _ => null
+            };
+            if (idx.HasValue)
+                result.Add(idx.Value);
+        }
+        return result;
     }
 }
