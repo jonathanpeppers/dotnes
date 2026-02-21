@@ -860,7 +860,8 @@ internal static class BuiltInSubroutines
         block.Emit(STA_zpg(TEMP3))       // TEMP3 = len
              // Write header to buffer
              .Emit(LDX_zpg(UPDPTR))       // X = buffer index
-             .Emit(LDA_zpg(TEMP))         // addr_hi | HORZ
+             .Emit(LDA_zpg(TEMP))         // addr_hi
+             .Emit(EOR(0x40))             // toggle bit 6 = sequential flag
              .Emit(STA_abs_X(0x0100))
              .Emit(INX())
              .Emit(LDA_zpg(TEMP2))        // addr_lo

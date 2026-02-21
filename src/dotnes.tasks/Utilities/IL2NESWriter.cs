@@ -1438,9 +1438,17 @@ class IL2NESWriter : NESWriter
                 var lastInstr = block[block.Count - 1];
                 useLocalAddress = lastInstr.Mode == AddressMode.Absolute && lastInstr.Opcode == Opcode.LDA;
                 if (useLocalAddress)
+                {
                     localAddr = (ushort)lastLocal!.Address!.Value;
-                // Remove the pusha + last LDA to restore A to the first-loaded value
-                RemoveLastInstructions(2);
+                    // Remove pusha + ldloc's LDA — A retains constant from ldc
+                    RemoveLastInstructions(2);
+                }
+                else
+                {
+                    // Local was loaded FIRST (ldloc then ldc). Only remove ldc's LDA.
+                    // A retains local's value from ldloc's LDA which stays in the block.
+                    RemoveLastInstructions(1);
+                }
             }
             if (isAdd)
             {
