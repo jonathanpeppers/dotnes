@@ -5,7 +5,7 @@
  * Differences from original 8bitworkshop horizmask.c:
  * - No attribute table updates (no nt2attraddr, no VRAMBUF_PUT)
  * - Single "HORIZMASK DEMO" header instead of multi-line text
- * - x is a byte (0-255) instead of word x_scroll
+ * - x is an unsigned int (16-bit) for smooth scrolling across both nametables
  * - sub-pixel counter instead of (x_scroll & 7) == 0
  * - col_counter tracks next column directly
  * - All state is local to scroll_demo()
@@ -46,7 +46,7 @@ void scroll_demo() {
   byte bldg_height;
   byte bldg_width;
   byte bldg_char;
-  byte x;
+  unsigned int x;
   byte col_counter;
   byte sub;
   char buf[PLAYROWS];
