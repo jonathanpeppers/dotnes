@@ -56,6 +56,33 @@ public class RoslynTests
         AssertEx.Equal(Utilities.ToByteArray(expectedAssembly), mainBlock);
     }
 
+    byte[] GetProgramBytes(string csharpSource)
+    {
+        _stream.SetLength(0);
+        csharpSource = $"using NES;using static NES.NESLib;{Environment.NewLine}{csharpSource}";
+        var syntaxTree = CSharpSyntaxTree.ParseText(csharpSource);
+        var systemPrivateCoreLib = typeof(object).Assembly.Location;
+        var frameworkDir = Path.GetDirectoryName(systemPrivateCoreLib)!;
+        var references = new List<MetadataReference>
+        {
+            MetadataReference.CreateFromFile(systemPrivateCoreLib),
+            MetadataReference.CreateFromFile(Path.Combine(frameworkDir, "netstandard.dll")),
+            MetadataReference.CreateFromFile(Path.Combine(frameworkDir, "System.Runtime.dll")),
+            MetadataReference.CreateFromFile(typeof(NESLib).Assembly.Location)
+        };
+        var compilation = CSharpCompilation
+            .Create("test.dll", [syntaxTree], references: references,
+                options: new CSharpCompilationOptions(OutputKind.ConsoleApplication,
+                    optimizationLevel: OptimizationLevel.Release, deterministic: true));
+        var emitResults = compilation.Emit(_stream);
+        if (!emitResults.Success)
+            Assert.Fail(string.Join(Environment.NewLine, emitResults.Diagnostics.Select(d => d.GetMessage())));
+        _stream.Seek(0, SeekOrigin.Begin);
+        using var transpiler = new Transpiler(_stream, [new AssemblyReader(new StreamReader(Utilities.GetResource("chr_generic.s")))], _logger);
+        var program = transpiler.BuildProgram6502(out _, out _);
+        return program.GetMainBlock();
+    }
+
     [Fact]
     public void HelloWorld()
     {
@@ -599,5 +626,88 @@ public class RoslynTests
                 208982  ; JSR ppu_on_all
                 4C0F85  ; JMP $850F
                 """);
+    }
+
+    [Fact]
+    public void EnumVariable()
+    {
+        // Enums compile to plain integer IL — no special transpiler support needed
+        var bytes = GetProgramBytes(
+            """
+            pal_col(0, 0x30);
+            GameState state = GameState.Playing;
+            if (state == GameState.Playing)
+                pal_col(1, 0x14);
+            if (state == GameState.GameOver)
+                pal_col(2, 0x27);
+            ppu_on_all();
+            while (true) ;
+
+            enum GameState : byte { Title, Playing, GameOver }
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        // Verify key patterns: store enum value, compare, branch
+        var hex = Convert.ToHexString(bytes);
+        // GameState.Playing = 1, stored with LDA #$01 (A901)
+        Assert.Contains("A901", hex);
+        // CMP #$01 (C901) for == Playing
+        Assert.Contains("C901", hex);
+        // CMP #$02 (C902) for == GameOver
+        Assert.Contains("C902", hex);
+    }
+
+    [Fact]
+    public void EnumSwitch()
+    {
+        // Enum used in a switch-like if/else chain (common game pattern)
+        var bytes = GetProgramBytes(
+            """
+            byte x = 128;
+            Direction dir = Direction.Right;
+            if (dir == Direction.Left) x--;
+            if (dir == Direction.Right) x++;
+            ppu_on_all();
+            while (true) ;
+
+            enum Direction : byte { Left, Right, Up, Down }
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        // Direction.Right = 1, stored with LDA #$01 (A901)
+        Assert.Contains("A901", hex);
+        // Direction.Left = 0: compiler optimizes == 0 to BNE (D0) without CMP
+        Assert.Contains("D0", hex);
+        // INC (EE) for x++ and DEC (CE) for x--
+        Assert.Contains("EE", hex);
+        Assert.Contains("CE", hex);
+    }
+
+    [Fact]
+    public void ForLoop()
+    {
+        // Verify for loops produce valid 6502 code
+        var bytes = GetProgramBytes(
+            """
+            pal_col(0, 0x30);
+            vram_adr(NTADR_A(0, 0));
+            for (byte i = 0; i < 5; i++)
+            {
+                vram_fill(i, 1);
+            }
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        // INC for i++ 
+        Assert.Contains("EE", hex);
+        // CMP #$05 (C905) for i < 5
+        Assert.Contains("C905", hex);
     }
 }
