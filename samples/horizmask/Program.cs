@@ -33,11 +33,9 @@ void scroll_demo()
         if (sub == 0)
         {
             // Clear buffer
-            byte i = 0;
-            while (i < PLAYROWS)
+            for (byte i = 0; i < PLAYROWS; i++)
             {
                 buf[i] = 0;
-                i++;
             }
 
             // Draw a random star in the sky
@@ -48,11 +46,9 @@ void scroll_demo()
             buf[roofIdx] = (byte)(bldg_char & 3);
 
             // Draw building body
-            byte j = (byte)(PLAYROWS - bldg_height);
-            while (j < PLAYROWS)
+            for (byte j = (byte)(PLAYROWS - bldg_height); j < PLAYROWS; j++)
             {
                 buf[j] = bldg_char;
-                j++;
             }
 
             // Write vertical column to offscreen nametable area

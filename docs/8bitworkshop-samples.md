@@ -334,7 +334,6 @@
 | Missing Feature | Samples Affected |
 |-----------------|-----------------|
 | User-defined functions with parameters | 25+ samples (byte params now supported; ushort/string params pending) |
-| `for` loops (must use `while`) | 20+ samples |
 | Global/static arrays | 15+ samples |
 | `typedef struct` / struct support | 8 samples |
 | Direct APU/PPU register access | 5 samples (apu.c already covered by built-in `apu_init()`) |
@@ -364,3 +363,5 @@
 | `ldarg` opcodes (function parameters) | horizscroll (infrastructure for user functions with byte params) |
 | `ushort` argument passing to built-ins (`pushax`) | horizscroll (16-bit scroll values) |
 | `incsp1`/`addysp` stack cleanup subroutines | horizscroll (parameter cleanup for user methods) |
+| `for` loops | all samples (C# `for` compiles to `br_s`+`blt_s` IL pattern, fully supported) |
+| `ushort` locals (16-bit zero page variables) | horizmask (smooth 16-bit scroll counter) |

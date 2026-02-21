@@ -22,11 +22,9 @@ oam_clear();
 
 // fill nametable with the message text on every row
 vram_adr(NTADR_A(0, 0));
-byte i = 0;
-while (i < 30)
+for (byte i = 0; i < 30; i++)
 {
     vram_write("  A:red B:green \x1e\x1f:blue \x1c\x1d:mono ");
-    i = (byte)(i + 1);
 }
 
 // attributes
