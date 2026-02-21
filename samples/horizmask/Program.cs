@@ -1,7 +1,7 @@
 // Horizontal scrolling with building generation using vertical VRAM writes.
 // Port of 8bitworkshop's horizmask.c sample.
 
-const byte PLAYROWS = 24;
+const byte PLAYROWS = 26;
 
 byte[] PALETTE = {
     0x03,

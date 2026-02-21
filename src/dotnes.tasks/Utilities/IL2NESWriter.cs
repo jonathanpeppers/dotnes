@@ -416,7 +416,28 @@ class IL2NESWriter : NESWriter
                 HandleAddSub(isAdd: false);
                 break;
             case ILOpCode.Mul:
-                Stack.Push(Stack.Pop() * Stack.Pop());
+                {
+                    int val2 = Stack.Pop();
+                    int val1 = Stack.Count > 0 ? Stack.Pop() : 0;
+                    if (_runtimeValueInA)
+                    {
+                        // Runtime multiply: use ASL for power-of-2 constants
+                        int constant = val2 >= 0 ? val2 : val1;
+                        if (constant > 0 && (constant & (constant - 1)) == 0)
+                        {
+                            int shifts = 0;
+                            int temp = constant;
+                            while (temp > 1) { temp >>= 1; shifts++; }
+                            for (int s = 0; s < shifts; s++)
+                                Emit(Opcode.ASL, AddressMode.Accumulator);
+                        }
+                        Stack.Push(val1 * val2);
+                    }
+                    else
+                    {
+                        Stack.Push(val1 * val2);
+                    }
+                }
                 break;
             case ILOpCode.Div:
                 {
@@ -640,11 +661,16 @@ class IL2NESWriter : NESWriter
                 break;
             case ILOpCode.Bne_un_s:
                 // Branch if not equal (unsigned)
+                // IL stack: ..., value1, value2 → ...
+                // Pattern: Ldloc → LDA $addr, then Ldc → LDA #imm
+                // Remove only the LDA #imm (1 instruction), keeping A = value1
                 {
                     operand = (sbyte)(byte)operand;
-                    RemoveLastInstructions(2);
+                    byte cmpValue = checked((byte)Stack.Pop()); // value2
+                    if (Stack.Count > 0) Stack.Pop(); // value1
+                    RemoveLastInstructions(1); // Remove LDA #imm from Ldc
                     
-                    // After removing 2, if the last instruction is INC/DEC (from x++ pattern),
+                    // If the last instruction is INC/DEC (from x++ pattern),
                     // A doesn't have the variable's value. Re-emit LDA to reload it.
                     var bneBlock = CurrentBlock!;
                     if (bneBlock.Count > 0)
@@ -655,18 +681,9 @@ class IL2NESWriter : NESWriter
                             Emit(Opcode.LDA, AddressMode.Absolute, absOp.Address);
                     }
                     
-                    Emit(Opcode.CMP, AddressMode.Immediate, checked((byte)Stack.Pop()));
-                    if (operand < 0)
-                    {
-                        // Backward branch: use label-based resolution
-                        var labelName = $"instruction_{instruction.Offset + operand + 2:X2}";
-                        EmitWithLabel(Opcode.BNE, AddressMode.Relative, labelName);
-                    }
-                    else
-                    {
-                        // Forward branch: read ahead to compute byte offset
-                        Emit(Opcode.BNE, AddressMode.Relative, NumberOfInstructionsForBranch(instruction.Offset + operand + 2));
-                    }
+                    Emit(Opcode.CMP, AddressMode.Immediate, cmpValue);
+                    var labelName = $"instruction_{instruction.Offset + operand + 2:X2}";
+                    EmitWithLabel(Opcode.BNE, AddressMode.Relative, labelName);
                     _runtimeValueInA = false;
                 }
                 break;
@@ -878,19 +895,20 @@ class IL2NESWriter : NESWriter
                             bool xIsRuntime = false;
                             bool xFromFlag = false; // true when x is runtime via _runtimeValueInA (not LDA Absolute)
                             Instruction? xInstr = null;
-                            if (!yIsRuntime && block.Count >= 2)
+                            if (!yIsRuntime && _runtimeValueInA)
+                            {
+                                // x came from a runtime expression (And/Or/Div etc.)
+                                // WriteLdc for y was skipped, so no LDA #y in block
+                                xIsRuntime = true;
+                                xFromFlag = true;
+                            }
+                            else if (!yIsRuntime && block.Count >= 2)
                             {
                                 var prevInstr = block[block.Count - 2];
                                 if (prevInstr.Mode == AddressMode.Absolute && prevInstr.Opcode == Opcode.LDA)
                                 {
                                     xIsRuntime = true;
                                     xInstr = prevInstr;
-                                }
-                                else if (_runtimeValueInA)
-                                {
-                                    // x came from a runtime expression (And/Or/Div etc.)
-                                    xIsRuntime = true;
-                                    xFromFlag = true;
                                 }
                             }
 
@@ -916,7 +934,7 @@ class IL2NESWriter : NESWriter
                             else
                             {
                                 // At least one arg is runtime — use nametable subroutine
-                                Stack.Pop(); // y (constant or placeholder)
+                                int yVal = Stack.Pop(); // y (constant or placeholder)
                                 Stack.Pop(); // x (constant or placeholder)
                                 string subroutine = operand switch
                                 {
@@ -939,9 +957,8 @@ class IL2NESWriter : NESWriter
                                 else if (xFromFlag)
                                 {
                                     // Runtime x from expression (And/Div etc.), constant y
-                                    // Block has: ..., <runtime op result in A>, LDA #y (1 instr to remove)
-                                    byte cy = ((ImmediateOperand)lastInstr.Operand!).Value;
-                                    RemoveLastInstructions(1); // Remove LDA #y, restores runtime A
+                                    // WriteLdc for y was skipped (_runtimeValueInA), so no LDA #y in block
+                                    byte cy = checked((byte)yVal);
                                     Emit(Opcode.STA, AddressMode.ZeroPage, TEMP);
                                     Emit(Opcode.LDA, AddressMode.Immediate, cy);
                                 }
@@ -2433,12 +2450,94 @@ class IL2NESWriter : NESWriter
             }
         }
 
-        if (targetArrayLocalIdx < 0 || (targetIndexLocalIdx < 0 && constantIndex < 0))
+        if (targetArrayLocalIdx < 0)
         {
-            // Stelem with expression-based index — not yet handled. Clear runtime state.
+            // Can't identify target array at all
             _runtimeValueInA = false;
             _savedRuntimeToTemp = false;
             _lastLoadedLocalIndex = null;
+            return;
+        }
+
+        // Handle expression-based index: buf[expr] = constValue
+        // Pattern: call+and, call, etc. as index expression
+        if (targetIndexLocalIdx < 0 && constantIndex < 0)
+        {
+            var targetArray2 = Locals[targetArrayLocalIdx];
+            if (targetArray2.Address is null)
+            {
+                _runtimeValueInA = false;
+                _savedRuntimeToTemp = false;
+                _lastLoadedLocalIndex = null;
+                return;
+            }
+
+            // Remove previously emitted instructions
+            if (_blockCountAtILOffset.TryGetValue(targetArrayILOffset, out int blockCountExpr))
+            {
+                int instrToRemove = GetBufferedBlockCount() - blockCountExpr;
+                if (instrToRemove > 0)
+                    RemoveLastInstructions(instrToRemove);
+            }
+
+            // Find the instruction array index of the target array ldloc
+            int targetArrayInstrIdx = -1;
+            for (int i = 0; i < Instructions.Length; i++)
+            {
+                if (Instructions[i].Offset == targetArrayILOffset) { targetArrayInstrIdx = i; break; }
+            }
+
+            // Find the constant value (last ldc before stelem, searching backwards)
+            int? exprValue = null;
+            int valueInstrIdx = -1;
+            for (int i = Index - 1; i > targetArrayInstrIdx; i--)
+            {
+                int? val = GetLdcValue(Instructions[i]);
+                if (val != null && Instructions[i].OpCode != ILOpCode.And)
+                {
+                    exprValue = val;
+                    valueInstrIdx = i;
+                    break;
+                }
+            }
+
+            // Emit index expression: instructions between array ldloc and value
+            int idxStart = targetArrayInstrIdx + 1;
+            if (idxStart >= 0 && valueInstrIdx >= 0)
+            {
+                for (int i = idxStart; i < valueInstrIdx; i++)
+                {
+                    var il = Instructions[i];
+                    if (il.OpCode == ILOpCode.Call && il.String != null)
+                    {
+                        EmitWithLabel(Opcode.JSR, AddressMode.Absolute, il.String);
+                        UsedMethods?.Add(il.String);
+                    }
+                    else if (il.OpCode == ILOpCode.And)
+                    {
+                        // Find the AND mask from the preceding ldc
+                        if (i > idxStart)
+                        {
+                            int? mask = GetLdcValue(Instructions[i - 1]);
+                            if (mask != null)
+                                Emit(Opcode.AND, AddressMode.Immediate, checked((byte)mask.Value));
+                        }
+                    }
+                    // Skip ldc values that are part of the index expression (AND mask, etc.)
+                }
+                // Move index from A to X
+                Emit(Opcode.TAX, AddressMode.Implied);
+            }
+
+            // Load value and store
+            if (exprValue != null)
+                Emit(Opcode.LDA, AddressMode.Immediate, checked((byte)exprValue.Value));
+            Emit(Opcode.STA, AddressMode.AbsoluteX, (ushort)targetArray2.Address);
+
+            _immediateInA = null;
+            _lastLoadedLocalIndex = null;
+            _runtimeValueInA = false;
+            _savedRuntimeToTemp = false;
             return;
         }
 

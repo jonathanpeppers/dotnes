@@ -345,17 +345,16 @@ public class RoslynTests
                 """,
             expectedAssembly:
                 """
-                207085  ; JSR pal_all
-                A920    ; LDA #$20 (array size)
-                A003    ; LDY #$03
-                9122    ; STA ($22),Y
-                A928    ; LDA #$28
-                88      ; DEY
-                9122    ; STA ($22),Y
-                AD2503  ; LDA M0001 (x)
-                D00D    ; BNE skip
-                207085  ; JSR decsp4
-                AD2503  ; LDA M0001 (x)
+                A9F2A285
+                201182  ; JSR pal_all
+                A928    ; LDA #$28 (x = 40)
+                8D2503  ; STA $0325
+                A922A286
+                AD2503  ; LDA $0325 (load x)
+                C928    ; CMP #$28
+                D01E    ; BNE skip
+                207485  ; JSR decsp4
+                AD2503  ; LDA $0325 (x)
                 A003    ; LDY #$03
                 9122    ; STA ($22),Y
                 A928    ; LDA #$28
@@ -368,9 +367,9 @@ public class RoslynTests
                 88      ; DEY
                 9122    ; STA ($22),Y
                 A900    ; LDA #$00
-                20C285  ; JSR oam_spr
+                20C685  ; JSR oam_spr
                 208982  ; JSR ppu_on_all
-                4C3485  ; JMP loop
+                4C3885  ; JMP loop
                 """);
     }
 

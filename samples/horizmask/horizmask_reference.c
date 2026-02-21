@@ -25,7 +25,7 @@
 // link the pattern table into CHR ROM
 //#link "chr_generic.s"
 
-#define PLAYROWS 24
+#define PLAYROWS 26
 
 /*{pal:"nes",layout:"nes"}*/
 const char PALETTE[32] = { 
