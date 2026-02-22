@@ -765,4 +765,94 @@ public class RoslynTests
         // CLC + ADC pattern for add (18 = CLC, 65/6D = ADC)
         Assert.Contains("18", hex);
     }
+
+    [Fact]
+    public void FunctionReturnConstant()
+    {
+        // Simplest case: function returns a constant byte
+        var bytes = GetProgramBytes(
+            """
+            pal_col(0, get_value());
+            ppu_on_all();
+            while (true) ;
+
+            static byte get_value() => 5;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        // Main block should contain JSR to get_value and JSR to pal_col
+        // LDA #$00 for pal_col first arg
+        Assert.Contains("A900", hex);
+        // Multiple JSR calls (20 = JSR opcode)
+        Assert.True(hex.Split("20").Length >= 3, "Expected at least 2 JSR calls in main block");
+    }
+
+    [Fact]
+    public void FunctionReturnParameter()
+    {
+        // Function takes a byte param and returns a computed value
+        var bytes = GetProgramBytes(
+            """
+            pal_col(0, add_one(3));
+            ppu_on_all();
+            while (true) ;
+
+            static byte add_one(byte x) => (byte)(x + 1);
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        // LDA #$03 for the argument to add_one
+        Assert.Contains("A903", hex);
+    }
+
+    [Fact]
+    public void FunctionReturnUsedInExpression()
+    {
+        // Return value stored to local, then used as argument
+        var bytes = GetProgramBytes(
+            """
+            byte r = get_value();
+            pal_col(0, r);
+            ppu_on_all();
+            while (true) ;
+
+            static byte get_value() => 0x14;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        // STA to local variable (8D = STA absolute, for storing return value)
+        Assert.Contains("8D", hex);
+    }
+
+    [Fact]
+    public void FunctionReturnWithParamUsed()
+    {
+        // Return value from parameterized function used in pal_col
+        // Verifies return value survives incsp1 parameter cleanup
+        var bytes = GetProgramBytes(
+            """
+            pal_col(0, double_it(3));
+            ppu_on_all();
+            while (true) ;
+
+            static byte double_it(byte x) => (byte)(x + x);
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        // LDA #$00 for pal_col first arg
+        Assert.Contains("A900", hex);
+        // LDA #$03 for double_it arg
+        Assert.Contains("A903", hex);
+        // 4 JSR calls: pusha, double_it, pal_col, ppu_on_all
+        int jsrCount = hex.Split("20").Length - 1;
+        Assert.True(jsrCount >= 4, $"Expected at least 4 JSR calls, got {jsrCount}");
+    }
 }

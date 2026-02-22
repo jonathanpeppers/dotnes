@@ -327,7 +327,7 @@
 
 | Missing Feature | Samples Affected |
 |-----------------|-----------------|
-| User-defined functions with parameters | 25+ samples (byte params now supported; ushort/string params pending) |
+| User-defined functions with parameters | 25+ samples (byte params and return values now supported; ushort/string params pending) |
 | Global/static arrays | 15+ samples |
 | `typedef struct` / struct support | 8 samples (basic field access now supported; arrays of structs, pointers to structs pending) |
 | Direct APU/PPU register access | 5 samples (apu.c already covered by built-in `apu_init()`) |
@@ -366,7 +366,7 @@
 
 Prioritized TODO list of features needed to port climber.c, ordered by dependency and impact:
 
-- [ ] **User functions with return values** — climber.c has 20+ functions returning `byte`, `bool`, or `word`. We already detect `hasReturnValue` in metadata; need to handle `ret` leaving result in A (byte) or A:X (ushort). Unlocks: `rndint`, `is_in_gap`, `get_floor_yy`, `get_closest_ladder`, `mount_ladder`, `check_collision`, `iabs`.
+- [x] **User functions with return values** — byte return values work: the last computed value stays in A through `incsp` parameter cleanup and RTS. The caller's `HasReturnValue` check sets `_runtimeValueInA = true`. Verified with RoslynTests: constant return, parameterized return, return value stored to local.
 - [ ] **switch/case** — may already work for small cases (compiler generates branch chains). Verify with a RoslynTest; larger switches may need the `switch` IL opcode (jump table). Used in `move_actor` and `draw_actor`.
 - [ ] **BCD arithmetic** — implement as `BCD` struct with `operator+` in NESLib, backed by a 6502 subroutine. Used for score tracking: `score = bcd_add(score, 1)`.
 - [ ] **Global/static variables** — `stsfld`/`ldsfld` for user-defined fields (extend existing `oam_off` handling). Climber needs: `scroll_pixel_yy`, `scroll_tile_y`, `player_screen_y`, `score`, `vbright`. Could also be top-level locals captured by local functions.
