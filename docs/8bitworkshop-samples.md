@@ -361,3 +361,16 @@
 | `ushort` locals (16-bit zero page variables) | horizmask (smooth 16-bit scroll counter) |
 | `enum` types (compile to plain integer IL, no transpiler changes needed) | climber, siegegame (enum values, switch on enum) |
 | Struct support (`stfld`, `ldfld`, `ldloca.s`) — byte/ushort fields on zero page | aputest, climber, shoot2, siegegame (struct field access and arithmetic) |
+
+### Roadmap to climber.c
+
+Prioritized TODO list of features needed to port climber.c, ordered by dependency and impact:
+
+- [ ] **User functions with return values** — climber.c has 20+ functions returning `byte`, `bool`, or `word`. We already detect `hasReturnValue` in metadata; need to handle `ret` leaving result in A (byte) or A:X (ushort). Unlocks: `rndint`, `is_in_gap`, `get_floor_yy`, `get_closest_ladder`, `mount_ladder`, `check_collision`, `iabs`.
+- [ ] **switch/case** — may already work for small cases (compiler generates branch chains). Verify with a RoslynTest; larger switches may need the `switch` IL opcode (jump table). Used in `move_actor` and `draw_actor`.
+- [ ] **BCD arithmetic** — implement as `BCD` struct with `operator+` in NESLib, backed by a 6502 subroutine. Used for score tracking: `score = bcd_add(score, 1)`.
+- [ ] **Global/static variables** — `stsfld`/`ldsfld` for user-defined fields (extend existing `oam_off` handling). Climber needs: `scroll_pixel_yy`, `scroll_tile_y`, `player_screen_y`, `score`, `vbright`. Could also be top-level locals captured by local functions.
+- [ ] **sbyte (signed char)** — `Actor.yvel`, `Actor.xvel` are signed. Needs `conv.i1` handling and signed comparison branches (`Blt_s` already works for unsigned; may need signed variants).
+- [ ] **Arrays of structs** — `Floor floors[MAX_FLOORS]`, `Actor actors[MAX_ACTORS]`. Need indexed struct access: base address + (index × struct size) + field offset.
+- [ ] **memset/memcpy** — used for clearing buffers and arrays. Map to 6502 fill loop or built-in subroutine.
+- [ ] **FamiTone2 integration** — `famitone_init`, `sfx_init`, `sfx_play`, `music_play`, `music_stop`, `nmi_set_callback(famitone_update)`. Requires linking external `.s` assembly files.
