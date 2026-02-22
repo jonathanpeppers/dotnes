@@ -369,7 +369,7 @@ Prioritized TODO list of features needed to port climber.c, ordered by dependenc
 - [x] **switch/case** — small switches use branch chains (beq.s, already supported). Larger sequential switches use the IL `switch` opcode (0x45) which emits CMP/BNE+JMP trampolines. Tested with SwitchSmall (3 cases) and SwitchEnum (7 cases with enum).
 - [x] **BCD arithmetic** — `bcd_add(ushort, ushort)` built-in NESLib function backed by 6502 subroutine. Software BCD since NES CPU disabled hardware BCD mode. Also fixed: 16-bit return values from built-in functions now correctly store both bytes (STA+STX) to word locals.
 - [x] **Global/static variables** — `stsfld`/`ldsfld` for user-defined static class fields. Allocated at `$0325+` (same region as locals). Both `static class State { public static byte x; }` and local variables work for the same patterns. Tested with store, load, and loop increment.
-- [ ] **sbyte (signed char)** — `Actor.yvel`, `Actor.xvel` are signed. Needs `conv.i1` handling and signed comparison branches (`Blt_s` already works for unsigned; may need signed variants).
+- [x] **sbyte (signed char)** — `Ldc_i4_m1`, negative constants via two's complement, `conv.i1`/`conv.i2`/`conv.i4` as no-ops on 8-bit 6502. Signed comparisons work via `Blt_s` (BMI).
 - [ ] **Arrays of structs** — `Floor floors[MAX_FLOORS]`, `Actor actors[MAX_ACTORS]`. Need indexed struct access: base address + (index × struct size) + field offset.
 - [ ] **memset/memcpy** — used for clearing buffers and arrays. Map to 6502 fill loop or built-in subroutine.
 - [ ] **FamiTone2 integration** — `famitone_init`, `sfx_init`, `sfx_play`, `music_play`, `music_stop`, `nmi_set_callback(famitone_update)`. Requires linking external `.s` assembly files.

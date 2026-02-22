@@ -1049,4 +1049,59 @@ public class RoslynTests
         Assert.Contains("8D", hex); // STA absolute for local
         Assert.Contains("AD", hex); // LDA absolute for local reload
     }
+
+    [Fact]
+    public void SbyteNegativeConstant()
+    {
+        // sbyte -1 should emit LDA #$FF (two's complement)
+        var bytes = GetProgramBytes(
+            """
+            sbyte vel = -1;
+            pal_col(0, (byte)vel);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        Assert.Contains("A9FF", hex); // LDA #$FF (-1 in two's complement)
+    }
+
+    [Fact]
+    public void SbyteNegativeArithmetic()
+    {
+        // sbyte arithmetic: -5 + 3 = -2 (0xFE)
+        var bytes = GetProgramBytes(
+            """
+            sbyte x = -5;
+            x = (sbyte)(x + 3);
+            pal_col(0, (byte)x);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        Assert.Contains("A9FB", hex); // LDA #$FB (-5 in two's complement)
+    }
+
+    [Fact]
+    public void SbyteComparison()
+    {
+        // sbyte comparison: if (vel < 0) should branch correctly
+        var bytes = GetProgramBytes(
+            """
+            sbyte vel = -2;
+            if (vel < 0) pal_col(0, 1);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        Assert.Contains("A9FE", hex); // LDA #$FE (-2 in two's complement)
+    }
 }

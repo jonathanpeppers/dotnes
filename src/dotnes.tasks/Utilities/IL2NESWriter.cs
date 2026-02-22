@@ -274,6 +274,9 @@ class IL2NESWriter : NESWriter
                     Stack.Pop();
                 _runtimeValueInA = false;
                 break;
+            case ILOpCode.Ldc_i4_m1:
+                WriteLdc(0xFF); // -1 in two's complement = 0xFF
+                break;
             case ILOpCode.Ldc_i4_0:
                 WriteLdc(0);
                 break;
@@ -430,7 +433,10 @@ class IL2NESWriter : NESWriter
             case ILOpCode.Conv_u2:
             case ILOpCode.Conv_u4:
             case ILOpCode.Conv_u8:
-                // Do nothing
+            case ILOpCode.Conv_i1:
+            case ILOpCode.Conv_i2:
+            case ILOpCode.Conv_i4:
+                // No-op: sign/zero extension is irrelevant on 8-bit 6502
                 break;
             case ILOpCode.Stelem_i1:
             case ILOpCode.Stelem_i2:
@@ -482,6 +488,7 @@ class IL2NESWriter : NESWriter
                         // Remove the LDA #divisor emitted by WriteLdc
                         if (!_runtimeValueInA
                             && previous is ILOpCode.Ldc_i4_s or ILOpCode.Ldc_i4
+                            or ILOpCode.Ldc_i4_m1
                             or ILOpCode.Ldc_i4_0 or ILOpCode.Ldc_i4_1 or ILOpCode.Ldc_i4_2
                             or ILOpCode.Ldc_i4_3 or ILOpCode.Ldc_i4_4 or ILOpCode.Ldc_i4_5
                             or ILOpCode.Ldc_i4_6 or ILOpCode.Ldc_i4_7 or ILOpCode.Ldc_i4_8)
@@ -528,6 +535,7 @@ class IL2NESWriter : NESWriter
                         // Only remove if WriteLdc actually emitted LDA (not skipped due to _runtimeValueInA)
                         if (!_runtimeValueInA
                             && previous is ILOpCode.Ldc_i4_s or ILOpCode.Ldc_i4 
+                            or ILOpCode.Ldc_i4_m1
                             or ILOpCode.Ldc_i4_0 or ILOpCode.Ldc_i4_1 or ILOpCode.Ldc_i4_2
                             or ILOpCode.Ldc_i4_3 or ILOpCode.Ldc_i4_4 or ILOpCode.Ldc_i4_5
                             or ILOpCode.Ldc_i4_6 or ILOpCode.Ldc_i4_7 or ILOpCode.Ldc_i4_8)
@@ -566,6 +574,7 @@ class IL2NESWriter : NESWriter
                         // Remove the LDA #mask emitted by WriteLdc
                         if (!_runtimeValueInA
                             && previous is ILOpCode.Ldc_i4_s or ILOpCode.Ldc_i4
+                            or ILOpCode.Ldc_i4_m1
                             or ILOpCode.Ldc_i4_0 or ILOpCode.Ldc_i4_1 or ILOpCode.Ldc_i4_2
                             or ILOpCode.Ldc_i4_3 or ILOpCode.Ldc_i4_4 or ILOpCode.Ldc_i4_5
                             or ILOpCode.Ldc_i4_6 or ILOpCode.Ldc_i4_7 or ILOpCode.Ldc_i4_8)
@@ -1844,6 +1853,7 @@ class IL2NESWriter : NESWriter
 
     static int? GetLdcValue(ILInstruction instr) => instr.OpCode switch
     {
+        ILOpCode.Ldc_i4_m1 => -1,
         ILOpCode.Ldc_i4_0 => 0,
         ILOpCode.Ldc_i4_1 => 1,
         ILOpCode.Ldc_i4_2 => 2,
@@ -2178,10 +2188,11 @@ class IL2NESWriter : NESWriter
                     }
                     break;
                 }
+                case ILOpCode.Ldc_i4_m1:
                 case ILOpCode.Ldc_i4_s:
                 case ILOpCode.Ldc_i4:
                 {
-                    int val = il.Integer ?? 0;
+                    int val = il.OpCode == ILOpCode.Ldc_i4_m1 ? -1 : (il.Integer ?? 0);
                     if (IsConsumedByAdd(ilIdx))
                     {
                         pendingAddValue = val;
@@ -2196,6 +2207,7 @@ class IL2NESWriter : NESWriter
                 }
                 case ILOpCode.Add: case ILOpCode.Sub:
                 case ILOpCode.Conv_u1: case ILOpCode.Conv_u2:
+                case ILOpCode.Conv_i1: case ILOpCode.Conv_i2: case ILOpCode.Conv_i4:
                 case ILOpCode.Pop:
                     break;
                 default:
@@ -2592,7 +2604,7 @@ class IL2NESWriter : NESWriter
             var op = Instructions[scan].OpCode;
             if (op == ILOpCode.Add || op == ILOpCode.Sub)
                 return true;
-            if (op is ILOpCode.Conv_u1 or ILOpCode.Conv_u2)
+            if (op is ILOpCode.Conv_u1 or ILOpCode.Conv_u2 or ILOpCode.Conv_i1 or ILOpCode.Conv_i2)
                 continue;
             break;
         }
@@ -2714,6 +2726,7 @@ class IL2NESWriter : NESWriter
             {
                 case ILOpCode.Ldloc_0: case ILOpCode.Ldloc_1: case ILOpCode.Ldloc_2: case ILOpCode.Ldloc_3:
                 case ILOpCode.Ldloc_s:
+                case ILOpCode.Ldc_i4_m1:
                 case ILOpCode.Ldc_i4_0: case ILOpCode.Ldc_i4_1: case ILOpCode.Ldc_i4_2: case ILOpCode.Ldc_i4_3:
                 case ILOpCode.Ldc_i4_4: case ILOpCode.Ldc_i4_5: case ILOpCode.Ldc_i4_6: case ILOpCode.Ldc_i4_7:
                 case ILOpCode.Ldc_i4_8: case ILOpCode.Ldc_i4_s: case ILOpCode.Ldc_i4:
@@ -2724,6 +2737,7 @@ class IL2NESWriter : NESWriter
                 case ILOpCode.Ldelem_u1:
                     pop = 2; push = 1; break;
                 case ILOpCode.Conv_u1: case ILOpCode.Conv_u2: case ILOpCode.Conv_u4: case ILOpCode.Conv_u8:
+                case ILOpCode.Conv_i1: case ILOpCode.Conv_i2: case ILOpCode.Conv_i4:
                     break; // no net change
                 case ILOpCode.Call:
                     // Determine how many args the call takes
@@ -3001,11 +3015,12 @@ class IL2NESWriter : NESWriter
                         }
                     }
                     break;
+                case ILOpCode.Ldc_i4_m1:
                 case ILOpCode.Ldc_i4_0: case ILOpCode.Ldc_i4_1: case ILOpCode.Ldc_i4_2: case ILOpCode.Ldc_i4_3:
                 case ILOpCode.Ldc_i4_4: case ILOpCode.Ldc_i4_5: case ILOpCode.Ldc_i4_6: case ILOpCode.Ldc_i4_7:
                 case ILOpCode.Ldc_i4_8:
                     {
-                        int val = il.OpCode - ILOpCode.Ldc_i4_0;
+                        int val = il.OpCode == ILOpCode.Ldc_i4_m1 ? -1 : (il.OpCode - ILOpCode.Ldc_i4_0);
                         // Check what operation consumes this constant
                         if (i + 1 < Index)
                         {
