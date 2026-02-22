@@ -359,6 +359,7 @@
 | `switch/case` — sequential cases via IL `switch` opcode (CMP/BNE+JMP trampolines), non-sequential via beq.s chains | climber (`move_actor`, `draw_actor`), siegegame |
 | User functions with return values (return value in A survives stack cleanup) | climber, siegegame, general user code |
 | `bcd_add(ushort, ushort)` — software BCD addition, 16-bit return value handling | bcd, climber, shoot2 (score tracking) |
+| Global/static variables (`stsfld`/`ldsfld`) — user-defined static fields at $0325+ | climber, shoot2, siegegame (game state) |
 
 ### Roadmap to climber.c
 
@@ -367,7 +368,7 @@ Prioritized TODO list of features needed to port climber.c, ordered by dependenc
 - [x] **User functions with return values** — byte return values work: the last computed value stays in A through `incsp` parameter cleanup and RTS. The caller's `HasReturnValue` check sets `_runtimeValueInA = true`. Verified with RoslynTests: constant return, parameterized return, return value stored to local.
 - [x] **switch/case** — small switches use branch chains (beq.s, already supported). Larger sequential switches use the IL `switch` opcode (0x45) which emits CMP/BNE+JMP trampolines. Tested with SwitchSmall (3 cases) and SwitchEnum (7 cases with enum).
 - [x] **BCD arithmetic** — `bcd_add(ushort, ushort)` built-in NESLib function backed by 6502 subroutine. Software BCD since NES CPU disabled hardware BCD mode. Also fixed: 16-bit return values from built-in functions now correctly store both bytes (STA+STX) to word locals.
-- [ ] **Global/static variables** — `stsfld`/`ldsfld` for user-defined fields (extend existing `oam_off` handling). Climber needs: `scroll_pixel_yy`, `scroll_tile_y`, `player_screen_y`, `score`, `vbright`. Could also be top-level locals captured by local functions.
+- [x] **Global/static variables** — `stsfld`/`ldsfld` for user-defined static class fields. Allocated at `$0325+` (same region as locals). Both `static class State { public static byte x; }` and local variables work for the same patterns. Tested with store, load, and loop increment.
 - [ ] **sbyte (signed char)** — `Actor.yvel`, `Actor.xvel` are signed. Needs `conv.i1` handling and signed comparison branches (`Blt_s` already works for unsigned; may need signed variants).
 - [ ] **Arrays of structs** — `Floor floors[MAX_FLOORS]`, `Actor actors[MAX_ACTORS]`. Need indexed struct access: base address + (index × struct size) + field offset.
 - [ ] **memset/memcpy** — used for clearing buffers and arrays. Map to 6502 fill loop or built-in subroutine.

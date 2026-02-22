@@ -958,4 +958,95 @@ public class RoslynTests
         Assert.Contains("8D", hex); // STA absolute (lo byte of ushort local)
         Assert.Contains("8E", hex); // STX absolute (hi byte of ushort local)
     }
+
+    [Fact]
+    public void StaticFieldStore()
+    {
+        // Static field via class — produces stsfld/ldsfld IL
+        var bytes = GetProgramBytes(
+            """
+            State.brightness = 4;
+            pal_bright(State.brightness);
+            ppu_on_all();
+            while (true) ;
+
+            static class State { public static byte brightness; }
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        // STA absolute for store, LDA absolute for load
+        Assert.Contains("8D", hex); // STA abs
+        Assert.Contains("AD", hex); // LDA abs
+    }
+
+    [Fact]
+    public void StaticFieldInLoop()
+    {
+        // Static field read and written in a loop — like climber.c globals
+        var bytes = GetProgramBytes(
+            """
+            State.counter = 0;
+            while (State.counter < 10) {
+                pal_col(0, State.counter);
+                State.counter = (byte)(State.counter + 1);
+            }
+            ppu_on_all();
+            while (true) ;
+
+            static class State { public static byte counter; }
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        // Should have STA absolute and LDA absolute for the static field
+        Assert.Contains("8D", hex);
+        Assert.Contains("AD", hex);
+    }
+
+    [Fact]
+    public void LocalVarInFunction()
+    {
+        // Local variable passed to a user function — same as static field version
+        var bytes = GetProgramBytes(
+            """
+            byte brightness = 4;
+            apply_bright(brightness);
+            ppu_on_all();
+            while (true) ;
+
+            static void apply_bright(byte b) { pal_bright(b); }
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        // Should have JSR calls: pusha, apply_bright, ppu_on_all
+        int jsrCount = hex.Split("20").Length - 1;
+        Assert.True(jsrCount >= 2, $"Expected at least 2 JSR calls, got {jsrCount}");
+    }
+
+    [Fact]
+    public void LocalVarInLoop()
+    {
+        // Same logic as StaticFieldInLoop but using locals (already works)
+        var bytes = GetProgramBytes(
+            """
+            byte counter = 0;
+            while (counter < 10) {
+                pal_col(0, counter);
+                counter = (byte)(counter + 1);
+            }
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        Assert.Contains("8D", hex); // STA absolute for local
+        Assert.Contains("AD", hex); // LDA absolute for local reload
+    }
 }

@@ -174,6 +174,12 @@ class IL2NESWriter : NESWriter
     int? _pendingStructLocal;
 
     /// <summary>
+    /// Maps user-defined static field names to their allocated absolute addresses.
+    /// Static fields are allocated in the same region as locals ($0325+).
+    /// </summary>
+    readonly Dictionary<string, ushort> _staticFieldAddresses = new(StringComparer.Ordinal);
+
+    /// <summary>
     /// NOTE: may not be exactly correct, this is the instructions inside zerobss:
     /// A925           LDA #$25                      ; zerobss
     /// 852A STA ptr1                      
@@ -1331,7 +1337,7 @@ class IL2NESWriter : NESWriter
                 }
                 else
                 {
-                    throw new NotImplementedException($"Stsfld for field '{operand}' is not implemented!");
+                    HandleStsfld(operand);
                 }
                 break;
             case ILOpCode.Ldsfld:
@@ -1344,7 +1350,7 @@ class IL2NESWriter : NESWriter
                 }
                 else
                 {
-                    throw new NotImplementedException($"Ldsfld for field '{operand}' is not implemented!");
+                    HandleLdsfld(operand);
                 }
                 break;
             case ILOpCode.Stfld:
@@ -1456,6 +1462,52 @@ class IL2NESWriter : NESWriter
             }
         }
         // Fall through = default (no match) — continues to next IL instruction
+    }
+
+    /// <summary>
+    /// Allocates an absolute address for a user-defined static field.
+    /// Static fields share the same $0325+ address space as locals.
+    /// </summary>
+    ushort GetOrAllocateStaticField(string fieldName)
+    {
+        if (_staticFieldAddresses.TryGetValue(fieldName, out var addr))
+            return addr;
+        addr = (ushort)(local + LocalCount);
+        LocalCount += 1;
+        _staticFieldAddresses[fieldName] = addr;
+        return addr;
+    }
+
+    void HandleStsfld(string fieldName)
+    {
+        var addr = GetOrAllocateStaticField(fieldName);
+        if (Stack.Count > 0) Stack.Pop();
+
+        if (_runtimeValueInA)
+        {
+            Emit(Opcode.STA, AddressMode.Absolute, addr);
+        }
+        else if (_immediateInA != null)
+        {
+            Emit(Opcode.LDA, AddressMode.Immediate, (byte)_immediateInA);
+            Emit(Opcode.STA, AddressMode.Absolute, addr);
+        }
+        else
+        {
+            // Constant from WriteLdc — remove previous LDA, re-emit with STA
+            Emit(Opcode.STA, AddressMode.Absolute, addr);
+        }
+        _runtimeValueInA = false;
+        _immediateInA = null;
+    }
+
+    void HandleLdsfld(string fieldName)
+    {
+        var addr = GetOrAllocateStaticField(fieldName);
+        Emit(Opcode.LDA, AddressMode.Absolute, addr);
+        _runtimeValueInA = true;
+        _immediateInA = null;
+        Stack.Push(0);
     }
 
     /// <summary>
