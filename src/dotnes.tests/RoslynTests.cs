@@ -855,4 +855,62 @@ public class RoslynTests
         int jsrCount = hex.Split("20").Length - 1;
         Assert.True(jsrCount >= 4, $"Expected at least 4 JSR calls, got {jsrCount}");
     }
+
+    [Fact]
+    public void SwitchSmall()
+    {
+        // Small switch (3 cases) — like ActorState checks
+        var bytes = GetProgramBytes(
+            """
+            byte state = 1;
+            switch (state) {
+                case 0: pal_col(0, 0x10); break;
+                case 1: pal_col(0, 0x20); break;
+                case 2: pal_col(0, 0x30); break;
+            }
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        // Should contain CMP #$01 and CMP #$02 for case 1 and 2
+        Assert.Contains("C901", hex);
+        Assert.Contains("C902", hex);
+        // BNE (D0) for skipping JMP on mismatch
+        Assert.Contains("D0", hex);
+        // JMP (4C) for jumping to case targets
+        Assert.Contains("4C", hex);
+    }
+
+    [Fact]
+    public void SwitchEnum()
+    {
+        // Switch on enum — like climber.c's move_actor switch on ActorState
+        var bytes = GetProgramBytes(
+            """
+            ActorState state = ActorState.Walking;
+            switch (state) {
+                case ActorState.Inactive: pal_col(0, 0x00); break;
+                case ActorState.Standing: pal_col(0, 0x10); break;
+                case ActorState.Walking:  pal_col(0, 0x20); break;
+                case ActorState.Climbing: pal_col(0, 0x30); break;
+                case ActorState.Jumping:  pal_col(0, 0x16); break;
+                case ActorState.Falling:  pal_col(0, 0x26); break;
+                case ActorState.Pacing:   pal_col(0, 0x36); break;
+            }
+            ppu_on_all();
+            while (true) ;
+
+            enum ActorState : byte { Inactive, Standing, Walking, Climbing, Jumping, Falling, Pacing }
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        // 7-case switch should have CMP for cases 1-6
+        Assert.Contains("C901", hex);
+        Assert.Contains("C906", hex);
+    }
 }

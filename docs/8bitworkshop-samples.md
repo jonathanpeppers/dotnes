@@ -361,13 +361,15 @@
 | `ushort` locals (16-bit zero page variables) | horizmask (smooth 16-bit scroll counter) |
 | `enum` types (compile to plain integer IL, no transpiler changes needed) | climber, siegegame (enum values, switch on enum) |
 | Struct support (`stfld`, `ldfld`, `ldloca.s`) — byte/ushort fields on zero page | aputest, climber, shoot2, siegegame (struct field access and arithmetic) |
+| `switch/case` — sequential cases via IL `switch` opcode (CMP/BNE+JMP trampolines), non-sequential via beq.s chains | climber (`move_actor`, `draw_actor`), siegegame |
+| User functions with return values (return value in A survives stack cleanup) | climber, siegegame, general user code |
 
 ### Roadmap to climber.c
 
 Prioritized TODO list of features needed to port climber.c, ordered by dependency and impact:
 
 - [x] **User functions with return values** — byte return values work: the last computed value stays in A through `incsp` parameter cleanup and RTS. The caller's `HasReturnValue` check sets `_runtimeValueInA = true`. Verified with RoslynTests: constant return, parameterized return, return value stored to local.
-- [ ] **switch/case** — may already work for small cases (compiler generates branch chains). Verify with a RoslynTest; larger switches may need the `switch` IL opcode (jump table). Used in `move_actor` and `draw_actor`.
+- [x] **switch/case** — small switches use branch chains (beq.s, already supported). Larger sequential switches use the IL `switch` opcode (0x45) which emits CMP/BNE+JMP trampolines. Tested with SwitchSmall (3 cases) and SwitchEnum (7 cases with enum).
 - [ ] **BCD arithmetic** — implement as `BCD` struct with `operator+` in NESLib, backed by a 6502 subroutine. Used for score tracking: `score = bcd_add(score, 1)`.
 - [ ] **Global/static variables** — `stsfld`/`ldsfld` for user-defined fields (extend existing `oam_off` handling). Climber needs: `scroll_pixel_yy`, `scroll_tile_y`, `player_screen_y`, `score`, `vbright`. Could also be top-level locals captured by local functions.
 - [ ] **sbyte (signed char)** — `Actor.yvel`, `Actor.xvel` are signed. Needs `conv.i1` handling and signed comparison branches (`Blt_s` already works for unsigned; may need signed variants).

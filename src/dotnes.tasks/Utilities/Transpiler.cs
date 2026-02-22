@@ -535,9 +535,20 @@ class Transpiler : IDisposable
                     break;
                 // (n + 1) * 32-bit
                 case OperandType.Switch:
-                    //uint n = blob.ReadUInt32();
-                    //blob.Offset += (int)(n * 4);
-                    goto default;
+                    {
+                        uint n = blob.ReadUInt32();
+                        intValue = (int)n;
+                        // Pack all target offsets as raw bytes
+                        var targets = new byte[n * 4];
+                        for (int ti = 0; ti < (int)n; ti++)
+                        {
+                            int target = blob.ReadInt32();
+                            var targetBytes = BitConverter.GetBytes(target);
+                            Array.Copy(targetBytes, 0, targets, ti * 4, 4);
+                        }
+                        byteValue = targets.ToImmutableArray();
+                    }
+                    break;
                 // 16-bit
                 case OperandType.Variable:
                     intValue = blob.ReadInt16();

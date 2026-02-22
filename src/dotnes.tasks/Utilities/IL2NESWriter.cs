@@ -817,6 +817,9 @@ class IL2NESWriter : NESWriter
                 // Load address of local variable — used for struct field access
                 _pendingStructLocal = operand;
                 break;
+            case ILOpCode.Switch:
+                HandleSwitch(instruction, operand);
+                break;
             default:
                 throw new NotImplementedException($"OpCode {instruction.OpCode} with Int32 operand is not implemented!");
         }
@@ -1411,6 +1414,46 @@ class IL2NESWriter : NESWriter
                 throw new NotImplementedException($"OpCode {instruction.OpCode} with byte[] operand is not implemented!");
         }
         previous = instruction.OpCode;
+    }
+
+    /// <summary>
+    /// Handles the IL switch opcode (jump table). Emits CMP/BEQ chains for sequential cases.
+    /// The switch value is in A (from preceding ldloc). For each case index 0..N-1,
+    /// emit CMP #index; BNE +3; JMP target_label.
+    /// </summary>
+    void HandleSwitch(ILInstruction instruction, int caseCount)
+    {
+        if (Stack.Count > 0) Stack.Pop(); // Pop the switch value
+
+        var targets = instruction.Bytes;
+        if (targets is null)
+            throw new InvalidOperationException("Switch instruction missing target offsets");
+
+        // The instruction after the switch is at: offset + 1 + 4 + caseCount * 4
+        int baseOffset = instruction.Offset + 1 + 4 + caseCount * 4;
+
+        // The switch variable should already be in A (from preceding ldloc → LDA)
+        // For case 0, we can use BEQ (branch if zero) without CMP
+        for (int i = 0; i < caseCount; i++)
+        {
+            int targetOffset = BitConverter.ToInt32(targets.Value.ToArray(), i * 4);
+            int absoluteTarget = baseOffset + targetOffset;
+            var labelName = $"instruction_{absoluteTarget:X2}";
+
+            if (i == 0)
+            {
+                // Case 0: value is already in A, use BEQ (zero check)
+                Emit(Opcode.BNE, AddressMode.Relative, 3); // skip JMP if not 0
+                EmitWithLabel(Opcode.JMP, AddressMode.Absolute, labelName);
+            }
+            else
+            {
+                Emit(Opcode.CMP, AddressMode.Immediate, (byte)i);
+                Emit(Opcode.BNE, AddressMode.Relative, 3); // skip JMP if not match
+                EmitWithLabel(Opcode.JMP, AddressMode.Absolute, labelName);
+            }
+        }
+        // Fall through = default (no match) — continues to next IL instruction
     }
 
     /// <summary>
