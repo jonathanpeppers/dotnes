@@ -913,4 +913,49 @@ public class RoslynTests
         Assert.Contains("C901", hex);
         Assert.Contains("C906", hex);
     }
+
+    [Fact]
+    public void BcdAddConstant()
+    {
+        // bcd_add with chained calls — optimizer keeps result on stack
+        var bytes = GetProgramBytes(
+            """
+            ushort score = bcd_add(0, 1);
+            score = bcd_add(score, 1);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        // Should have: pushax, bcd_add, pushax, bcd_add, ppu_on_all (5 JSRs + JMP)
+        int jsrCount = hex.Split("20").Length - 1;
+        Assert.True(jsrCount >= 4, $"Expected at least 4 JSR calls, got {jsrCount}");
+    }
+
+    [Fact]
+    public void BcdAddToLocal()
+    {
+        // bcd_add result stored to ushort local, read back in loop
+        // The loop forces the compiler to actually store score to a local
+        var bytes = GetProgramBytes(
+            """
+            ushort score = 0;
+            byte i = 0;
+            while (i < 3) {
+                score = bcd_add(score, 1);
+                i = (byte)(i + 1);
+            }
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        // bcd_add called inside a loop — STA + STX for ushort local store
+        Assert.Contains("8D", hex); // STA absolute (lo byte of ushort local)
+        Assert.Contains("8E", hex); // STX absolute (hi byte of ushort local)
+    }
 }

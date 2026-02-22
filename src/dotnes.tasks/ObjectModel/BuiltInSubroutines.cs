@@ -531,6 +531,90 @@ internal static class BuiltInSubroutines
     }
 
     /// <summary>
+    /// bcd_add - Software BCD addition for packed 16-bit BCD numbers.
+    /// The NES CPU (Ricoh 2A03) disabled hardware BCD mode, so this is done in software.
+    /// Algorithm: c=a+0x0666; d=c^b; c+=b; d=~(c^d)&amp;0x1110; d=(d>>2)|(d>>3); return c-d
+    /// Entry: b in A(lo)/X(hi), a pushed on parameter stack
+    /// Exit: result in A(lo)/X(hi)
+    /// Uses: TEMP/TEMP+1 (b), ptr1/ptr1+1 (c), ptr2/ptr2+1 (d), TEMP2/TEMP3 (scratch)
+    /// </summary>
+    public static Block BcdAdd()
+    {
+        var block = new Block(nameof(NESLib.bcd_add));
+
+        // Save b (in A/X) to TEMP/TEMP+1
+        block.Emit(STA_zpg(TEMP))
+             .Emit(STX_zpg(TEMP + 1))
+             // Pop a from stack: A=lo, X=hi (also cleans up stack)
+             .Emit(JSR(nameof(NESConstants.popax)))
+             // c = a + 0x0666
+             .Emit(CLC())
+             .Emit(ADC(0x66))
+             .Emit(STA_zpg(ptr1))          // c_lo
+             .Emit(TXA())
+             .Emit(ADC(0x06))
+             .Emit(STA_zpg(ptr1 + 1))      // c_hi
+             // d = c ^ b
+             .Emit(LDA_zpg(ptr1))
+             .Emit(EOR_zpg(TEMP))
+             .Emit(STA_zpg(ptr2))           // d_lo
+             .Emit(LDA_zpg(ptr1 + 1))
+             .Emit(EOR_zpg(TEMP + 1))
+             .Emit(STA_zpg(ptr2 + 1))       // d_hi
+             // c += b
+             .Emit(CLC())
+             .Emit(LDA_zpg(ptr1))
+             .Emit(ADC_zpg(TEMP))
+             .Emit(STA_zpg(ptr1))
+             .Emit(LDA_zpg(ptr1 + 1))
+             .Emit(ADC_zpg(TEMP + 1))
+             .Emit(STA_zpg(ptr1 + 1))
+             // d = ~(c ^ d) & 0x1110
+             .Emit(LDA_zpg(ptr1))
+             .Emit(EOR_zpg(ptr2))
+             .Emit(EOR(0xFF))
+             .Emit(AND(0x10))
+             .Emit(STA_zpg(ptr2))           // new d_lo
+             .Emit(LDA_zpg(ptr1 + 1))
+             .Emit(EOR_zpg(ptr2 + 1))       // old d_hi still valid
+             .Emit(EOR(0xFF))
+             .Emit(AND(0x11))
+             .Emit(STA_zpg(ptr2 + 1))       // new d_hi
+             // d >> 2 → TEMP2/TEMP3
+             .Emit(LDA_zpg(ptr2 + 1))
+             .Emit(LSR_A())
+             .Emit(STA_zpg(TEMP3))
+             .Emit(LDA_zpg(ptr2))
+             .Emit(ROR_A())
+             .Emit(STA_zpg(TEMP2))
+             .Emit(LSR_zpg(TEMP3))
+             .Emit(ROR_zpg(TEMP2))
+             // d >> 3 = (d >> 2) >> 1
+             .Emit(LDA_zpg(TEMP3))
+             .Emit(LSR_A())
+             .Emit(TAX())                   // (d>>3)_hi in X
+             .Emit(LDA_zpg(TEMP2))
+             .Emit(ROR_A())
+             // d = (d >> 2) | (d >> 3)
+             .Emit(ORA_zpg(TEMP2))          // (d>>3)_lo | (d>>2)_lo
+             .Emit(STA_zpg(ptr2))
+             .Emit(TXA())
+             .Emit(ORA_zpg(TEMP3))          // (d>>3)_hi | (d>>2)_hi
+             .Emit(STA_zpg(ptr2 + 1))
+             // result = c - d
+             .Emit(SEC())
+             .Emit(LDA_zpg(ptr1))
+             .Emit(SBC_zpg(ptr2))
+             .Emit(TAY())                   // result_lo in Y
+             .Emit(LDA_zpg(ptr1 + 1))
+             .Emit(SBC_zpg(ptr2 + 1))
+             .Emit(TAX())                   // result_hi in X
+             .Emit(TYA())                   // result_lo in A
+             .Emit(RTS());
+        return block;
+    }
+
+    /// <summary>
     /// _oam_meta_spr - Set metasprite in OAM buffer
     /// Args: A = sprid, data pointer on C stack, x/y pushed before data pointer
     /// Standard neslib convention: A = sprid, (sp) -> y, x, data_lo, data_hi

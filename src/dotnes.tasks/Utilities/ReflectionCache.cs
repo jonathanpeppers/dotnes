@@ -58,4 +58,12 @@ class ReflectionCache
             return info.hasReturnValue;
         return GetMethod(name).ReturnType != typeof(void);
     }
+
+    public bool Returns16Bit(string name)
+    {
+        if (_userMethods.ContainsKey(name))
+            return false; // User methods currently only return byte
+        var returnType = GetMethod(name).ReturnType;
+        return returnType == typeof(ushort) || returnType == typeof(short) || returnType == typeof(int);
+    }
 }

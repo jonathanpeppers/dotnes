@@ -314,7 +314,7 @@ class IL2NESWriter : NESWriter
                 {
                     var addr = Locals.TryGetValue(0, out var existing) && existing.Address is not null
                         ? (ushort)existing.Address : (ushort)(local + LocalCount);
-                    WriteStloc(Locals[0] = new Local(Stack.Pop(), addr, IsWord: WordLocals.Contains(0)));
+                    WriteStloc(Locals[0] = new Local(Stack.Pop(), addr, IsWord: WordLocals.Contains(0) || (_runtimeValueInA && _ushortInAX)));
                 }
                 break;
             case ILOpCode.Stloc_1:
@@ -340,7 +340,7 @@ class IL2NESWriter : NESWriter
                 {
                     var addr = Locals.TryGetValue(1, out var existing) && existing.Address is not null
                         ? (ushort)existing.Address : (ushort)(local + LocalCount);
-                    WriteStloc(Locals[1] = new Local(Stack.Pop(), addr, IsWord: WordLocals.Contains(1)));
+                    WriteStloc(Locals[1] = new Local(Stack.Pop(), addr, IsWord: WordLocals.Contains(1) || (_runtimeValueInA && _ushortInAX)));
                 }
                 break;
             case ILOpCode.Stloc_2:
@@ -366,7 +366,7 @@ class IL2NESWriter : NESWriter
                 {
                     var addr = Locals.TryGetValue(2, out var existing) && existing.Address is not null
                         ? (ushort)existing.Address : (ushort)(local + LocalCount);
-                    WriteStloc(Locals[2] = new Local(Stack.Pop(), addr, IsWord: WordLocals.Contains(2)));
+                    WriteStloc(Locals[2] = new Local(Stack.Pop(), addr, IsWord: WordLocals.Contains(2) || (_runtimeValueInA && _ushortInAX)));
                 }
                 break;
             case ILOpCode.Stloc_3:
@@ -392,7 +392,7 @@ class IL2NESWriter : NESWriter
                 {
                     var addr = Locals.TryGetValue(3, out var existing) && existing.Address is not null
                         ? (ushort)existing.Address : (ushort)(local + LocalCount);
-                    WriteStloc(Locals[3] = new Local(Stack.Pop(), addr, IsWord: WordLocals.Contains(3)));
+                    WriteStloc(Locals[3] = new Local(Stack.Pop(), addr, IsWord: WordLocals.Contains(3) || (_runtimeValueInA && _ushortInAX)));
                 }
                 break;
             case ILOpCode.Ldloc_0:
@@ -675,7 +675,7 @@ class IL2NESWriter : NESWriter
                         // Regular local — allocate address and store
                         var addr = Locals.TryGetValue(localIdx, out var existing) && existing.Address is not null
                             ? (ushort)existing.Address : (ushort)(local + LocalCount);
-                        WriteStloc(Locals[localIdx] = new Local(Stack.Pop(), addr, IsWord: WordLocals.Contains(localIdx)));
+                        WriteStloc(Locals[localIdx] = new Local(Stack.Pop(), addr, IsWord: WordLocals.Contains(localIdx) || (_runtimeValueInA && _ushortInAX)));
                     }
                 }
                 break;
@@ -1297,6 +1297,8 @@ class IL2NESWriter : NESWriter
                     if (operand is not (nameof(NTADR_A) or nameof(NTADR_B) or nameof(NTADR_C) or nameof(NTADR_D)))
                     {
                         _runtimeValueInA = true;
+                        // 16-bit return (e.g. bcd_add returns ushort): result in A/X
+                        _ushortInAX = _reflectionCache.Returns16Bit(operand);
                     }
                     // Push return value placeholder (except for NTADR which already pushed)
                     if (operand is not (nameof(NTADR_A) or nameof(NTADR_B) or nameof(NTADR_C) or nameof(NTADR_D)))
@@ -1308,8 +1310,8 @@ class IL2NESWriter : NESWriter
                 {
                     // Void method: JSR clobbers A, clear runtime tracking
                     _runtimeValueInA = false;
+                    _ushortInAX = false;
                 }
-                _ushortInAX = false;
                 break;
             case ILOpCode.Stsfld:
                 if (operand == nameof(NESLib.oam_off))
@@ -1815,9 +1817,19 @@ class IL2NESWriter : NESWriter
 
         if (_runtimeValueInA)
         {
-            // A has the runtime value — just store it
-            LocalCount += 1;
-            Emit(Opcode.STA, AddressMode.Absolute, (ushort)local.Address);
+            if (local.IsWord)
+            {
+                // A=lo, X=hi from a ushort-returning function — store both bytes
+                LocalCount += 2;
+                Emit(Opcode.STA, AddressMode.Absolute, (ushort)local.Address);
+                Emit(Opcode.STX, AddressMode.Absolute, (ushort)(local.Address + 1));
+            }
+            else
+            {
+                // A has the runtime value — just store it
+                LocalCount += 1;
+                Emit(Opcode.STA, AddressMode.Absolute, (ushort)local.Address);
+            }
             _runtimeValueInA = false;
             _savedRuntimeToTemp = false;
             _immediateInA = null;

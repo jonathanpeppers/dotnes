@@ -592,6 +592,8 @@ public class Program6502
                 size += BuiltInSubroutines.Incsp1().ByteSize;
             if (usedMethods.Contains("addysp"))
                 size += BuiltInSubroutines.Addysp().ByteSize;
+            if (usedMethods.Contains("bcd_add"))
+                size += BuiltInSubroutines.BcdAdd().ByteSize;
         }
         return size;
     }
@@ -673,6 +675,8 @@ public class Program6502
                 AddBlock(BuiltInSubroutines.Incsp1());
             if (usedMethods.Contains("addysp"))
                 AddBlock(BuiltInSubroutines.Addysp());
+            if (usedMethods.Contains("bcd_add"))
+                AddBlock(BuiltInSubroutines.BcdAdd());
         }
     }
 

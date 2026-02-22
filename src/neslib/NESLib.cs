@@ -342,6 +342,13 @@ public static class NESLib
     public static void set_rand(byte seed) => throw null!;
 
     /// <summary>
+    /// Add two packed-BCD 16-bit numbers (software BCD since NES CPU lacks hardware BCD).
+    /// Each nibble represents a decimal digit 0-9. Result is a 4-digit BCD value.
+    /// Example: bcd_add(0x0100, 0x0001) returns 0x0101 (100 + 1 = 101).
+    /// </summary>
+    public static ushort bcd_add(ushort a, ushort b) => throw null!;
+
+    /// <summary>
     /// when display is enabled, vram access could only be done with this vram update system
     /// the function sets a pointer to the update buffer that contains data and addresses
     /// in a special format. It allows to write non-sequental bytes, as well as horizontal or

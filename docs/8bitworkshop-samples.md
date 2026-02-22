@@ -148,13 +148,9 @@
 
 ### bcd.c
 - **Description:** Binary-Coded Decimal addition utility function.
-- **Status:** 🟠 Moderate
+- **Status:** ✅ Implemented as built-in
 - **Used by:** `climber.c`, `shoot2.c`
-- **Missing Features:**
-  - User-defined functions with return values (`bcd_add`)
-  - `word` (16-bit) arithmetic with bitwise NOT (`~`), shift, XOR
-  - `register` keyword (optimization hint, can be ignored)
-  - This is a utility; dotnes would need a built-in BCD helper or function support
+- **Implementation:** `bcd_add(ushort, ushort)` is a built-in NESLib function backed by a 6502 subroutine. The algorithm is implemented directly in assembly (no need to transpile the C bitwise operations). Users call `score = bcd_add(score, 1)` in C#.
 
 ---
 
@@ -317,8 +313,7 @@
 
 | Status | Count | Samples |
 |--------|-------|---------|
-| ✅ Already Implemented | 16 | hello, attributes, flicker, metasprites, music, tint, scroll, rletitle, tileset1, sprites, metacursor, metatrigger, statusbar, vrambuffer, horizscroll, horizmask |
-| 🟠 Moderate | 1 | bcd |
+| ✅ Already Implemented | 17 | hello, attributes, flicker, metasprites, music, tint, scroll, rletitle, tileset1, sprites, metacursor, metatrigger, statusbar, vrambuffer, horizscroll, horizmask, bcd |
 | 🔴 Complex | 12 | aputest, ppuhello, fami, bankswitch, monobitmap, conio, crypto, climber, transtable, irq, shoot2, siegegame |
 
 > **Note:** `apu.c` and `vrambuf.c` are library files (not demos). `apu.c` is covered by dotnes's built-in `apu_init()` subroutine. `vrambuf.c` is covered by built-in `vrambuf_clear()`, `vrambuf_put()`, `vrambuf_end()`, `vrambuf_flush()`, and `set_vram_update()` subroutines. Neither is counted separately.
@@ -363,6 +358,7 @@
 | Struct support (`stfld`, `ldfld`, `ldloca.s`) — byte/ushort fields on zero page | aputest, climber, shoot2, siegegame (struct field access and arithmetic) |
 | `switch/case` — sequential cases via IL `switch` opcode (CMP/BNE+JMP trampolines), non-sequential via beq.s chains | climber (`move_actor`, `draw_actor`), siegegame |
 | User functions with return values (return value in A survives stack cleanup) | climber, siegegame, general user code |
+| `bcd_add(ushort, ushort)` — software BCD addition, 16-bit return value handling | bcd, climber, shoot2 (score tracking) |
 
 ### Roadmap to climber.c
 
@@ -370,7 +366,7 @@ Prioritized TODO list of features needed to port climber.c, ordered by dependenc
 
 - [x] **User functions with return values** — byte return values work: the last computed value stays in A through `incsp` parameter cleanup and RTS. The caller's `HasReturnValue` check sets `_runtimeValueInA = true`. Verified with RoslynTests: constant return, parameterized return, return value stored to local.
 - [x] **switch/case** — small switches use branch chains (beq.s, already supported). Larger sequential switches use the IL `switch` opcode (0x45) which emits CMP/BNE+JMP trampolines. Tested with SwitchSmall (3 cases) and SwitchEnum (7 cases with enum).
-- [ ] **BCD arithmetic** — implement as `BCD` struct with `operator+` in NESLib, backed by a 6502 subroutine. Used for score tracking: `score = bcd_add(score, 1)`.
+- [x] **BCD arithmetic** — `bcd_add(ushort, ushort)` built-in NESLib function backed by 6502 subroutine. Software BCD since NES CPU disabled hardware BCD mode. Also fixed: 16-bit return values from built-in functions now correctly store both bytes (STA+STX) to word locals.
 - [ ] **Global/static variables** — `stsfld`/`ldsfld` for user-defined fields (extend existing `oam_off` handling). Climber needs: `scroll_pixel_yy`, `scroll_tile_y`, `player_screen_y`, `score`, `vbright`. Could also be top-level locals captured by local functions.
 - [ ] **sbyte (signed char)** — `Actor.yvel`, `Actor.xvel` are signed. Needs `conv.i1` handling and signed comparison branches (`Blt_s` already works for unsigned; may need signed variants).
 - [ ] **Arrays of structs** — `Floor floors[MAX_FLOORS]`, `Actor actors[MAX_ACTORS]`. Need indexed struct access: base address + (index × struct size) + field offset.
