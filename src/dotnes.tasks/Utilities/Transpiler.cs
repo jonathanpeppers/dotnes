@@ -519,8 +519,8 @@ class Transpiler : IDisposable
                     {
                         var token = blob.ReadInt32();
                         intValue = token;
-                        // Resolve type name for Newarr (e.g. "Byte", "UInt16")
-                        if (opCode == ILOpCode.Newarr)
+                        // Resolve type name for Newarr/Ldelema (e.g. "Byte", "UInt16", "Actor")
+                        if (opCode == ILOpCode.Newarr || opCode == ILOpCode.Ldelema)
                         {
                             var handle = MetadataTokens.EntityHandle(token);
                             if (handle.Kind == HandleKind.TypeReference)

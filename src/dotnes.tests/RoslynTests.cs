@@ -1104,4 +1104,82 @@ public class RoslynTests
         var hex = Convert.ToHexString(bytes);
         Assert.Contains("A9FE", hex); // LDA #$FE (-2 in two's complement)
     }
+
+    [Fact]
+    public void StructArrayConstantIndex()
+    {
+        // Store and load struct fields via constant array index
+        var bytes = GetProgramBytes(
+            """
+            Actor[] actors = new Actor[4];
+            actors[0].x = 10;
+            actors[1].y = 20;
+            byte val = actors[0].x;
+            pal_col(0, val);
+            ppu_on_all();
+            while (true) ;
+
+            struct Actor { public byte x; public byte y; }
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        Assert.Contains("A90A", hex); // LDA #$0A (10)
+        Assert.Contains("A914", hex); // LDA #$14 (20)
+        Assert.Contains("8D", hex); // STA absolute
+        Assert.Contains("AD", hex); // LDA absolute (loading actors[0].x)
+    }
+
+    [Fact]
+    public void StructArrayFieldReadWrite()
+    {
+        // Write to one element, read from another, pass to function
+        var bytes = GetProgramBytes(
+            """
+            Actor[] actors = new Actor[2];
+            actors[0].x = 42;
+            actors[1].x = 99;
+            pal_col(0, actors[0].x);
+            ppu_on_all();
+            while (true) ;
+
+            struct Actor { public byte x; public byte y; }
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        Assert.Contains("A92A", hex); // LDA #$2A (42)
+        Assert.Contains("A963", hex); // LDA #$63 (99)
+        Assert.Contains("8D", hex); // STA absolute
+        Assert.Contains("AD", hex); // LDA absolute (loading from actors[0].x)
+    }
+
+    [Fact]
+    public void StructArrayThreeFields()
+    {
+        // Struct with 3 fields to verify field offset calculation
+        var bytes = GetProgramBytes(
+            """
+            Pos[] positions = new Pos[2];
+            positions[0].x = 10;
+            positions[0].y = 20;
+            positions[0].flags = 3;
+            positions[1].x = 40;
+            pal_col(0, positions[1].x);
+            ppu_on_all();
+            while (true) ;
+
+            struct Pos { public byte x; public byte y; public byte flags; }
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        Assert.Contains("A90A", hex); // LDA #10
+        Assert.Contains("A914", hex); // LDA #20
+        Assert.Contains("A903", hex); // LDA #3
+        Assert.Contains("A928", hex); // LDA #40
+    }
 }

@@ -50,6 +50,8 @@ class IL2NESWriter : NESWriter
     readonly ReflectionCache _reflectionCache = new();
     ILOpCode previous;
     string? _pendingArrayType;
+    int _pendingStructArrayCount;
+    ushort? _pendingStructArrayBase; // Pre-allocated base address from newarr for struct arrays
     ImmutableArray<byte>? _pendingUShortArray;
     
     /// <summary>
@@ -174,6 +176,30 @@ class IL2NESWriter : NESWriter
     int? _pendingStructLocal;
 
     /// <summary>
+    /// Computed base address for a struct array element after ldelema with constant index.
+    /// Used by stfld/ldfld to know which struct element to access.
+    /// </summary>
+    ushort? _pendingStructElementBase;
+
+    /// <summary>
+    /// The struct type from the most recent ldelema instruction.
+    /// </summary>
+    string? _pendingStructElementType;
+
+    /// <summary>
+    /// When true, X register holds the element byte-offset within the struct array
+    /// (index * structSize) after ldelema with a variable index.
+    /// stfld/ldfld should use AbsoluteX addressing.
+    /// </summary>
+    bool _pendingStructArrayRuntimeIndex;
+
+    /// <summary>
+    /// Base address of the struct array for variable-index ldelema.
+    /// stfld/ldfld computes field address as this + fieldOffset, then uses ,X.
+    /// </summary>
+    ushort _structArrayBaseForRuntimeIndex;
+
+    /// <summary>
     /// Maps user-defined static field names to their allocated absolute addresses.
     /// Static fields are allocated in the same region as locals ($0325+).
     /// </summary>
@@ -223,7 +249,7 @@ class IL2NESWriter : NESWriter
         _byteArrays.Add(data);
     }
 
-    record Local(int Value, int? Address = null, string? LabelName = null, int ArraySize = 0, bool IsWord = false);
+    record Local(int Value, int? Address = null, string? LabelName = null, int ArraySize = 0, bool IsWord = false, string? StructArrayType = null);
 
     /// <summary>
     /// Tracks the buffered block instruction count at the START of processing each IL instruction.
@@ -319,6 +345,10 @@ class IL2NESWriter : NESWriter
                     _stloc0IsLdtokenPath = true;
                     Stack.Pop(); // Discard marker
                 }
+                else if (previous == ILOpCode.Newarr)
+                {
+                    HandleStlocAfterNewarr(0);
+                }
                 else
                 {
                     var addr = Locals.TryGetValue(0, out var existing) && existing.Address is not null
@@ -340,10 +370,7 @@ class IL2NESWriter : NESWriter
                 }
                 else if (previous == ILOpCode.Newarr)
                 {
-                    int arraySize = Stack.Count > 0 ? Stack.Pop() : 0;
-                    ushort arrayAddr = (ushort)(local + LocalCount);
-                    LocalCount += arraySize;
-                    Locals[1] = new Local(arraySize, arrayAddr, ArraySize: arraySize);
+                    HandleStlocAfterNewarr(1);
                 }
                 else
                 {
@@ -366,10 +393,7 @@ class IL2NESWriter : NESWriter
                 }
                 else if (previous == ILOpCode.Newarr)
                 {
-                    int arraySize = Stack.Count > 0 ? Stack.Pop() : 0;
-                    ushort arrayAddr = (ushort)(local + LocalCount);
-                    LocalCount += arraySize;
-                    Locals[2] = new Local(arraySize, arrayAddr, ArraySize: arraySize);
+                    HandleStlocAfterNewarr(2);
                 }
                 else
                 {
@@ -392,10 +416,7 @@ class IL2NESWriter : NESWriter
                 }
                 else if (previous == ILOpCode.Newarr)
                 {
-                    int arraySize = Stack.Count > 0 ? Stack.Pop() : 0;
-                    ushort arrayAddr = (ushort)(local + LocalCount);
-                    LocalCount += arraySize;
-                    Locals[3] = new Local(arraySize, arrayAddr, ArraySize: arraySize);
+                    HandleStlocAfterNewarr(3);
                 }
                 else
                 {
@@ -646,19 +667,38 @@ class IL2NESWriter : NESWriter
                 }
                 break;
             case ILOpCode.Newarr:
-                if (previous == ILOpCode.Ldc_i4_s || previous == ILOpCode.Ldc_i4)
                 {
-                    // Remove the previous LDA (and LDX for ushort-sized values)
-                    int toRemove = Stack.Count > 0 && Stack.Peek() > byte.MaxValue ? 2 : 1;
-                    RemoveLastInstructions(toRemove);
-                }
-                // Track the array element type so the next Ldtoken can handle non-byte arrays
-                _pendingArrayType = instruction.String;
-                if (_pendingArrayType != null && _pendingArrayType != "Byte")
-                {
-                    // Non-byte array: pop the array size that Ldc pushed
-                    if (Stack.Count > 0)
-                        Stack.Pop();
+                    bool isStructArray = instruction.String != null && StructLayouts.ContainsKey(instruction.String);
+                    if (isStructArray)
+                    {
+                        // Struct array: remove the LDA for the count (purely compile-time allocation)
+                        bool isLdcPrevious = previous == ILOpCode.Ldc_i4_s || previous == ILOpCode.Ldc_i4
+                            || (previous >= ILOpCode.Ldc_i4_0 && previous <= ILOpCode.Ldc_i4_8);
+                        if (isLdcPrevious)
+                        {
+                            int toRemove = Stack.Count > 0 && Stack.Peek() > byte.MaxValue ? 2 : 1;
+                            RemoveLastInstructions(toRemove);
+                        }
+                        _pendingStructArrayCount = Stack.Count > 0 ? Stack.Peek() : 0;
+                        // Pre-allocate the struct array now (optimizer uses dup before stloc)
+                        int structSize = GetStructSize(instruction.String!);
+                        int totalBytes = _pendingStructArrayCount * structSize;
+                        _pendingStructArrayBase = (ushort)(local + LocalCount);
+                        LocalCount += totalBytes;
+                    }
+                    else if (previous == ILOpCode.Ldc_i4_s || previous == ILOpCode.Ldc_i4)
+                    {
+                        // Non-struct: only remove LDA for Ldc_i4_s/Ldc_i4 (original behavior)
+                        int toRemove = Stack.Count > 0 && Stack.Peek() > byte.MaxValue ? 2 : 1;
+                        RemoveLastInstructions(toRemove);
+                    }
+                    // Track the array element type so the next Ldtoken can handle non-byte arrays
+                    _pendingArrayType = instruction.String;
+                    if (_pendingArrayType != null && _pendingArrayType != "Byte")
+                    {
+                        if (Stack.Count > 0)
+                            Stack.Pop();
+                    }
                 }
                 break;
             case ILOpCode.Stloc_s:
@@ -672,11 +712,7 @@ class IL2NESWriter : NESWriter
                     }
                     else if (previous == ILOpCode.Newarr)
                     {
-                        // Runtime array allocation: new byte[N]
-                        int arraySize = Stack.Count > 0 ? Stack.Pop() : 0;
-                        ushort arrayAddr = (ushort)(local + LocalCount);
-                        LocalCount += arraySize;
-                        Locals[localIdx] = new Local(arraySize, arrayAddr, ArraySize: arraySize);
+                        HandleStlocAfterNewarr(localIdx);
                     }
                     else if (previous == ILOpCode.Ldtoken)
                     {
@@ -831,6 +867,9 @@ class IL2NESWriter : NESWriter
             case ILOpCode.Ldloca_s:
                 // Load address of local variable — used for struct field access
                 _pendingStructLocal = operand;
+                break;
+            case ILOpCode.Ldelema:
+                HandleLdelema(instruction);
                 break;
             case ILOpCode.Switch:
                 HandleSwitch(instruction, operand);
@@ -1563,6 +1602,19 @@ class IL2NESWriter : NESWriter
     }
 
     /// <summary>
+    /// Gets the total size in bytes of a struct type.
+    /// </summary>
+    int GetStructSize(string structType)
+    {
+        if (!StructLayouts.TryGetValue(structType, out var fields))
+            throw new InvalidOperationException($"Unknown struct type '{structType}'");
+        int size = 0;
+        foreach (var f in fields)
+            size += f.Size;
+        return size > 0 ? size : 1;
+    }
+
+    /// <summary>
     /// Resolves the struct type for a local by checking _structLocalTypes or matching
     /// the field name against known struct layouts.
     /// </summary>
@@ -1587,21 +1639,232 @@ class IL2NESWriter : NESWriter
     }
 
     /// <summary>
+    /// Handles ldelema: load the address of a struct array element.
+    /// IL pattern: ldloc_N (array), ldc_i4 (index), ldelema TypeName
+    /// Sets pending state for the subsequent stfld/ldfld.
+    /// </summary>
+    void HandleLdelema(ILInstruction instruction)
+    {
+        string? structType = instruction.String;
+        if (structType == null || !StructLayouts.ContainsKey(structType))
+            throw new NotImplementedException($"ldelema for non-struct type '{structType}' is not supported");
+
+        int structSize = GetStructSize(structType);
+
+        // Pop index from IL stack
+        int index = Stack.Count > 0 ? Stack.Pop() : 0;
+        // Pop array ref from IL stack
+        if (Stack.Count > 0) Stack.Pop();
+
+        if (Instructions == null || Index < 2)
+            throw new InvalidOperationException("ldelema requires at least 2 preceding instructions");
+
+        // The previous instruction loaded the index, the one before that loaded the array
+        var indexInstr = Instructions[Index - 1];
+        var arrayInstr = Instructions[Index - 2];
+
+        int? arrayLocalIdx = GetLdlocIndex(arrayInstr);
+        ushort arrayBase;
+        
+        if (arrayLocalIdx != null)
+        {
+            // Array loaded from local variable
+            var arrayLocal = Locals[arrayLocalIdx.Value];
+            if (arrayLocal.Address == null)
+                throw new InvalidOperationException($"ldelema: array local {arrayLocalIdx} has no address");
+            arrayBase = (ushort)arrayLocal.Address;
+        }
+        else if (_pendingStructArrayBase != null)
+        {
+            // Array reference is on the evaluation stack (from newarr, dup, or carried through stfld)
+            arrayBase = _pendingStructArrayBase.Value;
+        }
+        else
+        {
+            throw new InvalidOperationException(
+                $"ldelema: no array local or pending struct array base (Index={Index}, Index-2={arrayInstr.OpCode})");
+        }
+
+        // Remove the LDA instructions emitted by WriteLdloc (array) and WriteLdc (index)
+        int arrayILOffset = arrayInstr.Offset;
+        if (_blockCountAtILOffset.TryGetValue(arrayILOffset, out int blockCountAtArray))
+        {
+            int instrToRemove = GetBufferedBlockCount() - blockCountAtArray;
+            if (instrToRemove > 0)
+                RemoveLastInstructions(instrToRemove);
+        }
+
+        // Check if the index is a constant or a variable
+        bool isConstantIndex = GetLdcValue(indexInstr) != null;
+
+        if (!isConstantIndex)
+        {
+            // Variable index: the index was loaded by a ldloc
+            int? indexLocalIdx = GetLdlocIndex(indexInstr);
+            if (indexLocalIdx != null && Locals.TryGetValue(indexLocalIdx.Value, out var indexLocal) && indexLocal.Address != null)
+            {
+                Emit(Opcode.LDA, AddressMode.Absolute, (ushort)indexLocal.Address);
+                EmitMultiplyA(structSize);
+                Emit(Opcode.TAX, AddressMode.Implied);
+
+                _pendingStructArrayRuntimeIndex = true;
+                _structArrayBaseForRuntimeIndex = arrayBase;
+                _pendingStructElementType = structType;
+                _pendingStructElementBase = null;
+            }
+            else
+            {
+                throw new NotImplementedException("ldelema: variable index without tracked local");
+            }
+        }
+        else
+        {
+            // Constant index: compute element base at compile time
+            ushort elementBase = (ushort)(arrayBase + index * structSize);
+            _pendingStructElementBase = elementBase;
+            _pendingStructElementType = structType;
+            _pendingStructArrayRuntimeIndex = false;
+        }
+
+        _runtimeValueInA = false;
+        _lastLoadedLocalIndex = null;
+    }
+
+    /// <summary>
+    /// Emits 6502 code to multiply A by a constant factor using shifts and adds.
+    /// A must contain the value to multiply; result is left in A.
+    /// </summary>
+    void EmitMultiplyA(int factor)
+    {
+        if (factor == 1) return;
+        if (factor == 2)
+        {
+            Emit(Opcode.ASL, AddressMode.Accumulator);
+            return;
+        }
+        if (factor == 4)
+        {
+            Emit(Opcode.ASL, AddressMode.Accumulator);
+            Emit(Opcode.ASL, AddressMode.Accumulator);
+            return;
+        }
+        if (factor == 8)
+        {
+            Emit(Opcode.ASL, AddressMode.Accumulator);
+            Emit(Opcode.ASL, AddressMode.Accumulator);
+            Emit(Opcode.ASL, AddressMode.Accumulator);
+            return;
+        }
+        // For non-power-of-2, use shift+add (e.g., *3 = *2 + *1, *6 = *2 * 3)
+        // Store A in TEMP, use shifts and add back
+        if ((factor & (factor - 1)) != 0)
+        {
+            // General case: decompose into shifts and adds
+            // For small struct sizes (common: 2-8 bytes), this covers most cases
+            Emit(Opcode.STA, AddressMode.ZeroPage, 0x17); // TEMP
+            int remaining = factor;
+            bool first = true;
+            for (int bit = 0; remaining > 0; bit++)
+            {
+                if ((remaining & 1) != 0)
+                {
+                    if (first)
+                    {
+                        Emit(Opcode.LDA, AddressMode.ZeroPage, 0x17); // start with original
+                        for (int s = 0; s < bit; s++)
+                            Emit(Opcode.ASL, AddressMode.Accumulator);
+                        first = false;
+                    }
+                    else
+                    {
+                        Emit(Opcode.STA, AddressMode.ZeroPage, 0x18); // save partial to TEMP+1
+                        Emit(Opcode.LDA, AddressMode.ZeroPage, 0x17);
+                        for (int s = 0; s < bit; s++)
+                            Emit(Opcode.ASL, AddressMode.Accumulator);
+                        Emit(Opcode.CLC, AddressMode.Implied);
+                        Emit(Opcode.ADC, AddressMode.ZeroPage, 0x18);
+                    }
+                }
+                remaining >>= 1;
+            }
+        }
+        else
+        {
+            // Pure power of 2
+            while (factor > 1)
+            {
+                Emit(Opcode.ASL, AddressMode.Accumulator);
+                factor >>= 1;
+            }
+        }
+    }
+
+    /// <summary>
     /// Handles stfld: store a value to a struct field on zero page.
     /// IL pattern: ldloca.s N, ldc.i4 value, stfld fieldName
     /// </summary>
     void HandleStfld(string fieldName)
     {
+        // Check for struct array element access (from ldelema)
+        if (_pendingStructElementType != null)
+        {
+            string structType = _pendingStructElementType;
+            int fieldOffset = GetFieldOffset(structType, fieldName);
+
+            // The value to store was pushed by ldc before stfld
+            int value = Stack.Count > 0 ? Stack.Pop() : 0;
+
+            if (_pendingStructArrayRuntimeIndex)
+            {
+                // Variable index: X holds element offset, use AbsoluteX
+                ushort fieldAddr = (ushort)(_structArrayBaseForRuntimeIndex + fieldOffset);
+                if (_runtimeValueInA)
+                {
+                    Emit(Opcode.STA, AddressMode.AbsoluteX, fieldAddr);
+                    _runtimeValueInA = false;
+                }
+                else
+                {
+                    RemoveLastInstructions(1);
+                    Emit(Opcode.LDA, AddressMode.Immediate, (byte)(value & 0xFF));
+                    Emit(Opcode.STA, AddressMode.AbsoluteX, fieldAddr);
+                }
+            }
+            else
+            {
+                // Constant index: _pendingStructElementBase has the element base
+                ushort fieldAddr = (ushort)(_pendingStructElementBase!.Value + fieldOffset);
+                if (_runtimeValueInA)
+                {
+                    Emit(Opcode.STA, AddressMode.Absolute, fieldAddr);
+                    _runtimeValueInA = false;
+                }
+                else
+                {
+                    RemoveLastInstructions(1);
+                    Emit(Opcode.LDA, AddressMode.Immediate, (byte)(value & 0xFF));
+                    Emit(Opcode.STA, AddressMode.Absolute, fieldAddr);
+                }
+            }
+
+            _pendingStructElementType = null;
+            _pendingStructElementBase = null;
+            _pendingStructArrayRuntimeIndex = false;
+            _immediateInA = null;
+            return;
+        }
+
         if (_pendingStructLocal is null)
-            throw new InvalidOperationException($"stfld '{fieldName}' without preceding ldloca.s");
+            throw new InvalidOperationException($"stfld '{fieldName}' without preceding ldloca.s or ldelema");
 
-        int localIndex = _pendingStructLocal.Value;
-        _pendingStructLocal = null;
+        {
+            int localIndex = _pendingStructLocal.Value;
+            _pendingStructLocal = null;
 
-        string structType = ResolveStructType(localIndex, fieldName);
-        ushort baseAddr = GetOrAllocateStructLocal(localIndex, structType);
-        int fieldOffset = GetFieldOffset(structType, fieldName);
-        ushort fieldAddr = (ushort)(baseAddr + fieldOffset);
+            string structType = ResolveStructType(localIndex, fieldName);
+            ushort baseAddr = GetOrAllocateStructLocal(localIndex, structType);
+            int fieldOffset = GetFieldOffset(structType, fieldName);
+            ushort fieldAddr = (ushort)(baseAddr + fieldOffset);
 
         // The value to store was pushed by ldc before stfld
         int value = Stack.Count > 0 ? Stack.Pop() : 0;
@@ -1620,6 +1883,7 @@ class IL2NESWriter : NESWriter
             Emit(Opcode.STA, AddressMode.Absolute, fieldAddr);
         }
         _immediateInA = null;
+        }
     }
 
     /// <summary>
@@ -1628,35 +1892,65 @@ class IL2NESWriter : NESWriter
     /// </summary>
     void HandleLdfld(string fieldName)
     {
-        int localIndex;
-        if (_pendingStructLocal is not null)
+        // Check for struct array element access (from ldelema)
+        if (_pendingStructElementType != null)
         {
-            localIndex = _pendingStructLocal.Value;
-            _pendingStructLocal = null;
-        }
-        else if (_lastLoadedLocalIndex is not null && _lastLoadedLocalIndex >= 0 && _structLocalTypes.ContainsKey(_lastLoadedLocalIndex.Value))
-        {
-            // ldloc loaded the struct value — undo the WriteLdloc LDA and use field access instead
-            localIndex = _lastLoadedLocalIndex.Value;
-            RemoveLastInstructions(1);
-            if (Stack.Count > 0) Stack.Pop(); // Remove the value WriteLdloc pushed
-        }
-        else
-        {
-            throw new InvalidOperationException($"ldfld '{fieldName}' without preceding ldloca.s or struct ldloc");
+            string structType = _pendingStructElementType;
+            int fieldOffset = GetFieldOffset(structType, fieldName);
+
+            if (_pendingStructArrayRuntimeIndex)
+            {
+                // Variable index: X holds element offset, use AbsoluteX
+                ushort fieldAddr = (ushort)(_structArrayBaseForRuntimeIndex + fieldOffset);
+                Emit(Opcode.LDA, AddressMode.AbsoluteX, fieldAddr);
+            }
+            else
+            {
+                // Constant index: _pendingStructElementBase has the element base
+                ushort fieldAddr = (ushort)(_pendingStructElementBase!.Value + fieldOffset);
+                Emit(Opcode.LDA, AddressMode.Absolute, fieldAddr);
+            }
+
+            _pendingStructElementType = null;
+            _pendingStructElementBase = null;
+            _pendingStructArrayRuntimeIndex = false;
+            _runtimeValueInA = true;
+            _immediateInA = null;
+            Stack.Push(0);
+            return;
         }
 
-        string structType = ResolveStructType(localIndex, fieldName);
-        ushort baseAddr = GetOrAllocateStructLocal(localIndex, structType);
-        int fieldOffset = GetFieldOffset(structType, fieldName);
-        ushort fieldAddr = (ushort)(baseAddr + fieldOffset);
+        {
+            int localIndex;
+            if (_pendingStructLocal is not null)
+            {
+                localIndex = _pendingStructLocal.Value;
+                _pendingStructLocal = null;
+            }
+            else if (_lastLoadedLocalIndex is not null && _lastLoadedLocalIndex >= 0 && _structLocalTypes.ContainsKey(_lastLoadedLocalIndex.Value))
+            {
+                // ldloc loaded the struct value — undo the WriteLdloc LDA and use field access instead
+                localIndex = _lastLoadedLocalIndex.Value;
+                RemoveLastInstructions(1);
+                if (Stack.Count > 0) Stack.Pop(); // Remove the value WriteLdloc pushed
+            }
+            else
+            {
+                throw new InvalidOperationException($"ldfld '{fieldName}' without preceding ldloca.s or struct ldloc");
+            }
 
-        Emit(Opcode.LDA, AddressMode.Absolute, fieldAddr);
-        _runtimeValueInA = true;
-        _immediateInA = null;
+            string structType = ResolveStructType(localIndex, fieldName);
+            ushort baseAddr = GetOrAllocateStructLocal(localIndex, structType);
+            int fieldOffset = GetFieldOffset(structType, fieldName);
+            ushort fieldAddr = (ushort)(baseAddr + fieldOffset);
 
-        // Push the field value onto the IL stack (unknown at compile time)
-        Stack.Push(0);
+            Emit(Opcode.LDA, AddressMode.Absolute, fieldAddr);
+            _runtimeValueInA = true;
+            _immediateInA = null;
+
+            // Push the field value onto the IL stack (unknown at compile time)
+            Stack.Push(0);
+        }
     }
 
     /// <summary>
@@ -1867,6 +2161,35 @@ class IL2NESWriter : NESWriter
         ILOpCode.Ldc_i4 => instr.Integer,
         _ => null
     };
+
+    /// <summary>
+    /// Handles stloc after newarr: allocates a runtime array (byte[] or struct[]).
+    /// For struct arrays, allocates count * structSize bytes and records the struct type.
+    /// </summary>
+    void HandleStlocAfterNewarr(int localIdx)
+    {
+        bool isStructArray = _pendingArrayType != null && StructLayouts.ContainsKey(_pendingArrayType);
+        if (isStructArray)
+        {
+            int count = _pendingStructArrayCount;
+            int structSize = GetStructSize(_pendingArrayType!);
+            int totalBytes = count * structSize;
+            // Use the pre-allocated base address from newarr
+            ushort arrayAddr = _pendingStructArrayBase ?? (ushort)(local + LocalCount);
+            if (_pendingStructArrayBase == null)
+                LocalCount += totalBytes; // fallback: allocate now if not pre-allocated
+            Locals[localIdx] = new Local(count, arrayAddr, ArraySize: totalBytes, StructArrayType: _pendingArrayType);
+            _pendingStructArrayCount = 0;
+            _pendingStructArrayBase = null;
+        }
+        else
+        {
+            int arraySize = Stack.Count > 0 ? Stack.Pop() : 0;
+            ushort arrayAddr = (ushort)(local + LocalCount);
+            LocalCount += arraySize;
+            Locals[localIdx] = new Local(arraySize, arrayAddr, ArraySize: arraySize);
+        }
+    }
 
     void WriteStloc(Local local)
     {
