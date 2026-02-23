@@ -481,13 +481,18 @@ class Transpiler : IDisposable
                             }
                             break;
                         case HandleKind.MemberReference:
-                            var member = _reader.GetMemberReference((MemberReferenceHandle)entity);
-                            stringValue = _reader.GetString(member.Name);
-                            if (stringValue == "InitializeArray")
+                            stringValue = GetQualifiedMemberName(_reader.GetMemberReference((MemberReferenceHandle)entity));
+                            if (stringValue is "InitializeArray" or "RuntimeHelpers.InitializeArray")
                             {
                                 // HACK: skip for now
                                 continue;
                             }
+                            break;
+                        case HandleKind.MethodSpecification:
+                            // Generic method instantiation (e.g., Array.Fill<byte>)
+                            var methodSpec = _reader.GetMethodSpecification((MethodSpecificationHandle)entity);
+                            if (methodSpec.Method.Kind == HandleKind.MemberReference)
+                                stringValue = GetQualifiedMemberName(_reader.GetMemberReference((MemberReferenceHandle)methodSpec.Method));
                             break;
                         case HandleKind.FieldDefinition:
                             var field = _reader.GetFieldDefinition((FieldDefinitionHandle)entity);
@@ -567,6 +572,25 @@ class Transpiler : IDisposable
 
             yield return new ILInstruction(opCode, offset, intValue, stringValue, byteValue);
         }
+    }
+
+    /// <summary>
+    /// Gets the method name from a MemberReference, qualified with the declaring type
+    /// for BCL methods (e.g., "Array.Fill") to avoid collisions with user functions.
+    /// NESLib methods remain unqualified (e.g., "pal_col").
+    /// </summary>
+    string GetQualifiedMemberName(MemberReference member)
+    {
+        string name = _reader.GetString(member.Name);
+        var parent = member.Parent;
+        string? typeName = null;
+        if (parent.Kind == HandleKind.TypeReference)
+            typeName = _reader.GetString(_reader.GetTypeReference((TypeReferenceHandle)parent).Name);
+        else if (parent.Kind == HandleKind.TypeDefinition)
+            typeName = _reader.GetString(_reader.GetTypeDefinition((TypeDefinitionHandle)parent).Name);
+        if (typeName != null && typeName != "NESLib")
+            return $"{typeName}.{name}";
+        return name;
     }
 
     void GetUsedMethods(MetadataReader reader)

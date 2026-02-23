@@ -1,4 +1,4 @@
-﻿using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Xunit.Abstractions;
 
@@ -1181,5 +1181,70 @@ public class RoslynTests
         Assert.Contains("A914", hex); // LDA #20
         Assert.Contains("A903", hex); // LDA #3
         Assert.Contains("A928", hex); // LDA #40
+    }
+
+    [Fact]
+    public void ArrayFillConstant()
+    {
+        // Array.Fill with a constant value — no subsequent array access
+        var bytes = GetProgramBytes(
+            """
+            byte[] buf = new byte[8];
+            System.Array.Fill(buf, (byte)0xFF);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        Assert.Contains("A9FF", hex);  // LDA #$FF (fill value)
+        Assert.Contains("A207", hex);  // LDX #$07 (size-1 = 7)
+        Assert.Contains("CA", hex);    // DEX
+        Assert.Contains("10FA", hex);  // BPL -6 (loop back to STA)
+    }
+
+    [Fact]
+    public void ArrayFillZero()
+    {
+        // Array.Fill with zero — common memset(buf, 0, n) pattern
+        var bytes = GetProgramBytes(
+            """
+            byte[] buf = new byte[4];
+            System.Array.Fill(buf, (byte)0);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        Assert.Contains("A900", hex);  // LDA #$00 (fill value)
+        Assert.Contains("A203", hex);  // LDX #$03 (size-1 = 3)
+        Assert.Contains("CA", hex);    // DEX
+        Assert.Contains("10FA", hex);  // BPL -6 (loop back to STA)
+    }
+
+    [Fact]
+    public void ArrayCopyBasic()
+    {
+        // Array.Copy between two runtime arrays
+        var bytes = GetProgramBytes(
+            """
+            byte[] src = new byte[4];
+            src[0] = 0x10;
+            src[1] = 0x20;
+            byte[] dst = new byte[4];
+            System.Array.Copy(src, dst, 4);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        Assert.Contains("A200", hex);  // LDX #$00 (start index)
+        Assert.Contains("E004", hex);  // CPX #$04 (length)
+        Assert.Contains("D0", hex);    // BNE (loop back)
     }
 }

@@ -1285,6 +1285,14 @@ class IL2NESWriter : NESWriter
                             argsAlreadyPopped = true;
                         }
                         break;
+                    case "Array.Fill":
+                        HandleArrayFill();
+                        argsAlreadyPopped = true;
+                        break;
+                    case "Array.Copy":
+                        HandleArrayCopy();
+                        argsAlreadyPopped = true;
+                        break;
                     default:
                         // Handle byte array locals loaded via ldloc (pushax pattern).
                         // Fastcall functions (pal_bg, pal_spr, pal_all, vram_unrle) expect
@@ -1336,6 +1344,13 @@ class IL2NESWriter : NESWriter
                         if (Stack.Count > 0)
                             Stack.Pop();
                     }
+                }
+                // Skip post-call tracking for BCL methods (not in ReflectionCache)
+                if (argsAlreadyPopped && operand.Contains('.'))
+                {
+                    _runtimeValueInA = false;
+                    _ushortInAX = false;
+                    break;
                 }
                 // Clear byte array label if it was consumed by this call
                 // Only clear if this call actually takes arguments (consumes the array)
@@ -1636,6 +1651,214 @@ class IL2NESWriter : NESWriter
             }
         }
         throw new InvalidOperationException($"Cannot resolve struct type for local {localIndex} with field '{fieldName}'");
+    }
+
+    /// <summary>
+    /// Handles Array.Fill(array, value): fill entire array with a byte value.
+    /// IL patterns:
+    ///   1. ldloc (array), ldc (value), call Array.Fill  — array stored in local
+    ///   2. newarr, [dup,] ldc (value), call Array.Fill  — array on eval stack (Roslyn Release)
+    /// Emits inline 6502 fill loop: LDA #value; LDX #(size-1); loop: STA arr,X; DEX; BPL loop
+    /// </summary>
+    void HandleArrayFill()
+    {
+        // Pop value and array ref from stack
+        int fillValue = Stack.Count > 0 ? Stack.Pop() : 0;
+        int arrayRef = Stack.Count > 0 ? Stack.Pop() : 0;
+
+        if (Instructions == null || Index < 2)
+            throw new InvalidOperationException("Array.Fill requires at least 2 preceding instructions");
+
+        // Try to find the array local by scanning for ldloc (stops at dup/newarr)
+        int? arrayLocalIdx = null;
+        for (int scan = Index - 2; scan >= 0; scan--)
+        {
+            var op = Instructions[scan].OpCode;
+            if (op == ILOpCode.Dup || op == ILOpCode.Newarr)
+                break; // eval stack pattern — no local
+            var idx = GetLdlocIndex(Instructions[scan]);
+            if (idx != null)
+            {
+                arrayLocalIdx = idx;
+                break;
+            }
+        }
+
+        ushort arrayAddr;
+        int arraySize;
+
+        if (arrayLocalIdx != null)
+        {
+            // Pattern 1: array is in a local
+            var arrayLocal = Locals[arrayLocalIdx.Value];
+            if (arrayLocal.Address == null || arrayLocal.ArraySize == 0)
+                throw new InvalidOperationException("Array.Fill: array has no address or zero size");
+            arraySize = arrayLocal.ArraySize;
+            arrayAddr = (ushort)arrayLocal.Address;
+        }
+        else
+        {
+            // Pattern 2: array on eval stack from newarr — allocate now
+            arraySize = arrayRef > 0 ? arrayRef : 1;
+            arrayAddr = (ushort)(local + LocalCount);
+            LocalCount += arraySize;
+        }
+
+        // Remove previously emitted instructions (WriteLdloc/WriteLdc or LDA from newarr size)
+        // Find the first instruction of the Fill args sequence
+        int firstArgILOffset = -1;
+        for (int scan = Index - 1; scan >= 0; scan--)
+        {
+            var op = Instructions[scan].OpCode;
+            if (op == ILOpCode.Newarr)
+            {
+                // Go one further back to include the ldc that pushed the array size
+                firstArgILOffset = scan > 0 ? Instructions[scan - 1].Offset : Instructions[scan].Offset;
+                break;
+            }
+            if (op == ILOpCode.Dup)
+            {
+                firstArgILOffset = Instructions[scan].Offset;
+                break;
+            }
+            if (GetLdlocIndex(Instructions[scan]) != null)
+            {
+                firstArgILOffset = Instructions[scan].Offset;
+                break;
+            }
+        }
+        if (firstArgILOffset >= 0 && _blockCountAtILOffset.TryGetValue(firstArgILOffset, out int blockCount))
+        {
+            int instrToRemove = GetBufferedBlockCount() - blockCount;
+            if (instrToRemove > 0)
+                RemoveLastInstructions(instrToRemove);
+        }
+
+        // Emit fill loop: LDA #value; LDX #(size-1); @loop: STA arr,X; DEX; BPL @loop
+        if (arraySize <= 256)
+        {
+            Emit(Opcode.LDA, AddressMode.Immediate, (byte)(fillValue & 0xFF));
+            Emit(Opcode.LDX, AddressMode.Immediate, (byte)(arraySize - 1));
+            // STA arr,X (3) + DEX (1) + BPL (-6 to STA)
+            Emit(Opcode.STA, AddressMode.AbsoluteX, arrayAddr);
+            Emit(Opcode.DEX, AddressMode.Implied);
+            Emit(Opcode.BPL, AddressMode.Relative, unchecked((byte)-6));
+        }
+
+        _runtimeValueInA = false;
+        _immediateInA = null;
+    }
+
+    /// <summary>
+    /// Handles Array.Copy(src, dst, length): copy bytes between arrays.
+    /// IL pattern: ldloc (src), ldloc (dst), ldc (length), call Copy
+    /// Emits inline 6502 copy loop: LDX #0; @loop: LDA src,X; STA dst,X; INX; CPX #len; BNE @loop
+    /// </summary>
+    void HandleArrayCopy()
+    {
+        // Pop length, dst, src from stack
+        int length = Stack.Count > 0 ? Stack.Pop() : 0;
+        int dstRef = Stack.Count > 0 ? Stack.Pop() : 0;
+        int srcRef = Stack.Count > 0 ? Stack.Pop() : 0;
+
+        if (Instructions == null || Index < 3)
+            throw new InvalidOperationException("Array.Copy requires at least 3 preceding instructions");
+
+        // Find dst and src array locals by scanning back (stops at newarr for eval-stack pattern)
+        // IL pattern: [ldloc(src) | newarr], ldloc(dst), ldc(len), call Array.Copy
+        int? srcLocalIdx = null;
+        int? dstLocalIdx = null;
+        int firstArgILOffset = -1;
+
+        for (int scan = Index - 2; scan >= 0; scan--)
+        {
+            var op = Instructions[scan].OpCode;
+
+            // Check for ldloc
+            var idx = GetLdlocIndex(Instructions[scan]);
+            if (idx != null)
+            {
+                if (dstLocalIdx == null)
+                    dstLocalIdx = idx;
+                else
+                {
+                    srcLocalIdx = idx;
+                    firstArgILOffset = Instructions[scan].Offset;
+                    break;
+                }
+                continue;
+            }
+
+            // Check for newarr (eval-stack src pattern)
+            if (op == ILOpCode.Newarr && dstLocalIdx != null)
+            {
+                // src is on eval stack from newarr — go one back to include ldc for size
+                firstArgILOffset = scan > 0 ? Instructions[scan - 1].Offset : Instructions[scan].Offset;
+                break;
+            }
+        }
+
+        if (dstLocalIdx == null)
+            throw new InvalidOperationException("Array.Copy: could not find dst array local");
+
+        var dstLocal = Locals[dstLocalIdx.Value];
+        if (dstLocal.Address == null && dstLocal.LabelName == null)
+            throw new InvalidOperationException("Array.Copy: dst has no address");
+
+        ushort? dstAddr = dstLocal.Address != null ? (ushort)dstLocal.Address : null;
+
+        // Resolve src address
+        ushort srcAddr;
+        if (srcLocalIdx != null)
+        {
+            var srcLocal = Locals[srcLocalIdx.Value];
+            if (srcLocal.Address == null)
+                throw new InvalidOperationException("Array.Copy: src has no address");
+            srcAddr = (ushort)srcLocal.Address;
+        }
+        else
+        {
+            // Eval-stack src: allocate now
+            int srcSize = srcRef > 0 ? srcRef : (length > 0 ? length : 1);
+            srcAddr = (ushort)(local + LocalCount);
+            LocalCount += srcSize;
+        }
+
+        // Determine copy length
+        int copyLen = length > 0 ? length : 1;
+        if (copyLen == 0)
+            throw new InvalidOperationException("Array.Copy: zero length");
+
+        // Remove previously emitted instructions
+        if (firstArgILOffset >= 0 && _blockCountAtILOffset.TryGetValue(firstArgILOffset, out int blockCount))
+        {
+            int instrToRemove = GetBufferedBlockCount() - blockCount;
+            if (instrToRemove > 0)
+                RemoveLastInstructions(instrToRemove);
+        }
+
+        // Emit copy loop: LDX #0; @loop: LDA src,X; STA dst,X; INX; CPX #len; BNE @loop
+        if (copyLen <= 256)
+        {
+            Emit(Opcode.LDX, AddressMode.Immediate, 0x00);
+            if (dstAddr != null)
+            {
+                Emit(Opcode.LDA, AddressMode.AbsoluteX, srcAddr);
+                Emit(Opcode.STA, AddressMode.AbsoluteX, dstAddr.Value);
+            }
+            else if (dstLocal.LabelName != null)
+            {
+                Emit(Opcode.LDA, AddressMode.AbsoluteX, srcAddr);
+                EmitWithLabel(Opcode.STA, AddressMode.AbsoluteX, dstLocal.LabelName);
+            }
+            Emit(Opcode.INX, AddressMode.Implied);
+            Emit(Opcode.CPX, AddressMode.Immediate, (byte)copyLen);
+            // LDA (3) + STA (3) + INX (1) + CPX (2) + BNE (2) = 11; target is LDA at -11 from after BNE
+            Emit(Opcode.BNE, AddressMode.Relative, unchecked((byte)-11));
+        }
+
+        _runtimeValueInA = false;
+        _immediateInA = null;
     }
 
     /// <summary>

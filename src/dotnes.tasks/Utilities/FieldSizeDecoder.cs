@@ -23,7 +23,15 @@ class FieldSizeDecoder : ISignatureTypeProvider<int, object?>
 
     public int GetPointerType(int elementType) => throw new NotImplementedException();
 
-    public int GetPrimitiveType(PrimitiveTypeCode typeCode) => throw new NotImplementedException();
+    public int GetPrimitiveType(PrimitiveTypeCode typeCode) => typeCode switch
+    {
+        PrimitiveTypeCode.Boolean or PrimitiveTypeCode.Byte or PrimitiveTypeCode.SByte => 1,
+        PrimitiveTypeCode.Char or PrimitiveTypeCode.Int16 or PrimitiveTypeCode.UInt16 => 2,
+        PrimitiveTypeCode.Int32 or PrimitiveTypeCode.UInt32 or PrimitiveTypeCode.Single => 4,
+        PrimitiveTypeCode.Int64 or PrimitiveTypeCode.UInt64 or PrimitiveTypeCode.Double => 8,
+        PrimitiveTypeCode.IntPtr or PrimitiveTypeCode.UIntPtr => 4,
+        _ => throw new NotImplementedException($"PrimitiveTypeCode {typeCode}"),
+    };
 
     public int GetSZArrayType(int elementType) => throw new NotImplementedException();
 
