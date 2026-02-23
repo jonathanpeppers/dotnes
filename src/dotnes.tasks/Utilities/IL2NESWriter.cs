@@ -233,6 +233,11 @@ class IL2NESWriter : NESWriter
     public HashSet<string> UserMethodNames { get; init; } = new(StringComparer.Ordinal);
 
     /// <summary>
+    /// Names of extern methods (declared with static extern). Used to emit JSR _name.
+    /// </summary>
+    public HashSet<string> ExternMethodNames { get; init; } = new(StringComparer.Ordinal);
+
+    /// <summary>
     /// Merges a string table entry from a user method writer into this writer.
     /// </summary>
     public void MergeStringTableEntry(string label, byte[] data)
@@ -1330,8 +1335,11 @@ class IL2NESWriter : NESWriter
                                 _needsByteArrayLoadInCall = false;
                             }
                         }
-                        // Emit JSR to built-in method
-                        EmitWithLabel(Opcode.JSR, AddressMode.Absolute, operand);
+                        // Emit JSR — extern methods use cc65 _prefix convention
+                        if (ExternMethodNames.Contains(operand))
+                            EmitWithLabel(Opcode.JSR, AddressMode.Absolute, $"_{operand}");
+                        else
+                            EmitWithLabel(Opcode.JSR, AddressMode.Absolute, operand);
                         _immediateInA = null;
                         break;
                 }

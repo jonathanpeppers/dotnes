@@ -6,13 +6,22 @@ class ReflectionCache
 {
     readonly Dictionary<string, MethodInfo> _cache = new(StringComparer.Ordinal);
     readonly Dictionary<string, (int argCount, bool hasReturnValue)> _userMethods = new(StringComparer.Ordinal);
+    readonly HashSet<string> _externMethods = new(StringComparer.Ordinal);
 
     public void RegisterUserMethod(string name, int argCount, bool hasReturnValue)
     {
         _userMethods[name] = (argCount, hasReturnValue);
     }
 
-    public bool IsUserMethod(string name) => _userMethods.ContainsKey(name);
+    public void RegisterExternMethod(string name, int argCount, bool hasReturnValue)
+    {
+        _userMethods[name] = (argCount, hasReturnValue);
+        _externMethods.Add(name);
+    }
+
+    public bool IsUserMethod(string name) => _userMethods.ContainsKey(name) && !_externMethods.Contains(name);
+
+    public bool IsExternMethod(string name) => _externMethods.Contains(name);
 
     public MethodInfo GetMethod(string name)
     {

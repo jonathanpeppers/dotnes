@@ -57,6 +57,9 @@ public class RoslynTests
     }
 
     byte[] GetProgramBytes(string csharpSource)
+        => GetProgramBytes(csharpSource, additionalAssemblyFiles: null);
+
+    byte[] GetProgramBytes(string csharpSource, IList<AssemblyReader>? additionalAssemblyFiles, bool allowUnsafe = false)
     {
         _stream.SetLength(0);
         csharpSource = $"using NES;using static NES.NESLib;{Environment.NewLine}{csharpSource}";
@@ -73,12 +76,16 @@ public class RoslynTests
         var compilation = CSharpCompilation
             .Create("test.dll", [syntaxTree], references: references,
                 options: new CSharpCompilationOptions(OutputKind.ConsoleApplication,
-                    optimizationLevel: OptimizationLevel.Release, deterministic: true));
+                    optimizationLevel: OptimizationLevel.Release, deterministic: true,
+                    allowUnsafe: allowUnsafe));
         var emitResults = compilation.Emit(_stream);
         if (!emitResults.Success)
             Assert.Fail(string.Join(Environment.NewLine, emitResults.Diagnostics.Select(d => d.GetMessage())));
         _stream.Seek(0, SeekOrigin.Begin);
-        using var transpiler = new Transpiler(_stream, [new AssemblyReader(new StreamReader(Utilities.GetResource("chr_generic.s")))], _logger);
+        var assemblyFiles = new List<AssemblyReader> { new AssemblyReader(new StreamReader(Utilities.GetResource("chr_generic.s"))) };
+        if (additionalAssemblyFiles != null)
+            assemblyFiles.AddRange(additionalAssemblyFiles);
+        using var transpiler = new Transpiler(_stream, assemblyFiles, _logger);
         var program = transpiler.BuildProgram6502(out _, out _);
         return program.GetMainBlock();
     }
@@ -1246,5 +1253,88 @@ public class RoslynTests
         Assert.Contains("A200", hex);  // LDX #$00 (start index)
         Assert.Contains("E004", hex);  // CPX #$04 (length)
         Assert.Contains("D0", hex);    // BNE (loop back)
+    }
+
+    [Fact]
+    public void ExternMethodCall()
+    {
+        // Create a temporary .s file with a labeled subroutine
+        var tempDir = Path.Combine(Path.GetTempPath(), "dotnes_test_extern");
+        Directory.CreateDirectory(tempDir);
+        var sFilePath = Path.Combine(tempDir, "test_extern.s");
+        try
+        {
+            // Write a minimal .s file: _my_extern_func label with an RTS (0x60)
+            File.WriteAllText(sFilePath,
+                """
+                ; Test extern subroutine
+                _my_extern_func:
+                .byte $A9,$42,$60
+                """);
+
+            var assemblyFiles = new List<AssemblyReader> { new AssemblyReader(sFilePath) };
+            var bytes = GetProgramBytes(
+                """
+                using System.Runtime.InteropServices;
+                [DllImport("ext")] static extern void my_extern_func();
+                my_extern_func();
+                ppu_on_all();
+                while (true) ;
+                """,
+                additionalAssemblyFiles: assemblyFiles,
+                allowUnsafe: true);
+            Assert.NotNull(bytes);
+            Assert.NotEmpty(bytes);
+
+            var hex = Convert.ToHexString(bytes);
+            // Should contain JSR (0x20) to _my_extern_func label
+            Assert.Contains("20", hex);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+                Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
+    public void ExternMethodWithArgs()
+    {
+        // Extern method with one argument: verifies arg passing + JSR
+        var tempDir = Path.Combine(Path.GetTempPath(), "dotnes_test_extern2");
+        Directory.CreateDirectory(tempDir);
+        var sFilePath = Path.Combine(tempDir, "test_extern2.s");
+        try
+        {
+            File.WriteAllText(sFilePath,
+                """
+                ; Test extern subroutine with arg
+                _set_value:
+                .byte $85,$17,$60
+                """);
+
+            var assemblyFiles = new List<AssemblyReader> { new AssemblyReader(sFilePath) };
+            var bytes = GetProgramBytes(
+                """
+                using System.Runtime.InteropServices;
+                [DllImport("ext")] static extern void set_value(byte val);
+                set_value(42);
+                ppu_on_all();
+                while (true) ;
+                """,
+                additionalAssemblyFiles: assemblyFiles,
+                allowUnsafe: true);
+            Assert.NotNull(bytes);
+            Assert.NotEmpty(bytes);
+
+            var hex = Convert.ToHexString(bytes);
+            Assert.Contains("A92A", hex);  // LDA #$2A (42) — arg loaded before JSR
+            Assert.Contains("20", hex);    // JSR to _set_value
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+                Directory.Delete(tempDir, true);
+        }
     }
 }

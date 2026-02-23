@@ -35,6 +35,12 @@ class Transpiler : IDisposable
     /// </summary>
     public Dictionary<string, (int argCount, bool hasReturnValue)> UserMethodMetadata { get; } = new(StringComparer.Ordinal);
 
+    /// <summary>
+    /// Extern methods declared with 'static extern' (name -> arg count, has return value).
+    /// These map to labels in external .s assembly files (cc65 convention: _name).
+    /// </summary>
+    public Dictionary<string, (int argCount, bool hasReturnValue)> ExternMethods { get; } = new(StringComparer.Ordinal);
+
     public Transpiler(Stream stream, IList<AssemblyReader> assemblyFiles, ILogger? logger = null, bool verticalMirroring = false)
     {
         _pe = new PEReader(stream);
@@ -150,14 +156,21 @@ class Transpiler : IDisposable
         {
             reflectionCache.RegisterUserMethod(kvp.Key, kvp.Value.argCount, kvp.Value.hasReturnValue);
         }
+        // Register extern methods so Call handler can look up arg counts
+        foreach (var kvp in ExternMethods)
+        {
+            reflectionCache.RegisterExternMethod(kvp.Key, kvp.Value.argCount, kvp.Value.hasReturnValue);
+        }
 
         // Build main program block using label references (addresses resolved later)
+        var externNames = new HashSet<string>(ExternMethods.Keys, StringComparer.Ordinal);
         var structLayouts = DetectStructLayouts();
         using var writer = new IL2NESWriter(new MemoryStream(), logger: _logger, reflectionCache: reflectionCache)
         {
             Instructions = instructions,
             UsedMethods = UsedMethods,
             UserMethodNames = new HashSet<string>(UserMethods.Keys, StringComparer.Ordinal),
+            ExternMethodNames = externNames,
             WordLocals = DetectWordLocals(instructions),
             StructLayouts = structLayouts,
         };
@@ -295,6 +308,28 @@ class Transpiler : IDisposable
                 writer.MergeByteArray(bytes);
         }
 
+        // Parse and add extern code blocks from .s assembly files
+        int externBlocksTotalSize = 0;
+        if (ExternMethods.Count > 0)
+        {
+            var externLabels = new HashSet<string>(ExternMethods.Keys.Select(n => $"_{n}"), StringComparer.Ordinal);
+            foreach (var assemblyFile in _assemblyFiles)
+            {
+                // Re-read the file for code blocks (GetSegments consumed the reader)
+                if (!File.Exists(assemblyFile.Path))
+                    continue;
+                foreach (var block in AssemblyReader.GetCodeBlocks(assemblyFile.Path))
+                {
+                    if (block.Label != null && externLabels.Contains(block.Label))
+                    {
+                        program.AddBlock(block);
+                        externBlocksTotalSize += block.Size;
+                        _logger.WriteLine($"Extern block '{block.Label}': {block.Size} bytes");
+                    }
+                }
+            }
+        }
+
         // Get local count from writer
         locals = checked((byte)writer.LocalCount);
 
@@ -338,7 +373,7 @@ class Transpiler : IDisposable
         int standardSize = Program6502.CalculateFinalBuiltInsSize(0, null);
         int actualSize = Program6502.CalculateFinalBuiltInsSize(locals, UsedMethods);
         int finalBuiltInsOffset = actualSize - standardSize;
-        ushort totalSize = (ushort)(PRG_LAST.GetAddressAfterMain(sizeOfMain) + finalBuiltInsOffset + musicSubroutinesSize + userMethodsTotalSize + byteArrayTableSize + stringTableSize);
+        ushort totalSize = (ushort)(PRG_LAST.GetAddressAfterMain(sizeOfMain) + finalBuiltInsOffset + musicSubroutinesSize + userMethodsTotalSize + externBlocksTotalSize + byteArrayTableSize + stringTableSize);
         
         program.AddFinalBuiltIns(totalSize, locals, UsedMethods);
 
@@ -398,6 +433,33 @@ class Transpiler : IDisposable
             }
             else if (!methodName.StartsWith("."))
             {
+                // Check for extern methods (static extern — no IL body)
+                if ((methodDef.Attributes & MethodAttributes.PinvokeImpl) != 0
+                    || methodDef.RelativeVirtualAddress == 0)
+                {
+                    // Clean up compiler-generated name (same as user methods)
+                    string externName = methodName;
+                    if (externName.StartsWith("<"))
+                    {
+                        int gIdx = externName.IndexOf(">g__");
+                        if (gIdx >= 0)
+                        {
+                            int nameStart = gIdx + 4;
+                            int pipeIdx = externName.IndexOf('|', nameStart);
+                            externName = pipeIdx > nameStart ? externName.Substring(nameStart, pipeIdx - nameStart) : externName.Substring(nameStart);
+                        }
+                    }
+                    {
+                        var esig = _reader.GetBlobReader(methodDef.Signature);
+                        esig.ReadByte(); // calling convention
+                        int eParamCount = esig.ReadCompressedInteger();
+                        byte eRetTypeByte = esig.ReadByte(); // ELEMENT_TYPE_VOID = 0x01
+                        bool eHasReturnValue = eRetTypeByte != 0x01;
+                        ExternMethods[externName] = (eParamCount, eHasReturnValue);
+                    }
+                    continue;
+                }
+
                 // Extract clean name for user-defined methods
                 // Normal methods: use name as-is
                 // Local functions: compiler generates names like <<Main>$>g__fade_in|0_0
