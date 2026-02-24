@@ -178,16 +178,9 @@
 
 ### fami.c
 - **Description:** Demonstrates the FamiTone2 library for music and sound effects, with controller-triggered SFX.
-- **Status:** 🔴 Complex
-- **Missing Features:**
-  - `famitone_init()` — FamiTone2 library initialization
-  - `sfx_init()` — sound effect initialization
-  - `sfx_play()` — declared in NESLib but not transpiler-supported
-  - `music_play()` — declared but the FamiTone2 variant needs linked assembly
-  - `nmi_set_callback()` — implemented but needs FamiTone2's `famitone_update` function
-  - External linked assembly files (`famitone2.s`, `music_aftertherain.s`, `demosounds.s`)
-  - `extern char[]` declarations for linked data
-  - `__fastcall__` calling convention
+- **Status:** ✅ Implemented
+- **Sample:** `samples/fami/`
+- **Features:** ca65 assembler, extern linking, FamiTone2 integration, label aliases, nmi_set_callback
 
 ### bankswitch.c
 - **Description:** Demonstrates MMC3 mapper bank switching for PRG and CHR ROM banks using `POKE` to mapper registers.
@@ -314,7 +307,7 @@
 | Status | Count | Samples |
 |--------|-------|---------|
 | ✅ Already Implemented | 17 | hello, attributes, flicker, metasprites, music, tint, scroll, rletitle, tileset1, sprites, metacursor, metatrigger, statusbar, vrambuffer, horizscroll, horizmask, bcd |
-| 🔴 Complex | 12 | aputest, ppuhello, fami, bankswitch, monobitmap, conio, crypto, climber, transtable, irq, shoot2, siegegame |
+| 🔴 Complex | 11 | aputest, ppuhello, bankswitch, monobitmap, conio, crypto, climber, transtable, irq, shoot2, siegegame |
 
 > **Note:** `apu.c` and `vrambuf.c` are library files (not demos). `apu.c` is covered by dotnes's built-in `apu_init()` subroutine. `vrambuf.c` is covered by built-in `vrambuf_clear()`, `vrambuf_put()`, `vrambuf_end()`, `vrambuf_flush()`, and `set_vram_update()` subroutines. Neither is counted separately.
 
@@ -372,4 +365,4 @@ Prioritized TODO list of features needed to port climber.c, ordered by dependenc
 - [x] **sbyte (signed char)** — `Ldc_i4_m1`, negative constants via two's complement, `conv.i1`/`conv.i2`/`conv.i4` as no-ops on 8-bit 6502. Signed comparisons work via `Blt_s` (BMI).
 - [x] **Arrays of structs** — `newarr` for struct types allocates `count * structSize` bytes. `ldelema` computes element address (constant index: compile-time; variable index: multiply+TAX). Handles Roslyn's optimized `dup` pattern where array ref stays on the evaluation stack. `stfld`/`ldfld` work with both absolute and AbsoluteX addressing for array elements.
 - [x] **memset/memcpy** — `System.Array.Fill<T>` → inline 6502 fill loop (`LDA #val; LDX #size-1; STA arr,X; DEX; BPL`). `System.Array.Copy` → inline copy loop (`LDX #0; LDA src,X; STA dst,X; INX; CPX #len; BNE`). BCL method names are type-qualified (e.g., `Array.Fill`) to avoid collisions with user functions. Handles Roslyn's eval-stack pattern (newarr+dup) where arrays are never stored to locals.
-- [ ] **FamiTone2 integration** — `famitone_init`, `sfx_init`, `sfx_play`, `music_play`, `music_stop`, `nmi_set_callback(famitone_update)`. Requires linking external `.s` assembly files.
+- [x] **FamiTone2 integration** — Full ca65-compatible assembler (`Ca65Assembler.cs`) supporting all 6502 instructions, conditional assembly, expression evaluation, label aliases. `famitone_init(string)`, `sfx_init(string)`, `nmi_set_callback(string)` NESLib stubs emit label address loads + JSR. Extern methods via `[DllImport("ext")]` emit JSR with `_` prefix convention. FamiTone2 `.s` files assembled and linked into ROM. See `samples/fami/`.
