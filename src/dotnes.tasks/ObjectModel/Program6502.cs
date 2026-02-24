@@ -186,6 +186,25 @@ public class Program6502
             if (block.Label != null)
                 _labels.DefineOrUpdate(block.Label, (ushort)(currentAddress + block.LabelOffset));
 
+            // Define additional labels (aliases) that point to the same block address
+            // Format: "aliasName" = same as block label, or "aliasName=targetLabel" for instruction-level aliases
+            if (block.AdditionalLabels != null)
+            {
+                foreach (var alias in block.AdditionalLabels)
+                {
+                    int eqIdx = alias.IndexOf('=');
+                    if (eqIdx > 0)
+                    {
+                        // Instruction-level alias: resolve after instruction labels are defined
+                        // (handled below after instruction labels)
+                    }
+                    else
+                    {
+                        _labels.DefineOrUpdate(alias, (ushort)(currentAddress + block.LabelOffset));
+                    }
+                }
+            }
+
             if (block.IsDataBlock)
             {
                 // Data blocks just advance the address by their size
@@ -209,6 +228,22 @@ public class Program6502
                     if (_labels.TryResolve(ScopeLabel(kvp.Value, block), out ushort address))
                     {
                         _labels.DefineOrUpdate(ScopeLabel(kvp.Key, block), address);
+                    }
+                }
+
+                // Resolve instruction-level additional labels (e.g., _famitone_init=FamiToneInit)
+                if (block.AdditionalLabels != null)
+                {
+                    foreach (var alias in block.AdditionalLabels)
+                    {
+                        int eqIdx = alias.IndexOf('=');
+                        if (eqIdx > 0)
+                        {
+                            var aliasName = alias.Substring(0, eqIdx);
+                            var targetName = alias.Substring(eqIdx + 1);
+                            if (_labels.TryResolve(targetName, out ushort address))
+                                _labels.DefineOrUpdate(aliasName, address);
+                        }
                     }
                 }
             }
@@ -248,6 +283,23 @@ public class Program6502
             {
                 // Write raw data bytes directly
                 ms.Write(block.RawData, 0, block.RawData.Length);
+
+                // Patch relocations: resolve label references to absolute addresses
+                if (block.Relocations != null)
+                {
+                    long savedPos = ms.Position;
+                    foreach (var (offset, label) in block.Relocations)
+                    {
+                        if (_labels.TryResolve(label, out ushort addr))
+                        {
+                            ms.Position = savedPos - block.RawData.Length + offset;
+                            ms.WriteByte((byte)(addr & 0xFF));
+                            ms.WriteByte((byte)(addr >> 8));
+                        }
+                    }
+                    ms.Position = savedPos;
+                }
+
                 currentAddress += (ushort)block.RawData.Length;
             }
             else

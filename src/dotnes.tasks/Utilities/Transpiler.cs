@@ -308,24 +308,32 @@ class Transpiler : IDisposable
                 writer.MergeByteArray(bytes);
         }
 
-        // Parse and add extern code blocks from .s assembly files
+        // Parse and add extern code blocks from .s assembly files using ca65 assembler
         int externBlocksTotalSize = 0;
         if (ExternMethods.Count > 0)
         {
-            var externLabels = new HashSet<string>(ExternMethods.Keys.Select(n => $"_{n}"), StringComparer.Ordinal);
             foreach (var assemblyFile in _assemblyFiles)
             {
-                // Re-read the file for code blocks (GetSegments consumed the reader)
                 if (!File.Exists(assemblyFile.Path))
                     continue;
-                foreach (var block in AssemblyReader.GetCodeBlocks(assemblyFile.Path))
+
+                var ca65 = new Ca65Assembler();
+                using (var reader = new StreamReader(assemblyFile.Path))
                 {
-                    if (block.Label != null && externLabels.Contains(block.Label))
+                    var blocks = ca65.Assemble(reader);
+                    foreach (var block in blocks)
                     {
                         program.AddBlock(block);
                         externBlocksTotalSize += block.Size;
                         _logger.WriteLine($"Extern block '{block.Label}': {block.Size} bytes");
                     }
+                }
+
+                // Register label aliases from the assembler (e.g., _famitone_init=FamiToneInit)
+                // Import symbols from the assembly that need to resolve to dotnes built-ins
+                foreach (var importName in ca65.Imports)
+                {
+                    _logger.WriteLine($"Assembly import: {importName}");
                 }
             }
         }

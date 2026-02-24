@@ -1120,6 +1120,48 @@ class IL2NESWriter : NESWriter
                         EmitWithLabel(Opcode.JSR, AddressMode.Absolute, operand);
                         _immediateInA = null;
                         break;
+                    case nameof(NESLib.nmi_set_callback):
+                    case nameof(NESLib.famitone_init):
+                    case nameof(NESLib.sfx_init):
+                        {
+                            // These functions take a string label name as argument.
+                            // The Ldstr emitted: LDA #<string_N, LDX #>string_N, JSR pushax, LDX #0, LDA #len
+                            // Replace with: LDA #<_label, LDX #>_label, JSR target
+                            var block = CurrentBlock!;
+                            string? labelName = null;
+                            if (block.Count >= 5)
+                            {
+                                var ldaStringInstr = block[block.Count - 5];
+                                if (ldaStringInstr.Operand is LowByteOperand lbo)
+                                {
+                                    foreach (var entry in _stringLabelMap)
+                                    {
+                                        if (entry.Value == lbo.Label)
+                                        {
+                                            labelName = entry.Key;
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                            RemoveLastInstructions(5);
+                            if (labelName != null)
+                            {
+                                string label = $"_{labelName}";
+                                EmitWithLabel(Opcode.LDA, AddressMode.Immediate_LowByte, label);
+                                EmitWithLabel(Opcode.LDX, AddressMode.Immediate_HighByte, label);
+                            }
+                            // nmi_set_callback is a built-in; famitone_init/sfx_init are extern (always _ prefix)
+                            string jsrTarget = operand == nameof(NESLib.nmi_set_callback)
+                                ? "nmi_set_callback"
+                                : $"_{operand}";
+                            EmitWithLabel(Opcode.JSR, AddressMode.Absolute, jsrTarget);
+                            if (operand == nameof(NESLib.nmi_set_callback))
+                                UsedMethods?.Add("nmi_set_callback");
+                            _immediateInA = null;
+                            argsAlreadyPopped = true;
+                        }
+                        break;
                     case nameof(NESLib.poke):
                         {
                             // poke(ushort addr, byte value) -> LDA #value, STA abs addr

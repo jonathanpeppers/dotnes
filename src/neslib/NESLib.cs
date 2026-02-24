@@ -76,6 +76,20 @@ public static class NESLib
     public static void apu_init() => throw null!;
 
     /// <summary>
+    /// initialize FamiTone2 music library with music data
+    /// Usage: famitone_init("danger_streets_music_data")
+    /// The string names a data label in a linked .s file
+    /// </summary>
+    public static void famitone_init(string musicDataLabel) => throw null!;
+
+    /// <summary>
+    /// initialize FamiTone2 sound effects
+    /// Usage: sfx_init("demo_sounds")
+    /// The string names a data label in a linked .s file
+    /// </summary>
+    public static void sfx_init(string soundDataLabel) => throw null!;
+
+    /// <summary>
     /// set up music data pointer for playback
     /// data is a byte array containing encoded music commands
     /// </summary>
@@ -106,6 +120,13 @@ public static class NESLib
     /// play sample
     /// </summary>
     public static void sample_play(byte sample) => throw null!;
+
+    /// <summary>
+    /// set NMI callback function by label name
+    /// The named function will be called every NMI frame.
+    /// Usage: nmi_set_callback("famitone_update")
+    /// </summary>
+    public static void nmi_set_callback(string callbackName) => throw null!;
 
     /// <summary>
     /// get pad trigger

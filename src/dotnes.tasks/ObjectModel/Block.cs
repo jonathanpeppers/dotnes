@@ -37,9 +37,22 @@ public class Block
     public int LabelOffset { get; set; }
 
     /// <summary>
+    /// Additional labels that resolve to the same address as this block's Label.
+    /// Used for ca65 label aliases (e.g., _famitone_init=FamiToneInit).
+    /// </summary>
+    public List<string>? AdditionalLabels { get; set; }
+
+    /// <summary>
     /// Raw data bytes for data-only blocks. When set, instructions are ignored.
     /// </summary>
     public byte[]? RawData { get; set; }
+
+    /// <summary>
+    /// Relocation entries for data blocks with label references (e.g., .word @label).
+    /// Each entry is (byte offset in RawData, label name) where 2 bytes at the offset
+    /// should be patched with the label's resolved absolute address.
+    /// </summary>
+    public List<(int Offset, string Label)>? Relocations { get; set; }
 
     /// <summary>
     /// Returns true if this block contains raw data instead of instructions
