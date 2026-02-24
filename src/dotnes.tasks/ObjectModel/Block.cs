@@ -55,6 +55,12 @@ public class Block
     public List<(int Offset, string Label)>? Relocations { get; set; }
 
     /// <summary>
+    /// Internal labels within a data block, mapping label name to byte offset.
+    /// Used when a data segment has multiple labels at different positions.
+    /// </summary>
+    public Dictionary<string, int>? InternalLabels { get; set; }
+
+    /// <summary>
     /// Returns true if this block contains raw data instead of instructions
     /// </summary>
     public bool IsDataBlock => RawData != null;

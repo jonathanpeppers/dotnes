@@ -26,6 +26,11 @@ public class Ca65Assembler
     readonly HashSet<string> _exports = new(StringComparer.Ordinal);
     readonly HashSet<string> _imports = new(StringComparer.Ordinal);
 
+    /// <summary>
+    /// Constants resolved during assembly (for diagnostics)
+    /// </summary>
+    public IReadOnlyDictionary<string, int> Constants => _constants;
+
     // Segment tracking
     string _currentSegment = "CODE";
     int _zeroPageOffset = 0;
@@ -366,6 +371,7 @@ public class Ca65Assembler
         string? currentBlockLabel = null;
         List<byte> dataBytes = new();
         List<(int offset, string label)> dataRelocations = new();
+        Dictionary<string, int>? dataInternalLabels = null;
         string? dataLabel = null;
         string? dataSegment = null;
 
@@ -407,30 +413,57 @@ public class Ca65Assembler
                             currentBlock = null;
                             currentBlockLabel = null;
                         }
-                        _pendingInlineLabel = asmLine.Text;
-                    }
-                    else if (currentBlock == null)
-                    {
-                        currentBlock = new Block(asmLine.Text);
-                        currentBlockLabel = asmLine.Text;
+                        // Add as internal label if we're already accumulating data
+                        if (dataLabel != null)
+                        {
+                            if (dataInternalLabels == null)
+                                dataInternalLabels = new Dictionary<string, int>(StringComparer.Ordinal);
+                            dataInternalLabels[asmLine.Text] = dataBytes.Count;
+                        }
+                        else
+                        {
+                            _pendingInlineLabel = asmLine.Text;
+                        }
                     }
                     else
                     {
-                        // Set label on next instruction
-                        currentBlock.SetNextLabel(asmLine.Text);
+                        // Label before code: flush accumulated data first
+                        if (dataLabel != null && dataBytes.Count > 0)
+                        {
+                            EmitDataBlock(dataLabel, dataBytes, dataRelocations, dataInternalLabels);
+                            dataLabel = null;
+                            dataBytes.Clear();
+                            dataRelocations.Clear();
+                            dataInternalLabels = null;
+                        }
+                        if (currentBlock == null)
+                        {
+                            currentBlock = new Block(asmLine.Text);
+                            currentBlockLabel = asmLine.Text;
+                        }
+                        else
+                        {
+                            // Set label on next instruction
+                            currentBlock.SetNextLabel(asmLine.Text);
+                        }
                     }
                 }
                 else
                 {
-                    // Data segment label
-                    if (dataLabel != null && dataBytes.Count > 0)
+                    // Data segment label — track as internal label within the current data block
+                    if (dataLabel == null)
                     {
-                        EmitDataBlock(dataLabel, dataBytes, dataRelocations);
+                        // First label in the data segment — becomes the block label
+                        dataLabel = asmLine.Text;
+                        dataSegment = asmLine.Segment;
                     }
-                    dataLabel = asmLine.Text;
-                    dataSegment = asmLine.Segment;
-                    dataBytes.Clear();
-                    dataRelocations.Clear();
+                    else
+                    {
+                        // Subsequent label — add as internal label at current offset
+                        if (dataInternalLabels == null)
+                            dataInternalLabels = new Dictionary<string, int>(StringComparer.Ordinal);
+                        dataInternalLabels[asmLine.Text] = dataBytes.Count;
+                    }
                 }
                 continue;
             }
@@ -448,6 +481,9 @@ public class Ca65Assembler
                     {
                         // Create a label alias
                         _labels[name] = _labels[exprStr];
+                        // Also propagate to constants if it's a constant (e.g., zero-page label)
+                        if (_constants.TryGetValue(exprStr, out int cval))
+                            _constants[name] = cval;
                     }
                     else
                     {
@@ -463,24 +499,27 @@ public class Ca65Assembler
             {
                 if (isCodeSegment)
                 {
-                    // Inline data in code segment: flush current code block,
-                    // emit data as a separate raw data block, then continue code
+                    // Inline data in code segment: flush current code block if needed
                     if (currentBlock != null)
                     {
                         _codeBlocks.Add(currentBlock);
                         currentBlock = null;
                         currentBlockLabel = null;
                     }
-                    // Use pending label from previous Label line if any
-                    string? inlineLabel = _pendingInlineLabel;
-                    _pendingInlineLabel = null;
-                    var inlineBytes = new List<byte>();
-                    var inlineRelocs = new List<(int, string)>();
-                    EmitDataBytes(asmLine.Text, asmLine.ScopeLabel, inlineBytes, inlineRelocs);
-                    if (inlineBytes.Count > 0)
+                    // Accumulate into the shared data block, using pendingInlineLabel or existing dataLabel
+                    if (_pendingInlineLabel != null && dataLabel == null)
                     {
-                        EmitDataBlock(inlineLabel ?? ("_inline_data_" + _dataBlocks.Count), inlineBytes, inlineRelocs);
+                        dataLabel = _pendingInlineLabel;
+                        _pendingInlineLabel = null;
                     }
+                    else if (_pendingInlineLabel != null)
+                    {
+                        if (dataInternalLabels == null)
+                            dataInternalLabels = new Dictionary<string, int>(StringComparer.Ordinal);
+                        dataInternalLabels[_pendingInlineLabel] = dataBytes.Count;
+                        _pendingInlineLabel = null;
+                    }
+                    EmitDataBytes(asmLine.Text, asmLine.ScopeLabel, dataBytes, dataRelocations);
                 }
                 else
                 {
@@ -493,6 +532,16 @@ public class Ca65Assembler
             if (asmLine.Kind == AssemblyLineKind.Instruction)
             {
                 if (!isCodeSegment) continue;
+
+                // Flush accumulated data block if any before starting code
+                if (dataLabel != null && dataBytes.Count > 0)
+                {
+                    EmitDataBlock(dataLabel, dataBytes, dataRelocations, dataInternalLabels);
+                    dataLabel = null;
+                    dataBytes.Clear();
+                    dataRelocations.Clear();
+                    dataInternalLabels = null;
+                }
 
                 if (currentBlock == null)
                 {
@@ -509,7 +558,7 @@ public class Ca65Assembler
         if (currentBlock != null)
             _codeBlocks.Add(currentBlock);
         if (dataLabel != null && dataBytes.Count > 0)
-            EmitDataBlock(dataLabel, dataBytes, dataRelocations);
+            EmitDataBlock(dataLabel, dataBytes, dataRelocations, dataInternalLabels);
 
         // Apply label aliases to blocks (e.g., _famitone_init=FamiToneInit)
         ApplyLabelAliasesToBlocks();
@@ -1138,11 +1187,13 @@ public class Ca65Assembler
             yield return valuesStr.Substring(start);
     }
 
-    void EmitDataBlock(string label, List<byte> bytes, List<(int offset, string label)> relocations)
+    void EmitDataBlock(string label, List<byte> bytes, List<(int offset, string label)> relocations, Dictionary<string, int>? internalLabels = null)
     {
         var block = Block.FromRawData(bytes.ToArray(), label);
         if (relocations.Count > 0)
             block.Relocations = new List<(int, string)>(relocations);
+        if (internalLabels != null && internalLabels.Count > 0)
+            block.InternalLabels = new Dictionary<string, int>(internalLabels);
         _dataBlocks.Add(block);
     }
 
@@ -1154,7 +1205,9 @@ public class Ca65Assembler
     {
         if (_constants.TryGetValue(name, out int val)) return val;
         if (_defines.TryGetValue(name, out int dval)) return dval;
-        if (_labels.TryGetValue(name, out int lval)) return lval;
+        // Don't resolve _labels here — code/data labels are offsets, not absolute addresses.
+        // They must remain as unresolved label operands for Program6502 to resolve.
+        // Zero-page labels are already in _constants via HandleZeroPageLine.
         return null;
     }
 
@@ -1162,11 +1215,11 @@ public class Ca65Assembler
     {
         return Ca65Expression.TryEvaluate(expr.AsSpan(), name =>
         {
-            // Try scoped local label first
+            // Try scoped local label first — only resolve from constants
             if (name.Length > 0 && name[0] == '@' && scopeLabel != null)
             {
                 var scoped = $"{scopeLabel}:{name}";
-                if (_labels.TryGetValue(scoped, out int v)) return v;
+                if (_constants.TryGetValue(scoped, out int v)) return v;
             }
             return LookupSymbol(name);
         });

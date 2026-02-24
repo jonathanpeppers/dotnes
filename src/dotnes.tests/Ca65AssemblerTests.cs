@@ -374,22 +374,21 @@ my_table:
 @entry2:
     .byte $04, $05, $06
 ");
-        // Should have 3 data blocks: my_table, @entry1, @entry2
-        Assert.Equal(3, blocks.Count);
-
-        // my_table has 4 bytes (2 words) with relocations
+        // All data in one block with internal labels
+        Assert.Single(blocks);
         Assert.True(blocks[0].IsDataBlock);
-        Assert.Equal(4, blocks[0].RawData!.Length);
+        Assert.Equal("my_table", blocks[0].Label);
+        // 4 bytes (2 words) + 3 bytes + 3 bytes = 10 total
+        Assert.Equal(10, blocks[0].RawData!.Length);
+        // 2 relocations for the .word entries
         Assert.NotNull(blocks[0].Relocations);
         Assert.Equal(2, blocks[0].Relocations!.Count);
-
-        // entry1 has 3 bytes
-        Assert.True(blocks[1].IsDataBlock);
-        Assert.Equal(3, blocks[1].RawData!.Length);
-
-        // entry2 has 3 bytes
-        Assert.True(blocks[2].IsDataBlock);
-        Assert.Equal(3, blocks[2].RawData!.Length);
+        // Internal labels for @entry1 and @entry2
+        Assert.NotNull(blocks[0].InternalLabels);
+        Assert.True(blocks[0].InternalLabels!.ContainsKey("my_table:@entry1"));
+        Assert.Equal(4, blocks[0].InternalLabels!["my_table:@entry1"]); // offset 4
+        Assert.True(blocks[0].InternalLabels!.ContainsKey("my_table:@entry2"));
+        Assert.Equal(7, blocks[0].InternalLabels!["my_table:@entry2"]); // offset 7
     }
 
     #endregion
@@ -583,4 +582,62 @@ _famitone_init=FamiToneInit
     }
 
     #endregion
+
+    [Fact]
+    public void ZeroPageDerivedConstants_ResolveInInstructions()
+    {
+        var source = @"
+.segment ""ZEROPAGE""
+FT_TEMP:    .res 3
+
+.segment ""CODE""
+FT_TEMP_PTR     = FT_TEMP
+FT_TEMP_PTR_L   = FT_TEMP_PTR+0
+FT_TEMP_PTR_H   = FT_TEMP_PTR+1
+
+_test:
+    sta <FT_TEMP_PTR_L
+    stx <FT_TEMP_PTR_H
+    rts
+";
+        var asm = new Ca65Assembler();
+        var blocks = asm.Assemble(source);
+
+        // Should produce one code block
+        Assert.Single(blocks);
+        var block = blocks[0];
+        Assert.Equal("_test", block.Label);
+
+        // sta <FT_TEMP_PTR_L should resolve to STA $00 (zero page, value 0)
+        var inst0 = block[0];
+        Assert.Equal(Opcode.STA, inst0.Opcode);
+        Assert.Equal(AddressMode.ZeroPage, inst0.Mode);
+
+        // stx <FT_TEMP_PTR_H should resolve to STX $01 (zero page, value 1)
+        var inst1 = block[1];
+        Assert.Equal(Opcode.STX, inst1.Opcode);
+        Assert.Equal(AddressMode.ZeroPage, inst1.Mode);
+    }
+
+    [Fact]
+    public void Assemble_FamiTone2_ZeroPageConstantsResolve()
+    {
+        var asm = new Ca65Assembler();
+        var blocks = asm.Assemble(File.ReadAllText(Path.Combine("Data", "fami", "famitone2.s")));
+
+        // famitone2.s should produce 4 blocks: 2 code, 2 data
+        Assert.Equal(4, blocks.Count);
+
+        // Zero-page derived constants should all be resolved
+        Assert.True(asm.Constants.ContainsKey("FT_TEMP"));
+        Assert.True(asm.Constants.ContainsKey("FT_TEMP_PTR"));
+        Assert.True(asm.Constants.ContainsKey("FT_TEMP_PTR_L"));
+        Assert.True(asm.Constants.ContainsKey("FT_TEMP_PTR_H"));
+        Assert.Equal(0, asm.Constants["FT_TEMP_PTR_L"]);
+        Assert.Equal(1, asm.Constants["FT_TEMP_PTR_H"]);
+
+        // Code labels should NOT appear in constants (they're resolved via LabelTable)
+        Assert.False(asm.Constants.ContainsKey("FamiToneInit"));
+        Assert.False(asm.Constants.ContainsKey("FamiToneUpdate"));
+    }
 }

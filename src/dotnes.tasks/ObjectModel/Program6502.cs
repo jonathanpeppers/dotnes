@@ -207,6 +207,12 @@ public class Program6502
 
             if (block.IsDataBlock)
             {
+                // Define internal labels within the data block
+                if (block.InternalLabels != null)
+                {
+                    foreach (var kvp in block.InternalLabels)
+                        _labels.DefineOrUpdate(kvp.Key, (ushort)(currentAddress + kvp.Value));
+                }
                 // Data blocks just advance the address by their size
                 currentAddress += (ushort)block.Size;
             }
