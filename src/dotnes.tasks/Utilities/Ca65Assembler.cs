@@ -811,7 +811,9 @@ public class Ca65Assembler
 
         if (parts.operand == null)
         {
-            // Implied
+            // Some opcodes without an operand use Accumulator mode, not Implied
+            if (opcode == Opcode.LSR || opcode == Opcode.ASL || opcode == Opcode.ROL || opcode == Opcode.ROR)
+                return new Instruction(opcode, AddressMode.Accumulator);
             return new Instruction(opcode, AddressMode.Implied);
         }
 
@@ -870,32 +872,24 @@ public class Ca65Assembler
             return new Instruction(opcode, AddressMode.Immediate_HighByte, new HighByteOperand(label));
         }
 
-        // .lobyte/.hibyte
-        if (trimmed.StartsWith(".lobyte", StringComparison.OrdinalIgnoreCase))
-        {
-            var inner = ExtractFunctionArg(trimmed, 7);
-            var val = EvalExpr(inner, scopeLabel);
-            if (val.HasValue)
-                return new Instruction(opcode, AddressMode.Immediate, new ImmediateOperand((byte)(val.Value & 0xFF)));
-            var label = ResolveLocalLabel(inner, scopeLabel);
-            return new Instruction(opcode, AddressMode.Immediate_LowByte, new LowByteOperand(label));
-        }
-
-        if (trimmed.StartsWith(".hibyte", StringComparison.OrdinalIgnoreCase))
-        {
-            var inner = ExtractFunctionArg(trimmed, 7);
-            var val = EvalExpr(inner, scopeLabel);
-            if (val.HasValue)
-                return new Instruction(opcode, AddressMode.Immediate, new ImmediateOperand((byte)((val.Value >> 8) & 0xFF)));
-            var label = ResolveLocalLabel(inner, scopeLabel);
-            return new Instruction(opcode, AddressMode.Immediate_HighByte, new HighByteOperand(label));
-        }
-
-        // Normal immediate value
+        // Normal immediate value (expression evaluator handles .lobyte/.hibyte + arithmetic)
         var value = EvalExpr(trimmed, scopeLabel);
         if (value.HasValue)
             return new Instruction(opcode, AddressMode.Immediate, new ImmediateOperand((byte)(value.Value & 0xFF)));
 
+        // Unresolved — check for .lobyte/.hibyte with label reference
+        if (trimmed.StartsWith(".lobyte", StringComparison.OrdinalIgnoreCase))
+        {
+            var inner = ExtractFunctionArg(trimmed, 7);
+            var label = ResolveLocalLabel(inner, scopeLabel);
+            return new Instruction(opcode, AddressMode.Immediate_LowByte, new LowByteOperand(label));
+        }
+        if (trimmed.StartsWith(".hibyte", StringComparison.OrdinalIgnoreCase))
+        {
+            var inner = ExtractFunctionArg(trimmed, 7);
+            var label = ResolveLocalLabel(inner, scopeLabel);
+            return new Instruction(opcode, AddressMode.Immediate_HighByte, new HighByteOperand(label));
+        }
         // Unresolved — treat as label lo byte (common pattern: lda #label is an error, but handle gracefully)
         var lbl = ResolveLocalLabel(trimmed, scopeLabel);
         return new Instruction(opcode, AddressMode.Immediate_LowByte, new LowByteOperand(lbl));

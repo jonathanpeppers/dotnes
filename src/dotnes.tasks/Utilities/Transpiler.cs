@@ -412,6 +412,15 @@ class Transpiler : IDisposable
         // Final address resolution
         program.ResolveAddresses();
 
+        // Log block addresses for diagnostics
+        _logger.WriteLine($"Block layout ({program.Blocks.Count} blocks):");
+        ushort diagAddr = program.BaseAddress;
+        foreach (var block in program.Blocks)
+        {
+            _logger.WriteLine($"  ${diagAddr:X4}: [{block.Label}] {block.Size} bytes, data={block.IsDataBlock}");
+            diagAddr += (ushort)block.Size;
+        }
+
         _logger.WriteLine($"Single-pass complete. Size of main: {sizeOfMain}, locals: {locals}");
 
         return program;

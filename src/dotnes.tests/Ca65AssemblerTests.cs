@@ -31,6 +31,15 @@ public class Ca65AssemblerTests
     [InlineData("$FF ^ $0F", 0xF0)]
     [InlineData("1 << 4", 16)]
     [InlineData("$80 >> 3", 16)]
+    [InlineData("1 && 1", 1)]
+    [InlineData("1 && 0", 0)]
+    [InlineData("0 && 1", 0)]
+    [InlineData("1 || 0", 1)]
+    [InlineData("0 || 0", 0)]
+    [InlineData("0 || 1", 1)]
+    [InlineData("!0", 1)]
+    [InlineData("!1", 0)]
+    [InlineData("!42", 0)]
     public void Expression_Arithmetic(string expr, int expected)
     {
         var result = Ca65Expression.Evaluate(expr, _ => null);
@@ -44,6 +53,8 @@ public class Ca65AssemblerTests
     [InlineData(">($1234)", 0x12)]
     [InlineData(".lobyte($ABCD)", 0xCD)]
     [InlineData(".hibyte($ABCD)", 0xAB)]
+    [InlineData(".lobyte($0537)+5", 0x3C)]
+    [InlineData(".lobyte($0500)+11", 0x0B)]
     public void Expression_LoByte_HiByte(string expr, int expected)
     {
         var result = Ca65Expression.Evaluate(expr, _ => null);
@@ -639,5 +650,20 @@ _test:
         // Code labels should NOT appear in constants (they're resolved via LabelTable)
         Assert.False(asm.Constants.ContainsKey("FamiToneInit"));
         Assert.False(asm.Constants.ContainsKey("FamiToneUpdate"));
+    }
+
+    [Fact]
+    public void Assemble_MusicData_StartsAtLabel()
+    {
+        var asm = new Ca65Assembler();
+        var blocks = asm.Assemble(File.ReadAllText(Path.Combine("Data", "fami", "music_dangerstreets.s")));
+
+        Assert.Single(blocks);
+        var block = blocks[0];
+        Assert.Equal("_danger_streets_music_data", block.Label);
+        Assert.True(block.IsDataBlock);
+
+        // First byte should be 0x01 (1 song)
+        Assert.Equal(0x01, block.RawData![0]);
     }
 }

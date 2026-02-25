@@ -4,8 +4,8 @@ namespace dotnes;
 
 /// <summary>
 /// Evaluates ca65-style expressions: hex ($xx), decimal, binary (%xx),
-/// arithmetic (+,-,*,/), bitwise (&,|,^,<<,>>), unary (<,>,~,-),
-/// functions (.lobyte, .hibyte), and symbol references.
+/// arithmetic (+,-,*,/), bitwise (&,|,^,<<,>>), logical (&&, ||),
+/// unary (<,>,~,-,!), functions (.lobyte, .hibyte), and symbol references.
 /// </summary>
 public static class Ca65Expression
 {
@@ -17,7 +17,7 @@ public static class Ca65Expression
     {
         int pos = 0;
         var trimmed = Trim(expr);
-        var result = ParseBitwiseOr(trimmed, ref pos, symbolLookup);
+        var result = ParseLogicalOr(trimmed, ref pos, symbolLookup);
         return result;
     }
 
@@ -41,6 +41,40 @@ public static class Ca65Expression
             pos++;
     }
 
+    static int? ParseLogicalOr(ReadOnlySpan<char> expr, ref int pos, Func<string, int?> lookup)
+    {
+        var left = ParseLogicalAnd(expr, ref pos, lookup);
+        if (left == null) return null;
+
+        while (pos < expr.Length)
+        {
+            SkipWhitespace(expr, ref pos);
+            if (pos + 1 >= expr.Length || expr[pos] != '|' || expr[pos + 1] != '|') break;
+            pos += 2;
+            var right = ParseLogicalAnd(expr, ref pos, lookup);
+            if (right == null) return null;
+            left = (left.Value != 0 || right.Value != 0) ? 1 : 0;
+        }
+        return left;
+    }
+
+    static int? ParseLogicalAnd(ReadOnlySpan<char> expr, ref int pos, Func<string, int?> lookup)
+    {
+        var left = ParseBitwiseOr(expr, ref pos, lookup);
+        if (left == null) return null;
+
+        while (pos < expr.Length)
+        {
+            SkipWhitespace(expr, ref pos);
+            if (pos + 1 >= expr.Length || expr[pos] != '&' || expr[pos + 1] != '&') break;
+            pos += 2;
+            var right = ParseBitwiseOr(expr, ref pos, lookup);
+            if (right == null) return null;
+            left = (left.Value != 0 && right.Value != 0) ? 1 : 0;
+        }
+        return left;
+    }
+
     static int? ParseBitwiseOr(ReadOnlySpan<char> expr, ref int pos, Func<string, int?> lookup)
     {
         var left = ParseBitwiseXor(expr, ref pos, lookup);
@@ -50,6 +84,8 @@ public static class Ca65Expression
         {
             SkipWhitespace(expr, ref pos);
             if (pos >= expr.Length || expr[pos] != '|') break;
+            // Don't consume || as bitwise or
+            if (pos + 1 < expr.Length && expr[pos + 1] == '|') break;
             pos++;
             var right = ParseBitwiseXor(expr, ref pos, lookup);
             if (right == null) return null;
@@ -84,6 +120,8 @@ public static class Ca65Expression
         {
             SkipWhitespace(expr, ref pos);
             if (pos >= expr.Length || expr[pos] != '&') break;
+            // Don't consume && as bitwise and
+            if (pos + 1 < expr.Length && expr[pos + 1] == '&') break;
             pos++;
             var right = ParseShift(expr, ref pos, lookup);
             if (right == null) return null;
@@ -198,6 +236,14 @@ public static class Ca65Expression
             pos++;
             var val = ParseUnary(expr, ref pos, lookup);
             return val.HasValue ? -val.Value : null;
+        }
+
+        // ! prefix: logical NOT
+        if (c == '!')
+        {
+            pos++;
+            var val = ParseUnary(expr, ref pos, lookup);
+            return val.HasValue ? (val.Value == 0 ? 1 : 0) : null;
         }
 
         return ParsePrimary(expr, ref pos, lookup);
