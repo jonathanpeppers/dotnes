@@ -4,7 +4,7 @@
 >
 > Analysis based on dotnes transpiler capabilities and the `NESLib.cs` API surface.
 >
-> Existing dotnes samples: `hello`, `hellofs`, `staticsprite`, `movingsprite`, `attributetable`, `flicker`, `metasprites`, `music`, `lols`, `tint`, `scroll`, `rletitle`, `tileset1`, `sprites`, `metacursor`, `metatrigger`, `statusbar`, `vrambuffer`, `horizscroll`, `horizmask`
+> Existing dotnes samples: `hello`, `hellofs`, `staticsprite`, `movingsprite`, `attributetable`, `flicker`, `metasprites`, `music`, `lols`, `tint`, `scroll`, `rletitle`, `tileset1`, `sprites`, `metacursor`, `metatrigger`, `statusbar`, `vrambuffer`, `horizscroll`, `horizmask`, `fami`
 
 ---
 
@@ -142,9 +142,17 @@
   - `Bge_s` (branch if >=), `Brtrue`/`Brfalse` long-form with JMP trampoline
   - `updbuf` and `VRAMBUF_VERT` constants in NESLib
 
----
-
-## 🟠 Moderate (Significant Work Needed)
+### fami.c
+- **Description:** Demonstrates the FamiTone2 library for music and sound effects, with controller-triggered SFX.
+- **Status:** ✅ Implemented
+- **dotnes sample:** `fami`
+- **Features:** Full ca65-compatible assembler (`Ca65Assembler`), extern `.s` file linking via `[DllImport("ext")]`, FamiTone2 music/SFX driver, `nmi_set_callback`, `famitone_init`, `sfx_init`, `music_play`, `sfx_play`, controller-triggered sound effects.
+- **New Features Added:**
+  - ca65 assembler with conditional assembly, expression evaluation (&&, ||, !), all 6502 addressing modes
+  - Extern assembly linking (`[DllImport("ext")] static extern void func()` → `JSR _func`)
+  - `famitone_init(string)`, `sfx_init(string)`, `nmi_set_callback(string)` NESLib stubs
+  - `music_play(byte)`, `music_stop()`, `sfx_play(byte, byte)` via extern declarations
+  - Block relocations and internal labels for music data cross-references
 
 ### bcd.c
 - **Description:** Binary-Coded Decimal addition utility function.
@@ -175,12 +183,6 @@
   - `#include <nes.h>` — CC65 NES hardware header
   - `waitvsync()` — CC65-specific function
   - No neslib functions used at all — entirely hardware-register driven
-
-### fami.c
-- **Description:** Demonstrates the FamiTone2 library for music and sound effects, with controller-triggered SFX.
-- **Status:** ✅ Implemented
-- **Sample:** `samples/fami/`
-- **Features:** ca65 assembler, extern linking, FamiTone2 integration, label aliases, nmi_set_callback
 
 ### bankswitch.c
 - **Description:** Demonstrates MMC3 mapper bank switching for PRG and CHR ROM banks using `POKE` to mapper registers.
@@ -226,22 +228,17 @@
   - `static` variables, `const` arrays
   - Multiple user-defined functions with complex control flow
   - `switch/case` statements
-  - `sfx_play()` — not transpiler-supported
   - Far exceeds dotnes's current single-top-level-statement model
 
 ### climber.c
 - **Description:** A full platform game with random level generation, enemy AI, scrolling, FamiTone2 music, and collision detection.
 - **Status:** 🔴 Complex
-- **Note:** `vrambuf` module, `delay()`, `rand8()`, `OAM_FLIP_H`, `for` loops, `ushort` locals, `enum` types, and basic struct field access are now available.
+- **Note:** `vrambuf` module, `delay()`, `rand8()`, `OAM_FLIP_H`, `for` loops, `ushort` locals, `enum` types, basic struct field access, `switch/case`, `bcd_add`, global/static variables, `sbyte`, arrays of structs, `Array.Fill`/`Array.Copy`, FamiTone2 integration, and `nmi_set_callback` are now available.
 - **Missing Features:**
-  - FamiTone2 library (`famitone_init`, `sfx_init`, `sfx_play`, `music_play`, `music_stop`)
-  - `nmi_set_callback()` with `famitone_update`
-  - BCD arithmetic module (`bcd.h` / `bcd.c`)
   - `typedef struct` with bitfields (`Floor`, `Actor`)
   - Pointer arithmetic and pointer-to-struct operations
-  - `memset()`, `memcpy()`
-  - Arrays of structs, arrays of pointers
-  - `bool` type, `static` variables
+  - Arrays of pointers
+  - `bool` type
   - 20+ user-defined functions with complex control flow
   - `switch/case` with fallthrough
 
@@ -279,11 +276,9 @@
 - **Missing Features:**
   - UxROM mapper (`NES_MAPPER 2`) with CHR RAM
   - Direct APU register macros (`APU_PULSE_DECAY`, `APU_PULSE_SUSTAIN`, `APU_NOISE_DECAY`, `APU_TRIANGLE_SUSTAIN`, `APU_ENABLE`)
-  - BCD module (`bcd_add`)
   - `typedef struct` (multiple: `FormationEnemy`, `AttackingEnemy`, `Missile`, `Sprite`)
   - Inline assembly (`asm()` statements for star animation)
   - `nesclock()` — declared but not transpiler-supported
-  - `signed char` type
   - Extremely large tileset data (2048 bytes)
   - 30+ user-defined functions
 
@@ -306,7 +301,7 @@
 
 | Status | Count | Samples |
 |--------|-------|---------|
-| ✅ Already Implemented | 17 | hello, attributes, flicker, metasprites, music, tint, scroll, rletitle, tileset1, sprites, metacursor, metatrigger, statusbar, vrambuffer, horizscroll, horizmask, bcd |
+| ✅ Already Implemented | 18 | hello, attributes, flicker, metasprites, music, tint, scroll, rletitle, tileset1, sprites, metacursor, metatrigger, statusbar, vrambuffer, horizscroll, horizmask, bcd, fami |
 | 🔴 Complex | 11 | aputest, ppuhello, bankswitch, monobitmap, conio, crypto, climber, transtable, irq, shoot2, siegegame |
 
 > **Note:** `apu.c` and `vrambuf.c` are library files (not demos). `apu.c` is covered by dotnes's built-in `apu_init()` subroutine. `vrambuf.c` is covered by built-in `vrambuf_clear()`, `vrambuf_put()`, `vrambuf_end()`, `vrambuf_flush()`, and `set_vram_update()` subroutines. Neither is counted separately.
@@ -319,10 +314,7 @@
 | Global/static arrays | 15+ samples |
 | `typedef struct` / struct support | 8 samples (basic field access now supported; arrays of structs, pointers to structs pending) |
 | Direct APU/PPU register access | 5 samples (apu.c already covered by built-in `apu_init()`) |
-| FamiTone2 library | 3 samples |
-| `delay()` | 3 samples (now implemented) |
 | Mapper support (MMC3, UxROM) | 3 samples |
-| `signed byte` (sbyte) type | 4 samples |
 | CC65-specific libraries (conio, joystick) | 2 samples |
 
 ### Features Now Implemented
@@ -353,6 +345,12 @@
 | User functions with return values (return value in A survives stack cleanup) | climber, siegegame, general user code |
 | `bcd_add(ushort, ushort)` — software BCD addition, 16-bit return value handling | bcd, climber, shoot2 (score tracking) |
 | Global/static variables (`stsfld`/`ldsfld`) — user-defined static fields at $0325+ | climber, shoot2, siegegame (game state) |
+| `sbyte` (signed char) — negative constants, `conv.i1`/`conv.i2` as no-ops | climber, shoot2, siegegame |
+| Arrays of structs — `newarr` struct, `ldelema`, `stfld`/`ldfld` with AbsoluteX | climber, shoot2, siegegame |
+| `Array.Fill` / `Array.Copy` — inline 6502 fill/copy loops | climber, siegegame |
+| ca65 assembler — full expression evaluator (&&, \|\|, !), conditional assembly, all addressing modes | fami (FamiTone2 linking) |
+| Extern assembly linking — `[DllImport("ext")]` → `JSR _func`, `.s` files assembled and linked | fami (FamiTone2, music data, SFX data) |
+| `famitone_init` / `sfx_init` / `nmi_set_callback` / `music_play` / `sfx_play` | fami, climber (music and SFX) |
 
 ### Roadmap to climber.c
 
