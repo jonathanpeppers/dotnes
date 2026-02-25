@@ -604,6 +604,13 @@ public class Program6502
         size += BuiltInSubroutines.Zerobss(locals).ByteSize;
         if (usedMethods != null)
         {
+            // vrambuf_flush depends on vrambuf_end + vrambuf_clear
+            if (usedMethods.Contains("vrambuf_flush"))
+            {
+                usedMethods.Add("vrambuf_end");
+                usedMethods.Add("vrambuf_clear");
+            }
+
             // pad_poll is needed directly or as a dependency of pad_trigger/pad_state
             if (usedMethods.Contains("pad_poll") || usedMethods.Contains("pad_trigger") || usedMethods.Contains("pad_state"))
                 size += BuiltInSubroutines.PadPoll().ByteSize;
@@ -687,6 +694,13 @@ public class Program6502
         // Optional methods
         if (usedMethods != null)
         {
+            // vrambuf_flush depends on vrambuf_end + vrambuf_clear
+            if (usedMethods.Contains("vrambuf_flush"))
+            {
+                usedMethods.Add("vrambuf_end");
+                usedMethods.Add("vrambuf_clear");
+            }
+
             // pad_poll is needed directly or as a dependency of pad_trigger/pad_state
             if (usedMethods.Contains("pad_poll") || usedMethods.Contains("pad_trigger") || usedMethods.Contains("pad_state"))
                 AddBlock(BuiltInSubroutines.PadPoll());

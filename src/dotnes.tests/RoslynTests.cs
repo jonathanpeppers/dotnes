@@ -1566,4 +1566,42 @@ public class RoslynTests
         var hex = Convert.ToHexString(bytes);
         Assert.Contains("A948", hex); // LDA #$48 ('H') in stelem
     }
+
+    [Fact]
+    public void ShiftRight()
+    {
+        // Shift right by constant — pyy >> 8 pattern for extracting high byte
+        var bytes = GetProgramBytes(
+            """
+            byte x = rand8();
+            byte hi = (byte)(x >> 2);
+            pal_col(0, hi);
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        // Should contain two LSR A instructions (4A 4A)
+        Assert.Contains("4A4A", hex);
+    }
+
+    [Fact]
+    public void ShiftLeft()
+    {
+        // Shift left by constant — x << 3 pattern for multiply by 8
+        var bytes = GetProgramBytes(
+            """
+            byte x = rand8();
+            byte result = (byte)(x << 3);
+            pal_col(0, result);
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        // Should contain three ASL A instructions (0A 0A 0A)
+        Assert.Contains("0A0A0A", hex);
+    }
 }

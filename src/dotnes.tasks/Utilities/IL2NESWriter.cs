@@ -597,6 +597,65 @@ class IL2NESWriter : NESWriter
                     }
                 }
                 break;
+            case ILOpCode.Shr:
+            case ILOpCode.Shr_un:
+                {
+                    int shiftCount = Stack.Pop();
+                    int value = Stack.Count > 0 ? Stack.Pop() : 0;
+
+                    bool shrLocalInA = _lastLoadedLocalIndex.HasValue &&
+                        Locals.TryGetValue(_lastLoadedLocalIndex.Value, out var shrLocal) && shrLocal.Address != null;
+
+                    if (_runtimeValueInA || shrLocalInA)
+                    {
+                        if (!_runtimeValueInA
+                            && previous is ILOpCode.Ldc_i4_s or ILOpCode.Ldc_i4
+                            or ILOpCode.Ldc_i4_0 or ILOpCode.Ldc_i4_1 or ILOpCode.Ldc_i4_2
+                            or ILOpCode.Ldc_i4_3 or ILOpCode.Ldc_i4_4 or ILOpCode.Ldc_i4_5
+                            or ILOpCode.Ldc_i4_6 or ILOpCode.Ldc_i4_7 or ILOpCode.Ldc_i4_8)
+                        {
+                            RemoveLastInstructions(1);
+                        }
+                        for (int i = 0; i < shiftCount; i++)
+                            Emit(Opcode.LSR, AddressMode.Accumulator);
+                        _runtimeValueInA = true;
+                        Stack.Push(0);
+                    }
+                    else
+                    {
+                        Stack.Push(value >> shiftCount);
+                    }
+                }
+                break;
+            case ILOpCode.Shl:
+                {
+                    int shiftCount = Stack.Pop();
+                    int value = Stack.Count > 0 ? Stack.Pop() : 0;
+
+                    bool shlLocalInA = _lastLoadedLocalIndex.HasValue &&
+                        Locals.TryGetValue(_lastLoadedLocalIndex.Value, out var shlLocal) && shlLocal.Address != null;
+
+                    if (_runtimeValueInA || shlLocalInA)
+                    {
+                        if (!_runtimeValueInA
+                            && previous is ILOpCode.Ldc_i4_s or ILOpCode.Ldc_i4
+                            or ILOpCode.Ldc_i4_0 or ILOpCode.Ldc_i4_1 or ILOpCode.Ldc_i4_2
+                            or ILOpCode.Ldc_i4_3 or ILOpCode.Ldc_i4_4 or ILOpCode.Ldc_i4_5
+                            or ILOpCode.Ldc_i4_6 or ILOpCode.Ldc_i4_7 or ILOpCode.Ldc_i4_8)
+                        {
+                            RemoveLastInstructions(1);
+                        }
+                        for (int i = 0; i < shiftCount; i++)
+                            Emit(Opcode.ASL, AddressMode.Accumulator);
+                        _runtimeValueInA = true;
+                        Stack.Push(0);
+                    }
+                    else
+                    {
+                        Stack.Push(value << shiftCount);
+                    }
+                }
+                break;
             case ILOpCode.And:
                 {
                     int mask = Stack.Pop();
@@ -792,12 +851,12 @@ class IL2NESWriter : NESWriter
                 _lastLoadedLocalIndex = operand;
                 break;
             case ILOpCode.Bne_un_s:
+            case ILOpCode.Bne_un:
                 // Branch if not equal (unsigned)
-                // IL stack: ..., value1, value2 → ...
-                // Pattern: Ldloc → LDA $addr, then Ldc → LDA #imm
-                // Remove only the LDA #imm (1 instruction), keeping A = value1
                 {
-                    operand = (sbyte)(byte)operand;
+                    int branchOffset = instruction.OpCode == ILOpCode.Bne_un_s
+                        ? (sbyte)(byte)operand : operand;
+                    int instrSize = instruction.OpCode == ILOpCode.Bne_un_s ? 2 : 5;
                     byte cmpValue = checked((byte)Stack.Pop()); // value2
                     if (Stack.Count > 0) Stack.Pop(); // value1
                     RemoveLastInstructions(1); // Remove LDA #imm from Ldc
@@ -814,30 +873,41 @@ class IL2NESWriter : NESWriter
                     }
                     
                     Emit(Opcode.CMP, AddressMode.Immediate, cmpValue);
-                    var labelName = $"instruction_{instruction.Offset + operand + 2:X2}";
-                    EmitWithLabel(Opcode.BNE, AddressMode.Relative, labelName);
+                    var labelName = $"instruction_{instruction.Offset + branchOffset + instrSize:X2}";
+                    if (instruction.OpCode == ILOpCode.Bne_un_s)
+                        EmitWithLabel(Opcode.BNE, AddressMode.Relative, labelName);
+                    else
+                    {
+                        Emit(Opcode.BEQ, AddressMode.Relative, 3);
+                        EmitWithLabel(Opcode.JMP, AddressMode.Absolute, labelName);
+                    }
                     _runtimeValueInA = false;
                 }
                 break;
             case ILOpCode.Beq_s:
+            case ILOpCode.Beq:
                 // Branch if equal: value1 == value2
-                // IL stack: ..., value1, value2 → ...
-                // Pattern: Ldloc → LDA $addr, then Ldc → LDA #imm
-                // Remove the LDA #imm, emit CMP #imm + BEQ
                 {
-                    operand = (sbyte)(byte)operand;
+                    int branchOffset = instruction.OpCode == ILOpCode.Beq_s
+                        ? (sbyte)(byte)operand : operand;
+                    int instrSize = instruction.OpCode == ILOpCode.Beq_s ? 2 : 5;
                     byte cmpValue = checked((byte)Stack.Pop()); // value2
                     if (Stack.Count > 0) Stack.Pop(); // value1
                     RemoveLastInstructions(1); // Remove LDA #imm from Ldc
                     Emit(Opcode.CMP, AddressMode.Immediate, cmpValue);
-                    var labelName = $"instruction_{instruction.Offset + operand + 2:X2}";
-                    EmitWithLabel(Opcode.BEQ, AddressMode.Relative, labelName);
+                    var labelName = $"instruction_{instruction.Offset + branchOffset + instrSize:X2}";
+                    if (instruction.OpCode == ILOpCode.Beq_s)
+                        EmitWithLabel(Opcode.BEQ, AddressMode.Relative, labelName);
+                    else
+                    {
+                        Emit(Opcode.BNE, AddressMode.Relative, 3);
+                        EmitWithLabel(Opcode.JMP, AddressMode.Absolute, labelName);
+                    }
                     _runtimeValueInA = false;
                 }
                 break;
             case ILOpCode.Brfalse_s:
                 // Branch if value is zero/false (after AND test)
-                // The AND result is in A and sets the zero flag, so use BEQ
                 {
                     operand = (sbyte)(byte)operand;
                     var labelName = $"instruction_{instruction.Offset + operand + 2:X2}";
@@ -859,57 +929,88 @@ class IL2NESWriter : NESWriter
                 }
                 break;
             case ILOpCode.Blt_s:
+            case ILOpCode.Blt:
                 // Branch if less than (signed): value1 < value2
-                // IL stack: ..., value1, value2 → ...
-                // Pattern: Ldloc → LDA $addr, then Ldc → LDA #imm
-                // Remove the LDA #imm, emit CMP #imm + BCC (unsigned less than)
                 {
-                    operand = (sbyte)(byte)operand;
-                    byte cmpValue = checked((byte)Stack.Pop()); // value2 (comparison target)
-                    if (Stack.Count > 0) Stack.Pop(); // value1
-                    RemoveLastInstructions(1); // Remove LDA #imm from Ldc
+                    int branchOffset = instruction.OpCode == ILOpCode.Blt_s
+                        ? (sbyte)(byte)operand : operand;
+                    int instrSize = instruction.OpCode == ILOpCode.Blt_s ? 2 : 5;
+                    byte cmpValue = checked((byte)Stack.Pop());
+                    if (Stack.Count > 0) Stack.Pop();
+                    RemoveLastInstructions(1);
                     Emit(Opcode.CMP, AddressMode.Immediate, cmpValue);
-                    var labelName = $"instruction_{instruction.Offset + operand + 2:X2}";
-                    EmitWithLabel(Opcode.BCC, AddressMode.Relative, labelName);
+                    var labelName = $"instruction_{instruction.Offset + branchOffset + instrSize:X2}";
+                    if (instruction.OpCode == ILOpCode.Blt_s)
+                        EmitWithLabel(Opcode.BCC, AddressMode.Relative, labelName);
+                    else
+                    {
+                        // Trampoline: BCS +3, JMP target
+                        Emit(Opcode.BCS, AddressMode.Relative, 3);
+                        EmitWithLabel(Opcode.JMP, AddressMode.Absolute, labelName);
+                    }
                 }
                 break;
             case ILOpCode.Ble_s:
-                // Branch if less than or equal (signed): value1 <= value2
-                // CMP #(value2+1) + BCC — A < value2+1 is equivalent to A <= value2
+            case ILOpCode.Ble:
+                // Branch if less than or equal: CMP #(value2+1) + BCC/trampoline
                 {
-                    operand = (sbyte)(byte)operand;
-                    byte cmpValue = checked((byte)Stack.Pop()); // value2 (comparison target)
-                    if (Stack.Count > 0) Stack.Pop(); // value1
-                    RemoveLastInstructions(1); // Remove LDA #imm from Ldc
+                    int branchOffset = instruction.OpCode == ILOpCode.Ble_s
+                        ? (sbyte)(byte)operand : operand;
+                    int instrSize = instruction.OpCode == ILOpCode.Ble_s ? 2 : 5;
+                    byte cmpValue = checked((byte)Stack.Pop());
+                    if (Stack.Count > 0) Stack.Pop();
+                    RemoveLastInstructions(1);
                     Emit(Opcode.CMP, AddressMode.Immediate, (byte)(cmpValue + 1));
-                    var labelName = $"instruction_{instruction.Offset + operand + 2:X2}";
-                    EmitWithLabel(Opcode.BCC, AddressMode.Relative, labelName);
+                    var labelName = $"instruction_{instruction.Offset + branchOffset + instrSize:X2}";
+                    if (instruction.OpCode == ILOpCode.Ble_s)
+                        EmitWithLabel(Opcode.BCC, AddressMode.Relative, labelName);
+                    else
+                    {
+                        Emit(Opcode.BCS, AddressMode.Relative, 3);
+                        EmitWithLabel(Opcode.JMP, AddressMode.Absolute, labelName);
+                    }
                 }
                 break;
             case ILOpCode.Bge_s:
-                // Branch if greater than or equal: value1 >= value2
-                // CMP #value2 + BCS (carry set means >=)
+            case ILOpCode.Bge:
+                // Branch if greater than or equal: CMP #value2 + BCS/trampoline
                 {
-                    operand = (sbyte)(byte)operand;
+                    int branchOffset = instruction.OpCode == ILOpCode.Bge_s
+                        ? (sbyte)(byte)operand : operand;
+                    int instrSize = instruction.OpCode == ILOpCode.Bge_s ? 2 : 5;
                     byte cmpValue = checked((byte)Stack.Pop());
                     if (Stack.Count > 0) Stack.Pop();
                     RemoveLastInstructions(1);
                     Emit(Opcode.CMP, AddressMode.Immediate, cmpValue);
-                    var labelName = $"instruction_{instruction.Offset + operand + 2:X2}";
-                    EmitWithLabel(Opcode.BCS, AddressMode.Relative, labelName);
+                    var labelName = $"instruction_{instruction.Offset + branchOffset + instrSize:X2}";
+                    if (instruction.OpCode == ILOpCode.Bge_s)
+                        EmitWithLabel(Opcode.BCS, AddressMode.Relative, labelName);
+                    else
+                    {
+                        Emit(Opcode.BCC, AddressMode.Relative, 3);
+                        EmitWithLabel(Opcode.JMP, AddressMode.Absolute, labelName);
+                    }
                 }
                 break;
             case ILOpCode.Bgt_s:
-                // Branch if greater than: value1 > value2
-                // CMP #(value2+1) + BCS — A >= value2+1 is equivalent to A > value2
+            case ILOpCode.Bgt:
+                // Branch if greater than: CMP #(value2+1) + BCS/trampoline
                 {
-                    operand = (sbyte)(byte)operand;
+                    int branchOffset = instruction.OpCode == ILOpCode.Bgt_s
+                        ? (sbyte)(byte)operand : operand;
+                    int instrSize = instruction.OpCode == ILOpCode.Bgt_s ? 2 : 5;
                     byte cmpValue = checked((byte)Stack.Pop());
                     if (Stack.Count > 0) Stack.Pop();
                     RemoveLastInstructions(1);
                     Emit(Opcode.CMP, AddressMode.Immediate, (byte)(cmpValue + 1));
-                    var labelName = $"instruction_{instruction.Offset + operand + 2:X2}";
-                    EmitWithLabel(Opcode.BCS, AddressMode.Relative, labelName);
+                    var labelName = $"instruction_{instruction.Offset + branchOffset + instrSize:X2}";
+                    if (instruction.OpCode == ILOpCode.Bgt_s)
+                        EmitWithLabel(Opcode.BCS, AddressMode.Relative, labelName);
+                    else
+                    {
+                        Emit(Opcode.BCC, AddressMode.Relative, 3);
+                        EmitWithLabel(Opcode.JMP, AddressMode.Absolute, labelName);
+                    }
                 }
                 break;
             case ILOpCode.Brtrue:
@@ -3431,6 +3532,7 @@ class IL2NESWriter : NESWriter
                     push = 1; break;
                 case ILOpCode.Add: case ILOpCode.Sub: case ILOpCode.Mul: case ILOpCode.Div: case ILOpCode.Rem:
                 case ILOpCode.And: case ILOpCode.Or: case ILOpCode.Xor:
+                case ILOpCode.Shr: case ILOpCode.Shr_un: case ILOpCode.Shl:
                     pop = 2; push = 1; break;
                 case ILOpCode.Ldelem_u1:
                     pop = 2; push = 1; break;
