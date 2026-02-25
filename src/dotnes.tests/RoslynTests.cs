@@ -1604,4 +1604,25 @@ public class RoslynTests
         // Should contain three ASL A instructions (0A 0A 0A)
         Assert.Contains("0A0A0A", hex);
     }
+
+    [Fact]
+    public void RuntimeComparison()
+    {
+        // Compare two runtime variables: for (byte i = 0; i < limit; i++)
+        var bytes = GetProgramBytes(
+            """
+            byte limit = (byte)(rand8() % 4);
+            for (byte i = 0; i < limit; i++)
+            {
+                pal_col(i, i);
+            }
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        // Should contain CMP $addr (absolute mode, opcode CD) for runtime comparison
+        Assert.Contains("CD", hex);
+    }
 }
