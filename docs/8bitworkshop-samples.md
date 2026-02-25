@@ -232,14 +232,14 @@
 
 ### climber.c
 - **Description:** A full platform game with random level generation, enemy AI, scrolling, FamiTone2 music, and collision detection.
-- **Status:** 🔴 Complex
-- **Note:** `vrambuf` module, `delay()`, `rand8()`, `OAM_FLIP_H`, `for` loops, `ushort` locals, `enum` types, basic struct field access, `switch/case`, `bcd_add`, global/static variables, `sbyte`, arrays of structs, `Array.Fill`/`Array.Copy`, FamiTone2 integration, and `nmi_set_callback` are now available.
-- **Missing Features:**
-  - `typedef struct` with bitfields (`Floor`, `Actor`)
-  - Pointer arithmetic and pointer-to-struct operations
-  - Arrays of pointers
-  - `bool` type
-  - 20+ user-defined functions with complex control flow
+- **Status:** 🟡 In Progress — scaffold boots with music, floor rendering, and basic player movement
+- **Note:** Uses SoA (structure-of-arrays) instead of structs with bitfields. All game state is local to avoid Roslyn display class closures. Static helper functions for pure computations.
+- **Available features used:** `vrambuf_put`, `vrambuf_flush`, `Array.Fill`, `pad_poll`, `oam_meta_spr_pal`, `rand8`, modulo `%`, bit shifts `>>` `<<`, runtime-vs-runtime comparison, long-form branches, FamiTone2 music/SFX via `DllImport`
+- **Remaining:**
+  - Vertical scrolling (16-bit scroll math)
+  - Full player movement (climbing, jumping, falling)
+  - Enemy AI and collision detection
+  - Item pickup and scoring
   - `switch/case` with fallthrough
 
 ### transtable.c
@@ -364,3 +364,6 @@ Prioritized TODO list of features needed to port climber.c, ordered by dependenc
 - [x] **Arrays of structs** — `newarr` for struct types allocates `count * structSize` bytes. `ldelema` computes element address (constant index: compile-time; variable index: multiply+TAX). Handles Roslyn's optimized `dup` pattern where array ref stays on the evaluation stack. `stfld`/`ldfld` work with both absolute and AbsoluteX addressing for array elements.
 - [x] **memset/memcpy** — `System.Array.Fill<T>` → inline 6502 fill loop (`LDA #val; LDX #size-1; STA arr,X; DEX; BPL`). `System.Array.Copy` → inline copy loop (`LDX #0; LDA src,X; STA dst,X; INX; CPX #len; BNE`). BCL method names are type-qualified (e.g., `Array.Fill`) to avoid collisions with user functions. Handles Roslyn's eval-stack pattern (newarr+dup) where arrays are never stored to locals.
 - [x] **FamiTone2 integration** — Full ca65-compatible assembler (`Ca65Assembler.cs`) supporting all 6502 instructions, conditional assembly, expression evaluation, label aliases. `famitone_init(string)`, `sfx_init(string)`, `nmi_set_callback(string)` NESLib stubs emit label address loads + JSR. Extern methods via `[DllImport("ext")]` emit JSR with `_` prefix convention. FamiTone2 `.s` files assembled and linked into ROM. See `samples/fami/`.
+- [x] **Bit shifts (Shr/Shl)** — `>>` emits LSR A (logical shift right), `<<` emits ASL A (arithmetic shift left). Supports runtime values and constant shift counts. Used for extracting hi/lo bytes of ushort values.
+- [x] **Runtime-vs-runtime comparisons** — `EmitBranchCompare` detects LDA Absolute (runtime) vs LDA Immediate (constant) and emits `CMP $addr` or `CMP #imm` accordingly. Enables `for (i = 0; i < limit; i++)` where `limit` is a variable.
+- [x] **Long-form branches** — All branch opcodes (Blt, Ble, Bge, Bgt, Bne_un, Beq) support both short (2-byte) and long (5-byte) IL forms. Long forms use inverted-condition + JMP trampolines to handle large code offsets.
