@@ -545,6 +545,58 @@ class IL2NESWriter : NESWriter
                     }
                 }
                 break;
+            case ILOpCode.Rem:
+                {
+                    int divisor = Stack.Pop();
+                    int dividend = Stack.Count > 0 ? Stack.Pop() : 0;
+
+                    bool remLocalInA = _lastLoadedLocalIndex.HasValue &&
+                        Locals.TryGetValue(_lastLoadedLocalIndex.Value, out var remLocal) && remLocal.Address != null;
+
+                    if (_runtimeValueInA || remLocalInA)
+                    {
+                        // Remove the LDA #divisor emitted by WriteLdc
+                        if (!_runtimeValueInA
+                            && previous is ILOpCode.Ldc_i4_s or ILOpCode.Ldc_i4
+                            or ILOpCode.Ldc_i4_m1
+                            or ILOpCode.Ldc_i4_0 or ILOpCode.Ldc_i4_1 or ILOpCode.Ldc_i4_2
+                            or ILOpCode.Ldc_i4_3 or ILOpCode.Ldc_i4_4 or ILOpCode.Ldc_i4_5
+                            or ILOpCode.Ldc_i4_6 or ILOpCode.Ldc_i4_7 or ILOpCode.Ldc_i4_8)
+                        {
+                            RemoveLastInstructions(1);
+                        }
+
+                        if (divisor > 0 && (divisor & (divisor - 1)) == 0)
+                        {
+                            // Power-of-2: x % N == x AND (N-1)
+                            Emit(Opcode.AND, AddressMode.Immediate, (byte)(divisor - 1));
+                        }
+                        else
+                        {
+                            // General 8-bit modulo via repeated subtraction
+                            // A = dividend (runtime). Result (remainder) left in A.
+                            //   SEC           ; 1 byte  (offset 0)
+                            //   CMP #divisor  ; 2 bytes (offset 1) ← @loop
+                            //   BCC @done     ; 2 bytes (offset 3) → +4 to @done
+                            //   SBC #divisor  ; 2 bytes (offset 5)
+                            //   BCS @loop     ; 2 bytes (offset 7) → -8 to CMP
+                            //   @done:        ;         (offset 9)
+                            Emit(Opcode.SEC, AddressMode.Implied);
+                            Emit(Opcode.CMP, AddressMode.Immediate, (byte)divisor);
+                            Emit(Opcode.BCC, AddressMode.Relative, 4); // skip SBC+BCS → @done
+                            Emit(Opcode.SBC, AddressMode.Immediate, (byte)divisor);
+                            Emit(Opcode.BCS, AddressMode.Relative, unchecked((byte)-8)); // back to CMP
+                        }
+                        _runtimeValueInA = true;
+                        Stack.Push(0);
+                    }
+                    else
+                    {
+                        // Compile-time
+                        Stack.Push(dividend % divisor);
+                    }
+                }
+                break;
             case ILOpCode.And:
                 {
                     int mask = Stack.Pop();
@@ -843,6 +895,19 @@ class IL2NESWriter : NESWriter
                     if (Stack.Count > 0) Stack.Pop();
                     RemoveLastInstructions(1);
                     Emit(Opcode.CMP, AddressMode.Immediate, cmpValue);
+                    var labelName = $"instruction_{instruction.Offset + operand + 2:X2}";
+                    EmitWithLabel(Opcode.BCS, AddressMode.Relative, labelName);
+                }
+                break;
+            case ILOpCode.Bgt_s:
+                // Branch if greater than: value1 > value2
+                // CMP #(value2+1) + BCS — A >= value2+1 is equivalent to A > value2
+                {
+                    operand = (sbyte)(byte)operand;
+                    byte cmpValue = checked((byte)Stack.Pop());
+                    if (Stack.Count > 0) Stack.Pop();
+                    RemoveLastInstructions(1);
+                    Emit(Opcode.CMP, AddressMode.Immediate, (byte)(cmpValue + 1));
                     var labelName = $"instruction_{instruction.Offset + operand + 2:X2}";
                     EmitWithLabel(Opcode.BCS, AddressMode.Relative, labelName);
                 }
@@ -3230,13 +3295,36 @@ class IL2NESWriter : NESWriter
         int? indexLocalIdx = GetLdlocIndex(indexInstr);
         int? arrayLocalIdx = GetLdlocIndex(arrayInstr);
 
-        if (indexLocalIdx == null || arrayLocalIdx == null)
-            throw new NotImplementedException("Ldelem_u1 only supports Ldloc patterns for array and index");
+        // Handle constant index (Ldc_i4_* or Ldc_i4_s)
+        int? constantIndex = null;
+        if (indexLocalIdx == null)
+        {
+            constantIndex = indexInstr.OpCode switch
+            {
+                ILOpCode.Ldc_i4_0 => 0,
+                ILOpCode.Ldc_i4_1 => 1,
+                ILOpCode.Ldc_i4_2 => 2,
+                ILOpCode.Ldc_i4_3 => 3,
+                ILOpCode.Ldc_i4_4 => 4,
+                ILOpCode.Ldc_i4_5 => 5,
+                ILOpCode.Ldc_i4_6 => 6,
+                ILOpCode.Ldc_i4_7 => 7,
+                ILOpCode.Ldc_i4_8 => 8,
+                ILOpCode.Ldc_i4_s => indexInstr.Integer,
+                ILOpCode.Ldc_i4 => indexInstr.Integer,
+                _ => null
+            };
+        }
 
-        var indexLocal = Locals[indexLocalIdx.Value];
+        if (indexLocalIdx == null && constantIndex == null)
+            throw new NotImplementedException("Ldelem_u1 only supports Ldloc or Ldc_i4 patterns for index");
+        if (arrayLocalIdx == null)
+            throw new NotImplementedException("Ldelem_u1 only supports Ldloc patterns for array");
+
+        Local? indexLocal = indexLocalIdx != null ? Locals[indexLocalIdx.Value] : null;
         var arrayLocal = Locals[arrayLocalIdx.Value];
 
-        // Remove the previously emitted instructions from WriteLdloc calls
+        // Remove the previously emitted instructions from WriteLdloc/WriteLdc calls
         int arrayILOffset = arrayInstr.Offset;
         if (_blockCountAtILOffset.TryGetValue(arrayILOffset, out int blockCountAtArray))
         {
@@ -3245,8 +3333,22 @@ class IL2NESWriter : NESWriter
                 RemoveLastInstructions(instrToRemove);
         }
 
-        // Emit: LDX index_addr; LDA array_base,X
-        if (indexLocal.Address is not null)
+        // Emit: LDX index; LDA array_base,X
+        if (constantIndex != null)
+        {
+            if (constantIndex.Value == 0 && arrayLocal.Address is not null)
+            {
+                // Constant index 0: just LDA array_base (no X needed)
+                Emit(Opcode.LDA, AddressMode.Absolute, (ushort)arrayLocal.Address);
+                Stack.Push(0);
+                _immediateInA = null;
+                _lastLoadedLocalIndex = null;
+                _runtimeValueInA = true;
+                return;
+            }
+            Emit(Opcode.LDX, AddressMode.Immediate, (byte)constantIndex.Value);
+        }
+        else if (indexLocal?.Address is not null)
         {
             Emit(Opcode.LDX, AddressMode.Absolute, (ushort)indexLocal.Address);
         }
@@ -3327,7 +3429,7 @@ class IL2NESWriter : NESWriter
                 case ILOpCode.Ldc_i4_4: case ILOpCode.Ldc_i4_5: case ILOpCode.Ldc_i4_6: case ILOpCode.Ldc_i4_7:
                 case ILOpCode.Ldc_i4_8: case ILOpCode.Ldc_i4_s: case ILOpCode.Ldc_i4:
                     push = 1; break;
-                case ILOpCode.Add: case ILOpCode.Sub: case ILOpCode.Mul: case ILOpCode.Div:
+                case ILOpCode.Add: case ILOpCode.Sub: case ILOpCode.Mul: case ILOpCode.Div: case ILOpCode.Rem:
                 case ILOpCode.And: case ILOpCode.Or: case ILOpCode.Xor:
                     pop = 2; push = 1; break;
                 case ILOpCode.Ldelem_u1:

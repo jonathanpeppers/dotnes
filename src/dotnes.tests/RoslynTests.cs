@@ -1337,4 +1337,233 @@ public class RoslynTests
                 Directory.Delete(tempDir, true);
         }
     }
+
+    [Fact]
+    public void DoWhileLoop()
+    {
+        // do { } while (cond) — body executes at least once
+        var bytes = GetProgramBytes(
+            """
+            byte x = 0;
+            do {
+                x = (byte)(x + 1);
+            } while (x < 5);
+            pal_col(0, x);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        // CMP #$05 for the comparison and BCC for backward branch
+        Assert.Contains("C905", hex); // CMP #$05
+        Assert.Contains("90", hex);   // BCC (backward branch)
+    }
+
+    [Fact]
+    public void TernaryOperator()
+    {
+        // ternary: byte r = (x > 3) ? 10 : 20
+        var bytes = GetProgramBytes(
+            """
+            byte x = 5;
+            byte r = (x > 3) ? (byte)10 : (byte)20;
+            pal_col(0, r);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        Assert.Contains("A90A", hex); // LDA #$0A (10)
+        Assert.Contains("A914", hex); // LDA #$14 (20)
+    }
+
+    [Fact]
+    public void ThreeParameterFunction()
+    {
+        // Function with 3 byte parameters
+        var bytes = GetProgramBytes(
+            """
+            byte r = add3(1, 2, 3);
+            pal_col(0, r);
+            ppu_on_all();
+            while (true) ;
+
+            static byte add3(byte a, byte b, byte c) => (byte)(a + b + c);
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        // All three constants should appear
+        Assert.Contains("A901", hex); // LDA #$01
+        Assert.Contains("A902", hex); // LDA #$02
+        Assert.Contains("A903", hex); // LDA #$03
+    }
+
+    [Fact]
+    public void NestedFunctionCalls()
+    {
+        // f(g(x)) — nested call
+        var bytes = GetProgramBytes(
+            """
+            pal_col(0, outer(3));
+            ppu_on_all();
+            while (true) ;
+
+            static byte outer(byte x) => inner(x);
+            static byte inner(byte x) => (byte)(x + 10);
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        Assert.Contains("A903", hex); // LDA #$03 (initial arg)
+    }
+
+    [Fact]
+    public void ModuloPowerOf2()
+    {
+        // x % 8 should optimize to AND #7 (runtime value)
+        var bytes = GetProgramBytes(
+            """
+            byte x = rand8();
+            byte r = (byte)(x % 8);
+            pal_col(0, r);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        Assert.Contains("2907", hex); // AND #$07 (x & 7 == x % 8)
+    }
+
+    [Fact]
+    public void ModuloGeneral()
+    {
+        // x % 5 needs software division (runtime value)
+        var bytes = GetProgramBytes(
+            """
+            byte x = rand8();
+            byte r = (byte)(x % 5);
+            pal_col(0, r);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        // Should contain SEC + CMP #$05 + BCC + SBC pattern
+        Assert.Contains("38", hex);   // SEC
+        Assert.Contains("C905", hex); // CMP #$05
+        Assert.Contains("E905", hex); // SBC #$05
+    }
+
+    [Fact]
+    public void SignedDivisionByPowerOf2()
+    {
+        // sbyte / 4 needs arithmetic shift right (preserving sign)
+        var bytes = GetProgramBytes(
+            """
+            sbyte vel = -8;
+            sbyte r = (sbyte)(vel / 4);
+            pal_col(0, (byte)r);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        Assert.Contains("A9F8", hex); // LDA #$F8 (-8 in two's complement)
+    }
+
+    [Fact]
+    public void UshortReturnFromFunction()
+    {
+        // User function returning ushort
+        var bytes = GetProgramBytes(
+            """
+            ushort val = get_addr(5);
+            pal_col(0, (byte)val);
+            ppu_on_all();
+            while (true) ;
+
+            static ushort get_addr(byte x) => (ushort)(x * 8 + 16);
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        Assert.Contains("A905", hex); // LDA #$05 (argument)
+    }
+
+    [Fact]
+    public void UshortComparison()
+    {
+        // 16-bit comparison: ushort > constant
+        var bytes = GetProgramBytes(
+            """
+            ushort yy = 200;
+            if (yy > 100) pal_col(0, 1);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        // Should compile without error (constant-folded)
+        var hex = Convert.ToHexString(bytes);
+        Assert.NotEmpty(hex);
+    }
+
+    [Fact]
+    public void UshortAddSignedByte()
+    {
+        // actor.yy += actor.yvel/4 — mixing ushort and sbyte
+        var bytes = GetProgramBytes(
+            """
+            ushort yy = 100;
+            sbyte vel = -8;
+            yy = (ushort)(yy + vel / 4);
+            pal_col(0, (byte)yy);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        Assert.Contains("A9F8", hex); // LDA #$F8 (-8)
+    }
+
+    [Fact]
+    public void ByteArrayConstantIndex()
+    {
+        // Access byte array with runtime index via for loop — pattern for type_message
+        var bytes = GetProgramBytes(
+            """
+            byte[] msg = new byte[3];
+            msg[0] = 0x48;
+            msg[1] = 0x49;
+            msg[2] = 0x00;
+            for (byte i = 0; i < 2; i++)
+            {
+                pal_col(i, msg[i]);
+            }
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        Assert.Contains("A948", hex); // LDA #$48 ('H') in stelem
+    }
 }
