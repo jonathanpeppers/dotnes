@@ -1438,39 +1438,62 @@ class IL2NESWriter : NESWriter
                     case "split":
                     case "scroll":
                         // scroll()/split() takes unsigned int params, which use popax (2-byte pop).
-                        // Three possible patterns for the first arg:
-                        // 1. Byte constant: ..., LDA #xx, JSR pusha, LDA #yy → rewrite pusha→pushax
-                        // 2. Ushort arg: ..., LDX $hi, JSR pushax, LDA #yy → already correct
-                        // 3. Local var: ..., LDA $addr, LDA #yy → no pusha, just insert LDX #0 + pushax
+                        // Patterns for the second arg (Y):
+                        // 1. Byte constant: last instr = LDA #yy
+                        // 2. Byte local: last instr = LDA $addr
+                        // 3. Ushort constant: LDX #hi was emitted before LDA #lo
+                        // 4. Ushort local: last 2 instrs = LDA $lo, LDX $hi (second arg already in A:X)
                         {
                             var block = CurrentBlock!;
-                            var ldaInstr = block[block.Count - 1]; // LDA (second arg)
-                            var prevInstr = block[block.Count - 2];
-                            bool alreadyPushax = prevInstr.Opcode == Opcode.JSR
-                                && prevInstr.Operand is LabelOperand lbl && lbl.Label == "pushax";
-                            bool hasPusha = prevInstr.Opcode == Opcode.JSR
-                                && prevInstr.Operand is LabelOperand lbl2 && lbl2.Label == "pusha";
-                            if (alreadyPushax)
+                            var lastInstr = block[block.Count - 1];
+
+                            // Pattern 4: ushort local — last instr is LDX (high byte)
+                            if (lastInstr.Opcode == Opcode.LDX && lastInstr.Mode == AddressMode.Absolute)
                             {
-                                // Ushort arg already pushed correctly via pushax
-                                RemoveLastInstructions(1); // Remove just LDA (second arg)
-                                block.Emit(ldaInstr); // Re-emit LDA for second arg
-                            }
-                            else if (hasPusha)
-                            {
-                                // Byte constant: replace pusha with LDX #$00 + pushax
-                                RemoveLastInstructions(2); // Remove JSR pusha + LDA
+                                // Second arg is already in A:X (LDA lo + LDX hi from WriteLdloc)
+                                // Keep both instructions, look further back for first arg push
+                                var ldxInstr = lastInstr;
+                                var ldaInstr = block[block.Count - 2]; // LDA $lo
+                                var firstArgInstr = block[block.Count - 3]; // first arg's instruction
+                                bool firstIsPusha = firstArgInstr.Opcode == Opcode.JSR
+                                    && firstArgInstr.Operand is LabelOperand lbl4 && lbl4.Label == "pusha";
+                                RemoveLastInstructions(3); // Remove first arg push + LDA lo + LDX hi
                                 Emit(Opcode.LDX, AddressMode.Immediate, 0x00);
                                 EmitJSR("pushax");
-                                block.Emit(ldaInstr); // Re-emit LDA for second arg
+                                block.Emit(ldaInstr);  // Re-emit LDA $lo
+                                block.Emit(ldxInstr);  // Re-emit LDX $hi
                             }
                             else
                             {
-                                // Local var or runtime value: A has the value, just push it
-                                RemoveLastInstructions(1); // Remove only the second arg's LDA
-                                Emit(Opcode.LDX, AddressMode.Immediate, 0x00);
-                                EmitJSR("pushax");
-                                block.Emit(ldaInstr); // Re-emit second arg LDA
+                                // Patterns 1-3: last instr is LDA (second arg)
+                                var ldaInstr = lastInstr;
+                                var prevInstr = block[block.Count - 2];
+                                bool alreadyPushax = prevInstr.Opcode == Opcode.JSR
+                                    && prevInstr.Operand is LabelOperand lbl && lbl.Label == "pushax";
+                                bool hasPusha = prevInstr.Opcode == Opcode.JSR
+                                    && prevInstr.Operand is LabelOperand lbl2 && lbl2.Label == "pusha";
+                                if (alreadyPushax)
+                                {
+                                    // Ushort arg already pushed correctly via pushax
+                                    RemoveLastInstructions(1); // Remove just LDA (second arg)
+                                    block.Emit(ldaInstr); // Re-emit LDA for second arg
+                                }
+                                else if (hasPusha)
+                                {
+                                    // Byte constant: replace pusha with LDX #$00 + pushax
+                                    RemoveLastInstructions(2); // Remove JSR pusha + LDA
+                                    Emit(Opcode.LDX, AddressMode.Immediate, 0x00);
+                                    EmitJSR("pushax");
+                                    block.Emit(ldaInstr); // Re-emit LDA for second arg
+                                }
+                                else
+                                {
+                                    // Local var or runtime value: A has the value, just push it
+                                    RemoveLastInstructions(1); // Remove only the second arg's LDA
+                                    Emit(Opcode.LDX, AddressMode.Immediate, 0x00);
+                                    EmitJSR("pushax");
+                                    block.Emit(ldaInstr); // Re-emit second arg LDA
+                                }
                             }
                             EmitWithLabel(Opcode.JSR, AddressMode.Absolute, operand);
                             _immediateInA = null;
@@ -2600,6 +2623,36 @@ class IL2NESWriter : NESWriter
             return;
         }
 
+        // Byte in A + ushort constant: A has byte, operand > 255
+        // Produces 16-bit result in A:X
+        if (operand > byte.MaxValue && (LastLDA || _runtimeValueInA || (_lastLoadedLocalIndex.HasValue &&
+            Locals.TryGetValue(_lastLoadedLocalIndex.Value, out var localForUshort) && localForUshort.Address.HasValue)))
+        {
+            byte lo = (byte)(operand & 0xFF);
+            byte hi = (byte)((operand >> 8) & 0xFF);
+            if (isAdd)
+            {
+                Emit(Opcode.CLC, AddressMode.Implied);
+                Emit(Opcode.ADC, AddressMode.Immediate, lo);
+                Emit(Opcode.LDX, AddressMode.Immediate, hi);
+                Emit(Opcode.BCC, AddressMode.Relative, 1);
+                Emit(Opcode.INX, AddressMode.Implied);
+            }
+            else
+            {
+                Emit(Opcode.SEC, AddressMode.Implied);
+                Emit(Opcode.SBC, AddressMode.Immediate, lo);
+                Emit(Opcode.LDX, AddressMode.Immediate, hi);
+                Emit(Opcode.BCS, AddressMode.Relative, 1);
+                Emit(Opcode.DEX, AddressMode.Implied);
+            }
+            _ushortInAX = true;
+            Stack.Push(0);
+            _lastLoadedLocalIndex = null;
+            _runtimeValueInA = true;
+            return;
+        }
+
         // Check if the value came from a local variable load (runtime value)
         // Same class of bug as AND: ldloc emits LDA $addr but doesn't set _runtimeValueInA
         Local? lastLocal = null;
@@ -2841,6 +2894,16 @@ class IL2NESWriter : NESWriter
 
     void WriteLdc(ushort operand)
     {
+        // Check if next instruction can handle the constant directly with A's current value
+        bool nextIsAddSub = Instructions is not null && Index + 1 < Instructions.Length &&
+            Instructions[Index + 1].OpCode is ILOpCode.Add or ILOpCode.Sub;
+        if (nextIsAddSub && LastLDA)
+        {
+            // Keep current A value — the Add/Sub handler will do 16-bit add inline
+            Stack.Push(operand);
+            return;
+        }
+
         if (LastLDA)
         {
             EmitJSR("pusha");

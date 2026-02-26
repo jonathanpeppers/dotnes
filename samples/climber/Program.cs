@@ -707,11 +707,18 @@ while (true)
                 if (scroll_yy_lo > 0xDF) sv_hi = (byte)(sv_hi - 1);
                 sv_hi = (byte)(sv_hi - scroll_yy_hi);
             }
-            // Pass to scroll: x=0, y=sv_hi:sv_lo
-            // Write scroll registers directly using NES zero-page variables
-            // SCROLL_X ($0C) = 0, SCROLL_Y ($0D) = sv_lo
-            // nametable bits handled by scroll subroutine
-            scroll(0, (byte)(sv_lo));
+            // Pass to scroll: x=0, y=sv_hi:sv_lo (16-bit)
+            // Construct ushort: sv_lo + sv_hi * 256
+            if (sv_hi == 0)
+            {
+                scroll(0, sv_lo);
+            }
+            else
+            {
+                // byte + ushort constant produces 16-bit result
+                ushort scroll_val = (ushort)(sv_lo + 256);
+                scroll(0, scroll_val);
+            }
         }
     }
 

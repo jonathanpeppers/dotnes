@@ -1683,4 +1683,20 @@ public class RoslynTests
         Assert.NotNull(bytes);
         Assert.NotEmpty(bytes);
     }
+
+    [Fact]
+    public void BytePlusUshortConstant()
+    {
+        // byte + ushort constant (> 255) produces 16-bit result
+        var bytes = GetProgramBytes(
+            """
+            byte lo = rand8();
+            ushort val = (ushort)(lo + 256);
+            pal_col(0, (byte)val);
+            pal_col(1, (byte)(val >> 8));
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+    }
 }
