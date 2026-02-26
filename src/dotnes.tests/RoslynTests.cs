@@ -1699,4 +1699,25 @@ public class RoslynTests
         Assert.NotNull(bytes);
         Assert.NotEmpty(bytes);
     }
+
+    [Fact]
+    public void UserFuncLdargAfterCall()
+    {
+        // User function that reads params after calling rand8
+        // Tests that WriteLdarg saves _runtimeValueInA to TEMP
+        var bytes = GetProgramBytes(
+            """
+            static byte rndint(byte a, byte b)
+            {
+                byte range = (byte)(b - a);
+                byte r = rand8();
+                return (byte)((byte)(r % range) + a);
+            }
+            byte result = rndint(3, 10);
+            pal_col(0, result);
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+    }
 }

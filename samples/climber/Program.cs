@@ -48,7 +48,9 @@ const byte PAD_DOWN = 0x04;
 // Pure utility function (no captured state)
 static byte rndint(byte a, byte b)
 {
-    return (byte)((byte)(rand8() % (byte)(b - a)) + a);
+    byte range = (byte)(b - a);
+    byte r = rand8();
+    return (byte)((byte)(r % range) + a);
 }
 
 // Setup sounds

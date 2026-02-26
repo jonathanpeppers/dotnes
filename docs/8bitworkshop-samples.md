@@ -4,7 +4,7 @@
 >
 > Analysis based on dotnes transpiler capabilities and the `NESLib.cs` API surface.
 >
-> Existing dotnes samples: `hello`, `hellofs`, `staticsprite`, `movingsprite`, `attributetable`, `flicker`, `metasprites`, `music`, `lols`, `tint`, `scroll`, `rletitle`, `tileset1`, `sprites`, `metacursor`, `metatrigger`, `statusbar`, `vrambuffer`, `horizscroll`, `horizmask`, `fami`
+> Existing dotnes samples: `hello`, `hellofs`, `staticsprite`, `movingsprite`, `attributetable`, `flicker`, `metasprites`, `music`, `lols`, `tint`, `scroll`, `rletitle`, `tileset1`, `sprites`, `metacursor`, `metatrigger`, `statusbar`, `vrambuffer`, `horizscroll`, `horizmask`, `fami`, `climber`
 
 ---
 
@@ -232,15 +232,10 @@
 
 ### climber.c
 - **Description:** A full platform game with random level generation, enemy AI, scrolling, FamiTone2 music, and collision detection.
-- **Status:** 🟡 In Progress — scaffold boots with music, floor rendering, and basic player movement
+- **Status:** ✅ Already Implemented
+- **dotnes sample:** `climber`
 - **Note:** Uses SoA (structure-of-arrays) instead of structs with bitfields. All game state is local to avoid Roslyn display class closures. Static helper functions for pure computations.
-- **Available features used:** `vrambuf_put`, `vrambuf_flush`, `Array.Fill`, `pad_poll`, `oam_meta_spr_pal`, `rand8`, modulo `%`, bit shifts `>>` `<<`, runtime-vs-runtime comparison, long-form branches, FamiTone2 music/SFX via `DllImport`
-- **Remaining:**
-  - Vertical scrolling (16-bit scroll math)
-  - Full player movement (climbing, jumping, falling)
-  - Enemy AI and collision detection
-  - Item pickup and scoring
-  - `switch/case` with fallthrough
+- **Features used:** `vrambuf_put`, `vrambuf_flush`, `Array.Fill`, `pad_poll`, `oam_meta_spr_pal`, `oam_spr`, `oam_hide_rest`, `rand8`, `bcd_add`, `pal_bright`, `scroll`, `delay`, modulo `%`, bit shifts `>>` `<<`, 16-bit arithmetic (multiply, add, shift), runtime-vs-runtime comparison, long-form branches, branch relaxation, FamiTone2 music/SFX via `DllImport`
 
 ### transtable.c
 - **Description:** Custom CHR tileset loaded into CHR RAM with `#pragma charmap` translation tables for text display.

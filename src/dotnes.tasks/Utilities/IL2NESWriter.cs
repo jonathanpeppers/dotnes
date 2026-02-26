@@ -152,6 +152,12 @@ class IL2NESWriter : NESWriter
     public int MethodParamCount { get; init; }
 
     /// <summary>
+    /// Tracks extra values pushed to the cc65 stack within a user function body
+    /// (via pusha between ldarg calls). Used to adjust ldarg stack offsets.
+    /// </summary>
+    int _argStackAdjust;
+
+    /// <summary>
     /// Local variable indices that are word-sized (ushort). Detected by pre-scanning
     /// for conv.u2 + stloc patterns in the IL. Word locals get 2 bytes of zero page.
     /// </summary>
@@ -3030,11 +3036,20 @@ class IL2NESWriter : NESWriter
         if (MethodParamCount == 0)
             throw new InvalidOperationException("ldarg used but MethodParamCount is 0");
 
-        if (LastLDA)
+        if (_runtimeValueInA && !LastLDA)
+        {
+            // Save return value to TEMP (not pusha — would shift arg offsets)
+            Emit(Opcode.STA, AddressMode.ZeroPage, (byte)NESConstants.TEMP);
+            _savedRuntimeToTemp = true;
+        }
+        else if (LastLDA)
+        {
             EmitJSR("pusha");
+            _argStackAdjust++;
+        }
 
-        // cc65 stack offset: first arg (index 0) is deepest
-        byte offset = checked((byte)(MethodParamCount - 1 - argIndex));
+        // cc65 stack offset: first arg (index 0) is deepest, adjusted for extra pushes
+        byte offset = checked((byte)(MethodParamCount - 1 - argIndex + _argStackAdjust));
         Emit(Opcode.LDY, AddressMode.Immediate, offset);
         Emit(Opcode.LDA, AddressMode.IndirectIndexed, (byte)sp);
         _immediateInA = null;
