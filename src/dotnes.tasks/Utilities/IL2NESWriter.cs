@@ -500,6 +500,10 @@ class IL2NESWriter : NESWriter
                 }
                 break;
             case ILOpCode.Conv_u1:
+                // When truncating from ushort to byte, discard high byte
+                if (_ushortInAX)
+                    _ushortInAX = false;
+                break;
             case ILOpCode.Conv_u2:
             case ILOpCode.Conv_u4:
             case ILOpCode.Conv_u8:
@@ -534,8 +538,29 @@ class IL2NESWriter : NESWriter
                             int shifts = 0;
                             int temp = constant;
                             while (temp > 1) { temp >>= 1; shifts++; }
-                            for (int s = 0; s < shifts; s++)
-                                Emit(Opcode.ASL, AddressMode.Accumulator);
+                            // Check if the result needs to be 16-bit (next IL is Conv_u2, or storing to word local)
+                            bool needs16Bit = Instructions is not null && Index + 1 < Instructions.Length &&
+                                (Instructions[Index + 1].OpCode == ILOpCode.Conv_u2 ||
+                                 Instructions[Index + 1].OpCode == ILOpCode.Conv_i2);
+                            if (needs16Bit)
+                            {
+                                // 16-bit shift (ASL A + ROL TEMP) to capture overflow
+                                Emit(Opcode.LDX, AddressMode.Immediate, 0);
+                                Emit(Opcode.STX, AddressMode.ZeroPage, 0x17); // TEMP = 0 (high byte)
+                                for (int s = 0; s < shifts; s++)
+                                {
+                                    Emit(Opcode.ASL, AddressMode.Accumulator);
+                                    Emit(Opcode.ROL, AddressMode.ZeroPage, 0x17);
+                                }
+                                Emit(Opcode.LDX, AddressMode.ZeroPage, 0x17); // X = high byte
+                                _ushortInAX = true;
+                            }
+                            else
+                            {
+                                // 8-bit shift only
+                                for (int s = 0; s < shifts; s++)
+                                    Emit(Opcode.ASL, AddressMode.Accumulator);
+                            }
                         }
                         Stack.Push(val1 * val2);
                     }
@@ -650,9 +675,9 @@ class IL2NESWriter : NESWriter
                     bool shrLocalInA = _lastLoadedLocalIndex.HasValue &&
                         Locals.TryGetValue(_lastLoadedLocalIndex.Value, out var shrLocal) && shrLocal.Address != null;
 
-                    if (_runtimeValueInA || shrLocalInA)
+                    if (_runtimeValueInA || shrLocalInA || _ushortInAX)
                     {
-                        if (!_runtimeValueInA
+                        if (!_runtimeValueInA && !_ushortInAX
                             && previous is ILOpCode.Ldc_i4_s or ILOpCode.Ldc_i4
                             or ILOpCode.Ldc_i4_0 or ILOpCode.Ldc_i4_1 or ILOpCode.Ldc_i4_2
                             or ILOpCode.Ldc_i4_3 or ILOpCode.Ldc_i4_4 or ILOpCode.Ldc_i4_5
@@ -660,8 +685,31 @@ class IL2NESWriter : NESWriter
                         {
                             RemoveLastInstructions(1);
                         }
-                        for (int i = 0; i < shiftCount; i++)
-                            Emit(Opcode.LSR, AddressMode.Accumulator);
+                        if (_ushortInAX && shiftCount >= 8)
+                        {
+                            // ushort >> 8+: high byte to A, then shift remaining
+                            Emit(Opcode.TXA, AddressMode.Implied);
+                            for (int i = 0; i < shiftCount - 8; i++)
+                                Emit(Opcode.LSR, AddressMode.Accumulator);
+                            _ushortInAX = false;
+                        }
+                        else if (_ushortInAX)
+                        {
+                            // ushort >> N (N < 8): shift both bytes
+                            for (int i = 0; i < shiftCount; i++)
+                            {
+                                Emit(Opcode.STX, AddressMode.ZeroPage, 0x17);
+                                Emit(Opcode.LSR, AddressMode.ZeroPage, 0x17);
+                                Emit(Opcode.ROR, AddressMode.Accumulator);
+                                Emit(Opcode.LDX, AddressMode.ZeroPage, 0x17);
+                            }
+                        }
+                        else
+                        {
+                            for (int i = 0; i < shiftCount; i++)
+                                Emit(Opcode.LSR, AddressMode.Accumulator);
+                            _ushortInAX = false;
+                        }
                         _runtimeValueInA = true;
                         Stack.Push(0);
                     }
@@ -2504,6 +2552,54 @@ class IL2NESWriter : NESWriter
             }
         }
         
+        // 16-bit arithmetic: ushort +/- constant
+        if (_ushortInAX)
+        {
+            byte lo = (byte)(operand & 0xFF);
+            byte hi = (byte)((operand >> 8) & 0xFF);
+            if (isAdd)
+            {
+                Emit(Opcode.CLC, AddressMode.Implied);
+                Emit(Opcode.ADC, AddressMode.Immediate, lo);
+                if (hi != 0)
+                {
+                    // Full 16-bit add: also add hi byte to X via TEMP
+                    Emit(Opcode.STA, AddressMode.ZeroPage, 0x17);
+                    Emit(Opcode.TXA, AddressMode.Implied);
+                    Emit(Opcode.ADC, AddressMode.Immediate, hi);
+                    Emit(Opcode.TAX, AddressMode.Implied);
+                    Emit(Opcode.LDA, AddressMode.ZeroPage, 0x17);
+                }
+                else
+                {
+                    Emit(Opcode.BCC, AddressMode.Relative, 1);
+                    Emit(Opcode.INX, AddressMode.Implied);
+                }
+            }
+            else
+            {
+                Emit(Opcode.SEC, AddressMode.Implied);
+                Emit(Opcode.SBC, AddressMode.Immediate, lo);
+                if (hi != 0)
+                {
+                    Emit(Opcode.STA, AddressMode.ZeroPage, 0x17);
+                    Emit(Opcode.TXA, AddressMode.Implied);
+                    Emit(Opcode.SBC, AddressMode.Immediate, hi);
+                    Emit(Opcode.TAX, AddressMode.Implied);
+                    Emit(Opcode.LDA, AddressMode.ZeroPage, 0x17);
+                }
+                else
+                {
+                    Emit(Opcode.BCS, AddressMode.Relative, 1);
+                    Emit(Opcode.DEX, AddressMode.Implied);
+                }
+            }
+            Stack.Push(0);
+            _lastLoadedLocalIndex = null;
+            _runtimeValueInA = true;
+            return;
+        }
+
         // Check if the value came from a local variable load (runtime value)
         // Same class of bug as AND: ldloc emits LDA $addr but doesn't set _runtimeValueInA
         Local? lastLocal = null;
@@ -2759,6 +2855,17 @@ class IL2NESWriter : NESWriter
     {
         if (_ushortInAX)
         {
+            // Check if the next instruction can handle A:X directly
+            bool nextIsShift = Instructions is not null && Index + 1 < Instructions.Length &&
+                Instructions[Index + 1].OpCode is ILOpCode.Shr or ILOpCode.Shr_un or ILOpCode.Shl;
+            bool nextIsAddSub = _runtimeValueInA && Instructions is not null && Index + 1 < Instructions.Length &&
+                Instructions[Index + 1].OpCode is ILOpCode.Add or ILOpCode.Sub;
+            if (nextIsShift || nextIsAddSub)
+            {
+                // Keep A:X intact — the operator will handle the 16-bit value
+                Stack.Push(operand);
+                return;
+            }
             // A:X holds a 16-bit value — push both bytes via pushax
             EmitJSR("pushax");
             _ushortInAX = false;

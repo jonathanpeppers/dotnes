@@ -107,7 +107,7 @@ public class TranspilerTests
         using var transpiler = new Transpiler(dll, [], _logger);
         
         // Build using single-pass transpilation
-        var program = transpiler.BuildProgram6502(out ushort sizeOfMain, out byte locals);
+        var program = transpiler.BuildProgram6502(out ushort sizeOfMain, out ushort locals);
 
         // Verify the program has blocks
         Assert.True(program.BlockCount > 0, "Program should have blocks");

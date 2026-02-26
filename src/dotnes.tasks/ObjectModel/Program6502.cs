@@ -279,6 +279,29 @@ public class Program6502
         if (!_addressesValid)
             ResolveAddresses();
 
+        // Branch relaxation: replace out-of-range relative branches with trampolines
+        for (int pass = 0; pass < 10; pass++)
+        {
+            bool anyRelaxed = false;
+            ushort addr = BaseAddress;
+            foreach (var block in _blocks)
+            {
+                if (!block.IsDataBlock)
+                {
+                    _labels.CurrentScope = block.Label;
+                    if (block.RelaxBranches(addr, _labels))
+                        anyRelaxed = true;
+                }
+                addr += (ushort)block.Size;
+            }
+            _labels.CurrentScope = null;
+            if (!anyRelaxed)
+                break;
+            // Re-resolve addresses since block sizes changed
+            _addressesValid = false;
+            ResolveAddresses();
+        }
+
         var ms = new MemoryStream(TotalSize);
         ushort currentAddress = BaseAddress;
 
@@ -579,7 +602,7 @@ public class Program6502
     /// Pre-calculates the total byte size of all final built-in subroutines.
     /// Must match the blocks added by AddFinalBuiltIns.
     /// </summary>
-    public static int CalculateFinalBuiltInsSize(byte locals, HashSet<string>? usedMethods = null)
+    public static int CalculateFinalBuiltInsSize(ushort locals, HashSet<string>? usedMethods = null)
     {
         int size = 0;
         bool needsDecsp4 = usedMethods != null && usedMethods.Contains("decsp4");
@@ -666,7 +689,7 @@ public class Program6502
     /// <summary>
     /// Adds the final built-in subroutines that come after main().
     /// </summary>
-    public void AddFinalBuiltIns(ushort totalSize, byte locals, HashSet<string>? usedMethods = null)
+    public void AddFinalBuiltIns(ushort totalSize, ushort locals, HashSet<string>? usedMethods = null)
     {
         AddBlock(BuiltInSubroutines.Donelib(totalSize));
         AddBlock(BuiltInSubroutines.Copydata(totalSize));

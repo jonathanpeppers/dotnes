@@ -62,7 +62,7 @@ class Transpiler : IDisposable
         _logger.WriteLine($"Building program...");
 
         // Build the complete program using single-pass transpilation
-        var program = BuildProgram6502(out ushort sizeOfMain, out byte locals);
+        var program = BuildProgram6502(out ushort sizeOfMain, out ushort locals);
         var programBytes = program.ToBytes();
 
         _logger.WriteLine($"Size of main: {sizeOfMain}, locals: {locals}");
@@ -139,9 +139,9 @@ class Transpiler : IDisposable
     /// then the program can emit bytes in a single pass.
     /// </summary>
     /// <param name="sizeOfMain">Output: size of the main program in bytes</param>
-    /// <param name="locals">Output: number of local variables</param>
+    /// <param name="locals">Output: number of local variable bytes</param>
     /// <returns>A Program6502 containing built-ins, main program, and final built-ins</returns>
-    public Program6502 BuildProgram6502(out ushort sizeOfMain, out byte locals)
+    public Program6502 BuildProgram6502(out ushort sizeOfMain, out ushort locals)
     {
         _logger.WriteLine($"Single-pass transpilation...");
         
@@ -339,7 +339,7 @@ class Transpiler : IDisposable
         }
 
         // Get local count from writer
-        locals = checked((byte)writer.LocalCount);
+        locals = (ushort)writer.LocalCount;
 
         // Store named ushort[] arrays (note tables) as interleaved 16-bit data (cc65 compatible)
         var noteTableData = new List<(string label, byte[] data)>();

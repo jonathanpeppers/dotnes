@@ -1698,8 +1698,10 @@ internal static class BuiltInSubroutines
     /// <summary>
     /// zerobss - Zero BSS section (parameterized version)
     /// </summary>
-    public static Block Zerobss(byte locals)
+    public static Block Zerobss(ushort locals)
     {
+        byte pages = (byte)(locals >> 8);
+        byte remainder = (byte)(locals & 0xFF);
         var block = new Block(nameof(zerobss));
         block.Emit(LDA(0x25))
              .Emit(STA_zpg(ptr1))
@@ -1707,7 +1709,7 @@ internal static class BuiltInSubroutines
              .Emit(STA_zpg(ptr1 + 1))
              .Emit(LDA(0x00))
              .Emit(TAY())
-             .Emit(LDX(0x00))
+             .Emit(LDX(pages))
              .Emit(BEQ(10))          // PAL_SPR_PTR = 0x0A
              .Emit(STA_ind_Y(ptr1), "@zeroLoop")
              .Emit(INY())
@@ -1715,7 +1717,7 @@ internal static class BuiltInSubroutines
              .Emit(INC_zpg(ptr1 + 1))
              .Emit(DEX())
              .Emit(BNE(-10))         // 0xF6
-             .Emit(CPY(locals), "@checkDone")
+             .Emit(CPY(remainder), "@checkDone")
              .Emit(BEQ(5))           // 0x05
              .Emit(STA_ind_Y(ptr1))
              .Emit(INY())

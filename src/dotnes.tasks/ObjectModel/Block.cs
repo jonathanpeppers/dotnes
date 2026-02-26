@@ -231,6 +231,65 @@ public class Block
     }
 
     /// <summary>
+    /// Relaxes out-of-range relative branches by replacing them with inverse-branch+JMP trampolines.
+    /// Returns true if any branches were relaxed (requiring address re-resolution).
+    /// </summary>
+    /// <param name="blockBaseAddress">Base address of this block in the ROM</param>
+    /// <param name="labels">Label table for resolving branch targets</param>
+    public bool RelaxBranches(ushort blockBaseAddress, LabelTable labels)
+    {
+        bool changed = false;
+        ushort instrAddr = blockBaseAddress;
+
+        for (int i = 0; i < _instructions.Count; i++)
+        {
+            var (instr, instrLabel) = _instructions[i];
+            if (instr.Mode == AddressMode.Relative && instr.Operand is RelativeOperand relOp)
+            {
+                if (labels.TryResolve(relOp.Label, out ushort targetAddress))
+                {
+                    int offset = targetAddress - (instrAddr + 2);
+                    if (offset < -128 || offset > 127)
+                    {
+                        // Replace Bxx label with inverse-Bxx +3; JMP label
+                        var inverse = GetInverseBranch(instr.Opcode);
+                        var inverseBranch = new Instruction(inverse, AddressMode.Relative,
+                            new RelativeByteOperand(3));
+                        var jmp = new Instruction(Opcode.JMP, AddressMode.Absolute,
+                            new LabelOperand(relOp.Label, OperandSize.Word));
+
+                        _instructions[i] = (inverseBranch, instrLabel);
+                        _instructions.Insert(i + 1, (jmp, null));
+                        changed = true;
+                        instrAddr += (ushort)inverseBranch.Size;
+                        instrAddr += (ushort)jmp.Size;
+                        i++; // skip the JMP we just inserted
+                        continue;
+                    }
+                }
+            }
+            instrAddr += (ushort)instr.Size;
+        }
+        return changed;
+    }
+
+    /// <summary>
+    /// Returns the inverse branch opcode for trampolines.
+    /// </summary>
+    static Opcode GetInverseBranch(Opcode opcode) => opcode switch
+    {
+        Opcode.BEQ => Opcode.BNE,
+        Opcode.BNE => Opcode.BEQ,
+        Opcode.BCC => Opcode.BCS,
+        Opcode.BCS => Opcode.BCC,
+        Opcode.BPL => Opcode.BMI,
+        Opcode.BMI => Opcode.BPL,
+        Opcode.BVC => Opcode.BVS,
+        Opcode.BVS => Opcode.BVC,
+        _ => throw new ArgumentException($"Not a branch opcode: {opcode}")
+    };
+
+    /// <summary>
     /// Returns the last instruction, or null if empty
     /// </summary>
     public Instruction? LastOrDefault()

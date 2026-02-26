@@ -1625,4 +1625,62 @@ public class RoslynTests
         // Should contain CMP $addr (absolute mode, opcode CD) for runtime comparison
         Assert.Contains("CD", hex);
     }
+
+    [Fact]
+    public void Ushort16BitMultiply()
+    {
+        // byte * 8 → ushort (overflow to 16-bit)
+        var bytes = GetProgramBytes(
+            """
+            byte x = rand8();
+            ushort result = (ushort)(x * 8);
+            pal_col(0, (byte)(result >> 8));
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        // Should contain ROL $17 (zero page, opcode 26 17) for 16-bit shift
+        Assert.Contains("2617", hex);
+        // Should contain TXA (8A) to extract high byte via >> 8
+        Assert.Contains("8A", hex);
+    }
+
+    [Fact]
+    public void Ushort16BitAdd()
+    {
+        // ushort + byte constant with carry propagation
+        var bytes = GetProgramBytes(
+            """
+            byte x = rand8();
+            ushort result = (ushort)(x * 8 + 16);
+            pal_col(0, (byte)(result >> 8));
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        // Should contain CLC (18) + ADC #10 (69 10) for 16-bit add
+        Assert.Contains("186910", hex);
+        // Should contain BCC (90) for carry propagation
+        Assert.Contains("90", hex);
+    }
+
+    [Fact]
+    public void UshortStoreAndLoad()
+    {
+        // Store ushort to local, load it back, use high/low bytes
+        var bytes = GetProgramBytes(
+            """
+            byte x = rand8();
+            ushort yy = (ushort)(x * 8 + 16);
+            pal_col(0, (byte)yy);
+            pal_col(1, (byte)(yy >> 8));
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+    }
 }
