@@ -646,6 +646,19 @@ class IL2NESWriter : NESWriter
                             // Power-of-2: x % N == x AND (N-1)
                             Emit(Opcode.AND, AddressMode.Immediate, (byte)(divisor - 1));
                         }
+                        else if (_savedRuntimeToTemp)
+                        {
+                            // Runtime divisor (in A) and runtime dividend (in TEMP)
+                            // Save divisor to TEMP2, load dividend from TEMP, then loop
+                            Emit(Opcode.STA, AddressMode.ZeroPage, (byte)NESConstants.TEMP2);
+                            Emit(Opcode.LDA, AddressMode.ZeroPage, (byte)NESConstants.TEMP);
+                            Emit(Opcode.SEC, AddressMode.Implied);
+                            Emit(Opcode.CMP, AddressMode.ZeroPage, (byte)NESConstants.TEMP2);
+                            Emit(Opcode.BCC, AddressMode.Relative, 4);
+                            Emit(Opcode.SBC, AddressMode.ZeroPage, (byte)NESConstants.TEMP2);
+                            Emit(Opcode.BCS, AddressMode.Relative, unchecked((byte)-8));
+                            _savedRuntimeToTemp = false;
+                        }
                         else
                         {
                             // General 8-bit modulo via repeated subtraction
@@ -2993,7 +3006,12 @@ class IL2NESWriter : NESWriter
             }
             else if (local.Value < byte.MaxValue)
             {
-                if (LastLDA)
+                if (_runtimeValueInA && !LastLDA)
+                {
+                    Emit(Opcode.STA, AddressMode.ZeroPage, (byte)NESConstants.TEMP);
+                    _savedRuntimeToTemp = true;
+                }
+                else if (LastLDA)
                 {
                     EmitJSR("pusha");
                 }
