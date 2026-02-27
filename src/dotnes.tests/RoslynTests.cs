@@ -625,13 +625,11 @@ public class RoslynTests
                 """,
             expectedAssembly:
                 """
-                A904    ; LDA #$04
-                207185  ; JSR pusha
                 A900    ; LDA #$00
-                207185  ; JSR pusha
+                206C85  ; JSR pusha
                 A955    ; LDA #$55
                 208982  ; JSR ppu_on_all
-                4C0F85  ; JMP $850F
+                4C0A85  ; JMP $850A
                 """);
     }
 

@@ -258,6 +258,7 @@ class IL2NESWriter : NESWriter
     public void MergeByteArray(ImmutableArray<byte> data)
     {
         _byteArrays.Add(data);
+        _byteArrayLabelIndex++; // Keep label indices in sync with merged arrays
     }
 
     record Local(int Value, int? Address = null, string? LabelName = null, int ArraySize = 0, bool IsWord = false, string? StructArrayType = null);
@@ -913,9 +914,10 @@ class IL2NESWriter : NESWriter
                         _pendingStructArrayBase = (ushort)(local + LocalCount);
                         LocalCount += totalBytes;
                     }
-                    else if (previous == ILOpCode.Ldc_i4_s || previous == ILOpCode.Ldc_i4)
+                    else if (previous == ILOpCode.Ldc_i4_s || previous == ILOpCode.Ldc_i4
+                        || (previous >= ILOpCode.Ldc_i4_0 && previous <= ILOpCode.Ldc_i4_8))
                     {
-                        // Non-struct: only remove LDA for Ldc_i4_s/Ldc_i4 (original behavior)
+                        // Remove LDA emitted for the array size constant
                         int toRemove = Stack.Count > 0 && Stack.Peek() > byte.MaxValue ? 2 : 1;
                         RemoveLastInstructions(toRemove);
                     }
@@ -1775,6 +1777,12 @@ class IL2NESWriter : NESWriter
     /// Counter for generating unique byte array labels
     /// </summary>
     int _byteArrayLabelIndex = 0;
+
+    /// <summary>
+    /// Gets or sets the starting index for byte array labels.
+    /// Used to offset user method writers so their labels don't collide with the main writer's.
+    /// </summary>
+    internal int ByteArrayLabelStartIndex { set => _byteArrayLabelIndex = value; }
     
     /// <summary>
     /// Track the last byte array label for Stloc handling
@@ -4122,10 +4130,36 @@ class IL2NESWriter : NESWriter
         }
         else if (hasCall && callName != null)
         {
-            // Pattern: arr[i] = call() or arr[i] = (call() & N) - M
+            // Pattern: arr[i] = call(...) or arr[i] = (call(...) & N) - M + A * C
+            // Collect constant arguments from IL before the call instruction
+            var callArgs = new List<int>();
+            for (int i = valueStart; i < Index; i++)
+            {
+                if (Instructions[i].OpCode == ILOpCode.Call)
+                    break;
+                int? val = GetLdcValue(Instructions[i]);
+                if (val != null) callArgs.Add(val.Value);
+            }
+            // Push all args except the last (cc65 calling convention: last arg in A)
+            for (int j = 0; j < callArgs.Count - 1; j++)
+            {
+                Emit(Opcode.LDA, AddressMode.Immediate, checked((byte)callArgs[j]));
+                EmitJSR("pusha");
+            }
+            if (callArgs.Count > 0)
+                Emit(Opcode.LDA, AddressMode.Immediate, checked((byte)callArgs[callArgs.Count - 1]));
+
             EmitWithLabel(Opcode.JSR, AddressMode.Absolute, callName);
             UsedMethods?.Add(callName);
             
+            // Handle post-call operations
+            if (hasMul && mulValue > 0)
+            {
+                int shifts = 0;
+                for (int v = mulValue; v > 1; v >>= 1) shifts++;
+                for (int s = 0; s < shifts; s++)
+                    Emit(Opcode.ASL, AddressMode.Accumulator);
+            }
             if (hasAnd)
             {
                 Emit(Opcode.AND, AddressMode.Immediate, checked((byte)andMask));
@@ -4134,6 +4168,11 @@ class IL2NESWriter : NESWriter
             {
                 Emit(Opcode.SEC, AddressMode.Implied);
                 Emit(Opcode.SBC, AddressMode.Immediate, checked((byte)subValue));
+            }
+            if (hasAdd)
+            {
+                Emit(Opcode.CLC, AddressMode.Implied);
+                Emit(Opcode.ADC, AddressMode.Immediate, checked((byte)addValue));
             }
         }
         else if (hasMul && mulLocalIdx >= 0)

@@ -244,6 +244,7 @@ class Transpiler : IDisposable
                 MethodParamCount = paramCount,
                 WordLocals = DetectWordLocals(methodIL),
                 StructLayouts = structLayouts,
+                ByteArrayLabelStartIndex = writer.ByteArrays.Count,
             };
             methodWriter.StartBlockBuffering();
 
