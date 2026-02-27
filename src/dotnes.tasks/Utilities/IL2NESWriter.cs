@@ -545,10 +545,27 @@ class IL2NESWriter : NESWriter
                             int shifts = 0;
                             int temp = constant;
                             while (temp > 1) { temp >>= 1; shifts++; }
-                            // Check if the result needs to be 16-bit (next IL is Conv_u2, or storing to word local)
-                            bool needs16Bit = Instructions is not null && Index + 1 < Instructions.Length &&
-                                (Instructions[Index + 1].OpCode == ILOpCode.Conv_u2 ||
-                                 Instructions[Index + 1].OpCode == ILOpCode.Conv_i2);
+                            // Check if the result needs to be 16-bit: look ahead past Add/Sub/Ldc for Conv_u2
+                            bool needs16Bit = false;
+                            if (Instructions is not null)
+                            {
+                                for (int look = Index + 1; look < Instructions.Length; look++)
+                                {
+                                    var lookOp = Instructions[look].OpCode;
+                                    if (lookOp == ILOpCode.Conv_u2 || lookOp == ILOpCode.Conv_i2)
+                                    {
+                                        needs16Bit = true;
+                                        break;
+                                    }
+                                    if (lookOp is ILOpCode.Add or ILOpCode.Sub
+                                        or ILOpCode.Ldc_i4_s or ILOpCode.Ldc_i4
+                                        or ILOpCode.Ldc_i4_0 or ILOpCode.Ldc_i4_1 or ILOpCode.Ldc_i4_2
+                                        or ILOpCode.Ldc_i4_3 or ILOpCode.Ldc_i4_4 or ILOpCode.Ldc_i4_5
+                                        or ILOpCode.Ldc_i4_6 or ILOpCode.Ldc_i4_7 or ILOpCode.Ldc_i4_8)
+                                        continue;
+                                    break;
+                                }
+                            }
                             if (needs16Bit)
                             {
                                 // 16-bit shift (ASL A + ROL TEMP) to capture overflow
@@ -2892,14 +2909,18 @@ class IL2NESWriter : NESWriter
             }
             else
             {
-                // Old pattern: full sequence with trailing LDA/LDX
+                // Store scalar local: remove previous LDA, re-emit with STA
                 RemoveLastInstructions(1);
                 Emit(Opcode.LDA, AddressMode.Immediate, (byte)local.Value);
                 Emit(Opcode.STA, AddressMode.Absolute, (ushort)local.Address);
-                Emit(Opcode.LDA, AddressMode.Immediate, 0x22);
-                Emit(Opcode.LDX, AddressMode.Immediate, 0x86);
+                if (_lastByteArrayLabel != null)
+                {
+                    // Byte array address needs to be in A:X for upcoming call — use label resolution
+                    EmitWithLabel(Opcode.LDA, AddressMode.Immediate_LowByte, _lastByteArrayLabel);
+                    EmitWithLabel(Opcode.LDX, AddressMode.Immediate_HighByte, _lastByteArrayLabel);
+                    _byteArrayAddressEmitted = true;
+                }
                 _immediateInA = null;
-                _byteArrayAddressEmitted = true;
             }
         }
         else if (local.Value < ushort.MaxValue)

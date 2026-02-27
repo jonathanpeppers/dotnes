@@ -14,10 +14,9 @@ static class AssertEx
     {
         if (expected.Length != actual.Length)
         {
-            // Print the actual bytes as hex for easier test updating
             var hexDump = new StringBuilder();
             hexDump.AppendLine($"Expected {expected.Length} bytes but got {actual.Length} bytes.");
-            hexDump.AppendLine("Actual bytes (for updating test):");
+            hexDump.AppendLine("Actual bytes:");
             for (int i = 0; i < actual.Length; i++)
             {
                 hexDump.Append($"{actual[i]:X2}");
@@ -30,14 +29,18 @@ static class AssertEx
         for (int i = 0; i < actual.Length; i++)
         {
             if (expected[i] != actual[i])
-            {
-                // Uncomment to debug further
-                //builder.AppendLine($"Prev:  {i - 1:X}, Expected: {expected[i - 1]:X}, Actual: {actual[i - 1]:X}");
-                builder.AppendLine($"Index: {i:X}, Expected: {expected[i]:X}, Actual: {actual[i]:X}");
-                //builder.AppendLine($"Next:  {i + 1:X}, Expected: {expected[i + 1]:X}, Actual: {actual[i + 1]:X}");
-            }
+                builder.AppendLine($"Index: {i}, Expected: {expected[i]:X2}, Actual: {actual[i]:X2}");
         }
         if (builder.Length > 0)
-            throw new Exception(builder.ToString());
+        {
+            var hexDump = new StringBuilder();
+            hexDump.AppendLine("Actual bytes:");
+            for (int i = 0; i < actual.Length; i++)
+            {
+                hexDump.Append($"{actual[i]:X2}");
+                if ((i + 1) % 16 == 0) hexDump.AppendLine();
+            }
+            throw new Exception($"{builder}{hexDump}");
+        }
     }
 }
