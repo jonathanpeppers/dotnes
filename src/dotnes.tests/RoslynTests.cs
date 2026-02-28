@@ -1865,4 +1865,32 @@ public class RoslynTests
         // Must contain ORA #$80 (0980) for the horizontal run flag in vrambuf_put
         Assert.Contains("0980", hex);
     }
+
+    [Fact]
+    public void LdelemConstantIndexCompareWithConstant()
+    {
+        // Pattern from climber: while (actor_floor[0] != MAX_FLOORS - 1)
+        // After ldelem.u1 with constant index 0, the next comparison should be
+        // CMP #constant, NOT CMP $array_addr (which would compare stale A with
+        // the array element instead of comparing the element with the constant).
+        var bytes = GetProgramBytes(
+            """
+            byte[] states = new byte[8];
+            states[0] = 1;
+            while (states[0] != 19)
+            {
+                states[0] = (byte)(states[0] + 1);
+            }
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"LdelemCmp hex: {hex}");
+        // Must contain CMP #$13 (C913) — comparing element with constant 19
+        Assert.Contains("C913", hex);
+        // Must NOT contain only CMP $0325 (CD2503) without a preceding LDA —
+        // that would mean comparing stale A with the array, not the element with 19
+    }
 }

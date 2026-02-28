@@ -302,24 +302,41 @@ class IL2NESWriter : NESWriter
                 && lastInstr.Mode is AddressMode.Absolute or AddressMode.ZeroPage
                 && lastInstr.Operand is AbsoluteOperand cmpAbsOp)
             {
-                // Runtime comparison: last LDA loaded value2 (runtime variable).
-                // The instruction before loaded value1 into A.
-                // Remove the LDA $value2_addr, leaving A = value1.
-                RemoveLastInstructions(1);
-                if (adjustValue == 0)
+                // Detect two-runtime-values: either _savedRuntimeToTemp was set,
+                // or the preceding instruction is also LDA Absolute/ZeroPage.
+                bool twoRuntimeValues = _savedRuntimeToTemp;
+                if (!twoRuntimeValues && block.Count >= 2)
                 {
-                    Emit(Opcode.CMP, AddressMode.Absolute, cmpAbsOp.Address);
+                    var prevInstr = block[block.Count - 2];
+                    twoRuntimeValues = prevInstr.Opcode == Opcode.LDA
+                        && prevInstr.Mode is AddressMode.Absolute or AddressMode.ZeroPage;
+                }
+
+                if (twoRuntimeValues)
+                {
+                    // Two runtime values: remove second LDA (value2), emit CMP $addr.
+                    // A retains value1 from the preceding instruction.
+                    RemoveLastInstructions(1);
+                    if (adjustValue == 0)
+                    {
+                        Emit(Opcode.CMP, AddressMode.Absolute, cmpAbsOp.Address);
+                    }
+                    else
+                    {
+                        Emit(Opcode.STA, AddressMode.ZeroPage, TEMP);
+                        Emit(Opcode.LDA, AddressMode.Absolute, cmpAbsOp.Address);
+                        Emit(Opcode.CLC, AddressMode.Implied);
+                        Emit(Opcode.ADC, AddressMode.Immediate, (byte)adjustValue);
+                        Emit(Opcode.STA, AddressMode.ZeroPage, (byte)(TEMP + 1));
+                        Emit(Opcode.LDA, AddressMode.ZeroPage, TEMP);
+                        Emit(Opcode.CMP, AddressMode.ZeroPage, (byte)(TEMP + 1));
+                    }
+                    _savedRuntimeToTemp = false;
                 }
                 else
                 {
-                    // Need value2+adjust: save A, load value2, add, store to TEMP+1, restore A, CMP
-                    Emit(Opcode.STA, AddressMode.ZeroPage, TEMP);
-                    Emit(Opcode.LDA, AddressMode.Absolute, cmpAbsOp.Address);
-                    Emit(Opcode.CLC, AddressMode.Implied);
-                    Emit(Opcode.ADC, AddressMode.Immediate, (byte)adjustValue);
-                    Emit(Opcode.STA, AddressMode.ZeroPage, (byte)(TEMP + 1));
-                    Emit(Opcode.LDA, AddressMode.ZeroPage, TEMP);
-                    Emit(Opcode.CMP, AddressMode.ZeroPage, (byte)(TEMP + 1));
+                    // Single runtime value + constant: keep the LDA, emit CMP #constant.
+                    Emit(Opcode.CMP, AddressMode.Immediate, checked((byte)(stackValue + adjustValue)));
                 }
                 return;
             }
