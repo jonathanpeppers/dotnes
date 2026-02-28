@@ -1823,4 +1823,46 @@ public class RoslynTests
 
         transpiler.Dispose();
     }
+
+    [Fact]
+    public void NtadrResultStoredToUshortLocal()
+    {
+        // Pattern from climber: ushort addr; if (row < 2) addr = NTADR_A(1, row);
+        // else addr = NTADR_C(1, row); vrambuf_put(addr, buf, 30);
+        // The NTADR result must be stored to a ushort local and then
+        // loaded back for vrambuf_put, with proper TEMP/TEMP2 setup.
+        // The if/else forces Roslyn to allocate the ushort local.
+        var bytes = GetProgramBytes(
+            """
+            byte[] buf = new byte[30];
+            vrambuf_clear();
+            set_vram_update(buf);
+            for (byte row = 0; row < 4; row++)
+            {
+                ushort addr;
+                if (row < 2)
+                    addr = NTADR_A(1, row);
+                else
+                    addr = NTADR_C(1, row);
+                vrambuf_put(addr, buf, 30);
+                vrambuf_flush();
+            }
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"NtadrLocal hex: {hex}");
+        // Must contain STA $19 (TEMP2) from NTADR handler
+        Assert.Contains("8519", hex);
+        // Must contain STX $17 (TEMP) from NTADR handler
+        Assert.Contains("8617", hex);
+        // Must contain LDA TEMP2 (A519) in the stloc path — store lo byte to local
+        Assert.Contains("A519", hex);
+        // Must contain LDA TEMP (A517) in the stloc path — store hi byte to local
+        Assert.Contains("A517", hex);
+        // Must contain ORA #$80 (0980) for the horizontal run flag in vrambuf_put
+        Assert.Contains("0980", hex);
+    }
 }

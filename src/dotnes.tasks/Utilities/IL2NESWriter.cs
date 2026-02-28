@@ -409,7 +409,7 @@ class IL2NESWriter : NESWriter
                 {
                     var addr = Locals.TryGetValue(0, out var existing) && existing.Address is not null
                         ? (ushort)existing.Address : (ushort)(local + LocalCount);
-                    WriteStloc(Locals[0] = new Local(Stack.Pop(), addr, IsWord: WordLocals.Contains(0) || (_runtimeValueInA && _ushortInAX)));
+                    WriteStloc(Locals[0] = new Local(Stack.Pop(), addr, IsWord: WordLocals.Contains(0) || (_runtimeValueInA && _ushortInAX) || _ntadrRuntimeResult));
                 }
                 break;
             case ILOpCode.Stloc_1:
@@ -432,7 +432,7 @@ class IL2NESWriter : NESWriter
                 {
                     var addr = Locals.TryGetValue(1, out var existing) && existing.Address is not null
                         ? (ushort)existing.Address : (ushort)(local + LocalCount);
-                    WriteStloc(Locals[1] = new Local(Stack.Pop(), addr, IsWord: WordLocals.Contains(1) || (_runtimeValueInA && _ushortInAX)));
+                    WriteStloc(Locals[1] = new Local(Stack.Pop(), addr, IsWord: WordLocals.Contains(1) || (_runtimeValueInA && _ushortInAX) || _ntadrRuntimeResult));
                 }
                 break;
             case ILOpCode.Stloc_2:
@@ -455,7 +455,7 @@ class IL2NESWriter : NESWriter
                 {
                     var addr = Locals.TryGetValue(2, out var existing) && existing.Address is not null
                         ? (ushort)existing.Address : (ushort)(local + LocalCount);
-                    WriteStloc(Locals[2] = new Local(Stack.Pop(), addr, IsWord: WordLocals.Contains(2) || (_runtimeValueInA && _ushortInAX)));
+                    WriteStloc(Locals[2] = new Local(Stack.Pop(), addr, IsWord: WordLocals.Contains(2) || (_runtimeValueInA && _ushortInAX) || _ntadrRuntimeResult));
                 }
                 break;
             case ILOpCode.Stloc_3:
@@ -478,7 +478,7 @@ class IL2NESWriter : NESWriter
                 {
                     var addr = Locals.TryGetValue(3, out var existing) && existing.Address is not null
                         ? (ushort)existing.Address : (ushort)(local + LocalCount);
-                    WriteStloc(Locals[3] = new Local(Stack.Pop(), addr, IsWord: WordLocals.Contains(3) || (_runtimeValueInA && _ushortInAX)));
+                    WriteStloc(Locals[3] = new Local(Stack.Pop(), addr, IsWord: WordLocals.Contains(3) || (_runtimeValueInA && _ushortInAX) || _ntadrRuntimeResult));
                 }
                 break;
             case ILOpCode.Ldloc_0:
@@ -972,7 +972,7 @@ class IL2NESWriter : NESWriter
                         // Regular local — allocate address and store
                         var addr = Locals.TryGetValue(localIdx, out var existing) && existing.Address is not null
                             ? (ushort)existing.Address : (ushort)(local + LocalCount);
-                        WriteStloc(Locals[localIdx] = new Local(Stack.Pop(), addr, IsWord: WordLocals.Contains(localIdx) || (_runtimeValueInA && _ushortInAX)));
+                        WriteStloc(Locals[localIdx] = new Local(Stack.Pop(), addr, IsWord: WordLocals.Contains(localIdx) || (_runtimeValueInA && _ushortInAX) || _ntadrRuntimeResult));
                     }
                 }
                 break;
@@ -1577,6 +1577,20 @@ class IL2NESWriter : NESWriter
                                     Emit(Opcode.LDA, AddressMode.ZeroPage, TEMP);
                                     Emit(Opcode.ORA, AddressMode.Immediate, 0x80);
                                     Emit(Opcode.STA, AddressMode.ZeroPage, TEMP);
+                                }
+                                else if (block.Count >= 2
+                                    && block[block.Count - 1] is { Opcode: Opcode.LDX, Mode: AddressMode.Absolute } ldxInstr
+                                    && block[block.Count - 2] is { Opcode: Opcode.LDA, Mode: AddressMode.Absolute } ldaInstr)
+                                {
+                                    // Address loaded from a ushort local (LDA $lo, LDX $hi)
+                                    ushort loAddr = ((AbsoluteOperand)ldaInstr.Operand!).Address;
+                                    ushort hiAddr = ((AbsoluteOperand)ldxInstr.Operand!).Address;
+                                    RemoveLastInstructions(2);
+                                    Emit(Opcode.LDA, AddressMode.Absolute, hiAddr);
+                                    Emit(Opcode.ORA, AddressMode.Immediate, 0x80);
+                                    Emit(Opcode.STA, AddressMode.ZeroPage, TEMP);
+                                    Emit(Opcode.LDA, AddressMode.Absolute, loAddr);
+                                    Emit(Opcode.STA, AddressMode.ZeroPage, TEMP2);
                                 }
                                 else
                                 {
@@ -2869,7 +2883,20 @@ class IL2NESWriter : NESWriter
         _firstAndAfterPadPoll = false;
         _ushortInAX = false;
 
-        if (_runtimeValueInA)
+        if (_ntadrRuntimeResult)
+        {
+            // NTADR result is in TEMP ($17 = hi) and TEMP2 ($19 = lo)
+            // Store both bytes to the ushort local
+            LocalCount += 2;
+            Emit(Opcode.LDA, AddressMode.ZeroPage, TEMP2);
+            Emit(Opcode.STA, AddressMode.Absolute, (ushort)local.Address);
+            Emit(Opcode.LDA, AddressMode.ZeroPage, TEMP);
+            Emit(Opcode.STA, AddressMode.Absolute, (ushort)(local.Address + 1));
+            _ntadrRuntimeResult = false;
+            _runtimeValueInA = false;
+            _immediateInA = null;
+        }
+        else if (_runtimeValueInA)
         {
             if (local.IsWord)
             {
