@@ -1,3 +1,4 @@
+using dotnes.ObjectModel;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Xunit.Abstractions;
@@ -61,6 +62,12 @@ public class RoslynTests
 
     byte[] GetProgramBytes(string csharpSource, IList<AssemblyReader>? additionalAssemblyFiles, bool allowUnsafe = false)
     {
+        var (program, _) = BuildProgram(csharpSource, additionalAssemblyFiles, allowUnsafe);
+        return program.GetMainBlock();
+    }
+
+    (Program6502 program, Transpiler transpiler) BuildProgram(string csharpSource, IList<AssemblyReader>? additionalAssemblyFiles = null, bool allowUnsafe = false)
+    {
         _stream.SetLength(0);
         csharpSource = $"using NES;using static NES.NESLib;{Environment.NewLine}{csharpSource}";
         var syntaxTree = CSharpSyntaxTree.ParseText(csharpSource);
@@ -85,9 +92,9 @@ public class RoslynTests
         var assemblyFiles = new List<AssemblyReader> { new AssemblyReader(new StreamReader(Utilities.GetResource("chr_generic.s"))) };
         if (additionalAssemblyFiles != null)
             assemblyFiles.AddRange(additionalAssemblyFiles);
-        using var transpiler = new Transpiler(_stream, assemblyFiles, _logger);
+        var transpiler = new Transpiler(_stream, assemblyFiles, _logger);
         var program = transpiler.BuildProgram6502(out _, out _);
-        return program.GetMainBlock();
+        return (program, transpiler);
     }
 
     [Fact]
@@ -1716,5 +1723,104 @@ public class RoslynTests
             """);
         Assert.NotNull(bytes);
         Assert.NotEmpty(bytes);
+    }
+
+    [Fact]
+    public void LdelemSubPreservesFirstOperand()
+    {
+        // Pattern from climber: row - heights[f] where both are loop variables.
+        // The ldelem clobbers A (which held row). The transpiler must save row to TEMP
+        // before the ldelem, then use the _savedRuntimeToTemp path in Sub.
+        var bytes = GetProgramBytes(
+            """
+            byte[] heights = new byte[4];
+            heights[0] = 10;
+            for (byte row = 0; row < 4; row++)
+            {
+                for (byte f = 0; f < 4; f++)
+                {
+                    byte diff = (byte)(row - heights[f]);
+                    pal_col(0, diff);
+                }
+            }
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"Sub hex: {hex}");
+        // Must contain STA $17 (8517) to save row to TEMP before ldelem clobbers A
+        Assert.Contains("8517", hex);
+        // Must contain SBC $18 (E518) — TEMP - TEMP+1 pattern for the subtraction
+        Assert.Contains("E518", hex);
+    }
+
+    [Fact]
+    public void LdelemAddPreservesFirstOperand()
+    {
+        // Pattern: val + arr[idx] with loop variables — addition is commutative.
+        // The transpiler should save val to TEMP, then CLC; ADC TEMP.
+        var bytes = GetProgramBytes(
+            """
+            byte[] offsets = new byte[4];
+            offsets[0] = 5;
+            for (byte row = 0; row < 4; row++)
+            {
+                for (byte f = 0; f < 4; f++)
+                {
+                    byte total = (byte)(row + offsets[f]);
+                    pal_col(0, total);
+                }
+            }
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"Add hex: {hex}");
+        // Must contain STA $17 (8517) to save row to TEMP
+        Assert.Contains("8517", hex);
+        // Must contain ADC $17 (6517) — add from TEMP
+        Assert.Contains("6517", hex);
+    }
+
+    [Fact]
+    public void UserFunctionLocalsDoNotOverlapMain()
+    {
+        // User function locals must be allocated AFTER main's locals to avoid
+        // memory corruption when the function is called.
+        // Main allocates an array of 20 bytes; the user function has a local.
+        // The function's local must be at an address >= main's array end.
+        var (program, transpiler) = BuildProgram(
+            """
+            static byte add_offset(byte x)
+            {
+                byte temp = (byte)(x + 5);
+                return temp;
+            }
+            byte[] data = new byte[20];
+            data[0] = add_offset(3);
+            pal_col(0, data[0]);
+            while (true) ;
+            """);
+
+        var mainBytes = program.GetMainBlock();
+        Assert.NotNull(mainBytes);
+
+        // Main local: data array is 20 bytes starting at $0325 (base local address).
+        // So main occupies $0325-$0338.
+        // User function local "temp" must be at $0339 or later, NOT at $0325.
+        var userBytes = program.GetMainBlock("add_offset");
+        Assert.NotEmpty(userBytes);
+
+        var userHex = Convert.ToHexString(userBytes);
+        // The function stores to its local via STA Absolute (8D xx yy).
+        // The address must NOT be $0325 (25 03 in little-endian) — that's main's array.
+        // It should be $0339 or higher.
+        Assert.DoesNotContain("8D2503", userHex);
+
+        transpiler.Dispose();
     }
 }

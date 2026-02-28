@@ -230,6 +230,8 @@ class Transpiler : IDisposable
         }
 
         // Transpile user-defined methods into separate blocks
+        // User function locals must start AFTER main's locals to avoid memory overlap
+        int mainLocalCount = writer.LocalCount;
         int userMethodsTotalSize = 0;
         foreach (var kvp in UserMethods)
         {
@@ -245,6 +247,7 @@ class Transpiler : IDisposable
                 WordLocals = DetectWordLocals(methodIL),
                 StructLayouts = structLayouts,
                 ByteArrayLabelStartIndex = writer.ByteArrays.Count,
+                LocalCount = mainLocalCount,
             };
             methodWriter.StartBlockBuffering();
 

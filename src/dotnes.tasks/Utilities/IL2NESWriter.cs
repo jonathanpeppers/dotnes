@@ -231,7 +231,7 @@ class IL2NESWriter : NESWriter
     /// ...
     /// A program with 0 locals has C000
     /// </summary>
-    public int LocalCount { get; private set; }
+    public int LocalCount { get; set; }
 
     /// <summary>
     /// Set of user-defined method names (for detecting user method calls).
@@ -3701,6 +3701,37 @@ class IL2NESWriter : NESWriter
             int instrToRemove = GetBufferedBlockCount() - blockCountAtArray;
             if (instrToRemove > 0)
                 RemoveLastInstructions(instrToRemove);
+        }
+
+        // Check if there's a preceding value in the block that will be clobbered by the
+        // upcoming LDA. This happens in patterns like: ldloc rh; ldloc arr; ldloc idx; ldelem.u1; sub
+        // After removing the array/index instructions, the block still has LDA $rh_addr.
+        // We save it to TEMP so the arithmetic handler can use it.
+        int blockCountAfterRemove = GetBufferedBlockCount();
+        if (blockCountAfterRemove > 0)
+        {
+            var block = CurrentBlock!;
+            var lastInstr = block[blockCountAfterRemove - 1];
+            if (lastInstr.Opcode == Opcode.LDA &&
+                (lastInstr.Mode == AddressMode.Absolute || lastInstr.Mode == AddressMode.Immediate
+                 || lastInstr.Mode == AddressMode.ZeroPage))
+            {
+                // Check if the next IL instruction is arithmetic (add/sub)
+                bool nextIsArithmetic = Instructions is not null && Index + 1 < Instructions.Length &&
+                    Instructions[Index + 1].OpCode is ILOpCode.Add or ILOpCode.Sub;
+                // Also check for conv.u1/conv.u2 followed by arithmetic
+                if (!nextIsArithmetic && Instructions is not null && Index + 1 < Instructions.Length)
+                {
+                    var nextOp = Instructions[Index + 1].OpCode;
+                    if (nextOp is ILOpCode.Conv_u1 or ILOpCode.Conv_u2 or ILOpCode.Conv_i1 && Index + 2 < Instructions.Length)
+                        nextIsArithmetic = Instructions[Index + 2].OpCode is ILOpCode.Add or ILOpCode.Sub;
+                }
+                if (nextIsArithmetic)
+                {
+                    Emit(Opcode.STA, AddressMode.ZeroPage, (byte)NESConstants.TEMP);
+                    _savedRuntimeToTemp = true;
+                }
+            }
         }
 
         // Emit: LDX index; LDA array_base,X
