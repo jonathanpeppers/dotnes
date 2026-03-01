@@ -1320,18 +1320,35 @@ class IL2NESWriter : NESWriter
                             bool yIsRuntime = lastInstr.Mode == AddressMode.Absolute
                                 && lastInstr.Opcode == Opcode.LDA;
 
+                            // Check if y is a runtime expression (e.g. row + 10):
+                            // _runtimeValueInA is true AND there's a JSR pusha in the block
+                            // (meaning x was pusha'd, and the expression result in A is y)
+                            bool yIsExpression = false;
+                            if (!yIsRuntime && _runtimeValueInA)
+                            {
+                                for (int bi = block.Count - 1; bi >= 0; bi--)
+                                {
+                                    if (block[bi].Opcode == Opcode.JSR &&
+                                        block[bi].Operand is LabelOperand lbl && lbl.Label == "pusha")
+                                    {
+                                        yIsExpression = true;
+                                        break;
+                                    }
+                                }
+                            }
+
                             // Check if x (first arg) is runtime
                             bool xIsRuntime = false;
                             bool xFromFlag = false; // true when x is runtime via _runtimeValueInA (not LDA Absolute)
                             Instruction? xInstr = null;
-                            if (!yIsRuntime && _runtimeValueInA)
+                            if (!yIsRuntime && !yIsExpression && _runtimeValueInA)
                             {
                                 // x came from a runtime expression (And/Or/Div etc.)
                                 // WriteLdc for y was skipped, so no LDA #y in block
                                 xIsRuntime = true;
                                 xFromFlag = true;
                             }
-                            else if (!yIsRuntime && block.Count >= 2)
+                            else if (!yIsRuntime && !yIsExpression && block.Count >= 2)
                             {
                                 var prevInstr = block[block.Count - 2];
                                 if (prevInstr.Mode == AddressMode.Absolute && prevInstr.Opcode == Opcode.LDA)
@@ -1341,7 +1358,7 @@ class IL2NESWriter : NESWriter
                                 }
                             }
 
-                            if (!yIsRuntime && !xIsRuntime)
+                            if (!yIsRuntime && !yIsExpression && !xIsRuntime)
                             {
                                 // Compile-time: both args are constants
                                 byte cy = checked((byte)Stack.Pop());
@@ -1373,7 +1390,16 @@ class IL2NESWriter : NESWriter
                                     nameof(NTADR_D) => "nametable_d",
                                     _ => throw new InvalidOperationException(),
                                 };
-                                if (yIsRuntime)
+                                if (yIsExpression)
+                                {
+                                    // Runtime y from expression (row + 10 etc.), x was pusha'd
+                                    // A has the y expression result, cc65 stack has x
+                                    Emit(Opcode.STA, AddressMode.ZeroPage, TEMP2);
+                                    EmitJSR("popa"); // A = x (from cc65 stack)
+                                    Emit(Opcode.STA, AddressMode.ZeroPage, TEMP); // TEMP = x
+                                    Emit(Opcode.LDA, AddressMode.ZeroPage, TEMP2); // A = y
+                                }
+                                else if (yIsRuntime)
                                 {
                                     // Runtime y: block has LDA #x, JSR pusha, LDA $y_addr (3 instrs)
                                     var xConstInstr = block[block.Count - 3];
@@ -2811,9 +2837,11 @@ class IL2NESWriter : NESWriter
                     Emit(Opcode.CLC, AddressMode.Implied);
                     Emit(Opcode.ADC, AddressMode.ZeroPage, (byte)NESConstants.TEMP);
                 }
-                else if (_savedConstantViaPusha)
+                else if (_savedConstantViaPusha && operand == 0)
                 {
                     // Constant was pusha'd, runtime in A — A + constant (commutative)
+                    // Only applies when operand==0 (no real Stack value for the add).
+                    // If operand!=0, the pusha'd value is a function call arg, not ours.
                     Emit(Opcode.STA, AddressMode.ZeroPage, (byte)NESConstants.TEMP2);
                     EmitJSR("popa");
                     Emit(Opcode.CLC, AddressMode.Implied);
@@ -2844,9 +2872,10 @@ class IL2NESWriter : NESWriter
                     Emit(Opcode.SEC, AddressMode.Implied);
                     Emit(Opcode.SBC, AddressMode.ZeroPage, (byte)(NESConstants.TEMP + 1));
                 }
-                else if (_savedConstantViaPusha)
+                else if (_savedConstantViaPusha && operand == 0)
                 {
                     // Constant was pusha'd, runtime in A — need constant - A
+                    // Only applies when operand==0 (no real Stack value for the sub).
                     Emit(Opcode.STA, AddressMode.ZeroPage, (byte)NESConstants.TEMP2);
                     EmitJSR("popa");
                     Emit(Opcode.SEC, AddressMode.Implied);

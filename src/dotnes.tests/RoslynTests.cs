@@ -2095,6 +2095,36 @@ public class RoslynTests
     }
 
     [Fact]
+    public void AddWithPushaFunctionArgDoesNotConsumePusha()
+    {
+        // Regression: in `NTADR_A(1, (byte)(row + 10))`, the first arg (1) was pusha'd
+        // for the function call, and the `row + 10` Add incorrectly consumed the pusha'd
+        // value (1) instead of using the actual operand (10), giving `1 + row` not `row + 10`.
+        var bytes = GetProgramBytes(
+            """
+            for (byte row = 0; row < 4; row++)
+            {
+                ushort addr = NTADR_A(1, (byte)(row + 10));
+                vrambuf_flush();
+            }
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"AddWithPusha hex: {hex}");
+        // The constant 10 (0x0A) must appear as ADC #$0A (690A) — the add of row+10.
+        // If the pusha bug is present, we'd see ADC $TEMP2 instead (no 0x0A constant).
+        Assert.Contains("690A", hex); // CLC; ADC #$0A
+        // After the add, NTADR_A args must be set up correctly:
+        // STA $19 (TEMP2=y), JSR popa, STA $17 (TEMP=x), LDA $19 (restore y)
+        Assert.Contains("8519", hex); // STA TEMP2
+        Assert.Contains("8517", hex); // STA TEMP (x from popa)
+        Assert.Contains("A519", hex); // LDA TEMP2 (restore y)
+    }
+
+    [Fact]
     public void LdelemConstantIndexCompareWithConstant()
     {
         // Pattern from climber: while (actor_floor[0] != MAX_FLOORS - 1)
