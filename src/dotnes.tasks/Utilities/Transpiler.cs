@@ -244,6 +244,7 @@ class Transpiler : IDisposable
                 UsedMethods = UsedMethods,
                 UserMethodNames = new HashSet<string>(UserMethods.Keys, StringComparer.Ordinal),
                 MethodParamCount = paramCount,
+                MethodName = methodName,
                 WordLocals = DetectWordLocals(methodIL),
                 StructLayouts = structLayouts,
                 ByteArrayLabelStartIndex = writer.ByteArrays.Count,
@@ -262,8 +263,7 @@ class Transpiler : IDisposable
                 methodWriter.Index = i;
                 var instruction = methodWriter.Instructions[i];
 
-                var labelName = $"instruction_{instruction.Offset:X2}";
-                if (methodWriter.CurrentBlock != null)
+                var labelName = $"{methodName}_instruction_{instruction.Offset:X2}";                if (methodWriter.CurrentBlock != null)
                     methodWriter.CurrentBlock.SetNextLabel(labelName);
                 methodWriter.RecordBlockCount(instruction.Offset);
 

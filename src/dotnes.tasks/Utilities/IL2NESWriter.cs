@@ -159,6 +159,12 @@ class IL2NESWriter : NESWriter
     public int MethodParamCount { get; init; }
 
     /// <summary>
+    /// Name of the current method being transpiled (null for main).
+    /// Used to scope branch labels so they don't collide across methods.
+    /// </summary>
+    public string? MethodName { get; init; }
+
+    /// <summary>
     /// Tracks extra values pushed to the cc65 stack within a user function body
     /// (via pusha between ldarg calls). Used to adjust ldarg stack offsets.
     /// </summary>
@@ -249,6 +255,13 @@ class IL2NESWriter : NESWriter
     /// Names of extern methods (declared with static extern). Used to emit JSR _name.
     /// </summary>
     public HashSet<string> ExternMethodNames { get; init; } = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// Generates a branch target label name scoped to the current method.
+    /// For main(), returns "instruction_XX". For user methods, returns "methodName_instruction_XX".
+    /// </summary>
+    string InstructionLabel(int offset) =>
+        MethodName is null ? $"instruction_{offset:X2}" : $"{MethodName}_instruction_{offset:X2}";
 
     /// <summary>
     /// Merges a string table entry from a user method writer into this writer.
@@ -937,14 +950,14 @@ class IL2NESWriter : NESWriter
             case ILOpCode.Br_s:
                 {
                     operand = (sbyte)(byte)operand;
-                    var labelName = $"instruction_{instruction.Offset + operand + 2:X2}";
+                    var labelName = InstructionLabel(instruction.Offset + operand + 2);
                     EmitJMP(labelName);
                 }
                 break;
             case ILOpCode.Br:
                 // Long form unconditional branch (32-bit offset)
                 {
-                    var labelName = $"instruction_{instruction.Offset + operand + 5:X2}";
+                    var labelName = InstructionLabel(instruction.Offset + operand + 5);
                     EmitJMP(labelName);
                 }
                 break;
@@ -1039,7 +1052,7 @@ class IL2NESWriter : NESWriter
                             Emit(Opcode.LDA, AddressMode.Absolute, absOp.Address);
                     }
                     
-                    var labelName = $"instruction_{instruction.Offset + branchOffset + instrSize:X2}";
+                    var labelName = InstructionLabel(instruction.Offset + branchOffset + instrSize);
                     if (instruction.OpCode == ILOpCode.Bne_un_s)
                         EmitWithLabel(Opcode.BNE, AddressMode.Relative, labelName);
                     else
@@ -1060,7 +1073,7 @@ class IL2NESWriter : NESWriter
                     int cmpVal = Stack.Count > 0 ? Stack.Pop() : 0;
                     if (Stack.Count > 0) Stack.Pop();
                     EmitBranchCompare(cmpVal);
-                    var labelName = $"instruction_{instruction.Offset + branchOffset + instrSize:X2}";
+                    var labelName = InstructionLabel(instruction.Offset + branchOffset + instrSize);
                     if (instruction.OpCode == ILOpCode.Beq_s)
                         EmitWithLabel(Opcode.BEQ, AddressMode.Relative, labelName);
                     else
@@ -1075,7 +1088,7 @@ class IL2NESWriter : NESWriter
                 // Branch if value is zero/false (after AND test)
                 {
                     operand = (sbyte)(byte)operand;
-                    var labelName = $"instruction_{instruction.Offset + operand + 2:X2}";
+                    var labelName = InstructionLabel(instruction.Offset + operand + 2);
                     EmitWithLabel(Opcode.BEQ, AddressMode.Relative, labelName);
                     if (Stack.Count > 0)
                         Stack.Pop();
@@ -1086,7 +1099,7 @@ class IL2NESWriter : NESWriter
                 // Branch if value is non-zero/true — inverse of Brfalse_s
                 {
                     operand = (sbyte)(byte)operand;
-                    var labelName = $"instruction_{instruction.Offset + operand + 2:X2}";
+                    var labelName = InstructionLabel(instruction.Offset + operand + 2);
                     EmitWithLabel(Opcode.BNE, AddressMode.Relative, labelName);
                     if (Stack.Count > 0)
                         Stack.Pop();
@@ -1103,7 +1116,7 @@ class IL2NESWriter : NESWriter
                     int cmpVal = Stack.Count > 0 ? Stack.Pop() : 0;
                     if (Stack.Count > 0) Stack.Pop();
                     EmitBranchCompare(cmpVal);
-                    var labelName = $"instruction_{instruction.Offset + branchOffset + instrSize:X2}";
+                    var labelName = InstructionLabel(instruction.Offset + branchOffset + instrSize);
                     if (instruction.OpCode == ILOpCode.Blt_s)
                         EmitWithLabel(Opcode.BCC, AddressMode.Relative, labelName);
                     else
@@ -1123,7 +1136,7 @@ class IL2NESWriter : NESWriter
                     int cmpVal = Stack.Count > 0 ? Stack.Pop() : 0;
                     if (Stack.Count > 0) Stack.Pop();
                     EmitBranchCompare(cmpVal, adjustValue: 1);
-                    var labelName = $"instruction_{instruction.Offset + branchOffset + instrSize:X2}";
+                    var labelName = InstructionLabel(instruction.Offset + branchOffset + instrSize);
                     if (instruction.OpCode == ILOpCode.Ble_s)
                         EmitWithLabel(Opcode.BCC, AddressMode.Relative, labelName);
                     else
@@ -1143,7 +1156,7 @@ class IL2NESWriter : NESWriter
                     int cmpVal = Stack.Count > 0 ? Stack.Pop() : 0;
                     if (Stack.Count > 0) Stack.Pop();
                     EmitBranchCompare(cmpVal);
-                    var labelName = $"instruction_{instruction.Offset + branchOffset + instrSize:X2}";
+                    var labelName = InstructionLabel(instruction.Offset + branchOffset + instrSize);
                     if (instruction.OpCode == ILOpCode.Bge_s)
                         EmitWithLabel(Opcode.BCS, AddressMode.Relative, labelName);
                     else
@@ -1163,7 +1176,7 @@ class IL2NESWriter : NESWriter
                     int cmpVal = Stack.Count > 0 ? Stack.Pop() : 0;
                     if (Stack.Count > 0) Stack.Pop();
                     EmitBranchCompare(cmpVal, adjustValue: 1);
-                    var labelName = $"instruction_{instruction.Offset + branchOffset + instrSize:X2}";
+                    var labelName = InstructionLabel(instruction.Offset + branchOffset + instrSize);
                     if (instruction.OpCode == ILOpCode.Bgt_s)
                         EmitWithLabel(Opcode.BCS, AddressMode.Relative, labelName);
                     else
@@ -1176,7 +1189,7 @@ class IL2NESWriter : NESWriter
             case ILOpCode.Brtrue:
                 // Long-form branch if non-zero — use trampoline: BEQ +3, JMP target
                 {
-                    var labelName = $"instruction_{instruction.Offset + operand + 5:X2}";
+                    var labelName = InstructionLabel(instruction.Offset + operand + 5);
                     Emit(Opcode.BEQ, AddressMode.Relative, 3); // skip JMP if zero
                     EmitWithLabel(Opcode.JMP, AddressMode.Absolute, labelName);
                     if (Stack.Count > 0)
@@ -1187,7 +1200,7 @@ class IL2NESWriter : NESWriter
             case ILOpCode.Brfalse:
                 // Long-form branch if zero — use trampoline: BNE +3, JMP target
                 {
-                    var labelName = $"instruction_{instruction.Offset + operand + 5:X2}";
+                    var labelName = InstructionLabel(instruction.Offset + operand + 5);
                     Emit(Opcode.BNE, AddressMode.Relative, 3); // skip JMP if non-zero
                     EmitWithLabel(Opcode.JMP, AddressMode.Absolute, labelName);
                     if (Stack.Count > 0)
@@ -1937,7 +1950,7 @@ class IL2NESWriter : NESWriter
         {
             int targetOffset = BitConverter.ToInt32(targets.Value.ToArray(), i * 4);
             int absoluteTarget = baseOffset + targetOffset;
-            var labelName = $"instruction_{absoluteTarget:X2}";
+            var labelName = InstructionLabel(absoluteTarget);
 
             if (i == 0)
             {

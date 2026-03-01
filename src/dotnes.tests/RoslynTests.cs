@@ -2021,6 +2021,80 @@ public class RoslynTests
     }
 
     [Fact]
+    public void NestedLoopWithBufferFill()
+    {
+        // Minimal nested loop: outer loop iterates rows, inner loop fills a buffer,
+        // then calls vrambuf_put. This is the core climber draw_entire_stage pattern.
+        var bytes = GetProgramBytes(
+            """
+            byte[] buf = new byte[30];
+            byte[] heights = new byte[4];
+            heights[0] = 3; heights[1] = 3; heights[2] = 3; heights[3] = 3;
+            for (byte row = 0; row < 4; row++)
+            {
+                for (byte col = 0; col < 30; col += 2)
+                {
+                    buf[col] = 0xF4;
+                    buf[(byte)(col + 1)] = 0xF6;
+                }
+                ushort addr = NTADR_A(1, row);
+                vrambuf_put(addr, buf, 30);
+                vrambuf_flush();
+            }
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"NestedLoop hex: {hex}");
+        // Must have two loop back-edges (JMP or BCC/BCS for outer and inner loops)
+        // The inner loop fills buf[col] and buf[col+1]
+        // F4 and F6 tile values must appear
+        Assert.Contains("A9F4", hex); // LDA #$F4
+        Assert.Contains("A9F6", hex); // LDA #$F6
+    }
+
+    [Fact]
+    public void UserMethodBranchLabelsDoNotCollideWithMain()
+    {
+        // Regression test: branch labels like instruction_XX were not scoped per method,
+        // so a JMP in main() could resolve to a label in a user method (or vice versa)
+        // if they shared the same IL offset number.
+        var bytes = GetProgramBytes(
+            """
+            static void setup_graphics()
+            {
+                pal_col(0, 0x02);
+                pal_col(1, 0x14);
+                bank_spr(0);
+                bank_bg(1);
+            }
+            
+            byte[] buf = new byte[30];
+            for (byte row = 0; row < 4; row++)
+            {
+                for (byte col = 0; col < 30; col++)
+                {
+                    buf[col] = 0xAB;
+                }
+            }
+            setup_graphics();
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"UserMethodBranchLabels hex: {hex}");
+
+        // The key assertion: the ROM must contain LDA #$AB (A9AB) for the inner loop body.
+        // If labels collide, the inner loop JMP would jump into setup_graphics instead
+        // of back to the loop condition, causing the tile value to never be stored.
+        Assert.Contains("A9AB", hex); // LDA #$AB
+    }
+
+    [Fact]
     public void LdelemConstantIndexCompareWithConstant()
     {
         // Pattern from climber: while (actor_floor[0] != MAX_FLOORS - 1)
