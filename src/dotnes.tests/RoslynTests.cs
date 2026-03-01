@@ -1862,8 +1862,54 @@ public class RoslynTests
         Assert.Contains("A519", hex);
         // Must contain LDA TEMP (A517) in the stloc path — store hi byte to local
         Assert.Contains("A517", hex);
-        // Must contain ORA #$80 (0980) for the horizontal run flag in vrambuf_put
-        Assert.Contains("0980", hex);
+        // Must NOT contain ORA #$80 — vrambuf_put now uses horizontal (ORA $40 in subroutine)
+        Assert.DoesNotContain("0980", hex);
+    }
+
+    [Fact]
+    public void VrambufPutUsesHorizontalFlag()
+    {
+        // vrambuf_put(addr, buf, len) should NOT add $80 vertical flag to the VRAM address.
+        // NTADR_A(1, 0) = $2001. Compile-time path stores addr_hi=$20 to TEMP.
+        var bytes = GetProgramBytes(
+            """
+            byte[] buf = new byte[30];
+            vrambuf_clear();
+            set_vram_update(buf);
+            vrambuf_put(NTADR_A(1, 0), buf, 30);
+            vrambuf_flush();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"VrambufPutHorz hex: {hex}");
+        // addr_hi = $20 stored to TEMP: LDA #$20, STA $17 → "A920" + "8517"
+        Assert.Contains("A9208517", hex);
+        // Must NOT contain LDA #$A0 (addr_hi | $80) which would mean vertical
+        Assert.DoesNotContain("A9A08517", hex);
+    }
+
+    [Fact]
+    public void VrambufPutVertUsesVerticalFlag()
+    {
+        // vrambuf_put_vert(addr, buf, len) should add $80 vertical flag.
+        // NTADR_A(1, 4) = $2081. Compile-time path should store (addr_hi | $80) = $A0 to TEMP.
+        var bytes = GetProgramBytes(
+            """
+            byte[] buf = new byte[26];
+            vrambuf_clear();
+            set_vram_update(buf);
+            vrambuf_put_vert(NTADR_A(1, 4), buf, 26);
+            vrambuf_flush();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"VrambufPutVert hex: {hex}");
+        // addr_hi = $20 | $80 = $A0 stored to TEMP: LDA #$A0, STA $17
+        Assert.Contains("A9A08517", hex);
     }
 
     [Fact]

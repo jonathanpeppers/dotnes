@@ -53,9 +53,9 @@ void scroll_demo()
 
             // Write vertical column to offscreen nametable area
             if (col_counter < 32)
-                vrambuf_put(NTADR_A(col_counter, 4), buf, PLAYROWS);
+                vrambuf_put_vert(NTADR_A(col_counter, 4), buf, PLAYROWS);
             else
-                vrambuf_put(NTADR_B((byte)(col_counter & 31), 4), buf, PLAYROWS);
+                vrambuf_put_vert(NTADR_B((byte)(col_counter & 31), 4), buf, PLAYROWS);
 
             // Advance column
             col_counter = (byte)((col_counter + 1) & 63);

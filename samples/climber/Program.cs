@@ -79,6 +79,8 @@ static void setup_graphics()
     });
     vram_adr(0x2000);
     vram_fill(CH_BLANK, 0x1000);
+    bank_spr(1);
+    bank_bg(0);
     vrambuf_clear();
     set_vram_update(updbuf);
     ppu_on_all();
@@ -286,22 +288,11 @@ while (true)
         else
             addr = NTADR_C(1, (byte)(rowy - 30));
 
-        // Attribute table (every 4 tile rows)
-        byte tile_y_attr = (byte)(rowy < 30 ? rowy : (byte)(rowy - 30));
-        if ((tile_y_attr & 3) == 0)
-        {
-            byte a;
-            if (found_dy == 1) a = 0x05;
-            else if (found_dy == 3) a = 0x50;
-            else a = 0x00;
-            Array.Fill(attrbuf, a);
-            byte ato = (byte)((tile_y_attr >> 2) << 3);
-            // Base: 0x23C0 (nametable A) or 0x2BC0 (nametable C)
-            if (rowy < 30)
-                vrambuf_put((ushort)(0x23C0 + ato), attrbuf, 8);
-            else
-                vrambuf_put((ushort)(0x2BC0 + ato), attrbuf, 8);
-        }
+        // TODO: Attribute table writes disabled for now (transpiler doesn't handle
+        // runtime ushort address in vrambuf_put yet)
+        // byte tile_y_attr = (byte)(rowy < 30 ? rowy : (byte)(rowy - 30));
+        // ... attribute writes ...
+
         vrambuf_put(addr, buf, COLS);
         vrambuf_flush();
     }

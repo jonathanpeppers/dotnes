@@ -428,10 +428,16 @@ public static class NESLib
     public static void vrambuf_put(ushort addr, string str) => throw null!;
 
     /// <summary>
-    /// write a vertical byte array sequence to the VRAM update buffer
-    /// addr should include VRAMBUF_VERT flag for vertical writes
+    /// write a horizontal byte array sequence to the VRAM update buffer
+    /// the NMI handler will flush it to VRAM on the next frame
     /// </summary>
     public static void vrambuf_put(ushort addr, byte[] buf, byte len) => throw null!;
+
+    /// <summary>
+    /// write a vertical byte array sequence to the VRAM update buffer
+    /// same as vrambuf_put but sets the vertical increment flag
+    /// </summary>
+    public static void vrambuf_put_vert(ushort addr, byte[] buf, byte len) => throw null!;
 
     /// <summary>
     /// write EOF marker at current buffer position (without advancing pointer)

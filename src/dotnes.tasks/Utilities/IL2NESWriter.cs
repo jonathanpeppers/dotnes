@@ -1566,8 +1566,10 @@ class IL2NESWriter : NESWriter
                         _immediateInA = null;
                         break;
                     case nameof(NESLib.vrambuf_put):
+                    case nameof(NESLib.vrambuf_put_vert):
                         {
                             var block = CurrentBlock!;
+                            bool isVertical = operand == nameof(NESLib.vrambuf_put_vert);
 
                             // Detect byte array overload via _lastLoadedLocalIndex
                             Local? arrayLocal = null;
@@ -1577,7 +1579,7 @@ class IL2NESWriter : NESWriter
 
                             if (isByteArrayOverload)
                             {
-                                // vrambuf_put(addr, buf, len) — byte array overload (vertical)
+                                // vrambuf_put(addr, buf, len) — byte array overload
                                 int len = checked((int)Stack.Pop());    // length
                                 Stack.Pop();                            // array size placeholder
                                 int addr = checked((int)Stack.Pop());   // NTADR result
@@ -1590,10 +1592,13 @@ class IL2NESWriter : NESWriter
                                 if (_ntadrRuntimeResult)
                                 {
                                     // TEMP/TEMP2 already set by NTADR handler
-                                    // OR TEMP (hi) with NT_UPD_VERT (0x80) for vertical writes
-                                    Emit(Opcode.LDA, AddressMode.ZeroPage, TEMP);
-                                    Emit(Opcode.ORA, AddressMode.Immediate, 0x80);
-                                    Emit(Opcode.STA, AddressMode.ZeroPage, TEMP);
+                                    if (isVertical)
+                                    {
+                                        // OR TEMP (hi) with $80 for vertical sequential
+                                        Emit(Opcode.LDA, AddressMode.ZeroPage, TEMP);
+                                        Emit(Opcode.ORA, AddressMode.Immediate, 0x80);
+                                        Emit(Opcode.STA, AddressMode.ZeroPage, TEMP);
+                                    }
                                 }
                                 else if (block.Count >= 2
                                     && block[block.Count - 1] is { Opcode: Opcode.LDX, Mode: AddressMode.Absolute } ldxInstr
@@ -1604,7 +1609,8 @@ class IL2NESWriter : NESWriter
                                     ushort hiAddr = ((AbsoluteOperand)ldxInstr.Operand!).Address;
                                     RemoveLastInstructions(2);
                                     Emit(Opcode.LDA, AddressMode.Absolute, hiAddr);
-                                    Emit(Opcode.ORA, AddressMode.Immediate, 0x80);
+                                    if (isVertical)
+                                        Emit(Opcode.ORA, AddressMode.Immediate, 0x80);
                                     Emit(Opcode.STA, AddressMode.ZeroPage, TEMP);
                                     Emit(Opcode.LDA, AddressMode.Absolute, loAddr);
                                     Emit(Opcode.STA, AddressMode.ZeroPage, TEMP2);
@@ -1616,7 +1622,7 @@ class IL2NESWriter : NESWriter
                                     byte addrLo = (byte)(addr & 0xFF);
                                     // Remove the compile-time NTADR instructions (LDX #hi, LDA #lo)
                                     RemoveLastInstructions(2);
-                                    Emit(Opcode.LDA, AddressMode.Immediate, (byte)(addrHi | 0x80));
+                                    Emit(Opcode.LDA, AddressMode.Immediate, isVertical ? (byte)(addrHi | 0x80) : addrHi);
                                     Emit(Opcode.STA, AddressMode.ZeroPage, TEMP);
                                     Emit(Opcode.LDA, AddressMode.Immediate, addrLo);
                                     Emit(Opcode.STA, AddressMode.ZeroPage, TEMP2);
@@ -1629,7 +1635,10 @@ class IL2NESWriter : NESWriter
                                 Emit(Opcode.STA, AddressMode.ZeroPage, ptr1 + 1);
                                 // A = length
                                 Emit(Opcode.LDA, AddressMode.Immediate, checked((byte)len));
-                                EmitWithLabel(Opcode.JSR, AddressMode.Absolute, operand);
+                                // Always call the vrambuf_put subroutine (shared)
+                                if (isVertical)
+                                    UsedMethods!.Add(nameof(NESLib.vrambuf_put));
+                                EmitWithLabel(Opcode.JSR, AddressMode.Absolute, nameof(NESLib.vrambuf_put));
                             }
                             else
                             {
