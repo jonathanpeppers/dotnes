@@ -2710,6 +2710,12 @@ class IL2NESWriter : NESWriter
                 // Signal that Stloc should be skipped
                 _pendingIncDecLocal = _lastLoadedLocalIndex;
                 
+                // The removal may have deleted a STA $TEMP emitted by WriteLdloc's
+                // _runtimeValueInA save. Clear stale state flags so downstream handlers
+                // don't reference a non-existent TEMP save or skip needed LDA emissions.
+                _savedRuntimeToTemp = false;
+                _runtimeValueInA = false;
+
                 // Push the updated value (for tracking)
                 int result = isAdd ? baseValue + 1 : baseValue - 1;
                 Stack.Push(result);
@@ -3837,7 +3843,13 @@ class IL2NESWriter : NESWriter
         {
             int instrToRemove = GetBufferedBlockCount() - blockCountAtArray;
             if (instrToRemove > 0)
+            {
                 RemoveLastInstructions(instrToRemove);
+                // The removed instructions may have included a STA $TEMP emitted by
+                // WriteLdloc's _runtimeValueInA save. Clear the flag so downstream
+                // handlers (HandleRem, HandleAddSub) don't reference a non-existent save.
+                _savedRuntimeToTemp = false;
+            }
         }
 
         // Check if there's a preceding value in the block that will be clobbered by the

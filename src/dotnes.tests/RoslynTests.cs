@@ -2151,4 +2151,42 @@ public class RoslynTests
         // Must NOT contain only CMP $0325 (CD2503) without a preceding LDA —
         // that would mean comparing stale A with the array, not the element with 19
     }
+
+    [Fact]
+    public void LdelemDoesNotLeaveStaleSavedRuntimeToTemp()
+    {
+        // Bug: HandleLdelemU1 removes instructions (including STA $17 from WriteLdloc)
+        // but did not clear _savedRuntimeToTemp. This caused HandleRem to use the
+        // "runtime divisor in TEMP" path instead of the constant divisor path,
+        // computing dividend % TEMP (stale rh) instead of dividend % 60.
+        // Pattern: inner loop with ldelem comparisons (value stays on eval stack,
+        // no explicit stloc), then modulo with constant after the loop.
+        var bytes = GetProgramBytes(
+            """
+            byte[] arr = new byte[4];
+            byte[] vals = new byte[4];
+            arr[0] = 3;
+            vals[0] = 5;
+            byte rh = 10;
+            for (byte f = 0; f < 4; f++)
+            {
+                if ((byte)(rh - arr[f]) < vals[f])
+                {
+                    break;
+                }
+            }
+            byte result = (byte)(rh % 60);
+            NESLib.pal_col(0, result);
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"LdelemRem hex: {hex}");
+
+        // The modulo must use CMP #$3C (C93C) for constant 60, NOT CMP $19 (C519)
+        // which would mean using stale TEMP2 as divisor
+        Assert.Contains("C93C", hex);
+    }
 }
