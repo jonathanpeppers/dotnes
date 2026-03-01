@@ -1913,6 +1913,37 @@ public class RoslynTests
     }
 
     [Fact]
+    public void BranchCompareWithIndexedArrayElement()
+    {
+        // Pattern from climber: if (dy < floor_height[f]) — compares local with array[index]
+        // ldelem.u1 emits LDA array,X (AbsoluteX). EmitBranchCompare must convert to CMP array,X.
+        var bytes = GetProgramBytes(
+            """
+            byte[] heights = new byte[20];
+            heights[0] = 5;
+            heights[1] = 3;
+            byte dy = 2;
+            for (byte f = 0; f < 20; f++)
+            {
+                if (dy < heights[f])
+                {
+                    oam_clear();
+                    break;
+                }
+            }
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"BranchCompareIndexed hex: {hex}");
+        // Must contain CMP absolute,X (opcode DD) for comparing dy with heights[f]
+        Assert.Contains("DD", hex);
+        // Must NOT contain CMP #$00 (C900) which would mean constant comparison
+        Assert.DoesNotContain("C900", hex);
+    }
+
+    [Fact]
     public void LdelemConstantIndexCompareWithConstant()
     {
         // Pattern from climber: while (actor_floor[0] != MAX_FLOORS - 1)

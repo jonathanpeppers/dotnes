@@ -298,6 +298,19 @@ class IL2NESWriter : NESWriter
         if (block.Count > 0)
         {
             var lastInstr = block[block.Count - 1];
+
+            // Handle indexed array access: LDA array,X from ldelem.u1
+            // Pattern: LDA value1; LDX index; LDA array,X → convert last to CMP array,X
+            if (lastInstr.Opcode == Opcode.LDA
+                && lastInstr.Mode == AddressMode.AbsoluteX
+                && lastInstr.Operand is AbsoluteOperand idxOp)
+            {
+                // Replace LDA array,X with CMP array,X — A still has value1 from earlier
+                RemoveLastInstructions(1);
+                Emit(Opcode.CMP, AddressMode.AbsoluteX, idxOp.Address);
+                return;
+            }
+
             if (lastInstr.Opcode == Opcode.LDA
                 && lastInstr.Mode is AddressMode.Absolute or AddressMode.ZeroPage
                 && lastInstr.Operand is AbsoluteOperand cmpAbsOp)
