@@ -3865,6 +3865,8 @@ class IL2NESWriter : NESWriter
         int targetArrayLocalIdx = -1;
         int targetIndexLocalIdx = -1;
         int constantIndex = -1; // For constant-index stores like actor_dx[0] = 254
+        int indexAddend = 0;    // For index arithmetic like buf[col + 1]
+        int indexLocalAddend = -1; // For index arithmetic like buf[offset + j]
         int targetArrayILOffset = -1;
 
         // Collect the value expression info
@@ -3934,17 +3936,51 @@ class IL2NESWriter : NESWriter
                         var nextIl = Instructions[i + 1];
                         var nextLocIdx = GetLdlocIndex(nextIl);
                         if (nextLocIdx != null)
+                        {
                             targetIndexLocalIdx = nextLocIdx.Value;
+                            valueStart = i + 2;
+                            // Check for index arithmetic: ldloc idx, ldc N, add, [conv]
+                            // Pattern: buf[(byte)(col + 1)] → ldloc col, ldc 1, add, conv.u1
+                            if (valueStart + 1 < Index)
+                            {
+                                int? addend = GetLdcValue(Instructions[valueStart]);
+                                if (addend != null && Instructions[valueStart + 1].OpCode == ILOpCode.Add)
+                                {
+                                    indexAddend = addend.Value;
+                                    valueStart += 2; // skip ldc + add
+                                    // Skip conv.u1/conv.u2 if present
+                                    if (valueStart < Index && Instructions[valueStart].OpCode
+                                        is ILOpCode.Conv_u1 or ILOpCode.Conv_u2 or ILOpCode.Conv_i1)
+                                        valueStart++;
+                                }
+                                else
+                                {
+                                    // Check for ldloc + add pattern: buf[(byte)(offset + j)]
+                                    int? secondLocalIdx = GetLdlocIndex(Instructions[valueStart]);
+                                    if (secondLocalIdx != null && Instructions[valueStart + 1].OpCode == ILOpCode.Add)
+                                    {
+                                        indexLocalAddend = secondLocalIdx.Value;
+                                        valueStart += 2; // skip ldloc + add
+                                        if (valueStart < Index && Instructions[valueStart].OpCode
+                                            is ILOpCode.Conv_u1 or ILOpCode.Conv_u2 or ILOpCode.Conv_i1)
+                                            valueStart++;
+                                    }
+                                }
+                            }
+                        }
                         else
                         {
                             // Check for constant index (ldc_i4_0, ldc_i4_1, etc.)
                             int? constIdx = GetLdcValue(nextIl);
                             if (constIdx != null)
                                 constantIndex = constIdx.Value;
+                            valueStart = i + 2;
                         }
                     }
-                    
-                    valueStart = i + 2; // Value expression starts after arr + idx
+                    else
+                    {
+                        valueStart = i + 2;
+                    }
                 }
                 break;
             }
@@ -4242,6 +4278,17 @@ class IL2NESWriter : NESWriter
             var src2 = Locals[sourceArray2Idx >= 0 ? sourceArray2Idx : sourceArray1Idx];
             
             Emit(Opcode.LDX, AddressMode.Absolute, (ushort)targetIndex.Address!);
+            if (indexAddend != 0 || indexLocalAddend >= 0)
+            {
+                RemoveLastInstructions(1); // remove the LDX
+                Emit(Opcode.LDA, AddressMode.Absolute, (ushort)targetIndex.Address!);
+                Emit(Opcode.CLC, AddressMode.Implied);
+                if (indexAddend != 0)
+                    Emit(Opcode.ADC, AddressMode.Immediate, checked((byte)indexAddend));
+                else
+                    Emit(Opcode.ADC, AddressMode.Absolute, (ushort)Locals[indexLocalAddend].Address!);
+                Emit(Opcode.TAX, AddressMode.Implied);
+            }
             Emit(Opcode.LDA, AddressMode.AbsoluteX, (ushort)src1.Address!);
             Emit(Opcode.CLC, AddressMode.Implied);
             Emit(Opcode.ADC, AddressMode.AbsoluteX, (ushort)src2.Address!);
@@ -4344,7 +4391,22 @@ class IL2NESWriter : NESWriter
         if (!hasTwoLdelems || !hasAdd)
         {
             // Need to load X with index (wasn't loaded yet for call patterns)
-            Emit(Opcode.LDX, AddressMode.Absolute, (ushort)targetIndex.Address!);
+            if (indexAddend != 0 || indexLocalAddend >= 0)
+            {
+                Emit(Opcode.STA, AddressMode.ZeroPage, TEMP); // save value
+                Emit(Opcode.LDA, AddressMode.Absolute, (ushort)targetIndex.Address!);
+                Emit(Opcode.CLC, AddressMode.Implied);
+                if (indexAddend != 0)
+                    Emit(Opcode.ADC, AddressMode.Immediate, checked((byte)indexAddend));
+                else
+                    Emit(Opcode.ADC, AddressMode.Absolute, (ushort)Locals[indexLocalAddend].Address!);
+                Emit(Opcode.TAX, AddressMode.Implied);
+                Emit(Opcode.LDA, AddressMode.ZeroPage, TEMP); // restore value
+            }
+            else
+            {
+                Emit(Opcode.LDX, AddressMode.Absolute, (ushort)targetIndex.Address!);
+            }
         }
         
         if (targetArray.ArraySize > 0 && targetArray.Address is not null)

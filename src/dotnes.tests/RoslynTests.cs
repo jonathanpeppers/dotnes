@@ -1276,7 +1276,8 @@ public class RoslynTests
                 .byte $A9,$42,$60
                 """);
 
-            var assemblyFiles = new List<AssemblyReader> { new AssemblyReader(sFilePath) };
+            using var reader = new AssemblyReader(sFilePath);
+            var assemblyFiles = new List<AssemblyReader> { reader };
             var bytes = GetProgramBytes(
                 """
                 using System.Runtime.InteropServices;
@@ -1317,7 +1318,8 @@ public class RoslynTests
                 .byte $85,$17,$60
                 """);
 
-            var assemblyFiles = new List<AssemblyReader> { new AssemblyReader(sFilePath) };
+            using var reader = new AssemblyReader(sFilePath);
+            var assemblyFiles = new List<AssemblyReader> { reader };
             var bytes = GetProgramBytes(
                 """
                 using System.Runtime.InteropServices;
@@ -1941,6 +1943,58 @@ public class RoslynTests
         Assert.Contains("DD", hex);
         // Must NOT contain CMP #$00 (C900) which would mean constant comparison
         Assert.DoesNotContain("C900", hex);
+    }
+
+    [Fact]
+    public void StelemWithIndexArithmetic()
+    {
+        // Pattern from climber: buf[(byte)(col + 1)] = (byte)(CH_FLOOR + 2)
+        // The stelem handler must apply the +1 offset to the index when storing.
+        var bytes = GetProgramBytes(
+            """
+            byte[] buf = new byte[30];
+            for (byte col = 0; col < 30; col += 2)
+            {
+                buf[col] = 0xF4;
+                buf[(byte)(col + 1)] = 0xF6;
+            }
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"StelemIndexArith hex: {hex}");
+        // Must contain CLC (18) and ADC #$01 (6901) for computing col + 1
+        Assert.Contains("186901", hex);
+        // Must contain TAX (AA) to move computed index to X
+        Assert.Contains("AA", hex);
+    }
+
+    [Fact]
+    public void StelemWithTwoLocalIndexArithmetic()
+    {
+        // Pattern from climber: buf[(byte)(offset + j)] = 0
+        // The stelem handler must compute X = offset + j at runtime.
+        var bytes = GetProgramBytes(
+            """
+            byte[] buf = new byte[30];
+            byte offset = 4;
+            for (byte j = 0; j < 4; j++)
+            {
+                buf[(byte)(offset + j)] = 0;
+            }
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"StelemTwoLocal hex: {hex}");
+        // Must contain CLC (18) for computing offset + j
+        Assert.Contains("18", hex);
+        // Must contain TAX (AA) to move computed index to X
+        Assert.Contains("AA", hex);
+        // The value 0 must be stored: LDA #$00 (A900) followed by STA TEMP (8517)
+        Assert.Contains("A900", hex);
     }
 
     [Fact]
