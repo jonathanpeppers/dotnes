@@ -919,7 +919,7 @@ internal static class BuiltInSubroutines
     }
 
     /// <summary>
-    /// vrambuf_clear - Clear VRAM update buffer and write EOF marker
+    /// vrambuf_clear - Clear VRAM update buffer, write EOF marker, and enable VRAM updates
     /// </summary>
     public static Block VrambufClear()
     {
@@ -929,6 +929,12 @@ internal static class BuiltInSubroutines
              .Emit(TAX())
              .Emit(LDA(0xFF))
              .Emit(STA_abs_X(0x0100))
+             // Point NAME_UPD_ADR to the VRAM buffer at $0100
+             .Emit(LDA(0x00))
+             .Emit(STA_zpg(NAME_UPD_ADR))
+             .Emit(LDA(0x01))
+             .Emit(STA_zpg(NAME_UPD_ADR + 1))
+             .Emit(STA_zpg(NAME_UPD_ENABLE))
              .Emit(RTS());
         return block;
     }

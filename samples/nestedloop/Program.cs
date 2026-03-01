@@ -48,6 +48,5 @@ static void setup_graphics()
     bank_spr(1);
     bank_bg(0);
     vrambuf_clear();
-    set_vram_update(255);
     ppu_on_all();
 }
