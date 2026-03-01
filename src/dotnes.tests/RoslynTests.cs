@@ -1998,6 +1998,29 @@ public class RoslynTests
     }
 
     [Fact]
+    public void SubtractRuntimeFromPushaConstant()
+    {
+        // Pattern from climber: byte rowy = (byte)(59 - (byte)(rh % 60))
+        // The Sub handler must pop the pusha'd 59 and compute 59 - A.
+        var bytes = GetProgramBytes(
+            """
+            byte rh = 5;
+            byte rowy = (byte)((byte)59 - (byte)(rh % (byte)60));
+            pal_col(0, rowy);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"SubPusha hex: {hex}");
+        // Must contain JSR popa (20 xx xx) to pop the pusha'd constant
+        // and SBC via TEMP2 ($19) — STA $19 (8519) then SBC $19 (E519)
+        Assert.Contains("8519", hex); // STA TEMP2 (save runtime)
+        Assert.Contains("E519", hex); // SBC TEMP2 (59 - runtime)
+    }
+
+    [Fact]
     public void LdelemConstantIndexCompareWithConstant()
     {
         // Pattern from climber: while (actor_floor[0] != MAX_FLOORS - 1)

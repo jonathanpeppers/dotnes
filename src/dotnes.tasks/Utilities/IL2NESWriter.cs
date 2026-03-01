@@ -134,6 +134,13 @@ class IL2NESWriter : NESWriter
     bool _savedRuntimeToTemp;
 
     /// <summary>
+    /// True when a compile-time constant was saved to the cc65 stack via JSR pusha,
+    /// because a subsequent Ldloc needed A for a runtime value. HandleAddSub must
+    /// use JSR popa to retrieve it (and keep the cc65 stack balanced).
+    /// </summary>
+    bool _savedConstantViaPusha;
+
+    /// <summary>
     /// True when a runtime NTADR result (A=lo, X=hi) is available.
     /// Used by vrambuf_put handler to detect runtime vs compile-time address.
     /// </summary>
@@ -2774,6 +2781,7 @@ class IL2NESWriter : NESWriter
                     localAddr = (ushort)lastLocal!.Address!.Value;
                     // Remove pusha + ldloc's LDA — A retains constant from ldc
                     RemoveLastInstructions(2);
+                    _savedConstantViaPusha = false; // pusha was removed from code
                 }
                 else
                 {
@@ -2789,6 +2797,15 @@ class IL2NESWriter : NESWriter
                     // Two runtime values: first in TEMP, second in A
                     Emit(Opcode.CLC, AddressMode.Implied);
                     Emit(Opcode.ADC, AddressMode.ZeroPage, (byte)NESConstants.TEMP);
+                }
+                else if (_savedConstantViaPusha)
+                {
+                    // Constant was pusha'd, runtime in A — A + constant (commutative)
+                    Emit(Opcode.STA, AddressMode.ZeroPage, (byte)NESConstants.TEMP2);
+                    EmitJSR("popa");
+                    Emit(Opcode.CLC, AddressMode.Implied);
+                    Emit(Opcode.ADC, AddressMode.ZeroPage, (byte)NESConstants.TEMP2);
+                    _savedConstantViaPusha = false;
                 }
                 else if (useLocalAddress)
                 {
@@ -2814,6 +2831,15 @@ class IL2NESWriter : NESWriter
                     Emit(Opcode.SEC, AddressMode.Implied);
                     Emit(Opcode.SBC, AddressMode.ZeroPage, (byte)(NESConstants.TEMP + 1));
                 }
+                else if (_savedConstantViaPusha)
+                {
+                    // Constant was pusha'd, runtime in A — need constant - A
+                    Emit(Opcode.STA, AddressMode.ZeroPage, (byte)NESConstants.TEMP2);
+                    EmitJSR("popa");
+                    Emit(Opcode.SEC, AddressMode.Implied);
+                    Emit(Opcode.SBC, AddressMode.ZeroPage, (byte)NESConstants.TEMP2);
+                    _savedConstantViaPusha = false;
+                }
                 else if (useLocalAddress)
                 {
                     // constant - runtime_local: A = constant, subtract local's runtime value
@@ -2830,6 +2856,7 @@ class IL2NESWriter : NESWriter
             Stack.Push(0); // Placeholder
             _lastLoadedLocalIndex = null;
             _savedRuntimeToTemp = false;
+            _savedConstantViaPusha = false;
             _runtimeValueInA = true; // Result of arithmetic is a runtime value
             return;
         }
@@ -3074,6 +3101,7 @@ class IL2NESWriter : NESWriter
     void WriteLdloc(Local local)
     {
         _ushortInAX = false;
+        _savedConstantViaPusha = false;
         if (local.LabelName is not null)
         {
             // This local holds a byte array label reference
@@ -3109,6 +3137,7 @@ class IL2NESWriter : NESWriter
                 else if (LastLDA)
                 {
                     EmitJSR("pusha");
+                    _savedConstantViaPusha = true;
                 }
                 Emit(Opcode.LDA, AddressMode.Absolute, (ushort)local.Address);
                 _immediateInA = null;
