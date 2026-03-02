@@ -3696,8 +3696,8 @@ class IL2NESWriter : NESWriter
 
     /// <summary>
     /// Emits oam_meta_spr_pal call with proper argument setup.
-    /// IL pattern: ldloc(arr_x), ldloc_s(i), ldelem_u1, ldloc(arr_y), ldloc_s(i), ldelem_u1,
-    ///             ldloc_s(pal), ldloc(metasprite), call oam_meta_spr_pal
+    /// Supports constants, locals, and array elements for x, y, pal args.
+    /// Sets up: TEMP = x, TEMP2 = y, TEMP3 = pal, PTR = data pointer
     /// 
     /// Sets up: TEMP = x, TEMP2 = y, TEMP3 = pal, PTR = data pointer
     /// Uses OAM_OFF zero-page global for OAM buffer offset.
@@ -3707,64 +3707,112 @@ class IL2NESWriter : NESWriter
         if (Instructions is null)
             throw new InvalidOperationException("EmitOamMetaSprPal requires Instructions");
 
-        int? xArrayIdx = null, yArrayIdx = null, indexIdx = null, palIdx = null;
-        string? dataLabel = null;
-        int firstArgILOffset = -1;
+        // Scan backward from the call to find all 4 argument sources
+        // Args order: x (byte), y (byte), pal (byte), data (byte[])
+        // We scan in reverse order: data, pal, y, x
 
         int scan = Index - 1;
 
-        // Find data source (should be a local with LabelName)
+        // --- Arg 4: data (byte[] local with LabelName or Address) ---
+        string? dataLabel = null;
+        ushort? dataAddress = null;
         if (scan >= 0)
         {
             var dataInstr = Instructions[scan];
             var dataLocIdx = GetLdlocIndex(dataInstr);
-            if (dataLocIdx != null && Locals.TryGetValue(dataLocIdx.Value, out var dataLocal) && dataLocal.LabelName != null)
+            if (dataLocIdx != null && Locals.TryGetValue(dataLocIdx.Value, out var dataLocal))
             {
-                dataLabel = dataLocal.LabelName;
+                if (dataLocal.LabelName != null)
+                    dataLabel = dataLocal.LabelName;
+                else if (dataLocal.Address != null)
+                    dataAddress = (ushort)dataLocal.Address;
                 scan--;
             }
         }
 
-        // Find pal source
-        if (scan >= 0)
-        {
-            var palInstr = Instructions[scan];
-            var palLocIdx = GetLdlocIndex(palInstr);
-            if (palLocIdx != null && Locals.TryGetValue(palLocIdx.Value, out var palLocal) && palLocal.Address != null)
-            {
-                palIdx = palLocIdx.Value;
-                scan--;
-            }
-        }
-
-        // Find y source (ldelem_u1 preceded by ldloc(arr) + ldloc(idx))
+        // --- Arg 3: pal (byte — constant, local, or array element) ---
+        int? palConst = null;
+        ushort? palAddr = null;
+        int? palArrayIdx = null;
+        int? palIndexIdx = null;
         if (scan >= 0 && Instructions[scan].OpCode == ILOpCode.Ldelem_u1)
         {
-            scan--;
-            if (scan >= 0)
+            scan--; // skip ldelem
+            if (scan >= 0) { palIndexIdx = GetLdlocIndex(Instructions[scan]); scan--; }
+            if (scan >= 0) { palArrayIdx = GetLdlocIndex(Instructions[scan]); scan--; }
+        }
+        else if (scan >= 0)
+        {
+            var pi = Instructions[scan];
+            var pLocIdx = GetLdlocIndex(pi);
+            if (pLocIdx != null && Locals.TryGetValue(pLocIdx.Value, out var pLoc) && pLoc.Address != null)
             {
-                var yIdxInstr = Instructions[scan];
-                indexIdx = GetLdlocIndex(yIdxInstr);
+                palAddr = (ushort)pLoc.Address;
                 scan--;
             }
-            if (scan >= 0)
+            else if (GetLdcValue(pi) is int pv)
             {
-                var yArrInstr = Instructions[scan];
-                yArrayIdx = GetLdlocIndex(yArrInstr);
+                palConst = pv;
                 scan--;
             }
         }
 
-        // Find x source (ldelem_u1 preceded by ldloc(arr) + ldloc(idx))
+        // --- Arg 2: y (byte — constant, local, or array element) ---
+        int? yConst = null;
+        ushort? yAddr = null;
+        int? yArrayIdx = null;
+        int? yIndexIdx = null;
         if (scan >= 0 && Instructions[scan].OpCode == ILOpCode.Ldelem_u1)
         {
-            scan--;
-            scan--;
+            scan--; // skip ldelem
+            if (scan >= 0) { yIndexIdx = GetLdlocIndex(Instructions[scan]); scan--; }
+            if (scan >= 0) { yArrayIdx = GetLdlocIndex(Instructions[scan]); scan--; }
+        }
+        else if (scan >= 0)
+        {
+            var yi = Instructions[scan];
+            var yLocIdx = GetLdlocIndex(yi);
+            if (yLocIdx != null && Locals.TryGetValue(yLocIdx.Value, out var yLoc) && yLoc.Address != null)
+            {
+                yAddr = (ushort)yLoc.Address;
+                scan--;
+            }
+            else if (GetLdcValue(yi) is int yv)
+            {
+                yConst = yv;
+                scan--;
+            }
+        }
+
+        // --- Arg 1: x (byte — constant, local, or array element) ---
+        int? xConst = null;
+        ushort? xAddr = null;
+        int? xArrayIdx = null;
+        int? xIndexIdx = null;
+        int firstArgILOffset = -1;
+        if (scan >= 0 && Instructions[scan].OpCode == ILOpCode.Ldelem_u1)
+        {
+            scan--; // skip ldelem
+            if (scan >= 0) { xIndexIdx = GetLdlocIndex(Instructions[scan]); scan--; }
             if (scan >= 0)
             {
-                var xArrInstr = Instructions[scan];
-                xArrayIdx = GetLdlocIndex(xArrInstr);
-                firstArgILOffset = xArrInstr.Offset;
+                xArrayIdx = GetLdlocIndex(Instructions[scan]);
+                firstArgILOffset = Instructions[scan].Offset;
+            }
+        }
+        else if (scan >= 0)
+        {
+            var xi = Instructions[scan];
+            var xLocIdx = GetLdlocIndex(xi);
+            if (xLocIdx != null && Locals.TryGetValue(xLocIdx.Value, out var xLoc) && xLoc.Address != null)
+            {
+                xAddr = (ushort)xLoc.Address;
+                firstArgILOffset = xi.Offset;
+            }
+            else if (GetLdcValue(xi) is int xv)
+            {
+                xConst = xv;
+                firstArgILOffset = xi.Offset;
             }
         }
 
@@ -3773,46 +3821,82 @@ class IL2NESWriter : NESWriter
         {
             int instrToRemove = GetBufferedBlockCount() - blockCount;
             if (instrToRemove > 0)
-            {
                 RemoveLastInstructions(instrToRemove);
-            }
         }
 
+        // Emit the proper code
+        // Track which index local last loaded into X to avoid redundant LDX
+        int? lastLoadedXIndex = null;
+
         // 1. Load x coordinate into TEMP
-        if (xArrayIdx != null && indexIdx != null)
+        if (xArrayIdx != null && xIndexIdx != null)
         {
             var xArr = Locals[xArrayIdx.Value];
-            var idx = Locals[indexIdx.Value];
+            var idx = Locals[xIndexIdx.Value];
             if (idx.Address != null)
             {
                 Emit(Opcode.LDX, AddressMode.Absolute, (ushort)idx.Address);
+                lastLoadedXIndex = xIndexIdx;
             }
             if (xArr.ArraySize > 0 && xArr.Address != null)
-            {
                 Emit(Opcode.LDA, AddressMode.AbsoluteX, (ushort)xArr.Address);
-            }
+            Emit(Opcode.STA, AddressMode.ZeroPage, (byte)NESConstants.TEMP);
+        }
+        else if (xConst != null)
+        {
+            Emit(Opcode.LDA, AddressMode.Immediate, checked((byte)xConst.Value));
+            Emit(Opcode.STA, AddressMode.ZeroPage, (byte)NESConstants.TEMP);
+        }
+        else if (xAddr != null)
+        {
+            Emit(Opcode.LDA, AddressMode.Absolute, xAddr.Value);
             Emit(Opcode.STA, AddressMode.ZeroPage, (byte)NESConstants.TEMP);
         }
 
         // 2. Load y coordinate into TEMP2
-        if (yArrayIdx != null && indexIdx != null)
+        if (yArrayIdx != null && yIndexIdx != null)
         {
             var yArr = Locals[yArrayIdx.Value];
-            if (yArr.ArraySize > 0 && yArr.Address != null)
+            var yIdx = Locals[yIndexIdx.Value];
+            if (yIdx.Address != null && yIndexIdx != lastLoadedXIndex)
             {
-                Emit(Opcode.LDA, AddressMode.AbsoluteX, (ushort)yArr.Address);
+                Emit(Opcode.LDX, AddressMode.Absolute, (ushort)yIdx.Address);
+                lastLoadedXIndex = yIndexIdx;
             }
+            if (yArr.ArraySize > 0 && yArr.Address != null)
+                Emit(Opcode.LDA, AddressMode.AbsoluteX, (ushort)yArr.Address);
+            Emit(Opcode.STA, AddressMode.ZeroPage, (byte)NESConstants.TEMP2);
+        }
+        else if (yConst != null)
+        {
+            Emit(Opcode.LDA, AddressMode.Immediate, checked((byte)yConst.Value));
+            Emit(Opcode.STA, AddressMode.ZeroPage, (byte)NESConstants.TEMP2);
+        }
+        else if (yAddr != null)
+        {
+            Emit(Opcode.LDA, AddressMode.Absolute, yAddr.Value);
             Emit(Opcode.STA, AddressMode.ZeroPage, (byte)NESConstants.TEMP2);
         }
 
         // 3. Load palette into TEMP3
-        if (palIdx != null)
+        if (palArrayIdx != null && palIndexIdx != null)
         {
-            var palLocal = Locals[palIdx.Value];
-            if (palLocal.Address != null)
-            {
-                Emit(Opcode.LDA, AddressMode.Absolute, (ushort)palLocal.Address);
-            }
+            var pArr = Locals[palArrayIdx.Value];
+            var pIdx = Locals[palIndexIdx.Value];
+            if (pIdx.Address != null && palIndexIdx != lastLoadedXIndex)
+                Emit(Opcode.LDX, AddressMode.Absolute, (ushort)pIdx.Address);
+            if (pArr.ArraySize > 0 && pArr.Address != null)
+                Emit(Opcode.LDA, AddressMode.AbsoluteX, (ushort)pArr.Address);
+            Emit(Opcode.STA, AddressMode.ZeroPage, (byte)NESConstants.TEMP3);
+        }
+        else if (palConst != null)
+        {
+            Emit(Opcode.LDA, AddressMode.Immediate, checked((byte)palConst.Value));
+            Emit(Opcode.STA, AddressMode.ZeroPage, (byte)NESConstants.TEMP3);
+        }
+        else if (palAddr != null)
+        {
+            Emit(Opcode.LDA, AddressMode.Absolute, palAddr.Value);
             Emit(Opcode.STA, AddressMode.ZeroPage, (byte)NESConstants.TEMP3);
         }
 
@@ -3822,6 +3906,13 @@ class IL2NESWriter : NESWriter
             EmitWithLabel(Opcode.LDA, AddressMode.Immediate_LowByte, dataLabel);
             Emit(Opcode.STA, AddressMode.ZeroPage, (byte)NESConstants.ptr1);
             EmitWithLabel(Opcode.LDA, AddressMode.Immediate_HighByte, dataLabel);
+            Emit(Opcode.STA, AddressMode.ZeroPage, (byte)(NESConstants.ptr1 + 1));
+        }
+        else if (dataAddress != null)
+        {
+            Emit(Opcode.LDA, AddressMode.Immediate, (byte)(dataAddress.Value & 0xFF));
+            Emit(Opcode.STA, AddressMode.ZeroPage, (byte)NESConstants.ptr1);
+            Emit(Opcode.LDA, AddressMode.Immediate, (byte)(dataAddress.Value >> 8));
             Emit(Opcode.STA, AddressMode.ZeroPage, (byte)(NESConstants.ptr1 + 1));
         }
 

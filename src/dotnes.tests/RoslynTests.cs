@@ -2250,4 +2250,37 @@ public class RoslynTests
         // sprid=0 loaded into A: LDA #$00 = A900
         Assert.Contains("A900", hex);
     }
+
+    [Fact]
+    public void OamMetaSprPalWithMixedArgs()
+    {
+        // Climber pattern: oam_meta_spr_pal(arr[i], local, arr[i], data)
+        // x from array element, y from local, pal from array element
+        var bytes = GetProgramBytes(
+            """
+            byte[] actor_x = new byte[8];
+            byte[] actor_pal = new byte[8];
+            byte[] sprite = new byte[] { 0, 0, 0xd8, 0, 128 };
+            byte ai = 0;
+            byte screen_y = 100;
+            oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], sprite);
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"OamMetaSprPalMixed hex: {hex}");
+
+        // Verify correct argument ordering:
+        // STA $17 (TEMP=x) must come right after LDA abs,X (BD), not after LDA abs (AD)
+        int sta17 = hex.IndexOf("8517");
+        Assert.True(sta17 >= 0, $"STA $17 not found in hex");
+        string before_sta17 = hex.Substring(sta17 - 6, 2);
+        Assert.Equal("BD", before_sta17); // LDA abs,X for array element
+
+        // Data pointer setup: STA $2A and STA $2B must exist for ptr1
+        Assert.Contains("852A", hex); // STA ptr1
+        Assert.Contains("852B", hex); // STA ptr1+1
+    }
 }
