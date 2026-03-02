@@ -30,6 +30,8 @@ python scripts/disasm.py <file.nes> [start_hex] [end_hex]
 
 **Examples:**
 
+> **Note:** `.nes` files are build outputs — run `dotnet build` in the sample directory first.
+
 ```bash
 # Disassemble the entire PRG ROM
 python scripts/disasm.py samples/hello/hello.nes
@@ -86,8 +88,8 @@ Offset    Size     Content
 ```
 
 **Key NES addresses:**
-- `$8000-$84FF` — neslib runtime (palette, PPU, NMI handler)
-- `$8500+` — User code and subroutines (exact layout varies per sample)
+- `$8000-$85AD` — neslib runtime and built-in subroutines (palette, PPU, NMI handler, stack ops)
+- `$85AE+` — `main()` and user code (exact layout varies per sample)
 - `$FFFA` — NMI vector (2 bytes, little-endian)
 - `$FFFC` — RESET vector (2 bytes, little-endian — entry point)
 - `$FFFE` — IRQ vector (2 bytes, little-endian)

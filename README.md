@@ -261,7 +261,7 @@ block.Emit(STA_zpg(TEMP))
 
 ## Limitations
 
-This is a hobby project, so only around 5 C# programs are known to work. But to
+This is a hobby project, so there are around 25 C# sample programs that are known to work. But to
 get an idea of what is not available:
 
 * No runtime

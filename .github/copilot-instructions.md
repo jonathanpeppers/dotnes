@@ -67,9 +67,9 @@ Tests in [src/dotnes.tests/](src/dotnes.tests/) use **Verify snapshots**:
 
 ## NES Program Constraints
 
-**Supported:** Top-level statements, local variables (zero page `$0324+`), byte arrays as ROM tables, ushort arrays as note tables, while loops, NESLib API calls, NES APU music playback
+**Supported:** Top-level statements, user-defined methods (with parameters and return values), local variables (zero page `$0325+`), byte arrays as ROM tables, ushort arrays as note tables, while loops, NESLib API calls, NES APU music playback
 
-**Not supported:** Methods, classes, objects, BCL, string manipulation, GC
+**Not supported:** Classes, objects, BCL, string manipulation, GC
 
 **Required:** Programs MUST end with `while (true) ;` (NES has no exit)
 
