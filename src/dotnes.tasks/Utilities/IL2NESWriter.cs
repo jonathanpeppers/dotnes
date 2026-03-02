@@ -1124,6 +1124,7 @@ class IL2NESWriter : NESWriter
                         Emit(Opcode.BCS, AddressMode.Relative, 3);
                         EmitWithLabel(Opcode.JMP, AddressMode.Absolute, labelName);
                     }
+                    _runtimeValueInA = false;
                 }
                 break;
             case ILOpCode.Ble_s:
@@ -1144,6 +1145,7 @@ class IL2NESWriter : NESWriter
                         Emit(Opcode.BCS, AddressMode.Relative, 3);
                         EmitWithLabel(Opcode.JMP, AddressMode.Absolute, labelName);
                     }
+                    _runtimeValueInA = false;
                 }
                 break;
             case ILOpCode.Bge_s:
@@ -1164,6 +1166,7 @@ class IL2NESWriter : NESWriter
                         Emit(Opcode.BCC, AddressMode.Relative, 3);
                         EmitWithLabel(Opcode.JMP, AddressMode.Absolute, labelName);
                     }
+                    _runtimeValueInA = false;
                 }
                 break;
             case ILOpCode.Bgt_s:
@@ -1184,6 +1187,7 @@ class IL2NESWriter : NESWriter
                         Emit(Opcode.BCC, AddressMode.Relative, 3);
                         EmitWithLabel(Opcode.JMP, AddressMode.Absolute, labelName);
                     }
+                    _runtimeValueInA = false;
                 }
                 break;
             case ILOpCode.Brtrue:

@@ -60,27 +60,24 @@ if (hwnd == IntPtr.Zero)
     return;
 }
 
-// Bring to foreground, then capture via Alt+PrintScreen (clipboard)
-NativeMethods.SetForegroundWindow(hwnd);
-Thread.Sleep(1000);
-
-// Send Alt+PrintScreen to capture active window to clipboard
-NativeMethods.keybd_event(0x12, 0, 0, UIntPtr.Zero); // VK_MENU down
-NativeMethods.keybd_event(0x2C, 0, 0, UIntPtr.Zero); // VK_SNAPSHOT down
-NativeMethods.keybd_event(0x2C, 0, 2, UIntPtr.Zero); // VK_SNAPSHOT up
-NativeMethods.keybd_event(0x12, 0, 2, UIntPtr.Zero); // VK_MENU up
-Thread.Sleep(1000);
-
-// Read bitmap from clipboard using Win32 APIs
+// Capture via PrintWindow with PW_RENDERFULLCONTENT (flag 2)
+// This captures hardware-accelerated (SDL2/DX) windows on Win 8.1+
+NativeMethods.GetWindowRect(hwnd, out var rect);
+int w = rect.Right - rect.Left;
+int h = rect.Bottom - rect.Top;
 Bitmap? bmp = null;
-if (NativeMethods.OpenClipboard(IntPtr.Zero))
+if (w > 0 && h > 0)
 {
-    IntPtr hBitmap = NativeMethods.GetClipboardData(2); // CF_BITMAP
-    if (hBitmap != IntPtr.Zero)
+    bmp = new Bitmap(w, h, PixelFormat.Format32bppArgb);
+    using var g = Graphics.FromImage(bmp);
+    IntPtr hdc = g.GetHdc();
+    bool ok = NativeMethods.PrintWindow(hwnd, hdc, 2); // PW_RENDERFULLCONTENT
+    g.ReleaseHdc(hdc);
+    if (!ok)
     {
-        bmp = Image.FromHbitmap(hBitmap);
+        bmp.Dispose();
+        bmp = null;
     }
-    NativeMethods.CloseClipboard();
 }
 
 if (bmp == null)
@@ -110,30 +107,6 @@ static class NativeMethods
 
     [DllImport("user32.dll")]
     public static extern bool PrintWindow(IntPtr hWnd, IntPtr hdcBlt, uint nFlags);
-
-    [DllImport("user32.dll")]
-    public static extern IntPtr GetDC(IntPtr hWnd);
-
-    [DllImport("user32.dll")]
-    public static extern int ReleaseDC(IntPtr hWnd, IntPtr hDC);
-
-    [DllImport("gdi32.dll")]
-    public static extern bool BitBlt(IntPtr hdcDest, int xDest, int yDest, int w, int h, IntPtr hdcSrc, int xSrc, int ySrc, uint rop);
-
-    [DllImport("user32.dll")]
-    public static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo);
-
-    [DllImport("user32.dll")]
-    public static extern bool OpenClipboard(IntPtr hWndNewOwner);
-
-    [DllImport("user32.dll")]
-    public static extern bool CloseClipboard();
-
-    [DllImport("user32.dll")]
-    public static extern IntPtr GetClipboardData(uint uFormat);
-
-    [DllImport("user32.dll")]
-    public static extern bool SetForegroundWindow(IntPtr hWnd);
 
     [DllImport("user32.dll")]
     public static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
