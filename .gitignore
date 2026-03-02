@@ -341,3 +341,6 @@ ASALocalRun/
 # Development tools and reference files
 tools/
 dump_il*
+
+# Repo-specific, png in root of repo
+/*.png
