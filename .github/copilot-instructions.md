@@ -45,6 +45,7 @@ cd samples/hello && dotnet run  # Build + run in emulator
 - `python scripts/compare_rom.py <cc65.nes> <dotnes.nes>` — Side-by-side ROM comparison with 6502 disassembly (useful for debugging transpiler output vs cc65 reference)
 - `dotnet run scripts/ildump.cs -- <path-to-dll>` — Dumps IL opcodes from a .NET DLL (useful for understanding what IL the transpiler will process)
 - `dotnet run scripts/screenshot-nes.cs -- <rom.nes> [delay_ms] [output.png]` — Launches the ROM in ANESE emulator, captures a screenshot, and saves it as PNG (Windows only, default 3000ms delay)
+- `python scripts/gen_chr_tileset1.py` — One-time generator that created the `tileset1` CHR ROM `.s` files. Use as a template when adding new samples with custom CHR tilesets.
 
 ## MSBuild Integration
 - [bin/Debug/dotnes.props](bin/Debug/dotnes.props) - Disables BCL (`NoStdLib=true`), forces `Optimize=true`
