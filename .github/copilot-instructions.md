@@ -39,8 +39,11 @@ cd samples/hello && dotnet run  # Build + run in emulator
 
 ### Diagnostic Scripts
 
-- `dotnet run scripts/ildump.cs -- <path-to-dll>` — Dumps IL opcodes from a .NET DLL (useful for understanding what IL the transpiler will process)
+> **💡 Skill available:** The `nes-rom-debug` skill (`.github/skills/nes-rom-debug/SKILL.md`) has detailed workflows, NES ROM format reference, and 6502 quick reference for all ROM debugging tasks. Use it when disassembling ROMs or investigating transpiler output.
+
+- `python scripts/disasm.py <file.nes> [start_hex] [end_hex]` — Disassembles PRG ROM into 6502 assembly (default: full `$8000-$FFFF` range)
 - `python scripts/compare_rom.py <cc65.nes> <dotnes.nes>` — Side-by-side ROM comparison with 6502 disassembly (useful for debugging transpiler output vs cc65 reference)
+- `dotnet run scripts/ildump.cs -- <path-to-dll>` — Dumps IL opcodes from a .NET DLL (useful for understanding what IL the transpiler will process)
 
 ## MSBuild Integration
 - [bin/Debug/dotnes.props](bin/Debug/dotnes.props) - Disables BCL (`NoStdLib=true`), forces `Optimize=true`
