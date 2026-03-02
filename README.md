@@ -6,6 +6,21 @@
 
 ![Gif of NES Emulator launching from VS Code](assets/vscode.gif)
 
+## Samples
+
+| | |
+|:---:|:---:|
+| ![metasprites](samples/metasprites/metasprites.gif) | ![sprites](samples/sprites/sprites.gif) |
+| metasprites | sprites |
+| ![climber](samples/climber/climber.gif) | ![horizscroll](samples/horizscroll/horizscroll.gif) |
+| climber | horizscroll |
+| ![rletitle](samples/rletitle/rletitle.png) | ![flicker](samples/flicker/flicker.gif) |
+| rletitle | flicker |
+| ![attributetable](samples/attributetable/attributetable.png) | ![statusbar](samples/statusbar/statusbar.gif) |
+| attributetable | statusbar |
+
+> See the [samples/](samples/) folder for all 25 sample projects. Generate images with `dotnet run scripts/record-all-samples.cs`.
+
 ## Contributing
 
 PRs of any kind are welcome! If you have a question, feel free to:
