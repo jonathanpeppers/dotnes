@@ -2189,4 +2189,39 @@ public class RoslynTests
         // which would mean using stale TEMP2 as divisor
         Assert.Contains("C93C", hex);
     }
+
+    [Fact]
+    public void LdelemAfterSubSavesToTempForBranchComparison()
+    {
+        // Bug: HandleLdelemU1's "save preceding value" check only looked for LDA as the
+        // last instruction. After SUB, the last instruction is SBC, so the computed dy
+        // value in A was NOT saved to TEMP. The ldelem's LDA then overwrote dy.
+        // Pattern: dy = rh - arr[0]; if (dy < vals[0]) — the second ldelem must save dy.
+        var bytes = GetProgramBytes(
+            """
+            byte[] arr = new byte[4];
+            byte[] vals = new byte[4];
+            arr[0] = 2;
+            vals[0] = 6;
+            byte rh = 3;
+            byte dy = (byte)(rh - arr[0]);
+            if (dy < vals[0])
+            {
+                NESLib.pal_col(0, 1);
+            }
+            NESLib.pal_col(0, 0);
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"LdelemBranch hex: {hex}");
+
+        // After SBC (dy computation), there must be a STA $17 (8517) to save dy to TEMP
+        // before the LDA that loads vals[0] for the comparison.
+        // The branch comparison should use CMP (Cxxx) not a bare LDA overwrite.
+        // Specifically: SBC ... STA $17 ... LDA $addr ... CMP pattern
+        Assert.Contains("8517", hex); // STA $17 (save dy to TEMP)
+    }
 }

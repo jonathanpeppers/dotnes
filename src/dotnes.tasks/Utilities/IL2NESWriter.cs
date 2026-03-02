@@ -3855,13 +3855,25 @@ class IL2NESWriter : NESWriter
         // Check if there's a preceding value in the block that will be clobbered by the
         // upcoming LDA. This happens in patterns like: ldloc rh; ldloc arr; ldloc idx; ldelem.u1; sub
         // After removing the array/index instructions, the block still has LDA $rh_addr.
-        // We save it to TEMP so the arithmetic handler can use it.
+        // We save it to TEMP so the arithmetic/comparison handler can use it.
         int blockCountAfterRemove = GetBufferedBlockCount();
         if (blockCountAfterRemove > 0)
         {
             var block = CurrentBlock!;
             var lastInstr = block[blockCountAfterRemove - 1];
-            if (lastInstr.Opcode == Opcode.LDA &&
+
+            bool needsSave = false;
+
+            // Case 1: A has a computed value (from SBC, ADC, AND, etc.) that will be lost
+            // when we emit the LDA for the array element. This covers patterns like:
+            //   dy = (byte)(rh - floor_ypos[0]); if (dy < floor_height[0])
+            // where the subtraction result in A must be preserved for the branch comparison.
+            if (_runtimeValueInA)
+            {
+                needsSave = true;
+            }
+            // Case 2: A has a loaded value (LDA) and the next IL op is arithmetic
+            else if (lastInstr.Opcode == Opcode.LDA &&
                 (lastInstr.Mode == AddressMode.Absolute || lastInstr.Mode == AddressMode.Immediate
                  || lastInstr.Mode == AddressMode.ZeroPage))
             {
@@ -3875,11 +3887,13 @@ class IL2NESWriter : NESWriter
                     if (nextOp is ILOpCode.Conv_u1 or ILOpCode.Conv_u2 or ILOpCode.Conv_i1 && Index + 2 < Instructions.Length)
                         nextIsArithmetic = Instructions[Index + 2].OpCode is ILOpCode.Add or ILOpCode.Sub;
                 }
-                if (nextIsArithmetic)
-                {
-                    Emit(Opcode.STA, AddressMode.ZeroPage, (byte)NESConstants.TEMP);
-                    _savedRuntimeToTemp = true;
-                }
+                needsSave = nextIsArithmetic;
+            }
+
+            if (needsSave)
+            {
+                Emit(Opcode.STA, AddressMode.ZeroPage, (byte)NESConstants.TEMP);
+                _savedRuntimeToTemp = true;
             }
         }
 
