@@ -79,7 +79,7 @@ static void setup_graphics()
     });
     vram_adr(0x2000);
     vram_fill(CH_BLANK, 0x1000);
-    bank_spr(1);
+    bank_spr(0);
     bank_bg(0);
     vrambuf_clear();
     set_vram_update(updbuf);

@@ -3496,9 +3496,7 @@ class IL2NESWriter : NESWriter
 
     /// <summary>
     /// Emits oam_meta_spr call with proper argument setup.
-    /// IL pattern: ldloc(arr_x), ldloc_s(i), ldelem_u1, ldloc(arr_y), ldloc_s(i), ldelem_u1,
-    ///             ldloc_s(sprid), ldloc(metasprite), call oam_meta_spr
-    /// 
+    /// Supports constants, locals, and array elements for x, y, sprid args.
     /// Sets up: TEMP = x, TEMP2 = y, PTR = data pointer, A = sprid
     /// </summary>
     void EmitOamMetaSpr()
@@ -3506,73 +3504,106 @@ class IL2NESWriter : NESWriter
         if (Instructions is null)
             throw new InvalidOperationException("EmitOamMetaSpr requires Instructions");
 
-        // Scan backward to find all 4 argument sources
-        // Args: x (byte), y (byte), sprid (byte), data (byte[])
-        // In IL, they appear in order: x_source, y_source, sprid_source, data_source
+        // Scan backward from the call to find all 4 argument sources
+        // Args order: x (byte), y (byte), sprid (byte), data (byte[])
+        // We scan in reverse order: data, sprid, y, x
 
-        // Find argument-producing instructions by walking backward
-        int? xArrayIdx = null, yArrayIdx = null, indexIdx = null, spridIdx = null;
-        string? dataLabel = null;
-        int firstArgILOffset = -1;
-
-        // The last arg (data/metasprite) is ldloc_0 which has a LabelName
-        // The sprid is ldloc_s (a byte local)
-        // x and y come from ldelem_u1 (array[index])
-        
         int scan = Index - 1;
-        
-        // Find data source (should be a local with LabelName)
+
+        // Each arg is one of: constant, local, or array element
+        // We record what we find for each
+
+        // --- Arg 4: data (byte[] local with LabelName) ---
+        string? dataLabel = null;
+        ushort? dataAddress = null;
         if (scan >= 0)
         {
             var dataInstr = Instructions[scan];
             var dataLocIdx = GetLdlocIndex(dataInstr);
-            if (dataLocIdx != null && Locals.TryGetValue(dataLocIdx.Value, out var dataLocal) && dataLocal.LabelName != null)
+            if (dataLocIdx != null && Locals.TryGetValue(dataLocIdx.Value, out var dataLocal))
             {
-                dataLabel = dataLocal.LabelName;
+                if (dataLocal.LabelName != null)
+                    dataLabel = dataLocal.LabelName;
+                else if (dataLocal.Address != null)
+                    dataAddress = (ushort)dataLocal.Address;
                 scan--;
             }
         }
 
-        // Find sprid source
+        // --- Arg 3: sprid (byte) ---
+        int? spridConst = null;
+        ushort? spridAddr = null;
         if (scan >= 0)
         {
-            var spridInstr = Instructions[scan];
-            var spridLocIdx = GetLdlocIndex(spridInstr);
-            if (spridLocIdx != null && Locals.TryGetValue(spridLocIdx.Value, out var spridLocal) && spridLocal.Address != null)
+            var si = Instructions[scan];
+            var sLocIdx = GetLdlocIndex(si);
+            if (sLocIdx != null && Locals.TryGetValue(sLocIdx.Value, out var sLoc) && sLoc.Address != null)
             {
-                spridIdx = spridLocIdx.Value;
+                spridAddr = (ushort)sLoc.Address;
+                scan--;
+            }
+            else if ((GetLdcValue(si) is int sv))
+            {
+                spridConst = sv;
                 scan--;
             }
         }
 
-        // Find y source (ldelem_u1 preceded by ldloc(arr) + ldloc(idx))
+        // --- Arg 2: y (byte) ---
+        int? yConst = null;
+        ushort? yAddr = null;
+        int? yArrayIdx = null;
+        int? indexIdx = null; // shared index for x and y array access
         if (scan >= 0 && Instructions[scan].OpCode == ILOpCode.Ldelem_u1)
         {
             scan--; // skip ldelem
-            if (scan >= 0)
+            if (scan >= 0) { indexIdx = GetLdlocIndex(Instructions[scan]); scan--; }
+            if (scan >= 0) { yArrayIdx = GetLdlocIndex(Instructions[scan]); scan--; }
+        }
+        else if (scan >= 0)
+        {
+            var yi = Instructions[scan];
+            var yLocIdx = GetLdlocIndex(yi);
+            if (yLocIdx != null && Locals.TryGetValue(yLocIdx.Value, out var yLoc) && yLoc.Address != null)
             {
-                var yIdxInstr = Instructions[scan];
-                indexIdx = GetLdlocIndex(yIdxInstr);
+                yAddr = (ushort)yLoc.Address;
                 scan--;
             }
-            if (scan >= 0)
+            else if ((GetLdcValue(yi) is int yv))
             {
-                var yArrInstr = Instructions[scan];
-                yArrayIdx = GetLdlocIndex(yArrInstr);
+                yConst = yv;
                 scan--;
             }
         }
 
-        // Find x source (ldelem_u1 preceded by ldloc(arr) + ldloc(idx))
+        // --- Arg 1: x (byte) ---
+        int? xConst = null;
+        ushort? xAddr = null;
+        int? xArrayIdx = null;
+        int firstArgILOffset = -1;
         if (scan >= 0 && Instructions[scan].OpCode == ILOpCode.Ldelem_u1)
         {
             scan--; // skip ldelem
-            scan--; // skip index ldloc (same index)
+            scan--; // skip index ldloc (same index as y)
             if (scan >= 0)
             {
-                var xArrInstr = Instructions[scan];
-                xArrayIdx = GetLdlocIndex(xArrInstr);
-                firstArgILOffset = xArrInstr.Offset;
+                xArrayIdx = GetLdlocIndex(Instructions[scan]);
+                firstArgILOffset = Instructions[scan].Offset;
+            }
+        }
+        else if (scan >= 0)
+        {
+            var xi = Instructions[scan];
+            var xLocIdx = GetLdlocIndex(xi);
+            if (xLocIdx != null && Locals.TryGetValue(xLocIdx.Value, out var xLoc) && xLoc.Address != null)
+            {
+                xAddr = (ushort)xLoc.Address;
+                firstArgILOffset = xi.Offset;
+            }
+            else if ((GetLdcValue(xi) is int xv))
+            {
+                xConst = xv;
+                firstArgILOffset = xi.Offset;
             }
         }
 
@@ -3596,6 +3627,16 @@ class IL2NESWriter : NESWriter
                 Emit(Opcode.LDA, AddressMode.AbsoluteX, (ushort)xArr.Address);
             Emit(Opcode.STA, AddressMode.ZeroPage, (byte)NESConstants.TEMP);
         }
+        else if (xConst != null)
+        {
+            Emit(Opcode.LDA, AddressMode.Immediate, checked((byte)xConst.Value));
+            Emit(Opcode.STA, AddressMode.ZeroPage, (byte)NESConstants.TEMP);
+        }
+        else if (xAddr != null)
+        {
+            Emit(Opcode.LDA, AddressMode.Absolute, xAddr.Value);
+            Emit(Opcode.STA, AddressMode.ZeroPage, (byte)NESConstants.TEMP);
+        }
 
         // 2. Load y coordinate into TEMP2
         if (yArrayIdx != null && indexIdx != null)
@@ -3604,6 +3645,16 @@ class IL2NESWriter : NESWriter
             // X already has the index from step 1
             if (yArr.ArraySize > 0 && yArr.Address != null)
                 Emit(Opcode.LDA, AddressMode.AbsoluteX, (ushort)yArr.Address);
+            Emit(Opcode.STA, AddressMode.ZeroPage, (byte)NESConstants.TEMP2);
+        }
+        else if (yConst != null)
+        {
+            Emit(Opcode.LDA, AddressMode.Immediate, checked((byte)yConst.Value));
+            Emit(Opcode.STA, AddressMode.ZeroPage, (byte)NESConstants.TEMP2);
+        }
+        else if (yAddr != null)
+        {
+            Emit(Opcode.LDA, AddressMode.Absolute, yAddr.Value);
             Emit(Opcode.STA, AddressMode.ZeroPage, (byte)NESConstants.TEMP2);
         }
 
@@ -3615,13 +3666,22 @@ class IL2NESWriter : NESWriter
             EmitWithLabel(Opcode.LDA, AddressMode.Immediate_HighByte, dataLabel);
             Emit(Opcode.STA, AddressMode.ZeroPage, (byte)(NESConstants.ptr1 + 1));
         }
+        else if (dataAddress != null)
+        {
+            Emit(Opcode.LDA, AddressMode.Immediate, (byte)(dataAddress.Value & 0xFF));
+            Emit(Opcode.STA, AddressMode.ZeroPage, (byte)NESConstants.ptr1);
+            Emit(Opcode.LDA, AddressMode.Immediate, (byte)(dataAddress.Value >> 8));
+            Emit(Opcode.STA, AddressMode.ZeroPage, (byte)(NESConstants.ptr1 + 1));
+        }
 
         // 4. Load sprid into A
-        if (spridIdx != null)
+        if (spridAddr != null)
         {
-            var spridLocal = Locals[spridIdx.Value];
-            if (spridLocal.Address != null)
-                Emit(Opcode.LDA, AddressMode.Absolute, (ushort)spridLocal.Address);
+            Emit(Opcode.LDA, AddressMode.Absolute, spridAddr.Value);
+        }
+        else if (spridConst != null)
+        {
+            Emit(Opcode.LDA, AddressMode.Immediate, checked((byte)spridConst.Value));
         }
 
         // 5. Call oam_meta_spr

@@ -2224,4 +2224,30 @@ public class RoslynTests
         // Specifically: SBC ... STA $17 ... LDA $addr ... CMP pattern
         Assert.Contains("8517", hex); // STA $17 (save dy to TEMP)
     }
+
+    [Fact]
+    public void OamMetaSprWithConstantArgs()
+    {
+        // Bug: EmitOamMetaSpr only handled array element args (ldelem_u1).
+        // When x, y, sprid are constants (ldc.i4), the scanner failed to find them.
+        // Fix: support constants and locals in addition to array elements.
+        var bytes = GetProgramBytes(
+            """
+            byte[] sprite = new byte[] { 0, 0, 0xd8, 0, 128 };
+            NESLib.oam_meta_spr(64, 100, 0, sprite);
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"OamMetaSprConst hex: {hex}");
+
+        // x=64 (0x40) stored to TEMP ($17): LDA #$40 = A940, STA $17 = 8517
+        Assert.Contains("A9408517", hex);
+        // y=100 (0x64) stored to TEMP2 ($19): LDA #$64 = A964, STA $19 = 8519
+        Assert.Contains("A9648519", hex);
+        // sprid=0 loaded into A: LDA #$00 = A900
+        Assert.Contains("A900", hex);
+    }
 }
