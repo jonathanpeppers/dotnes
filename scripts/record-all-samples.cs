@@ -1,6 +1,7 @@
 // Usage: dotnet run scripts/record-all-samples.cs
-// Builds all samples and records PNG/GIF for each into samples/{name}/{name}.png or .gif
-// Requires: .NET 10+, Windows, ANESE emulator built
+// Builds and runs all samples via `dotnet run`, captures PNG/GIF for each
+// into samples/{name}/{name}.png or .gif
+// Requires: .NET 10+, Windows
 #:package System.Drawing.Common@9.*
 #:package AnimatedGif@1.*
 #:property NoWarn=CA1416
@@ -12,13 +13,6 @@ using System.Runtime.InteropServices;
 using AnimatedGif;
 
 string repoRoot = Path.GetFullPath(".");
-string anesePath = Path.Combine(repoRoot, "src", "dotnes.anese", "obj", "Debug", "win", "anese.exe");
-if (!File.Exists(anesePath))
-{
-    Console.Error.WriteLine($"ERROR: anese.exe not found at {anesePath}");
-    Console.Error.WriteLine("Build the emulator first: dotnet build src/dotnes.anese");
-    return;
-}
 
 // Static samples get a PNG, animated samples get a GIF
 HashSet<string> staticSamples = [
@@ -46,54 +40,36 @@ foreach (var sampleDir in sampleDirs)
 
     Console.WriteLine($"=== {name} ({ext}) ===");
 
-    // Build the sample
-    Console.Write($"  Building... ");
-    var buildResult = RunProcess("dotnet", $"build \"{sampleDir}\" -c Debug --nologo -v q", timeoutMs: 60000);
-    if (buildResult.ExitCode != 0)
+    // dotnet run builds and launches the emulator
+    Console.Write($"  Launching... ");
+    var proc = Process.Start(new ProcessStartInfo("dotnet", "run")
     {
-        Console.WriteLine("FAILED");
-        Console.Error.WriteLine($"  Build error: {buildResult.StdErr.Trim()}");
-        failed++;
-        continue;
-    }
-    Console.WriteLine("OK");
-
-    // Find the .nes file
-    string? nesFile = Directory.GetFiles(sampleDir, "*.nes", SearchOption.AllDirectories)
-        .Where(f => !f.Contains("obj"))
-        .FirstOrDefault();
-
-    // Also check bin output
-    nesFile ??= Directory.GetFiles(sampleDir, "*.nes", SearchOption.AllDirectories).FirstOrDefault();
-
-    if (nesFile == null)
-    {
-        Console.WriteLine($"  No .nes file found after build — skipping");
-        skipped++;
-        continue;
-    }
-
-    Console.Write($"  Recording {ext}... ");
-
-    // Launch emulator
-    var proc = Process.Start(new ProcessStartInfo(anesePath, $"\"{nesFile}\" --no-sav") { UseShellExecute = false });
+        WorkingDirectory = sampleDir,
+        UseShellExecute = false,
+        RedirectStandardOutput = true,
+        RedirectStandardError = true,
+        CreateNoWindow = true
+    });
     if (proc == null)
     {
-        Console.WriteLine("FAILED (couldn't start emulator)");
+        Console.WriteLine("FAILED (couldn't start)");
         failed++;
         continue;
     }
 
-    Thread.Sleep(3000); // Wait for emulator to boot
+    Thread.Sleep(5000); // Wait for build + emulator boot
 
-    IntPtr hwnd = FindWindowByPid(proc.Id);
+    // Find the ANESE emulator window (child process of dotnet run)
+    IntPtr hwnd = FindAneseWindow();
     if (hwnd == IntPtr.Zero)
     {
-        Console.WriteLine("FAILED (couldn't find window)");
+        Console.WriteLine("FAILED (couldn't find emulator window)");
         proc.Kill();
         failed++;
         continue;
     }
+
+    Console.Write($"  Recording {ext}... ");
 
     try
     {
@@ -143,8 +119,10 @@ foreach (var sampleDir in sampleDirs)
     }
     finally
     {
-        proc.Kill();
-        proc.WaitForExit();
+        // Kill the ANESE emulator process (grandchild of dotnet run)
+        KillAneseProcess();
+        try { proc.Kill(); } catch { }
+        try { proc.WaitForExit(3000); } catch { }
     }
 }
 
@@ -169,8 +147,10 @@ Bitmap? CaptureWindow(IntPtr window)
     return bmp;
 }
 
-IntPtr FindWindowByPid(int pid)
+IntPtr FindAneseWindow()
 {
+    // ANESE window title contains "ANESE" — find it regardless of parent PID
+    // since dotnet run spawns it as a grandchild process
     IntPtr found = IntPtr.Zero;
     for (int attempt = 0; attempt < 20 && found == IntPtr.Zero; attempt++)
     {
@@ -178,30 +158,34 @@ IntPtr FindWindowByPid(int pid)
         {
             if (NativeMethods.IsWindowVisible(h))
             {
-                NativeMethods.GetWindowThreadProcessId(h, out uint foundPid);
-                if (foundPid == pid) found = h;
+                int len = NativeMethods.GetWindowTextLength(h);
+                if (len > 0)
+                {
+                    var sb = new System.Text.StringBuilder(len + 1);
+                    NativeMethods.GetWindowText(h, sb, sb.Capacity);
+                    string title = sb.ToString();
+                    if (title.Contains("ANESE", StringComparison.OrdinalIgnoreCase))
+                        found = h;
+                }
             }
             return found == IntPtr.Zero;
         }, IntPtr.Zero);
-        if (found == IntPtr.Zero) Thread.Sleep(250);
+        if (found == IntPtr.Zero) Thread.Sleep(500);
     }
     return found;
 }
 
-(int ExitCode, string StdOut, string StdErr) RunProcess(string fileName, string arguments, int timeoutMs = 30000)
+void KillAneseProcess()
 {
-    var psi = new ProcessStartInfo(fileName, arguments)
+    foreach (var p in Process.GetProcesses())
     {
-        RedirectStandardOutput = true,
-        RedirectStandardError = true,
-        UseShellExecute = false,
-        CreateNoWindow = true
-    };
-    using var p = Process.Start(psi)!;
-    string stdout = p.StandardOutput.ReadToEnd();
-    string stderr = p.StandardError.ReadToEnd();
-    p.WaitForExit(timeoutMs);
-    return (p.ExitCode, stdout, stderr);
+        try
+        {
+            if (p.ProcessName.Contains("anese", StringComparison.OrdinalIgnoreCase))
+                p.Kill();
+        }
+        catch { }
+    }
 }
 
 static class NativeMethods
@@ -216,6 +200,10 @@ static class NativeMethods
     public static extern bool IsWindowVisible(IntPtr hWnd);
     [DllImport("user32.dll")]
     public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
+    [DllImport("user32.dll", CharSet = CharSet.Auto)]
+    public static extern int GetWindowText(IntPtr hWnd, System.Text.StringBuilder lpString, int nMaxCount);
+    [DllImport("user32.dll")]
+    public static extern int GetWindowTextLength(IntPtr hWnd);
     public delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
     [StructLayout(LayoutKind.Sequential)]
     public struct RECT { public int Left, Top, Right, Bottom; }
