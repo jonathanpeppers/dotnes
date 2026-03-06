@@ -237,10 +237,27 @@ public class NESAnalyzer : DiagnosticAnalyzer
         if (lastStatement is null)
             return;
 
-        if (!IsInfiniteWhileTrue(lastStatement))
+        if (IsInfiniteWhileTrue(lastStatement))
+            return;
+
+        // Also accept when the last statement calls a local function that itself
+        // ends with while (true) — e.g. scroll_demo(); where scroll_demo has the loop
+        if (lastStatement is ExpressionStatementSyntax exprStmt
+            && exprStmt.Expression is InvocationExpressionSyntax invocation
+            && invocation.Expression is IdentifierNameSyntax identifier)
         {
-            context.ReportDiagnostic(Diagnostic.Create(NES001Rule, lastStatement.GetLocation()));
+            var calledName = identifier.Identifier.Text;
+            var localFunctions = globalStatements
+                .Select(gs => gs.Statement)
+                .OfType<LocalFunctionStatementSyntax>();
+            foreach (var fn in localFunctions)
+            {
+                if (fn.Identifier.Text == calledName && ContainsInfiniteWhileTrue(fn))
+                    return;
+            }
         }
+
+        context.ReportDiagnostic(Diagnostic.Create(NES001Rule, lastStatement.GetLocation()));
     }
 
     static bool IsInfiniteWhileTrue(StatementSyntax statement)
@@ -256,6 +273,20 @@ public class NESAnalyzer : DiagnosticAnalyzer
 
         // Any body is valid — while (true) ; , while (true) { }, while (true) { game_loop(); }
         return true;
+    }
+
+    static bool ContainsInfiniteWhileTrue(LocalFunctionStatementSyntax function)
+    {
+        // Check if the function body or expression contains while (true)
+        if (function.Body is not null)
+        {
+            foreach (var stmt in function.Body.Statements)
+            {
+                if (IsInfiniteWhileTrue(stmt))
+                    return true;
+            }
+        }
+        return false;
     }
 
     static bool IsSupportedType(ITypeSymbol type)

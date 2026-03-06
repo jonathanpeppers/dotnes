@@ -96,6 +96,25 @@ public class NESAnalyzerTests
     }
 
     [Fact]
+    public async Task NES001_InfiniteLoopInsideLocalFunction_NoDiagnostic()
+    {
+        // Some samples put the infinite loop inside a local function called as the last statement
+        var test = """
+            setup();
+            game_loop();
+
+            static void setup() { }
+            static void game_loop()
+            {
+                byte x = 0;
+                while (true) { x = (byte)(x + 1); }
+            }
+            """;
+
+        await VerifyAsync(test);
+    }
+
+    [Fact]
     public async Task NES001_NoGlobalStatements_NoDiagnostic()
     {
         // Library code (no top-level statements) should not trigger NES001
