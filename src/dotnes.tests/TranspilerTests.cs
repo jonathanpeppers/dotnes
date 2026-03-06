@@ -80,6 +80,8 @@ public class TranspilerTests
     [InlineData("horizmask", false, true)]
     [InlineData("multifile", true)]
     [InlineData("multifile", false)]
+    [InlineData("fade", true)]
+    [InlineData("fade", false)]
     public Task Write(string name, bool debug, bool verticalMirroring = false)
     {
         var configuration = debug ? "debug" : "release";
