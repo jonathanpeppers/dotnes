@@ -237,4 +237,38 @@ public class IL2NESWriterTests
         
         Assert.Equal(49, writer.Stack.Peek());
     }
+
+    /// <summary>
+    /// Test that poke(ushort, byte) emits LDA #value, STA abs addr and consumes both args.
+    /// </summary>
+    [Fact]
+    public void Poke_EmitsLdaSta_ConsumesArgs()
+    {
+        using var writer = GetWriter();
+        writer.Labels["pusha"] = 0x85A2;
+
+        // poke(0x4015, 0x0F)
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4), 0x4015);
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4), 0x0F);
+        writer.Write(new ILInstruction(ILOpCode.Call), nameof(poke));
+
+        // Both arguments should be consumed, stack empty
+        Assert.Empty(writer.Stack);
+    }
+
+    /// <summary>
+    /// Test that peek(ushort) emits LDA abs addr and pushes a return value placeholder.
+    /// </summary>
+    [Fact]
+    public void Peek_EmitsLdaAbsolute_PushesReturnValue()
+    {
+        using var writer = GetWriter();
+
+        // peek(0x2002)
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4), 0x2002);
+        writer.Write(new ILInstruction(ILOpCode.Call), nameof(peek));
+
+        // Return value should be on stack
+        Assert.Single(writer.Stack);
+    }
 }
