@@ -748,6 +748,8 @@ public class Program6502
                 AddBlock(BuiltInSubroutines.ApuInit());
             if (usedMethods.Contains("vram_unrle"))
                 AddBlock(BuiltInSubroutines.VramUnrle());
+            if (usedMethods.Contains("vram_read"))
+                AddBlock(BuiltInSubroutines.VramRead());
             if (usedMethods.Contains("split"))
                 AddBlock(BuiltInSubroutines.Split());
             if (usedMethods.Contains("vrambuf_clear"))

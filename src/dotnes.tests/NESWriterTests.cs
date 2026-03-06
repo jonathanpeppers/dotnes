@@ -109,6 +109,17 @@ public class NESWriterTests
     }
 
     [Fact]
+    public void Write_vram_read()
+    {
+        using var writer = GetWriter();
+        // vram_read needs popax label - same setup as vram_write
+        writer.Labels["popax"] = 0x857C;
+        writer.WriteBlock(BuiltInSubroutines.VramRead());
+        writer.Flush();
+        AssertInstructions("8517 8618 207C85 8519 861A A000 AD0720 9119 E619 D002 E61A A517 D002 C618 C617 A517 0518 D0E7 60");
+    }
+
+    [Fact]
     public void Write_ppu_on_all()
     {
         using var writer = GetWriter();
