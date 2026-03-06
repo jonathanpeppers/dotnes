@@ -10,7 +10,6 @@
     <ProjectReference Include="..\dotnes.tasks\dotnes.tasks.csproj" />
     <ProjectReference Include="..\dotnes.analyzers\dotnes.analyzers.csproj" ReferenceOutputAssembly="false" />
     <ProjectReference Include="..\neslib\neslib.csproj" />
-    <ProjectReference Include="..\dotnes.analyzers\dotnes.analyzers.csproj" />
   </ItemGroup>
   <ItemGroup>
     <None Include="../../LICENSE" Pack="true" PackagePath="" />
