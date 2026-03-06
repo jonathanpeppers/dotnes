@@ -171,7 +171,7 @@ class Transpiler : IDisposable
             UsedMethods = UsedMethods,
             UserMethodNames = new HashSet<string>(UserMethods.Keys, StringComparer.Ordinal),
             ExternMethodNames = externNames,
-            WordLocals = DetectWordLocals(instructions),
+            WordLocals = DetectWordLocals(instructions, reflectionCache),
             StructLayouts = structLayouts,
         };
 
@@ -245,7 +245,7 @@ class Transpiler : IDisposable
                 UserMethodNames = new HashSet<string>(UserMethods.Keys, StringComparer.Ordinal),
                 MethodParamCount = paramCount,
                 MethodName = methodName,
-                WordLocals = DetectWordLocals(methodIL),
+                WordLocals = DetectWordLocals(methodIL, reflectionCache),
                 StructLayouts = structLayouts,
                 ByteArrayLabelStartIndex = writer.ByteArrays.Count,
                 LocalCount = mainLocalCount,
@@ -791,13 +791,20 @@ class Transpiler : IDisposable
     /// <summary>
     /// Pre-scan IL instructions for conv.u2 + stloc patterns to detect ushort locals.
     /// </summary>
-    static HashSet<int> DetectWordLocals(ILInstruction[] instructions)
+    static HashSet<int> DetectWordLocals(ILInstruction[] instructions, ReflectionCache? reflectionCache = null)
     {
         var result = new HashSet<int>();
         for (int i = 0; i < instructions.Length - 1; i++)
         {
-            if (instructions[i].OpCode != ILOpCode.Conv_u2)
+            bool isConvU2 = instructions[i].OpCode == ILOpCode.Conv_u2;
+            bool is16BitCall = instructions[i].OpCode == ILOpCode.Call
+                && instructions[i].String is not null
+                && reflectionCache is not null
+                && reflectionCache.TryReturns16Bit(instructions[i].String!);
+
+            if (!isConvU2 && !is16BitCall)
                 continue;
+
             var next = instructions[i + 1];
             int? idx = next.OpCode switch
             {

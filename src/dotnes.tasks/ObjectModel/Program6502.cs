@@ -684,6 +684,8 @@ public class Program6502
                 size += BuiltInSubroutines.Addysp().ByteSize;
             if (usedMethods.Contains("bcd_add"))
                 size += BuiltInSubroutines.BcdAdd().ByteSize;
+            if (usedMethods.Contains("waitvsync"))
+                size += BuiltInSubroutines.Waitvsync().ByteSize;
         }
         return size;
     }
@@ -776,6 +778,8 @@ public class Program6502
                 AddBlock(BuiltInSubroutines.Addysp());
             if (usedMethods.Contains("bcd_add"))
                 AddBlock(BuiltInSubroutines.BcdAdd());
+            if (usedMethods.Contains("waitvsync"))
+                AddBlock(BuiltInSubroutines.Waitvsync());
         }
     }
 
