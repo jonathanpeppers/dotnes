@@ -558,4 +558,24 @@ public class ObjectModelTests
     }
 
     #endregion
+
+    #region TranspileException Tests
+
+    [Fact]
+    public void TranspileException_WithMethodName_IncludesMethodInMessage()
+    {
+        var ex = new TranspileException("Test error message", "MyMethod");
+        Assert.Equal("In method 'MyMethod': Test error message", ex.Message);
+        Assert.Equal("MyMethod", ex.MethodName);
+    }
+
+    [Fact]
+    public void TranspileException_WithoutMethodName_UsesPlainMessage()
+    {
+        var ex = new TranspileException("Test error message");
+        Assert.Equal("Test error message", ex.Message);
+        Assert.Null(ex.MethodName);
+    }
+
+    #endregion
 }

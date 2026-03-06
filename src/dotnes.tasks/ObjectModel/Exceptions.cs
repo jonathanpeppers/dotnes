@@ -1,6 +1,31 @@
 namespace dotnes.ObjectModel;
 
 /// <summary>
+/// Exception thrown when the transpiler encounters an unsupported C# feature or pattern.
+/// Provides actionable error messages that name the C# feature and suggest workarounds.
+/// </summary>
+public class TranspileException : Exception
+{
+    /// <summary>
+    /// The name of the method being transpiled when the error occurred, if available.
+    /// </summary>
+    public string? MethodName { get; }
+
+    public TranspileException(string message, string? methodName = null)
+        : base(FormatMessage(message, methodName))
+    {
+        MethodName = methodName;
+    }
+
+    static string FormatMessage(string message, string? methodName)
+    {
+        if (methodName != null)
+            return $"In method '{methodName}': {message}";
+        return message;
+    }
+}
+
+/// <summary>
 /// Exception thrown when a label cannot be resolved
 /// </summary>
 public class UnresolvedLabelException : Exception

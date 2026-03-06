@@ -676,7 +676,7 @@ class IL2NESWriter : NESWriter
                         }
                         else
                         {
-                            throw new NotImplementedException($"Runtime division by non-power-of-2 ({divisor}) not supported");
+                            throw new TranspileException($"Division by {divisor} is not yet supported. Use power-of-2 divisors (2, 4, 8...) or bit shifts instead.", MethodName);
                         }
                         _runtimeValueInA = true;
                         Stack.Push(0);
@@ -917,7 +917,7 @@ class IL2NESWriter : NESWriter
                 HandleLdelemU1();
                 break;
             default:
-                throw new NotImplementedException($"OpCode {instruction.OpCode} with no operands is not implemented!");
+                throw new TranspileException($"The IL opcode '{instruction.OpCode}' is not yet supported. This C# feature cannot be transpiled to 6502 assembly.", MethodName);
         }
         previous = instruction.OpCode;
     }
@@ -936,7 +936,7 @@ class IL2NESWriter : NESWriter
             case ILOpCode.Ldc_i4_s:
                 if (operand > ushort.MaxValue)
                 {
-                    throw new NotImplementedException($"{instruction.OpCode} not implemented for value larger than ushort: {operand}");
+                    throw new TranspileException($"Integer constant {operand} exceeds the maximum supported value of {ushort.MaxValue}. Only byte and ushort values are supported on the NES.", MethodName);
                 }
                 else if (operand > byte.MaxValue)
                 {
@@ -1230,7 +1230,7 @@ class IL2NESWriter : NESWriter
                 WriteLdc(1);
                 break;
             default:
-                throw new NotImplementedException($"OpCode {instruction.OpCode} with Int32 operand is not implemented!");
+                throw new TranspileException($"The IL opcode '{instruction.OpCode}' is not yet supported. This C# feature cannot be transpiled to 6502 assembly.", MethodName);
         }
         previous = instruction.OpCode;
     }
@@ -1900,7 +1900,7 @@ class IL2NESWriter : NESWriter
                 HandleLdfld(operand);
                 break;
             default:
-                throw new NotImplementedException($"OpCode {instruction.OpCode} with String operand is not implemented!");
+                throw new TranspileException($"The IL opcode '{instruction.OpCode}' is not yet supported. This C# feature cannot be transpiled to 6502 assembly.", MethodName);
         }
         previous = instruction.OpCode;
     }
@@ -1965,7 +1965,7 @@ class IL2NESWriter : NESWriter
                 Stack.Push(-(_byteArrayLabelIndex)); // Negative marker
                 break;
             default:
-                throw new NotImplementedException($"OpCode {instruction.OpCode} with byte[] operand is not implemented!");
+                throw new TranspileException($"The IL opcode '{instruction.OpCode}' is not yet supported. This C# feature cannot be transpiled to 6502 assembly.", MethodName);
         }
         previous = instruction.OpCode;
     }
@@ -2353,7 +2353,7 @@ class IL2NESWriter : NESWriter
     {
         string? structType = instruction.String;
         if (structType == null || !StructLayouts.ContainsKey(structType))
-            throw new NotImplementedException($"ldelema for non-struct type '{structType}' is not supported");
+            throw new TranspileException($"Arrays of type '{structType}' are not supported. Only byte[], ushort[], and struct arrays are supported.", MethodName);
 
         int structSize = GetStructSize(structType);
 
@@ -2420,7 +2420,7 @@ class IL2NESWriter : NESWriter
             }
             else
             {
-                throw new NotImplementedException("ldelema: variable index without tracked local");
+                throw new TranspileException("Struct array access with a variable index requires the index to be stored in a local variable.", MethodName);
             }
         }
         else
@@ -3093,7 +3093,7 @@ class IL2NESWriter : NESWriter
         }
         else
         {
-            throw new NotImplementedException($"{nameof(WriteStloc)} not implemented for value larger than ushort: {local.Value}");
+            throw new TranspileException($"Local variable value {local.Value} exceeds the maximum supported size of ushort. Only byte and ushort local variables are supported on the NES.", MethodName);
         }
     }
 
@@ -3216,7 +3216,7 @@ class IL2NESWriter : NESWriter
             }
             else
             {
-                throw new NotImplementedException($"{nameof(WriteLdloc)} not implemented for value larger than ushort: {local.Value}");
+                throw new TranspileException($"Local variable value {local.Value} exceeds the maximum supported size of ushort. Only byte and ushort local variables are supported on the NES.", MethodName);
             }
         }
         else
@@ -3997,9 +3997,9 @@ class IL2NESWriter : NESWriter
         }
 
         if (indexLocalIdx == null && constantIndex == null)
-            throw new NotImplementedException("Ldelem_u1 only supports Ldloc or Ldc_i4 patterns for index");
+            throw new TranspileException("Array element access requires the index to be a local variable or constant. Complex index expressions are not supported.", MethodName);
         if (arrayLocalIdx == null)
-            throw new NotImplementedException("Ldelem_u1 only supports Ldloc patterns for array");
+            throw new TranspileException("Array element access requires the array to be stored in a local variable.", MethodName);
 
         Local? indexLocal = indexLocalIdx != null ? Locals[indexLocalIdx.Value] : null;
         var arrayLocal = Locals[arrayLocalIdx.Value];
@@ -4096,7 +4096,7 @@ class IL2NESWriter : NESWriter
         }
         else
         {
-            throw new NotImplementedException("Ldelem_u1: array local has no address or label");
+            throw new TranspileException("Array element access failed: the array variable has no allocated address. Ensure the array is initialized before use.", MethodName);
         }
 
         Stack.Push(0); // Push a placeholder value
@@ -4683,7 +4683,7 @@ class IL2NESWriter : NESWriter
         }
         else
         {
-            throw new NotImplementedException($"Stelem_i1: array local {targetArrayLocalIdx} has no address or label. ArraySize={targetArray.ArraySize}, Address={targetArray.Address}, LabelName={targetArray.LabelName}, Value={targetArray.Value}. Known locals: {string.Join(", ", Locals.Select(kv => $"[{kv.Key}]=(V={kv.Value.Value}, A={kv.Value.Address}, AS={kv.Value.ArraySize}, L={kv.Value.LabelName})"))}");
+            throw new TranspileException("Array element assignment failed: the array variable has no allocated address. Ensure the array is initialized before use.", MethodName);
         }
 
         _immediateInA = null;
