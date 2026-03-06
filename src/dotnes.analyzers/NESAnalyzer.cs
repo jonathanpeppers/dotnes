@@ -86,6 +86,7 @@ public class NESAnalyzer : DiagnosticAnalyzer
         context.RegisterSyntaxNodeAction(AnalyzeInterpolatedString, SyntaxKind.InterpolatedStringExpression);
         context.RegisterSyntaxNodeAction(AnalyzeObjectCreation, SyntaxKind.ObjectCreationExpression);
         context.RegisterSyntaxNodeAction(AnalyzeObjectCreation, SyntaxKind.ImplicitObjectCreationExpression);
+        context.RegisterSyntaxNodeAction(AnalyzeArrayCreation, SyntaxKind.ArrayCreationExpression, SyntaxKind.ImplicitArrayCreationExpression);
         context.RegisterSyntaxNodeAction(AnalyzeVariableDeclaration, SyntaxKind.VariableDeclaration);
         context.RegisterSyntaxNodeAction(AnalyzeMethodDeclaration, SyntaxKind.MethodDeclaration);
         context.RegisterSyntaxNodeAction(AnalyzeLocalFunctionStatement, SyntaxKind.LocalFunctionStatement);
@@ -141,6 +142,27 @@ public class NESAnalyzer : DiagnosticAnalyzer
 
         context.ReportDiagnostic(Diagnostic.Create(NES004Rule, context.Node.GetLocation()));
     }
+
+    static void AnalyzeArrayCreation(SyntaxNodeAnalysisContext context)
+    {
+        var typeInfo = context.SemanticModel.GetTypeInfo(context.Node, context.CancellationToken);
+        var type = typeInfo.Type;
+        if (type is not IArrayTypeSymbol arrayType)
+            return;
+
+        var elementType = arrayType.ElementType;
+
+        // Allow byte[] and ushort[]
+        if (elementType.SpecialType == SpecialType.System_Byte || elementType.SpecialType == SpecialType.System_UInt16)
+            return;
+
+        // Allow struct arrays
+        if (elementType.IsValueType && elementType.TypeKind == TypeKind.Struct && elementType.SpecialType == SpecialType.None)
+            return;
+
+        context.ReportDiagnostic(Diagnostic.Create(NES004Rule, context.Node.GetLocation()));
+    }
+
 
     static void AnalyzeVariableDeclaration(SyntaxNodeAnalysisContext context)
     {
