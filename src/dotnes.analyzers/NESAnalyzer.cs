@@ -96,6 +96,9 @@ public class NESAnalyzer : DiagnosticAnalyzer
     static void AnalyzeClassDeclaration(SyntaxNodeAnalysisContext context)
     {
         var classDeclaration = (ClassDeclarationSyntax)context.Node;
+        // Static classes are used as modules for multi-file NES projects
+        if (classDeclaration.Modifiers.Any(SyntaxKind.StaticKeyword))
+            return;
         context.ReportDiagnostic(Diagnostic.Create(NES002Rule, classDeclaration.Identifier.GetLocation(), classDeclaration.Identifier.Text));
     }
 
