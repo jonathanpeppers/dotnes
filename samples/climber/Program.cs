@@ -4,12 +4,10 @@
 
 #pragma warning disable CS0649, CS8321, CS0219
 
-using System.Runtime.InteropServices;
-
-// Link FamiTone2 functions
-[DllImport("ext")] static extern void music_play(byte song);
-[DllImport("ext")] static extern void music_stop();
-[DllImport("ext")] static extern void sfx_play(byte sound, byte channel);
+// Link FamiTone2 functions (from famitone2.s / sounds.s)
+static extern void music_play(byte song);
+static extern void music_stop();
+static extern void sfx_play(byte sound, byte channel);
 
 // Constants
 const byte COLS = 30;

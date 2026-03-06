@@ -1280,8 +1280,7 @@ public class RoslynTests
             var assemblyFiles = new List<AssemblyReader> { reader };
             var bytes = GetProgramBytes(
                 """
-                using System.Runtime.InteropServices;
-                [DllImport("ext")] static extern void my_extern_func();
+                static extern void my_extern_func();
                 my_extern_func();
                 ppu_on_all();
                 while (true) ;
@@ -1322,8 +1321,7 @@ public class RoslynTests
             var assemblyFiles = new List<AssemblyReader> { reader };
             var bytes = GetProgramBytes(
                 """
-                using System.Runtime.InteropServices;
-                [DllImport("ext")] static extern void set_value(byte val);
+                static extern void set_value(byte val);
                 set_value(42);
                 ppu_on_all();
                 while (true) ;
