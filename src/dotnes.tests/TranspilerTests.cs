@@ -78,6 +78,8 @@ public class TranspilerTests
     [InlineData("horizscroll", false, true)]
     [InlineData("horizmask", true, true)]
     [InlineData("horizmask", false, true)]
+    [InlineData("animation", true)]
+    [InlineData("animation", false)]
     [InlineData("multifile", true)]
     [InlineData("multifile", false)]
     public Task Write(string name, bool debug, bool verticalMirroring = false)
