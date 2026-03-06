@@ -1572,7 +1572,7 @@ public class RoslynTests
         Assert.NotEmpty(bytes);
 
         var hex = Convert.ToHexString(bytes);
-        // Should contain LDX #$FF + SEC + INX + SBC #$03 + BCS + TXA pattern
+        // Should contain LDX #$FF, SBC #$03, and TXA opcodes
         Assert.Contains("A2FF", hex); // LDX #$FF
         Assert.Contains("E903", hex); // SBC #$03
         Assert.Contains("8A", hex);   // TXA
