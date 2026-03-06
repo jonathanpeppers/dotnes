@@ -944,7 +944,7 @@ class IL2NESWriter : NESWriter
                 HandleLdelemU1();
                 break;
             default:
-                throw new TranspileException($"The IL opcode '{instruction.OpCode}' is not yet supported. This C# feature cannot be transpiled to 6502 assembly.", MethodName);
+                throw new TranspileException(GetUnsupportedOpcodeMessage(instruction.OpCode), MethodName);
         }
         previous = instruction.OpCode;
     }
@@ -1257,7 +1257,7 @@ class IL2NESWriter : NESWriter
                 WriteLdc(1);
                 break;
             default:
-                throw new TranspileException($"The IL opcode '{instruction.OpCode}' is not yet supported. This C# feature cannot be transpiled to 6502 assembly.", MethodName);
+                throw new TranspileException(GetUnsupportedOpcodeMessage(instruction.OpCode), MethodName);
         }
         previous = instruction.OpCode;
     }
@@ -1946,7 +1946,7 @@ class IL2NESWriter : NESWriter
                 HandleLdfld(operand);
                 break;
             default:
-                throw new TranspileException($"The IL opcode '{instruction.OpCode}' is not yet supported. This C# feature cannot be transpiled to 6502 assembly.", MethodName);
+                throw new TranspileException(GetUnsupportedOpcodeMessage(instruction.OpCode), MethodName);
         }
         previous = instruction.OpCode;
     }
@@ -2011,7 +2011,7 @@ class IL2NESWriter : NESWriter
                 Stack.Push(-(_byteArrayLabelIndex)); // Negative marker
                 break;
             default:
-                throw new TranspileException($"The IL opcode '{instruction.OpCode}' is not yet supported. This C# feature cannot be transpiled to 6502 assembly.", MethodName);
+                throw new TranspileException(GetUnsupportedOpcodeMessage(instruction.OpCode), MethodName);
         }
         previous = instruction.OpCode;
     }
@@ -4753,4 +4753,73 @@ class IL2NESWriter : NESWriter
         _runtimeValueInA = false;
         _savedRuntimeToTemp = false;
     }
+
+    /// <summary>
+    /// Returns a user-friendly error message for an unsupported IL opcode, explaining
+    /// what C# pattern likely generated it and what to use instead.
+    /// </summary>
+    internal static string GetUnsupportedOpcodeMessage(ILOpCode opCode) => opCode switch
+    {
+        ILOpCode.Conv_i8 =>
+            $"The IL opcode '{opCode}' is not supported. " +
+            "This is typically caused by using 'long' (64-bit integer). " +
+            "Use 'byte', 'sbyte', 'ushort', or 'int' instead.",
+        ILOpCode.Conv_r4 or ILOpCode.Conv_r8 =>
+            $"The IL opcode '{opCode}' is not supported. " +
+            "This is typically caused by using 'float' or 'double' (floating-point types). " +
+            "The NES has no floating-point hardware. Use integer types ('byte', 'ushort', 'int') instead.",
+        ILOpCode.Conv_r_un =>
+            $"The IL opcode '{opCode}' is not supported. " +
+            "This is typically caused by converting an unsigned integer to a floating-point type. " +
+            "The NES has no floating-point hardware. Use integer types ('byte', 'ushort', 'int') instead.",
+        ILOpCode.Conv_ovf_i or ILOpCode.Conv_ovf_i_un or ILOpCode.Conv_ovf_i1 or ILOpCode.Conv_ovf_i1_un or
+        ILOpCode.Conv_ovf_i2 or ILOpCode.Conv_ovf_i2_un or ILOpCode.Conv_ovf_i4 or ILOpCode.Conv_ovf_i4_un or
+        ILOpCode.Conv_ovf_i8 or ILOpCode.Conv_ovf_i8_un or ILOpCode.Conv_ovf_u or ILOpCode.Conv_ovf_u_un or
+        ILOpCode.Conv_ovf_u1 or ILOpCode.Conv_ovf_u1_un or ILOpCode.Conv_ovf_u2 or ILOpCode.Conv_ovf_u2_un or
+        ILOpCode.Conv_ovf_u4 or ILOpCode.Conv_ovf_u4_un or ILOpCode.Conv_ovf_u8 or ILOpCode.Conv_ovf_u8_un =>
+            $"The IL opcode '{opCode}' is not supported. " +
+            "This is typically caused by a 'checked' arithmetic expression or cast. " +
+            "Use unchecked arithmetic instead (the NES does not support overflow checking).",
+        ILOpCode.Box or ILOpCode.Unbox or ILOpCode.Unbox_any =>
+            $"The IL opcode '{opCode}' is not supported. " +
+            "This is typically caused by boxing a value type (e.g., passing an 'int' as 'object'). " +
+            "Avoid using 'object', generics, or interfaces that require boxing.",
+        ILOpCode.Castclass or ILOpCode.Isinst =>
+            $"The IL opcode '{opCode}' is not supported. " +
+            "This is typically caused by type casting ('as', 'is', or explicit cast to a reference type). " +
+            "Avoid reference type casts; use only primitive types.",
+        ILOpCode.Throw or ILOpCode.Rethrow =>
+            $"The IL opcode '{opCode}' is not supported. " +
+            "Exception handling ('throw', 'try/catch') is not supported on the NES.",
+        ILOpCode.Leave or ILOpCode.Leave_s or ILOpCode.Endfinally or ILOpCode.Endfilter =>
+            $"The IL opcode '{opCode}' is not supported. " +
+            "This is typically caused by 'try/catch/finally' blocks. " +
+            "Exception handling is not supported on the NES.",
+        ILOpCode.Newobj =>
+            $"The IL opcode '{opCode}' is not supported. " +
+            "This is typically caused by creating an object with 'new' (e.g., 'new List<byte>()'). " +
+            "Only 'byte[]', 'ushort[]', and struct arrays can be created. Avoid classes and reference types.",
+        ILOpCode.Callvirt =>
+            $"The IL opcode '{opCode}' is not supported. " +
+            "This is typically caused by calling an instance method or virtual method on an object. " +
+            "Use only static methods and NESLib API calls.",
+        ILOpCode.Ldlen =>
+            $"The IL opcode '{opCode}' is not supported. " +
+            "This is typically caused by accessing '.Length' on an array. " +
+            "Track array length in a separate variable instead.",
+        ILOpCode.Neg =>
+            $"The IL opcode '{opCode}' is not supported. " +
+            "This is typically caused by the unary negation operator ('-x'). " +
+            "Use '(256 - x)' or bitwise operations for two's complement negation instead.",
+        ILOpCode.Not =>
+            $"The IL opcode '{opCode}' is not supported. " +
+            "This is typically caused by the bitwise NOT operator ('~x'). " +
+            "Use XOR with 0xFF instead (e.g., 'x ^ 0xFF').",
+        ILOpCode.Ceq or ILOpCode.Cgt or ILOpCode.Cgt_un or ILOpCode.Clt or ILOpCode.Clt_un =>
+            $"The IL opcode '{opCode}' is not supported. " +
+            "This is typically caused by a comparison expression used as a value (e.g., 'bool b = x > y;'). " +
+            "Use comparisons only in 'if' or 'while' conditions, not as standalone values.",
+        _ =>
+            $"The IL opcode '{opCode}' is not yet supported. This C# feature cannot be transpiled to 6502 assembly."
+    };
 }
