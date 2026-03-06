@@ -266,16 +266,16 @@ public class NESAnalyzerTests
     [Fact]
     public async Task NES003_FormattableStringInvariant_Diagnostic()
     {
+        // When the argument is an interpolated string, AnalyzeInterpolatedString already fires NES003
+        // so the invocation handler skips the duplicate diagnostic.
         var test = """
             byte x = 5;
-            string s = {|#0:System.FormattableString.Invariant({|#1:$"value: {x}"|})|};
+            string s = System.FormattableString.Invariant({|#0:$"value: {x}"|});
             while (true) ;
             """;
 
-        // Both the FormattableString.Invariant invocation and the interpolated string fire NES003
         await VerifyAsync(test,
-            Diagnostic(NESAnalyzer.NES003).WithLocation(0),
-            Diagnostic(NESAnalyzer.NES003).WithLocation(1));
+            Diagnostic(NESAnalyzer.NES003).WithLocation(0));
     }
 
     [Fact]

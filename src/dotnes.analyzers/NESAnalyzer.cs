@@ -122,8 +122,19 @@ public class NESAnalyzer : DiagnosticAnalyzer
     static void AnalyzeInvocation(SyntaxNodeAnalysisContext context)
     {
         var invocation = (InvocationExpressionSyntax)context.Node;
+
+        // Cheap syntax pre-filter: only consider calls where the member name is one we care about.
+        if (invocation.Expression is not MemberAccessExpressionSyntax memberAccess)
+            return;
+
+        var memberName = memberAccess.Name.Identifier.Text;
+        if (memberName is not ("Format" or "Concat" or "Invariant"))
+            return;
+
         var symbolInfo = context.SemanticModel.GetSymbolInfo(invocation, context.CancellationToken);
-        if (symbolInfo.Symbol is not IMethodSymbol method)
+        var method = symbolInfo.Symbol as IMethodSymbol
+                     ?? symbolInfo.CandidateSymbols.OfType<IMethodSymbol>().FirstOrDefault();
+        if (method is null)
             return;
 
         var containingType = method.ContainingType;
@@ -141,11 +152,15 @@ public class NESAnalyzer : DiagnosticAnalyzer
         }
 
         // FormattableString.Invariant(...)
+        // Skip when the argument is an interpolated string — AnalyzeInterpolatedString already covers it.
         if (containingType.Name == "FormattableString" &&
             containingType.ContainingNamespace?.ToDisplayString() == "System" &&
             method.Name == "Invariant")
         {
-            context.ReportDiagnostic(Diagnostic.Create(NES003Rule, invocation.GetLocation()));
+            var hasInterpolatedArg = invocation.ArgumentList.Arguments
+                .Any(a => a.Expression is InterpolatedStringExpressionSyntax);
+            if (!hasInterpolatedArg)
+                context.ReportDiagnostic(Diagnostic.Create(NES003Rule, invocation.GetLocation()));
         }
     }
 
