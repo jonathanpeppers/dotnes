@@ -8,7 +8,7 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\dotnes.tasks\dotnes.tasks.csproj" />
-    <ProjectReference Include="..\dotnes.analyzers\dotnes.analyzers.csproj" />
+    <ProjectReference Include="..\dotnes.analyzers\dotnes.analyzers.csproj" ReferenceOutputAssembly="false" />
     <ProjectReference Include="..\neslib\neslib.csproj" />
   </ItemGroup>
   <ItemGroup>

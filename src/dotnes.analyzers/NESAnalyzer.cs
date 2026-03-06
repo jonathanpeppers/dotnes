@@ -124,7 +124,9 @@ public class NESAnalyzer : DiagnosticAnalyzer
         if (type.IsValueType)
             return;
 
-        // Allow byte[] and ushort[] (handled via ArrayCreationExpression, but new byte[N] also hits ObjectCreationExpression)
+        // Allow byte[] and ushort[]
+        // Note: array allocations are ArrayCreationExpression, not ObjectCreationExpression,
+        // but this guard handles any case where the type resolves to an array.
         if (type is IArrayTypeSymbol arrayType)
         {
             var elementType = arrayType.ElementType;
