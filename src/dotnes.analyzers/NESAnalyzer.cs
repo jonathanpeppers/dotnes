@@ -178,13 +178,17 @@ public class NESAnalyzer : DiagnosticAnalyzer
 
     static void AnalyzeDllImport(SyntaxNodeAnalysisContext context, SyntaxList<AttributeListSyntax> attributeLists)
     {
+        var dllImportType = context.SemanticModel.Compilation.GetTypeByMetadataName("System.Runtime.InteropServices.DllImportAttribute");
+        if (dllImportType is null)
+            return;
+
         foreach (var attributeList in attributeLists)
         {
             foreach (var attribute in attributeList.Attributes)
             {
                 var symbolInfo = context.SemanticModel.GetSymbolInfo(attribute, context.CancellationToken);
                 if (symbolInfo.Symbol is IMethodSymbol attributeConstructor &&
-                    attributeConstructor.ContainingType.ToDisplayString() == "System.Runtime.InteropServices.DllImportAttribute")
+                    SymbolEqualityComparer.Default.Equals(attributeConstructor.ContainingType, dllImportType))
                 {
                     context.ReportDiagnostic(Diagnostic.Create(NES006Rule, attribute.GetLocation()));
                     return;
