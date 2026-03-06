@@ -676,7 +676,7 @@ class IL2NESWriter : NESWriter
                         }
                         else
                         {
-                            throw new TranspileException($"Division by {divisor} is not yet supported. Use power-of-2 divisors (2, 4, 8...) or bit shifts instead.", MethodName);
+                            throw new TranspileException($"Division by {divisor} is not yet supported. Replace with a power-of-2 divisor (2, 4, 8, 16) or use bit shift operations instead.", MethodName);
                         }
                         _runtimeValueInA = true;
                         Stack.Push(0);
@@ -3093,7 +3093,7 @@ class IL2NESWriter : NESWriter
         }
         else
         {
-            throw new TranspileException($"Local variable value {local.Value} exceeds the maximum supported size of ushort. Only byte and ushort local variables are supported on the NES.", MethodName);
+            throw new TranspileException($"Local variable holds a constant value ({local.Value}) that exceeds the maximum supported size of ushort ({ushort.MaxValue}). Only byte and ushort values are supported on the NES.", MethodName);
         }
     }
 
@@ -3216,7 +3216,7 @@ class IL2NESWriter : NESWriter
             }
             else
             {
-                throw new TranspileException($"Local variable value {local.Value} exceeds the maximum supported size of ushort. Only byte and ushort local variables are supported on the NES.", MethodName);
+                throw new TranspileException($"Local variable holds a constant value ({local.Value}) that exceeds the maximum supported size of ushort ({ushort.MaxValue}). Only byte and ushort values are supported on the NES.", MethodName);
             }
         }
         else
