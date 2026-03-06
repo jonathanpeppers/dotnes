@@ -30,12 +30,12 @@ public class NESAnalyzer : DiagnosticAnalyzer
 
     static readonly DiagnosticDescriptor NES002Rule = new(
         NES002,
-        "Classes and objects are not supported",
-        "Type '{0}' uses classes/objects which are not supported on the NES",
+        "Class declarations are not supported",
+        "Class '{0}' is not supported; the NES does not support class declarations",
         Category,
         DiagnosticSeverity.Error,
         isEnabledByDefault: true,
-        description: "The NES has no heap or garbage collector, so classes and objects cannot be used.");
+        description: "The NES has no heap or garbage collector, so class declarations cannot be used. Use top-level statements, static methods, and structs instead.");
 
     static readonly DiagnosticDescriptor NES003Rule = new(
         NES003,
@@ -84,8 +84,10 @@ public class NESAnalyzer : DiagnosticAnalyzer
         context.RegisterSyntaxNodeAction(AnalyzeClassDeclaration, SyntaxKind.ClassDeclaration);
         context.RegisterSyntaxNodeAction(AnalyzeStringExpression, SyntaxKind.AddExpression);
         context.RegisterSyntaxNodeAction(AnalyzeInterpolatedString, SyntaxKind.InterpolatedStringExpression);
+        context.RegisterSyntaxNodeAction(AnalyzeInvocation, SyntaxKind.InvocationExpression);
         context.RegisterSyntaxNodeAction(AnalyzeObjectCreation, SyntaxKind.ObjectCreationExpression);
         context.RegisterSyntaxNodeAction(AnalyzeObjectCreation, SyntaxKind.ImplicitObjectCreationExpression);
+        context.RegisterSyntaxNodeAction(AnalyzeArrayCreation, SyntaxKind.ArrayCreationExpression, SyntaxKind.ImplicitArrayCreationExpression);
         context.RegisterSyntaxNodeAction(AnalyzeVariableDeclaration, SyntaxKind.VariableDeclaration);
         context.RegisterSyntaxNodeAction(AnalyzeMethodDeclaration, SyntaxKind.MethodDeclaration);
         context.RegisterSyntaxNodeAction(AnalyzeLocalFunctionStatement, SyntaxKind.LocalFunctionStatement);
@@ -95,6 +97,11 @@ public class NESAnalyzer : DiagnosticAnalyzer
     static void AnalyzeClassDeclaration(SyntaxNodeAnalysisContext context)
     {
         var classDeclaration = (ClassDeclarationSyntax)context.Node;
+
+        // Static classes are just containers for static methods and don't imply instance allocations / object usage
+        if (classDeclaration.Modifiers.Any(SyntaxKind.StaticKeyword))
+            return;
+
         context.ReportDiagnostic(Diagnostic.Create(NES002Rule, classDeclaration.Identifier.GetLocation(), classDeclaration.Identifier.Text));
     }
 
@@ -111,6 +118,51 @@ public class NESAnalyzer : DiagnosticAnalyzer
     static void AnalyzeInterpolatedString(SyntaxNodeAnalysisContext context)
     {
         context.ReportDiagnostic(Diagnostic.Create(NES003Rule, context.Node.GetLocation()));
+    }
+
+    static void AnalyzeInvocation(SyntaxNodeAnalysisContext context)
+    {
+        var invocation = (InvocationExpressionSyntax)context.Node;
+
+        // Cheap syntax pre-filter: only consider calls where the member name is one we care about.
+        if (invocation.Expression is not MemberAccessExpressionSyntax memberAccess)
+            return;
+
+        var memberName = memberAccess.Name.Identifier.Text;
+        if (memberName is not ("Format" or "Concat" or "Invariant"))
+            return;
+
+        var symbolInfo = context.SemanticModel.GetSymbolInfo(invocation, context.CancellationToken);
+        var method = symbolInfo.Symbol as IMethodSymbol
+                     ?? symbolInfo.CandidateSymbols.OfType<IMethodSymbol>().FirstOrDefault();
+        if (method is null)
+            return;
+
+        var containingType = method.ContainingType;
+        if (containingType is null)
+            return;
+
+        // Detect string.Format(...) and string.Concat(...)
+        if (containingType.SpecialType == SpecialType.System_String)
+        {
+            if (method.Name is "Format" or "Concat")
+            {
+                context.ReportDiagnostic(Diagnostic.Create(NES003Rule, invocation.GetLocation()));
+                return;
+            }
+        }
+
+        // FormattableString.Invariant(...)
+        // Skip when the argument is an interpolated string — AnalyzeInterpolatedString already covers it.
+        if (containingType.Name == "FormattableString" &&
+            containingType.ContainingNamespace?.ToDisplayString() == "System" &&
+            method.Name == "Invariant")
+        {
+            var hasInterpolatedArg = invocation.ArgumentList.Arguments
+                .Any(a => a.Expression is InterpolatedStringExpressionSyntax);
+            if (!hasInterpolatedArg)
+                context.ReportDiagnostic(Diagnostic.Create(NES003Rule, invocation.GetLocation()));
+        }
     }
 
     static void AnalyzeObjectCreation(SyntaxNodeAnalysisContext context)
@@ -137,6 +189,27 @@ public class NESAnalyzer : DiagnosticAnalyzer
         context.ReportDiagnostic(Diagnostic.Create(NES004Rule, context.Node.GetLocation()));
     }
 
+    static void AnalyzeArrayCreation(SyntaxNodeAnalysisContext context)
+    {
+        var typeInfo = context.SemanticModel.GetTypeInfo(context.Node, context.CancellationToken);
+        var type = typeInfo.Type;
+        if (type is not IArrayTypeSymbol arrayType)
+            return;
+
+        var elementType = arrayType.ElementType;
+
+        // Allow byte[] and ushort[]
+        if (elementType.SpecialType == SpecialType.System_Byte || elementType.SpecialType == SpecialType.System_UInt16)
+            return;
+
+        // Allow struct arrays
+        if (elementType.IsValueType && elementType.TypeKind == TypeKind.Struct && elementType.SpecialType == SpecialType.None)
+            return;
+
+        context.ReportDiagnostic(Diagnostic.Create(NES004Rule, context.Node.GetLocation()));
+    }
+
+
     static void AnalyzeVariableDeclaration(SyntaxNodeAnalysisContext context)
     {
         var variableDeclaration = (VariableDeclarationSyntax)context.Node;
@@ -161,7 +234,7 @@ public class NESAnalyzer : DiagnosticAnalyzer
     static void AnalyzeMethodDeclaration(SyntaxNodeAnalysisContext context)
     {
         var method = (MethodDeclarationSyntax)context.Node;
-        AnalyzeDllImport(context, method.AttributeLists, method.GetLocation());
+        AnalyzeDllImport(context, method.AttributeLists);
         AnalyzeMethodReturnAndParams(context, method.ReturnType, method.ParameterList);
     }
 
@@ -171,16 +244,21 @@ public class NESAnalyzer : DiagnosticAnalyzer
         AnalyzeMethodReturnAndParams(context, function.ReturnType, function.ParameterList);
     }
 
-    static void AnalyzeDllImport(SyntaxNodeAnalysisContext context, SyntaxList<AttributeListSyntax> attributeLists, Location location)
+    static void AnalyzeDllImport(SyntaxNodeAnalysisContext context, SyntaxList<AttributeListSyntax> attributeLists)
     {
+        var dllImportType = context.SemanticModel.Compilation.GetTypeByMetadataName("System.Runtime.InteropServices.DllImportAttribute");
+        if (dllImportType is null)
+            return;
+
         foreach (var attributeList in attributeLists)
         {
             foreach (var attribute in attributeList.Attributes)
             {
-                var name = attribute.Name.ToString();
-                if (name is "DllImport" or "System.Runtime.InteropServices.DllImport" or "DllImportAttribute" or "System.Runtime.InteropServices.DllImportAttribute")
+                var symbolInfo = context.SemanticModel.GetSymbolInfo(attribute, context.CancellationToken);
+                if (symbolInfo.Symbol is IMethodSymbol attributeConstructor &&
+                    SymbolEqualityComparer.Default.Equals(attributeConstructor.ContainingType, dllImportType))
                 {
-                    context.ReportDiagnostic(Diagnostic.Create(NES006Rule, location));
+                    context.ReportDiagnostic(Diagnostic.Create(NES006Rule, attribute.GetLocation()));
                     return;
                 }
             }
