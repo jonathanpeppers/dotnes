@@ -38,7 +38,7 @@ class NESWriter : IDisposable
     /// </summary>
     public const int CHR_ROM_BLOCK_SIZE = 8192;
 
-    protected const ushort BaseAddress = 0x8000;
+    protected const ushort BaseAddress = NESConstants.PrgRomStart;
 
     protected readonly BinaryWriter _writer;
     protected readonly ILogger _logger;

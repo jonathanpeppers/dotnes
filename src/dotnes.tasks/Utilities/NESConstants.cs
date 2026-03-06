@@ -22,6 +22,7 @@ internal static class NESConstants
     public const int PPU_CTRL_VAR1 = 0x0F;   // split() saved PPU_CTRL
     public const int NMI_CALLBACK = 0x14;  // 3 bytes: JMP opcode + address ($14-$16)
     public const int TEMP = 0x17;
+    public const int TEMP_HI = 0x18;   // TEMP+1 (also used as DUP_TEMP; not always the "high byte")
     public const int RAND_SEED = 0x3C;  // 1 byte: random seed for LFSR PRNG (cc65 compatible)
     public const int TEMP2 = 0x19;  // Additional temporary variable
     public const int TEMP3 = 0x1A;  // Additional temporary variable
@@ -37,6 +38,12 @@ internal static class NESConstants
     public const int RLE_BYTE = 0x31;
     public const int PRG_FILEOFFS = 0x10;
     public const int PPU_MASK_VAR = 0x12;
+
+    // Local variable storage
+    public const ushort LocalStackBase = 0x0325;
+
+    // PRG ROM
+    public const ushort PrgRomStart = 0x8000;
 
     // RAM buffers
     public const ushort OAM_BUF = 0x0200;
