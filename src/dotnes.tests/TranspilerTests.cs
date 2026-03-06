@@ -80,6 +80,8 @@ public class TranspilerTests
     [InlineData("horizmask", false, true)]
     [InlineData("multifile", true)]
     [InlineData("multifile", false)]
+    [InlineData("fade", true)]
+    [InlineData("fade", false)]
     [InlineData("ppuhello", true)]
     [InlineData("ppuhello", false)]
     [InlineData("scoreboard", true)]
