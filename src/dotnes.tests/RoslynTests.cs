@@ -1257,7 +1257,7 @@ public class RoslynTests
     [Fact]
     public void SizeofNint()
     {
-        // sizeof(nint) emits the same IL as IntPtr.Size
+        // sizeof(nint) produces the same 6502 output as IntPtr.Size
         var bytes = GetProgramBytes(
             """
             unsafe
