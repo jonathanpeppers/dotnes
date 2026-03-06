@@ -1590,6 +1590,28 @@ public class RoslynTests
     }
 
     [Fact]
+    public void DivisionGeneral()
+    {
+        // x / 3 needs software division (runtime value, non-power-of-2)
+        var bytes = GetProgramBytes(
+            """
+            byte x = rand8();
+            byte r = (byte)(x / 3);
+            pal_col(0, r);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        // Should contain LDX #$FF, SBC #$03, and TXA opcodes
+        Assert.Contains("A2FF", hex); // LDX #$FF
+        Assert.Contains("E903", hex); // SBC #$03
+        Assert.Contains("8A", hex);   // TXA
+    }
+
+    [Fact]
     public void SignedDivisionByPowerOf2()
     {
         // sbyte / 4 needs arithmetic shift right (preserving sign)
