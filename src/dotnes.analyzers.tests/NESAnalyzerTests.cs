@@ -151,7 +151,7 @@ public class NESAnalyzerTests
         await VerifyLibraryAsync(test, expected);
     }
 
-    // ==================== NES002: Classes not supported ====================
+    // ==================== NES002: Class declarations not supported ====================
 
     [Fact]
     public async Task NES002_ClassDeclaration_Diagnostic()
@@ -198,6 +198,22 @@ public class NESAnalyzerTests
         await VerifyAsync(test);
     }
 
+    [Fact]
+    public async Task NES002_ReferenceTypeVariable_TriggersNES005NotNES002()
+    {
+        // Reference types used as variables should trigger NES005 (unsupported type),
+        // not NES002 (class declaration). NES002 is specifically for class declarations.
+        var test = """
+            System.Collections.Generic.List<byte> {|#0:list|} = {|#1:new System.Collections.Generic.List<byte>()|};
+            while (true) ;
+            """;
+
+        // NES005 for the unsupported variable type, NES004 for the allocation
+        await VerifyAsync(test,
+            Diagnostic(NESAnalyzer.NES005).WithLocation(0).WithArguments("System.Collections.Generic.List<byte>"),
+            Diagnostic(NESAnalyzer.NES004).WithLocation(1));
+    }
+
     // ==================== NES003: String manipulation not supported ====================
 
     [Fact]
@@ -232,6 +248,60 @@ public class NESAnalyzerTests
         var test = """
             string s = "HELLO";
             while (true) ;
+            """;
+
+        await VerifyAsync(test);
+    }
+
+    [Fact]
+    public async Task NES003_StringFormat_Diagnostic()
+    {
+        var test = """
+            byte x = 5;
+            string s = {|#0:string.Format("value: {0}", x)|};
+            while (true) ;
+            """;
+
+        var expected = Diagnostic(NESAnalyzer.NES003).WithLocation(0);
+        await VerifyAsync(test, expected);
+    }
+
+    [Fact]
+    public async Task NES003_StringConcat_Diagnostic()
+    {
+        var test = """
+            string a = "hello";
+            string b = {|#0:string.Concat(a, " world")|};
+            while (true) ;
+            """;
+
+        var expected = Diagnostic(NESAnalyzer.NES003).WithLocation(0);
+        await VerifyAsync(test, expected);
+    }
+
+    [Fact]
+    public async Task NES003_FormattableStringInvariant_Diagnostic()
+    {
+        // When the argument is an interpolated string, AnalyzeInterpolatedString already fires NES003
+        // so the invocation handler skips the duplicate diagnostic.
+        var test = """
+            byte x = 5;
+            string s = System.FormattableString.Invariant({|#0:$"value: {x}"|});
+            while (true) ;
+            """;
+
+        await VerifyAsync(test,
+            Diagnostic(NESAnalyzer.NES003).WithLocation(0));
+    }
+
+    [Fact]
+    public async Task NES003_RegularMethodCall_NoDiagnostic()
+    {
+        var test = """
+            setup();
+            while (true) ;
+
+            static void setup() { }
             """;
 
         await VerifyAsync(test);
