@@ -96,7 +96,7 @@ public class NESAnalyzer : DiagnosticAnalyzer
     {
         var classDeclaration = (ClassDeclarationSyntax)context.Node;
 
-        // Static classes are just containers for static methods — no heap allocation involved
+        // Static classes are just containers for static methods and don't imply instance allocations / object usage
         if (classDeclaration.Modifiers.Any(SyntaxKind.StaticKeyword))
             return;
 
