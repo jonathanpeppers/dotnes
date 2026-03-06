@@ -95,6 +95,11 @@ public class NESAnalyzer : DiagnosticAnalyzer
     static void AnalyzeClassDeclaration(SyntaxNodeAnalysisContext context)
     {
         var classDeclaration = (ClassDeclarationSyntax)context.Node;
+
+        // Static classes are just containers for static methods and don't imply instance allocations / object usage
+        if (classDeclaration.Modifiers.Any(SyntaxKind.StaticKeyword))
+            return;
+
         context.ReportDiagnostic(Diagnostic.Create(NES002Rule, classDeclaration.Identifier.GetLocation(), classDeclaration.Identifier.Text));
     }
 
