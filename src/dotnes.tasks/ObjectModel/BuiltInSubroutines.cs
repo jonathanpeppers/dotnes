@@ -1292,6 +1292,7 @@ internal static class BuiltInSubroutines
              .Emit(STA_zpg(TEMP2))
              .Emit(STX_zpg(TEMP3))
              .Emit(LDY(0x00))
+             .Emit(LDA_abs(PPU_DATA))           // dummy read (PPU $2007 is buffered for non-palette addresses)
              .Emit(LDA_abs(PPU_DATA), "@1")
              .Emit(STA_ind_Y(TEMP2))
              .Emit(INC_zpg(TEMP2))

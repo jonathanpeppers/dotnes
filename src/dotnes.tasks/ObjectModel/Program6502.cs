@@ -658,6 +658,8 @@ public class Program6502
                 size += BuiltInSubroutines.ApuInit().ByteSize;
             if (usedMethods.Contains("vram_unrle"))
                 size += BuiltInSubroutines.VramUnrle().ByteSize;
+            if (usedMethods.Contains("vram_read"))
+                size += BuiltInSubroutines.VramRead().ByteSize;
             if (usedMethods.Contains("split"))
                 size += BuiltInSubroutines.Split().ByteSize;
             if (usedMethods.Contains("vrambuf_clear"))

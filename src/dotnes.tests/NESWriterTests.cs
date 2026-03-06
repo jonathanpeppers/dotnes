@@ -116,7 +116,7 @@ public class NESWriterTests
         writer.Labels["popax"] = 0x857C;
         writer.WriteBlock(BuiltInSubroutines.VramRead());
         writer.Flush();
-        AssertInstructions("8517 8618 207C85 8519 861A A000 AD0720 9119 E619 D002 E61A A517 D002 C618 C617 A517 0518 D0E7 60");
+        AssertInstructions("8517 8618 207C85 8519 861A A000 AD0720 AD0720 9119 E619 D002 E61A A517 D002 C618 C617 A517 0518 D0E7 60");
     }
 
     [Fact]
