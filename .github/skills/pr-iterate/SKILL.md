@@ -205,11 +205,34 @@ Then verify:
 gh pr checks <number> --repo <owner>/<repo>
 ```
 
-Once all checks pass, post a final comment:
+Once all checks pass:
 
-```bash
-gh pr comment <number> --repo <owner>/<repo> --body "🤖 CI is green. Ready for human review."
-```
+1. **Capture a screenshot or GIF** if the PR adds or modifies a sample. Build the
+   solution first (`dotnet build` from the repo root), then use the screenshot or
+   record script:
+
+   ```powershell
+   # Screenshot (PNG)
+   dotnet run scripts/screenshot-nes.cs -- samples/<name>/bin/Debug/net10.0/<name>.nes 4000 samples/<name>/<name>.png
+
+   # Animated GIF (better for samples with movement)
+   dotnet run scripts/record-nes.cs -- samples/<name>/bin/Debug/net10.0/<name>.nes --gif --output samples/<name>/<name>.gif
+   ```
+
+   Upload the image to the PR comment so reviewers can see the result without
+   running it locally.
+
+2. **Post a final comment** with the screenshot/GIF attached:
+
+   ```powershell
+   # Upload the image and include it in the comment
+   gh pr comment <number> --repo <owner>/<repo> --body "🤖 CI is green. Ready for human review.
+
+   ![<name> sample](samples/<name>/<name>.png)"
+   ```
+
+   If the PR does NOT involve a sample (e.g., analyzer changes, build fixes),
+   just post the text comment without a screenshot.
 
 ## Important Rules
 
