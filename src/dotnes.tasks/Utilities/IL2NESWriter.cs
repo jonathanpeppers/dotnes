@@ -321,13 +321,32 @@ class IL2NESWriter : NESWriter
 
             // Handle indexed array access: LDA array,X from ldelem.u1
             // Pattern: LDA value1; LDX index; LDA array,X → convert last to CMP array,X
+            // Only valid when there are two runtime values — either _savedRuntimeToTemp
+            // or a preceding LDA in the block (before the LDX+LDA pair).
             if (lastInstr.Opcode == Opcode.LDA
                 && lastInstr.Mode == AddressMode.AbsoluteX
                 && lastInstr.Operand is AbsoluteOperand idxOp)
             {
-                // Replace LDA array,X with CMP array,X — A still has value1 from earlier
-                RemoveLastInstructions(1);
-                Emit(Opcode.CMP, AddressMode.AbsoluteX, idxOp.Address);
+                bool hasPrecedingRuntimeLDA = _savedRuntimeToTemp;
+                if (!hasPrecedingRuntimeLDA && block.Count >= 3)
+                {
+                    // Look past the LDX at block[-2] for a preceding LDA (Absolute/ZeroPage)
+                    var beforeLDX = block[block.Count - 3];
+                    hasPrecedingRuntimeLDA = beforeLDX.Opcode == Opcode.LDA
+                        && beforeLDX.Mode is AddressMode.Absolute or AddressMode.ZeroPage;
+                }
+                if (hasPrecedingRuntimeLDA)
+                {
+                    // Two runtime values: A has value1, replace LDA with CMP
+                    RemoveLastInstructions(1);
+                    Emit(Opcode.CMP, AddressMode.AbsoluteX, idxOp.Address);
+                    _savedRuntimeToTemp = false;
+                }
+                else
+                {
+                    // Single runtime array value vs constant: keep the LDA, emit CMP #imm
+                    Emit(Opcode.CMP, AddressMode.Immediate, checked((byte)(stackValue + adjustValue)));
+                }
                 return;
             }
 
