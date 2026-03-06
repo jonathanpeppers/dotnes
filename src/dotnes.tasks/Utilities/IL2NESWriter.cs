@@ -147,6 +147,13 @@ class IL2NESWriter : NESWriter
     bool _ntadrRuntimeResult;
 
     /// <summary>
+    /// True when a dup'd runtime value has been saved to DUP_TEMP ($18) for cascading
+    /// if-else comparisons. When dup is encountered with _runtimeValueInA=false but
+    /// this flag is true, A is reloaded from DUP_TEMP.
+    /// </summary>
+    bool _dupSavedValue;
+
+    /// <summary>
     /// True when A and X hold a 16-bit value (A=lo, X=hi) from a ushort load.
     /// Used by WriteLdc to emit pushax instead of pusha.
     /// </summary>
@@ -404,6 +411,14 @@ class IL2NESWriter : NESWriter
                 Emit(Opcode.CMP, AddressMode.Immediate, checked((byte)(stackValue + adjustValue)));
                 return;
             }
+            // If the dup handler saved A to DUP_TEMP, the last instruction is STA $18 (first save)
+            // or LDA $18 (subsequent reload). Keep it, just emit CMP.
+            if (_dupSavedValue && (lastInstr.Opcode == Opcode.STA || lastInstr.Opcode == Opcode.LDA)
+                && lastInstr.Mode == AddressMode.ZeroPage)
+            {
+                Emit(Opcode.CMP, AddressMode.Immediate, checked((byte)(stackValue + adjustValue)));
+                return;
+            }
         }
         // Constant comparison: remove last LDA #imm, emit CMP #imm
         RemoveLastInstructions(1);
@@ -431,11 +446,25 @@ class IL2NESWriter : NESWriter
             case ILOpCode.Dup:
                 if (Stack.Count > 0)
                     Stack.Push(Stack.Peek());
+                if (_runtimeValueInA && !_dupSavedValue && IsDupCascadeComparison())
+                {
+                    // First dup in a cascading equality comparison (e.g., if (st==1)...else if (st==2)...)
+                    // Save A to DUP_TEMP so subsequent dup points can reload it after case bodies clobber A
+                    Emit(Opcode.STA, AddressMode.ZeroPage, DUP_TEMP);
+                    _dupSavedValue = true;
+                }
+                else if (!_runtimeValueInA && _dupSavedValue)
+                {
+                    // Subsequent dup after a case body clobbered A: reload from DUP_TEMP
+                    Emit(Opcode.LDA, AddressMode.ZeroPage, DUP_TEMP);
+                    _runtimeValueInA = true;
+                }
                 break;
             case ILOpCode.Pop:
                 if (Stack.Count > 0)
                     Stack.Pop();
                 _runtimeValueInA = false;
+                _dupSavedValue = false;
                 break;
             case ILOpCode.Ldc_i4_m1:
                 WriteLdc(0xFF); // -1 in two's complement = 0xFF
@@ -1262,6 +1291,31 @@ class IL2NESWriter : NESWriter
     public ILInstruction[]? Instructions { get; set; }
 
     public int Index { get; set; }
+
+    /// <summary>
+    /// Checks if the current dup is part of a cascading equality comparison pattern:
+    /// dup → ldc → bne/beq (e.g., if (x==1)...else if (x==2)...).
+    /// Returns false for bit-mask patterns: dup → ldc → and → brfalse.
+    /// </summary>
+    bool IsDupCascadeComparison()
+    {
+        if (Instructions is null || Index + 2 >= Instructions.Length)
+            return false;
+
+        var next1 = Instructions[Index + 1].OpCode;
+        var next2 = Instructions[Index + 2].OpCode;
+
+        // Check: dup is followed by ldc_i4* then a branch (not and/or/sub)
+        bool isLdc = next1 is ILOpCode.Ldc_i4_0 or ILOpCode.Ldc_i4_1 or ILOpCode.Ldc_i4_2
+            or ILOpCode.Ldc_i4_3 or ILOpCode.Ldc_i4_4 or ILOpCode.Ldc_i4_5
+            or ILOpCode.Ldc_i4_6 or ILOpCode.Ldc_i4_7 or ILOpCode.Ldc_i4_8
+            or ILOpCode.Ldc_i4_s or ILOpCode.Ldc_i4 or ILOpCode.Ldc_i4_m1;
+
+        bool isBranch = next2 is ILOpCode.Bne_un_s or ILOpCode.Bne_un
+            or ILOpCode.Beq_s or ILOpCode.Beq;
+
+        return isLdc && isBranch;
+    }
 
     byte NumberOfInstructionsForBranch(int stopAt)
     {
