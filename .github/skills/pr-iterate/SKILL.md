@@ -64,11 +64,22 @@ Get-Content test_out.txt -Tail 30
 
 ### 3. Leave a Review
 
-Submit a review on the PR. Always prefix the body with 🤖:
+Submit a review on the PR. Always prefix the body with 🤖.
 
-```bash
-gh pr review <number> --repo <owner>/<repo> --comment --body "🤖 <your review>"
+**Formatting rule:** Write the review body to a temp file and use `--body-file` to
+avoid shell escaping issues with backticks and special characters:
+
+```powershell
+$body = @"
+🤖 Your review here. Use `backticks` freely — no escaping needed.
+"@
+$body | Set-Content -Path review.md -Encoding utf8
+gh pr review <number> --repo <owner>/<repo> --approve --body-file review.md
+Remove-Item review.md
 ```
+
+**Never** pass review bodies with backticks directly via `--body` — PowerShell and
+the gh CLI mangle them into backslash-escaped garbage.
 
 Use `--comment` for feedback that needs changes, `--approve` when it looks good.
 Be specific about what you checked and any concerns.
