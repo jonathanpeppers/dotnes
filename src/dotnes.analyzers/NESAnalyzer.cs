@@ -84,6 +84,7 @@ public class NESAnalyzer : DiagnosticAnalyzer
         context.RegisterSyntaxNodeAction(AnalyzeClassDeclaration, SyntaxKind.ClassDeclaration);
         context.RegisterSyntaxNodeAction(AnalyzeStringExpression, SyntaxKind.AddExpression);
         context.RegisterSyntaxNodeAction(AnalyzeInterpolatedString, SyntaxKind.InterpolatedStringExpression);
+        context.RegisterSyntaxNodeAction(AnalyzeInvocation, SyntaxKind.InvocationExpression);
         context.RegisterSyntaxNodeAction(AnalyzeObjectCreation, SyntaxKind.ObjectCreationExpression);
         context.RegisterSyntaxNodeAction(AnalyzeObjectCreation, SyntaxKind.ImplicitObjectCreationExpression);
         context.RegisterSyntaxNodeAction(AnalyzeVariableDeclaration, SyntaxKind.VariableDeclaration);
@@ -111,6 +112,36 @@ public class NESAnalyzer : DiagnosticAnalyzer
     static void AnalyzeInterpolatedString(SyntaxNodeAnalysisContext context)
     {
         context.ReportDiagnostic(Diagnostic.Create(NES003Rule, context.Node.GetLocation()));
+    }
+
+    static void AnalyzeInvocation(SyntaxNodeAnalysisContext context)
+    {
+        var invocation = (InvocationExpressionSyntax)context.Node;
+        var symbolInfo = context.SemanticModel.GetSymbolInfo(invocation, context.CancellationToken);
+        if (symbolInfo.Symbol is not IMethodSymbol method)
+            return;
+
+        var containingType = method.ContainingType;
+        if (containingType is null)
+            return;
+
+        // string.Format(...) or string.Concat(...)
+        if (containingType.SpecialType == SpecialType.System_String)
+        {
+            if (method.Name is "Format" or "Concat")
+            {
+                context.ReportDiagnostic(Diagnostic.Create(NES003Rule, invocation.GetLocation()));
+                return;
+            }
+        }
+
+        // FormattableString.Invariant(...)
+        if (containingType.Name == "FormattableString" &&
+            containingType.ContainingNamespace?.ToDisplayString() == "System" &&
+            method.Name == "Invariant")
+        {
+            context.ReportDiagnostic(Diagnostic.Create(NES003Rule, invocation.GetLocation()));
+        }
     }
 
     static void AnalyzeObjectCreation(SyntaxNodeAnalysisContext context)

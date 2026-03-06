@@ -202,6 +202,60 @@ public class NESAnalyzerTests
         await VerifyAsync(test);
     }
 
+    [Fact]
+    public async Task NES003_StringFormat_Diagnostic()
+    {
+        var test = """
+            byte x = 5;
+            string s = {|#0:string.Format("value: {0}", x)|};
+            while (true) ;
+            """;
+
+        var expected = Diagnostic(NESAnalyzer.NES003).WithLocation(0);
+        await VerifyAsync(test, expected);
+    }
+
+    [Fact]
+    public async Task NES003_StringConcat_Diagnostic()
+    {
+        var test = """
+            string a = "hello";
+            string b = {|#0:string.Concat(a, " world")|};
+            while (true) ;
+            """;
+
+        var expected = Diagnostic(NESAnalyzer.NES003).WithLocation(0);
+        await VerifyAsync(test, expected);
+    }
+
+    [Fact]
+    public async Task NES003_FormattableStringInvariant_Diagnostic()
+    {
+        var test = """
+            byte x = 5;
+            string s = {|#0:System.FormattableString.Invariant({|#1:$"value: {x}"|})|};
+            while (true) ;
+            """;
+
+        // Both the FormattableString.Invariant invocation and the interpolated string fire NES003
+        await VerifyAsync(test,
+            Diagnostic(NESAnalyzer.NES003).WithLocation(0),
+            Diagnostic(NESAnalyzer.NES003).WithLocation(1));
+    }
+
+    [Fact]
+    public async Task NES003_RegularMethodCall_NoDiagnostic()
+    {
+        var test = """
+            setup();
+            while (true) ;
+
+            static void setup() { }
+            """;
+
+        await VerifyAsync(test);
+    }
+
     // ==================== NES004: Allocation types ====================
 
     [Fact]
