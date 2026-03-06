@@ -1222,6 +1222,13 @@ class IL2NESWriter : NESWriter
             case ILOpCode.Switch:
                 HandleSwitch(instruction, operand);
                 break;
+            case ILOpCode.Sizeof:
+                // Native integer size (nint/IntPtr) on the 6502 is 1 byte (8-bit CPU).
+                // Fixed-size primitive types (byte, ushort, int, etc.) are folded by Roslyn at compile time
+                // and typically never reach this opcode; this implementation only handles platform-dependent
+                // native integer sizeof values and will always push 1 here.
+                WriteLdc(1);
+                break;
             default:
                 throw new NotImplementedException($"OpCode {instruction.OpCode} with Int32 operand is not implemented!");
         }
@@ -1753,6 +1760,11 @@ class IL2NESWriter : NESWriter
                         break;
                     case "Array.Copy":
                         HandleArrayCopy();
+                        argsAlreadyPopped = true;
+                        break;
+                    case "IntPtr.get_Size":
+                        // 6502 is an 8-bit CPU: native integer size is 1 byte
+                        WriteLdc(1);
                         argsAlreadyPopped = true;
                         break;
                     default:

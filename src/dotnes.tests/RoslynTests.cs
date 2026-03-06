@@ -1237,6 +1237,93 @@ public class RoslynTests
     }
 
     [Fact]
+    public void IntPtrSize()
+    {
+        // IntPtr.Size should be 1 on the 6502 (8-bit CPU)
+        var bytes = GetProgramBytes(
+            """
+            byte size = (byte)System.IntPtr.Size;
+            pal_col(0, size);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        Assert.Contains("A901", hex);  // LDA #$01 (IntPtr.Size = 1)
+    }
+
+    [Fact]
+    public void SizeofNint()
+    {
+        // sizeof(nint) produces the same 6502 output as IntPtr.Size
+        var bytes = GetProgramBytes(
+            """
+            unsafe
+            {
+                byte size = (byte)sizeof(nint);
+                pal_col(0, size);
+            }
+            ppu_on_all();
+            while (true) ;
+            """,
+            additionalAssemblyFiles: null,
+            allowUnsafe: true);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        Assert.Contains("A901", hex);  // LDA #$01 (sizeof(nint) = 1)
+    }
+
+    [Fact]
+    public void SizeofUshort()
+    {
+        // sizeof(ushort) is folded by Roslyn to ldc.i4.2 at compile time (no Sizeof opcode)
+        var bytes = GetProgramBytes(
+            """
+            unsafe
+            {
+                byte size = (byte)sizeof(ushort);
+                pal_col(0, size);
+            }
+            ppu_on_all();
+            while (true) ;
+            """,
+            additionalAssemblyFiles: null,
+            allowUnsafe: true);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        Assert.Contains("A902", hex);  // LDA #$02 (sizeof(ushort) = 2, folded by Roslyn)
+    }
+
+    [Fact]
+    public void SizeofByte()
+    {
+        // sizeof(byte) is folded by Roslyn to ldc.i4.1 at compile time (no Sizeof opcode)
+        var bytes = GetProgramBytes(
+            """
+            unsafe
+            {
+                byte size = (byte)sizeof(byte);
+                pal_col(0, size);
+            }
+            ppu_on_all();
+            while (true) ;
+            """,
+            additionalAssemblyFiles: null,
+            allowUnsafe: true);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        Assert.Contains("A901", hex);  // LDA #$01 (sizeof(byte) = 1, folded by Roslyn)
+    }
+
+    [Fact]
     public void ArrayCopyBasic()
     {
         // Array.Copy between two runtime arrays
