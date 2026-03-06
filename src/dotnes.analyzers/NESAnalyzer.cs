@@ -128,7 +128,7 @@ public class NESAnalyzer : DiagnosticAnalyzer
         if (containingType is null)
             return;
 
-        // string.Format(...) or string.Concat(...)
+        // Detect string.Format(...) and string.Concat(...)
         if (containingType.SpecialType == SpecialType.System_String)
         {
             if (method.Name is "Format" or "Concat")
