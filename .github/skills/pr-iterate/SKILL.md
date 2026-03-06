@@ -181,6 +181,16 @@ For each unresolved review comment:
    **This is mandatory.** Every review comment must get its own reply describing
    the specific fix. Do not batch replies or skip this step.
 4. **Commit and push** the fix (with Co-authored-by trailer)
+5. **File follow-up issues** for valid feedback that is out of scope for this PR.
+   Reply to the comment acknowledging the point and linking the new issue:
+   ```bash
+   gh issue create --repo <owner>/<repo> \
+     --title "<concise title>" \
+     --body "Follow-up from PR #<number> review. <description>"
+   gh api repos/<owner>/<repo>/pulls/<number>/comments \
+     -f body="🤖 Valid point — filed #<issue> as a follow-up." \
+     -F in_reply_to=<comment-id>
+   ```
 
 If a review requests changes, address all comments before re-requesting review.
 After pushing fixes, go back to step 6 to monitor CI.
@@ -188,7 +198,7 @@ After pushing fixes, go back to step 6 to monitor CI.
 ### 9. Iterate
 
 Repeat steps 5-8 until CI is fully green, merge conflicts are resolved, and all
-review comments are addressed.
+review comments are addressed (either fixed or filed as follow-ups).
 Then verify:
 
 ```bash

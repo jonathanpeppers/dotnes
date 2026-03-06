@@ -121,14 +121,32 @@ public class NESAnalyzerTests
         var test = """
             namespace MyLib
             {
-                public static class {|#0:Helper|}
+                public static class Helper
                 {
                     public static byte Add(byte a, byte b) => (byte)(a + b);
                 }
             }
             """;
 
-        // NES002 fires for class, but NES001 should not
+        // Static class should not trigger NES002, and NES001 should not fire either
+        await VerifyLibraryAsync(test);
+    }
+
+    [Fact]
+    public async Task NES001_NoGlobalStatements_NonStaticClass_NoDiagnostic()
+    {
+        // NES001 should not fire for library code, even with a non-static class
+        var test = """
+            namespace MyLib
+            {
+                public class {|#0:Helper|}
+                {
+                    public byte Add(byte a, byte b) => (byte)(a + b);
+                }
+            }
+            """;
+
+        // NES002 fires for the non-static class, but NES001 should not
         var expected = Diagnostic(NESAnalyzer.NES002).WithLocation(0).WithArguments("Helper");
         await VerifyLibraryAsync(test, expected);
     }
@@ -153,6 +171,23 @@ public class NESAnalyzerTests
     }
 
     [Fact]
+    public async Task NES002_StaticClassDeclaration_NoDiagnostic()
+    {
+        // Static classes are just method containers, not objects
+        var test = """
+            namespace MyGame
+            {
+                static class Display
+                {
+                    public static void Setup() { }
+                }
+            }
+            """;
+
+        await VerifyLibraryAsync(test);
+    }
+
+    [Fact]
     public async Task NES002_NoClassDeclaration_NoDiagnostic()
     {
         var test = """
@@ -173,6 +208,7 @@ public class NESAnalyzerTests
             while (true) ;
             """;
 
+        // NES005 for the unsupported variable type, NES004 for the allocation
         await VerifyAsync(test,
             Diagnostic(NESAnalyzer.NES005).WithLocation(0).WithArguments("System.Collections.Generic.List<byte>"),
             Diagnostic(NESAnalyzer.NES004).WithLocation(1));
@@ -267,6 +303,70 @@ public class NESAnalyzerTests
                 public byte X;
                 public byte Y;
             }
+            """;
+
+        await VerifyAsync(test);
+    }
+
+    [Fact]
+    public async Task NES004_IntArrayAllocation_Diagnostic()
+    {
+        var test = """
+            int[] data = {|#0:new int[4]|};
+            while (true) ;
+            """;
+
+        var expected = Diagnostic(NESAnalyzer.NES004).WithLocation(0);
+        await VerifyAsync(test, expected);
+    }
+
+    [Fact]
+    public async Task NES004_StringArrayAllocation_Diagnostic()
+    {
+        var test = """
+            string[] data = {|#0:new string[2]|};
+            while (true) ;
+            """;
+
+        var expected = Diagnostic(NESAnalyzer.NES004).WithLocation(0);
+        await VerifyAsync(test, expected);
+    }
+
+    [Fact]
+    public async Task NES004_StructArrayAllocation_NoDiagnostic()
+    {
+        var test = """
+            MyPoint[] points = new MyPoint[4];
+            while (true) ;
+
+            struct MyPoint
+            {
+                public byte X;
+                public byte Y;
+            }
+            """;
+
+        await VerifyAsync(test);
+    }
+
+    [Fact]
+    public async Task NES004_ImplicitIntArrayAllocation_Diagnostic()
+    {
+        var test = """
+            int[] data = {|#0:new[] { 1, 2 }|};
+            while (true) ;
+            """;
+
+        var expected = Diagnostic(NESAnalyzer.NES004).WithLocation(0);
+        await VerifyAsync(test, expected);
+    }
+
+    [Fact]
+    public async Task NES004_ImplicitByteArrayAllocation_NoDiagnostic()
+    {
+        var test = """
+            byte[] data = new[] { (byte)1 };
+            while (true) ;
             """;
 
         await VerifyAsync(test);
@@ -408,18 +508,17 @@ public class NESAnalyzerTests
 
             namespace MyApp
             {
-                static class {|#0:NativeMethods|}
+                static class NativeMethods
                 {
-                    {|#1:[DllImport("kernel32")]
+                    {|#0:[DllImport("kernel32")]
                     static extern void Sleep(byte ms);|}
                 }
             }
             """;
 
-        // NES002 for class, NES006 for DllImport
+        // NES006 for DllImport (static class no longer triggers NES002)
         await VerifyLibraryAsync(test,
-            Diagnostic(NESAnalyzer.NES002).WithLocation(0).WithArguments("NativeMethods"),
-            Diagnostic(NESAnalyzer.NES006).WithLocation(1));
+            Diagnostic(NESAnalyzer.NES006).WithLocation(0));
     }
 
     [Fact]
