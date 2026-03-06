@@ -30,12 +30,12 @@ public class NESAnalyzer : DiagnosticAnalyzer
 
     static readonly DiagnosticDescriptor NES002Rule = new(
         NES002,
-        "Classes and objects are not supported",
-        "Type '{0}' uses classes/objects which are not supported on the NES",
+        "Class declarations are not supported",
+        "Class '{0}' is not supported; the NES does not support class declarations",
         Category,
         DiagnosticSeverity.Error,
         isEnabledByDefault: true,
-        description: "The NES has no heap or garbage collector, so classes and objects cannot be used.");
+        description: "The NES has no heap or garbage collector, so class declarations cannot be used. Use top-level statements, static methods, and structs instead.");
 
     static readonly DiagnosticDescriptor NES003Rule = new(
         NES003,

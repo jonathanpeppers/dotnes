@@ -6,7 +6,7 @@
 Rule ID | Category | Severity | Notes
 --------|----------|----------|-------
 NES001 | NES | Error | NES programs must end with an infinite loop
-NES002 | NES | Error | Classes and objects are not supported
+NES002 | NES | Error | Class declarations are not supported
 NES003 | NES | Error | String manipulation is not supported
 NES004 | NES | Warning | Unsupported allocation type
 NES005 | NES | Warning | Unsupported type

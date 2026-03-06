@@ -151,7 +151,7 @@ public class NESAnalyzerTests
         await VerifyLibraryAsync(test, expected);
     }
 
-    // ==================== NES002: Classes not supported ====================
+    // ==================== NES002: Class declarations not supported ====================
 
     [Fact]
     public async Task NES002_ClassDeclaration_Diagnostic()
@@ -196,6 +196,22 @@ public class NESAnalyzerTests
             """;
 
         await VerifyAsync(test);
+    }
+
+    [Fact]
+    public async Task NES002_ReferenceTypeVariable_TriggersNES005NotNES002()
+    {
+        // Reference types used as variables should trigger NES005 (unsupported type),
+        // not NES002 (class declaration). NES002 is specifically for class declarations.
+        var test = """
+            System.Collections.Generic.List<byte> {|#0:list|} = {|#1:new System.Collections.Generic.List<byte>()|};
+            while (true) ;
+            """;
+
+        // NES005 for the unsupported variable type, NES004 for the allocation
+        await VerifyAsync(test,
+            Diagnostic(NESAnalyzer.NES005).WithLocation(0).WithArguments("System.Collections.Generic.List<byte>"),
+            Diagnostic(NESAnalyzer.NES004).WithLocation(1));
     }
 
     // ==================== NES003: String manipulation not supported ====================
