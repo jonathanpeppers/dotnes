@@ -154,11 +154,16 @@ For each unresolved review comment:
 
 1. **Understand the feedback** — read the comment in context of the code it references
 2. **Fix the code** if the feedback is actionable
-3. **Reply to the comment** explaining what you did (always prefix with 🤖):
+3. **⚠️ Reply to EACH comment individually** explaining what you did:
    ```bash
-   gh api repos/<owner>/<repo>/pulls/comments/<comment-id>/replies \
-     -f body="🤖 Fixed — <what you changed and why>"
+   # Get comment IDs
+   gh api repos/<owner>/<repo>/pulls/<number>/comments --jq '.[].id'
+   # Reply to each one
+   gh api repos/<owner>/<repo>/pulls/<number>/comments/<comment-id>/replies \
+     -f body="Fixed in <sha> — <what you changed and why>"
    ```
+   **This is mandatory.** Every review comment must get its own reply describing
+   the specific fix. Do not batch replies or skip this step.
 4. **Commit and push** the fix (with Co-authored-by trailer)
 
 If a review requests changes, address all comments before re-requesting review.
@@ -182,8 +187,12 @@ gh pr comment <number> --repo <owner>/<repo> --body "🤖 CI is green. Ready for
 
 ## Important Rules
 
+- **Never commit or push directly to `main`** — all changes go through PRs, no exceptions
 - **Never merge** — the human reviews and merges
 - **Never force-push** — always push incremental commits
+- **Always reply to each review comment individually** — use the `/replies` API
+  endpoint for each comment ID. Never skip this even if you addressed all feedback
+  in a single commit.
 - **Always use `dotnet test` without `--no-build`** — the test project requires fresh builds
 - **Use `Start-Process` with redirected output** for `dotnet test` — it hangs in
   interactive PowerShell due to MSBuild terminal output
