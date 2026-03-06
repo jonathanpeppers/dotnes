@@ -128,8 +128,27 @@ public class NESAnalyzerTests
             }
             """;
 
-        // Static classes are allowed, NES001 should not fire for non-top-level code
+        // Static class should not trigger NES002, and NES001 should not fire either
         await VerifyLibraryAsync(test);
+    }
+
+    [Fact]
+    public async Task NES001_NoGlobalStatements_NonStaticClass_NoDiagnostic()
+    {
+        // NES001 should not fire for library code, even with a non-static class
+        var test = """
+            namespace MyLib
+            {
+                public class {|#0:Helper|}
+                {
+                    public byte Add(byte a, byte b) => (byte)(a + b);
+                }
+            }
+            """;
+
+        // NES002 fires for the non-static class, but NES001 should not
+        var expected = Diagnostic(NESAnalyzer.NES002).WithLocation(0).WithArguments("Helper");
+        await VerifyLibraryAsync(test, expected);
     }
 
     // ==================== NES002: Classes not supported ====================
@@ -152,9 +171,9 @@ public class NESAnalyzerTests
     }
 
     [Fact]
-    public async Task NES002_StaticClass_NoDiagnostic()
+    public async Task NES002_StaticClassDeclaration_NoDiagnostic()
     {
-        // Static classes are used as modules in multi-file NES projects
+        // Static classes are just method containers, not objects
         var test = """
             namespace MyGame
             {
@@ -471,7 +490,7 @@ public class NESAnalyzerTests
             }
             """;
 
-        // NES006 for DllImport (static class is allowed, no NES002)
+        // NES006 for DllImport (static class no longer triggers NES002)
         await VerifyLibraryAsync(test,
             Diagnostic(NESAnalyzer.NES006).WithLocation(0));
     }
