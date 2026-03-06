@@ -22,8 +22,8 @@ and ready for human review. The human will review and merge — never merge your
 **Every** comment, review body, or PR description edit you post must start with
 the 🤖 emoji so humans can instantly tell it came from automation. This applies to:
 
-- PR review bodies (`gh pr review --body "🤖 ..."`)
-- PR comments (`gh pr comment --body "🤖 ..."`)
+- PR review bodies (`gh pr review --body-file ...` — always use `--body-file`, see Step 3)
+- PR comments (`gh pr comment --body-file ...`)
 - Commit messages do NOT need the emoji (they already have the Co-authored-by trailer)
 
 ## Workflow
@@ -65,11 +65,27 @@ Get-Content test_out.txt -Tail 30
 
 ### 3. Leave a Review
 
-Submit a review on the PR. Always prefix the body with 🤖:
+Submit a review on the PR. Always prefix the body with 🤖.
 
-```bash
-gh pr review <number> --repo <owner>/<repo> --comment --body "🤖 <your review>"
+**Formatting rule:** Write the review body to a temp file and use `--body-file` to
+avoid shell escaping issues with backticks and special characters:
+
+```powershell
+$body = @'
+🤖 Your review here. Use `backticks` freely — no escaping needed.
+'@
+$tempFile = New-TemporaryFile
+try {
+    $body | Set-Content -Path $tempFile.FullName -Encoding utf8
+    gh pr review <number> --repo <owner>/<repo> --approve --body-file $tempFile.FullName
+}
+finally {
+    Remove-Item $tempFile -ErrorAction SilentlyContinue
+}
 ```
+
+**Never** pass review bodies with backticks directly via `--body` — PowerShell and
+the gh CLI mangle them into backslash-escaped garbage.
 
 Use `--comment` for feedback that needs changes, `--approve` when it looks good.
 Be specific about what you checked and any concerns.
