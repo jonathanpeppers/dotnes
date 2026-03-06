@@ -4410,15 +4410,29 @@ class IL2NESWriter : NESWriter
 
             // Determine the value to store from the value expression
             int? constValue = null;
+            int? storeValueLocalIdx = null;
             for (int i = valueStart; i < Index; i++)
             {
                 int? val = GetLdcValue(Instructions[i]);
                 if (val != null)
                     constValue = val;
+                // Track if the value comes from a local variable
+                int? locIdx = GetLdlocIndex(Instructions[i]);
+                if (locIdx != null)
+                    storeValueLocalIdx = locIdx;
             }
 
             if (constValue != null)
+            {
                 Emit(Opcode.LDA, AddressMode.Immediate, checked((byte)constValue.Value));
+            }
+            else if (storeValueLocalIdx != null &&
+                     Locals.TryGetValue(storeValueLocalIdx.Value, out var valueLocal) &&
+                     valueLocal.Address.HasValue)
+            {
+                // Value is a runtime local variable — load it
+                Emit(Opcode.LDA, AddressMode.Absolute, (ushort)valueLocal.Address.Value);
+            }
 
             Emit(Opcode.STA, AddressMode.Absolute, (ushort)(targetArray.Address + constantIndex));
 

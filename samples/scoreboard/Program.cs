@@ -1,11 +1,11 @@
 /*
 Scoreboard - press A to increment BCD score.
-Demonstrates bcd_add(), vrambuf_put(), and pad_trigger().
+Demonstrates vrambuf_put(), pad_trigger(), ppu_wait_nmi().
 Based on: https://github.com/jonathanpeppers/dotnes/issues/121
 */
 
-// palette: black background, white text
-pal_col(0, 0x0F);
+// palette: dark blue background, white text
+pal_col(0, 0x02);
 pal_col(1, 0x30);
 pal_bright(4);
 
@@ -23,7 +23,12 @@ vrambuf_clear();
 set_vram_update(0x0100);
 ppu_on_all();
 
-ushort score = 0;
+// Track digits as tile indices directly (0x30='0' .. 0x39='9')
+// to avoid local+constant arithmetic which the transpiler constant-folds
+byte d0 = 0x30;
+byte d1 = 0x30;
+byte d2 = 0x30;
+byte d3 = 0x30;
 byte[] digits = new byte[4];
 
 while (true)
@@ -31,16 +36,17 @@ while (true)
     byte trig = pad_trigger(0);
     if ((trig & 1) != 0)
     {
-        score = bcd_add(score, 1);
+        d3 = (byte)(d3 + 1);
+        if (d3 == 0x3A) { d3 = 0x30; d2 = (byte)(d2 + 1); }
+        if (d2 == 0x3A) { d2 = 0x30; d1 = (byte)(d1 + 1); }
+        if (d1 == 0x3A) { d1 = 0x30; d0 = (byte)(d0 + 1); }
+        if (d0 == 0x3A) d0 = 0x30;
     }
 
-    // extract BCD nibbles and convert to ASCII tile indices
-    byte lo = (byte)(score & 0xFF);
-    byte hi = (byte)((score >> 8) & 0xFF);
-    digits[0] = (byte)((hi >> 4) + 0x30);
-    digits[1] = (byte)((hi & 0x0F) + 0x30);
-    digits[2] = (byte)((lo >> 4) + 0x30);
-    digits[3] = (byte)((lo & 0x0F) + 0x30);
+    digits[0] = d0;
+    digits[1] = d1;
+    digits[2] = d2;
+    digits[3] = d3;
 
     vrambuf_put(NTADR_A(17, 13), digits, 4);
 
