@@ -121,14 +121,32 @@ public class NESAnalyzerTests
         var test = """
             namespace MyLib
             {
-                public static class {|#0:Helper|}
+                public static class Helper
                 {
                     public static byte Add(byte a, byte b) => (byte)(a + b);
                 }
             }
             """;
 
-        // NES002 fires for class, but NES001 should not
+        // Static class should not trigger NES002, and NES001 should not fire either
+        await VerifyLibraryAsync(test);
+    }
+
+    [Fact]
+    public async Task NES001_NoGlobalStatements_NonStaticClass_NoDiagnostic()
+    {
+        // NES001 should not fire for library code, even with a non-static class
+        var test = """
+            namespace MyLib
+            {
+                public class {|#0:Helper|}
+                {
+                    public byte Add(byte a, byte b) => (byte)(a + b);
+                }
+            }
+            """;
+
+        // NES002 fires for the non-static class, but NES001 should not
         var expected = Diagnostic(NESAnalyzer.NES002).WithLocation(0).WithArguments("Helper");
         await VerifyLibraryAsync(test, expected);
     }
@@ -150,6 +168,23 @@ public class NESAnalyzerTests
 
         var expected = Diagnostic(NESAnalyzer.NES002).WithLocation(0).WithArguments("Player");
         await VerifyLibraryAsync(test, expected);
+    }
+
+    [Fact]
+    public async Task NES002_StaticClassDeclaration_NoDiagnostic()
+    {
+        // Static classes are just method containers, not objects
+        var test = """
+            namespace MyGame
+            {
+                static class Display
+                {
+                    public static void Setup() { }
+                }
+            }
+            """;
+
+        await VerifyLibraryAsync(test);
     }
 
     [Fact]
@@ -393,18 +428,17 @@ public class NESAnalyzerTests
 
             namespace MyApp
             {
-                static class {|#0:NativeMethods|}
+                static class NativeMethods
                 {
-                    {|#1:[DllImport("kernel32")]
+                    {|#0:[DllImport("kernel32")]
                     static extern void Sleep(byte ms);|}
                 }
             }
             """;
 
-        // NES002 for class, NES006 for DllImport
+        // NES006 for DllImport (static class no longer triggers NES002)
         await VerifyLibraryAsync(test,
-            Diagnostic(NESAnalyzer.NES002).WithLocation(0).WithArguments("NativeMethods"),
-            Diagnostic(NESAnalyzer.NES006).WithLocation(1));
+            Diagnostic(NESAnalyzer.NES006).WithLocation(0));
     }
 
     [Fact]
