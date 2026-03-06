@@ -110,6 +110,8 @@ See [docs/music-sample.md](docs/music-sample.md) for ROM layout details and cc65
 
 **⚠️ NEVER commit or push directly to `main`.** All changes must go through pull requests. This includes documentation, skills, config files — everything. Create a branch, push it, and open a PR.
 
+**⚠️ PR descriptions must use plain text or simple Markdown.** Do not use backslash-escaped characters like `\`backtick\`` in `gh pr create --body`. Write naturally — use **bold**, `code`, and bullet points, but never escape backticks or other Markdown characters with backslashes.
+
 ## Code Review Guidelines
 
 **⚠️ DO NOT suggest these changes in code reviews:**
