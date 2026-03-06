@@ -2456,12 +2456,10 @@ public class RoslynTests
         Assert.NotNull(mainBlock);
         Assert.NotEmpty(mainBlock);
 
-        var hex = Convert.ToHexString(mainBlock);
-        _logger.WriteLine($"MultiFile_StaticHelperClass main hex: {hex}");
+        _logger.WriteLine($"MultiFile_StaticHelperClass main hex: {Convert.ToHexString(mainBlock)}");
 
-        // Main should contain JSR to setup method
-        // 20 = JSR opcode
-        Assert.True(hex.Contains("20"), "Expected JSR opcode in main block");
+        // First instruction in main should be JSR (0x20) to the setup method
+        Assert.Equal(0x20, mainBlock[0]);
     }
 
     [Fact]
@@ -2609,16 +2607,12 @@ public class RoslynTests
         Assert.NotNull(mainBlock);
         Assert.NotEmpty(mainBlock);
 
-        var hex = Convert.ToHexString(mainBlock);
-        _logger.WriteLine($"MultiFile_MultipleHelperClasses main hex: {hex}");
+        _logger.WriteLine($"MultiFile_MultipleHelperClasses main hex: {Convert.ToHexString(mainBlock)}");
 
-        // Main should contain at least two JSR calls (to setup and enable)
-        var jsrCount = 0;
-        for (int i = 0; i < hex.Length - 1; i += 2)
-        {
-            if (hex.Substring(i, 2) == "20")
-                jsrCount++;
-        }
-        Assert.True(jsrCount >= 2, $"Expected at least 2 JSR calls, found {jsrCount}");
+        // Main should begin with two JSR (0x20) calls at instruction boundaries:
+        // JSR setup (3 bytes) then JSR enable (3 bytes)
+        Assert.True(mainBlock.Length >= 6, $"Expected at least 6 bytes, got {mainBlock.Length}");
+        Assert.Equal(0x20, mainBlock[0]);  // JSR setup
+        Assert.Equal(0x20, mainBlock[3]);  // JSR enable
     }
 }
