@@ -162,6 +162,7 @@ gh pr comment <number> --repo <owner>/<repo> --body "🤖 CI is green. Ready for
 
 ## Important Rules
 
+- **Never commit or push directly to `main`** — all changes go through PRs, no exceptions
 - **Never merge** — the human reviews and merges
 - **Never force-push** — always push incremental commits
 - **Always reply to each review comment individually** — use the `/replies` API
