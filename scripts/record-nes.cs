@@ -132,22 +132,59 @@ void RecordGif(IntPtr window, string output, int frames, int interval)
 
 Bitmap? CaptureWindow(IntPtr window)
 {
+    // Force ANESE window to topmost and foreground
+    NativeMethods.ShowWindow(window, 9); // SW_RESTORE
+    NativeMethods.SetWindowPos(window, new IntPtr(-1), 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0040); // HWND_TOPMOST, SWP_NOMOVE|SWP_NOSIZE|SWP_SHOWWINDOW
+    NativeMethods.SetForegroundWindow(window);
+    Thread.Sleep(1000);
+
+    // Get window position on screen
     NativeMethods.GetWindowRect(window, out var rect);
     int w = rect.Right - rect.Left;
     int h = rect.Bottom - rect.Top;
     if (w <= 0 || h <= 0) return null;
 
-    var bmp = new Bitmap(w, h, PixelFormat.Format32bppArgb);
-    using var g = Graphics.FromImage(bmp);
-    IntPtr hdc = g.GetHdc();
-    bool ok = NativeMethods.PrintWindow(window, hdc, 2); // PW_RENDERFULLCONTENT
-    g.ReleaseHdc(hdc);
-    if (!ok)
+    // Method 1: Alt+PrintScreen → clipboard (DWM compositor capture)
+    // Clear clipboard first
+    NativeMethods.OpenClipboard(IntPtr.Zero);
+    NativeMethods.EmptyClipboard();
+    NativeMethods.CloseClipboard();
+
+    // Simulate Alt+PrintScreen
+    NativeMethods.keybd_event(0x12, 0, 0, UIntPtr.Zero); // VK_MENU down
+    NativeMethods.keybd_event(0x2C, 0, 0, UIntPtr.Zero); // VK_SNAPSHOT down
+    NativeMethods.keybd_event(0x2C, 0, 2, UIntPtr.Zero); // VK_SNAPSHOT up
+    NativeMethods.keybd_event(0x12, 0, 2, UIntPtr.Zero); // VK_MENU up
+    Thread.Sleep(500);
+
+    // Read image from clipboard
+    if (NativeMethods.OpenClipboard(IntPtr.Zero))
     {
-        bmp.Dispose();
-        return null;
+        if (NativeMethods.IsClipboardFormatAvailable(2)) // CF_BITMAP
+        {
+            IntPtr hBitmap = NativeMethods.GetClipboardData(2);
+            if (hBitmap != IntPtr.Zero)
+            {
+                var fullScreen = Image.FromHbitmap(hBitmap);
+                NativeMethods.CloseClipboard();
+                Console.WriteLine("[Capture] Alt+PrintScreen succeeded via clipboard");
+                // Crop to just the ANESE window bounds
+                var cropped = new Bitmap(w, h, PixelFormat.Format32bppArgb);
+                using (var g = Graphics.FromImage(cropped))
+                    g.DrawImage(fullScreen, 0, 0, new Rectangle(rect.Left, rect.Top, w, h), GraphicsUnit.Pixel);
+                fullScreen.Dispose();
+                return cropped;
+            }
+        }
+        NativeMethods.CloseClipboard();
     }
-    return bmp;
+    Console.WriteLine("[Capture] Alt+PrintScreen failed, trying CopyFromScreen...");
+
+    // Method 2: CopyFromScreen fallback
+    var bmp2 = new Bitmap(w, h, PixelFormat.Format32bppArgb);
+    using (var g = Graphics.FromImage(bmp2))
+        g.CopyFromScreen(rect.Left, rect.Top, 0, 0, new Size(w, h));
+    return bmp2;
 }
 
 Bitmap CropToGameArea(Bitmap src)
@@ -195,6 +232,33 @@ static class NativeMethods
 
     [DllImport("user32.dll")]
     public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
+
+    [DllImport("user32.dll")]
+    public static extern bool SetForegroundWindow(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
+    [DllImport("user32.dll")]
+    public static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
+
+    [DllImport("user32.dll")]
+    public static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo);
+
+    [DllImport("user32.dll")]
+    public static extern bool OpenClipboard(IntPtr hWndNewOwner);
+
+    [DllImport("user32.dll")]
+    public static extern bool CloseClipboard();
+
+    [DllImport("user32.dll")]
+    public static extern bool EmptyClipboard();
+
+    [DllImport("user32.dll")]
+    public static extern IntPtr GetClipboardData(uint uFormat);
+
+    [DllImport("user32.dll")]
+    public static extern bool IsClipboardFormatAvailable(uint format);
 
     public delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
 

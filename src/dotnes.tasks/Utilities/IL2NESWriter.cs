@@ -1409,6 +1409,29 @@ class IL2NESWriter : NESWriter
                             bool yIsRuntime = lastInstr.Mode == AddressMode.Absolute
                                 && lastInstr.Opcode == Opcode.LDA;
 
+                            // When _runtimeValueInA is true and lastInstr is LDA Absolute,
+                            // it could be either y-runtime (NTADR(const_x, runtime_y)) or
+                            // x-runtime (NTADR(runtime_x, const_y) where WriteLdc skipped).
+                            // Disambiguate by checking if there's a constant LDA #x before.
+                            if (yIsRuntime && _runtimeValueInA)
+                            {
+                                bool hasConstXBefore = false;
+                                if (block.Count >= 2 && block[block.Count - 2] is
+                                    { Opcode: Opcode.LDA, Mode: AddressMode.Immediate })
+                                    hasConstXBefore = true;
+                                else if (block.Count >= 3 && block[block.Count - 2] is
+                                    { Opcode: Opcode.JSR } && block[block.Count - 3] is
+                                    { Opcode: Opcode.LDA, Mode: AddressMode.Immediate })
+                                    hasConstXBefore = true;
+
+                                if (!hasConstXBefore)
+                                {
+                                    // No constant x before the LDA Absolute — x is runtime,
+                                    // y was a skipped WriteLdc constant. Correct the detection.
+                                    yIsRuntime = false;
+                                }
+                            }
+
                             // Check if y is a runtime expression (e.g. row + 10):
                             // _runtimeValueInA is true AND there's a JSR pusha in the block
                             // (meaning x was pusha'd, and the expression result in A is y)
