@@ -286,6 +286,19 @@ internal static class BuiltInSubroutines
     #region PPU Control Subroutines
 
     /// <summary>
+    /// _waitvsync - Wait for vertical blank by polling PPU status bit 7
+    /// </summary>
+    public static Block Waitvsync()
+    {
+        // https://github.com/cc65/cc65/blob/master/libsrc/nes/waitvsync.s
+        var block = new Block(nameof(NESLib.waitvsync));
+        block.Emit(BIT_abs(PPU_STATUS), "@loop")
+             .Emit(BPL(-5))   // -5: back past BPL (2 bytes) + BIT abs (3 bytes) to @loop
+             .Emit(RTS());
+        return block;
+    }
+
+    /// <summary>
     /// _ppu_off - Disable rendering
     /// </summary>
     public static Block PpuOff()
@@ -1264,6 +1277,37 @@ internal static class BuiltInSubroutines
              .Emit(LDY(0x00))
              .Emit(LDA_ind_Y(TEMP2), "@1")
              .Emit(STA_abs(PPU_DATA))
+             .Emit(INC_zpg(TEMP2))
+             .Emit(BNE(0x02))
+             .Emit(INC_zpg(TEMP3))
+             .Emit(LDA_zpg(TEMP))
+             .Emit(BNE(0x02))
+             .Emit(DEC_zpg(TEMP + 1))
+             .Emit(DEC_zpg(TEMP))
+             .Emit(LDA_zpg(TEMP))
+             .Emit(ORA_zpg(TEMP + 1))
+             .Emit(BNE(-25))  // branch back to @1
+             .Emit(RTS());
+        return block;
+    }
+
+    /// <summary>
+    /// _vram_read - Read bytes from VRAM (PPU_DATA) into destination buffer.
+    /// Inverse of VramWrite: reads 'size' bytes from current VRAM address into dst.
+    /// Input: A:X = size (last arg), stack = dst pointer (popped via popax)
+    /// </summary>
+    public static Block VramRead()
+    {
+        var block = new Block(nameof(NESLib.vram_read));
+        block.Emit(STA_zpg(TEMP))
+             .Emit(STX_zpg(TEMP + 1))
+             .Emit(JSR(nameof(NESConstants.popax)))
+             .Emit(STA_zpg(TEMP2))
+             .Emit(STX_zpg(TEMP3))
+             .Emit(LDY(0x00))
+             .Emit(LDA_abs(PPU_DATA))           // dummy read (PPU $2007 is buffered for non-palette addresses)
+             .Emit(LDA_abs(PPU_DATA), "@1")
+             .Emit(STA_ind_Y(TEMP2))
              .Emit(INC_zpg(TEMP2))
              .Emit(BNE(0x02))
              .Emit(INC_zpg(TEMP3))

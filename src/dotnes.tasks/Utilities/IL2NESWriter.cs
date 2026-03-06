@@ -45,7 +45,7 @@ class IL2NESWriter : NESWriter
     readonly Dictionary<string, string> _stringLabelMap = new();
     int _stringLabelIndex;
 
-    readonly ushort local = 0x325;
+    readonly ushort local = LocalStackBase;
     ushort _padReloadAddress; // Address to reload pad_poll result from (set by stloc after pad_poll)
     readonly ReflectionCache _reflectionCache = new();
     ILOpCode previous;
@@ -147,9 +147,9 @@ class IL2NESWriter : NESWriter
     bool _ntadrRuntimeResult;
 
     /// <summary>
-    /// True when a dup'd runtime value has been saved to DUP_TEMP ($18) for cascading
+    /// True when a dup'd runtime value has been saved to TEMP_HI ($18) for cascading
     /// if-else comparisons. When dup is encountered with _runtimeValueInA=false but
-    /// this flag is true, A is reloaded from DUP_TEMP.
+    /// this flag is true, A is reloaded from TEMP_HI.
     /// </summary>
     bool _dupSavedValue;
 
@@ -411,7 +411,7 @@ class IL2NESWriter : NESWriter
                 Emit(Opcode.CMP, AddressMode.Immediate, checked((byte)(stackValue + adjustValue)));
                 return;
             }
-            // If the dup handler saved A to DUP_TEMP, the last instruction is STA $18 (first save)
+            // If the dup handler saved A to TEMP_HI, the last instruction is STA $18 (first save)
             // or LDA $18 (subsequent reload). Keep it, just emit CMP.
             if (_dupSavedValue && (lastInstr.Opcode == Opcode.STA || lastInstr.Opcode == Opcode.LDA)
                 && lastInstr.Mode == AddressMode.ZeroPage)
@@ -449,14 +449,14 @@ class IL2NESWriter : NESWriter
                 if (_runtimeValueInA && !_dupSavedValue && IsDupCascadeComparison())
                 {
                     // First dup in a cascading equality comparison (e.g., if (st==1)...else if (st==2)...)
-                    // Save A to DUP_TEMP so subsequent dup points can reload it after case bodies clobber A
-                    Emit(Opcode.STA, AddressMode.ZeroPage, DUP_TEMP);
+                    // Save A to TEMP_HI so subsequent dup points can reload it after case bodies clobber A
+                    Emit(Opcode.STA, AddressMode.ZeroPage, TEMP_HI);
                     _dupSavedValue = true;
                 }
                 else if (!_runtimeValueInA && _dupSavedValue)
                 {
-                    // Subsequent dup after a case body clobbered A: reload from DUP_TEMP
-                    Emit(Opcode.LDA, AddressMode.ZeroPage, DUP_TEMP);
+                    // Subsequent dup after a case body clobbered A: reload from TEMP_HI
+                    Emit(Opcode.LDA, AddressMode.ZeroPage, TEMP_HI);
                     _runtimeValueInA = true;
                 }
                 break;
@@ -680,13 +680,13 @@ class IL2NESWriter : NESWriter
                             {
                                 // 16-bit shift (ASL A + ROL TEMP) to capture overflow
                                 Emit(Opcode.LDX, AddressMode.Immediate, 0);
-                                Emit(Opcode.STX, AddressMode.ZeroPage, 0x17); // TEMP = 0 (high byte)
+                                Emit(Opcode.STX, AddressMode.ZeroPage, TEMP); // TEMP = 0 (high byte)
                                 for (int s = 0; s < shifts; s++)
                                 {
                                     Emit(Opcode.ASL, AddressMode.Accumulator);
-                                    Emit(Opcode.ROL, AddressMode.ZeroPage, 0x17);
+                                    Emit(Opcode.ROL, AddressMode.ZeroPage, TEMP);
                                 }
-                                Emit(Opcode.LDX, AddressMode.ZeroPage, 0x17); // X = high byte
+                                Emit(Opcode.LDX, AddressMode.ZeroPage, TEMP); // X = high byte
                                 _ushortInAX = true;
                             }
                             else
@@ -734,9 +734,36 @@ class IL2NESWriter : NESWriter
                             for (int i = 0; i < shifts; i++)
                                 Emit(Opcode.LSR, AddressMode.Accumulator);
                         }
+                        else if (_savedRuntimeToTemp)
+                        {
+                            // Runtime divisor (in A) and runtime dividend (in TEMP)
+                            // Save divisor to TEMP2, load dividend from TEMP, then divide
+                            Emit(Opcode.STA, AddressMode.ZeroPage, (byte)NESConstants.TEMP2);
+                            Emit(Opcode.LDA, AddressMode.ZeroPage, (byte)NESConstants.TEMP);
+                            Emit(Opcode.LDX, AddressMode.Immediate, 0xFF);
+                            Emit(Opcode.SEC, AddressMode.Implied);
+                            Emit(Opcode.INX, AddressMode.Implied);
+                            Emit(Opcode.SBC, AddressMode.ZeroPage, (byte)NESConstants.TEMP2);
+                            Emit(Opcode.BCS, AddressMode.Relative, unchecked((byte)-5));
+                            Emit(Opcode.TXA, AddressMode.Implied);
+                            _savedRuntimeToTemp = false;
+                        }
                         else
                         {
-                            throw new NotImplementedException($"Runtime division by non-power-of-2 ({divisor}) not supported");
+                            // General 8-bit division via repeated subtraction
+                            // A = dividend (runtime). Result (quotient) left in A.
+                            //   LDX #$FF      ; 2 bytes (offset 0) quotient = -1
+                            //   SEC            ; 1 byte  (offset 2) set carry
+                            //   INX            ; 1 byte  (offset 3) ← @loop
+                            //   SBC #divisor   ; 2 bytes (offset 4)
+                            //   BCS @loop      ; 2 bytes (offset 6) → -5 to INX
+                            //   TXA            ; 1 byte  (offset 8) quotient to A
+                            Emit(Opcode.LDX, AddressMode.Immediate, 0xFF);
+                            Emit(Opcode.SEC, AddressMode.Implied);
+                            Emit(Opcode.INX, AddressMode.Implied);
+                            Emit(Opcode.SBC, AddressMode.Immediate, (byte)divisor);
+                            Emit(Opcode.BCS, AddressMode.Relative, unchecked((byte)-5));
+                            Emit(Opcode.TXA, AddressMode.Implied);
                         }
                         _runtimeValueInA = true;
                         Stack.Push(0);
@@ -845,10 +872,10 @@ class IL2NESWriter : NESWriter
                             // ushort >> N (N < 8): shift both bytes
                             for (int i = 0; i < shiftCount; i++)
                             {
-                                Emit(Opcode.STX, AddressMode.ZeroPage, 0x17);
-                                Emit(Opcode.LSR, AddressMode.ZeroPage, 0x17);
+                                Emit(Opcode.STX, AddressMode.ZeroPage, TEMP);
+                                Emit(Opcode.LSR, AddressMode.ZeroPage, TEMP);
                                 Emit(Opcode.ROR, AddressMode.Accumulator);
-                                Emit(Opcode.LDX, AddressMode.ZeroPage, 0x17);
+                                Emit(Opcode.LDX, AddressMode.ZeroPage, TEMP);
                             }
                         }
                         else
@@ -977,7 +1004,7 @@ class IL2NESWriter : NESWriter
                 HandleLdelemU1();
                 break;
             default:
-                throw new NotImplementedException($"OpCode {instruction.OpCode} with no operands is not implemented!");
+                throw new TranspileException($"The IL opcode '{instruction.OpCode}' is not yet supported. This C# feature cannot be transpiled to 6502 assembly.", MethodName);
         }
         previous = instruction.OpCode;
     }
@@ -996,7 +1023,7 @@ class IL2NESWriter : NESWriter
             case ILOpCode.Ldc_i4_s:
                 if (operand > ushort.MaxValue)
                 {
-                    throw new NotImplementedException($"{instruction.OpCode} not implemented for value larger than ushort: {operand}");
+                    throw new TranspileException($"Integer constant {operand} exceeds the maximum supported value of {ushort.MaxValue}. Only byte and ushort values are supported on the NES.", MethodName);
                 }
                 else if (operand > byte.MaxValue)
                 {
@@ -1282,8 +1309,15 @@ class IL2NESWriter : NESWriter
             case ILOpCode.Switch:
                 HandleSwitch(instruction, operand);
                 break;
+            case ILOpCode.Sizeof:
+                // Native integer size (nint/IntPtr) on the 6502 is 1 byte (8-bit CPU).
+                // Fixed-size primitive types (byte, ushort, int, etc.) are folded by Roslyn at compile time
+                // and typically never reach this opcode; this implementation only handles platform-dependent
+                // native integer sizeof values and will always push 1 here.
+                WriteLdc(1);
+                break;
             default:
-                throw new NotImplementedException($"OpCode {instruction.OpCode} with Int32 operand is not implemented!");
+                throw new TranspileException($"The IL opcode '{instruction.OpCode}' is not yet supported. This C# feature cannot be transpiled to 6502 assembly.", MethodName);
         }
         previous = instruction.OpCode;
     }
@@ -1659,6 +1693,24 @@ class IL2NESWriter : NESWriter
                                 _pokeLastValue = (byte)value;
                                 _immediateInA = (byte)value;
                             }
+                            argsAlreadyPopped = true;
+                        }
+                        break;
+                    case nameof(NESLib.peek):
+                        {
+                            // peek(ushort addr) -> LDA abs addr
+                            if (Stack.Count >= 1)
+                            {
+                                int addr = Stack.Pop();
+                                // Remove previously emitted instructions:
+                                // LDX #hi, LDA #lo = 2 instructions
+                                RemoveLastInstructions(2);
+                                Emit(Opcode.LDA, AddressMode.Absolute, (ushort)addr);
+                                _runtimeValueInA = true;
+                                _immediateInA = null;
+                                _pokeLastValue = null;
+                            }
+                            argsAlreadyPopped = true;
                         }
                         break;
                     case "split":
@@ -1767,7 +1819,7 @@ class IL2NESWriter : NESWriter
                                     {
                                         // OR TEMP (hi) with $80 for vertical sequential
                                         Emit(Opcode.LDA, AddressMode.ZeroPage, TEMP);
-                                        Emit(Opcode.ORA, AddressMode.Immediate, 0x80);
+                                        Emit(Opcode.ORA, AddressMode.Immediate, NT_UPD_VERT);
                                         Emit(Opcode.STA, AddressMode.ZeroPage, TEMP);
                                     }
                                 }
@@ -1781,7 +1833,7 @@ class IL2NESWriter : NESWriter
                                     RemoveLastInstructions(2);
                                     Emit(Opcode.LDA, AddressMode.Absolute, hiAddr);
                                     if (isVertical)
-                                        Emit(Opcode.ORA, AddressMode.Immediate, 0x80);
+                                        Emit(Opcode.ORA, AddressMode.Immediate, NT_UPD_VERT);
                                     Emit(Opcode.STA, AddressMode.ZeroPage, TEMP);
                                     Emit(Opcode.LDA, AddressMode.Absolute, loAddr);
                                     Emit(Opcode.STA, AddressMode.ZeroPage, TEMP2);
@@ -1793,7 +1845,7 @@ class IL2NESWriter : NESWriter
                                     byte addrLo = (byte)(addr & 0xFF);
                                     // Remove the compile-time NTADR instructions (LDX #hi, LDA #lo)
                                     RemoveLastInstructions(2);
-                                    Emit(Opcode.LDA, AddressMode.Immediate, isVertical ? (byte)(addrHi | 0x80) : addrHi);
+                                    Emit(Opcode.LDA, AddressMode.Immediate, isVertical ? (byte)(addrHi | NT_UPD_VERT) : addrHi);
                                     Emit(Opcode.STA, AddressMode.ZeroPage, TEMP);
                                     Emit(Opcode.LDA, AddressMode.Immediate, addrLo);
                                     Emit(Opcode.STA, AddressMode.ZeroPage, TEMP2);
@@ -1830,7 +1882,7 @@ class IL2NESWriter : NESWriter
                                     foreach (var instr in ntadrInstrs)
                                         block.Emit(instr);
                                     Emit(Opcode.LDA, AddressMode.ZeroPage, TEMP);
-                                    Emit(Opcode.ORA, AddressMode.Immediate, 0x40);
+                                    Emit(Opcode.ORA, AddressMode.Immediate, NT_UPD_HORZ);
                                     Emit(Opcode.STA, AddressMode.ZeroPage, TEMP);
                                 }
                                 else
@@ -1838,7 +1890,7 @@ class IL2NESWriter : NESWriter
                                     byte addrHi = (byte)(addr >> 8);
                                     byte addrLo = (byte)(addr & 0xFF);
                                     RemoveLastInstructions(7);
-                                    Emit(Opcode.LDA, AddressMode.Immediate, (byte)(addrHi | 0x40));
+                                    Emit(Opcode.LDA, AddressMode.Immediate, (byte)(addrHi | NT_UPD_HORZ));
                                     Emit(Opcode.STA, AddressMode.ZeroPage, TEMP);
                                     Emit(Opcode.LDA, AddressMode.Immediate, addrLo);
                                     Emit(Opcode.STA, AddressMode.ZeroPage, TEMP2);
@@ -1861,6 +1913,11 @@ class IL2NESWriter : NESWriter
                         break;
                     case "Array.Copy":
                         HandleArrayCopy();
+                        argsAlreadyPopped = true;
+                        break;
+                    case "IntPtr.get_Size":
+                        // 6502 is an 8-bit CPU: native integer size is 1 byte
+                        WriteLdc(1);
                         argsAlreadyPopped = true;
                         break;
                     default:
@@ -1906,6 +1963,7 @@ class IL2NESWriter : NESWriter
                         else
                             EmitWithLabel(Opcode.JSR, AddressMode.Absolute, operand);
                         _immediateInA = null;
+                        _pokeLastValue = null;
                         break;
                 }
                 // Pop N times (unless handler already popped)
@@ -1996,7 +2054,7 @@ class IL2NESWriter : NESWriter
                 HandleLdfld(operand);
                 break;
             default:
-                throw new NotImplementedException($"OpCode {instruction.OpCode} with String operand is not implemented!");
+                throw new TranspileException($"The IL opcode '{instruction.OpCode}' is not yet supported. This C# feature cannot be transpiled to 6502 assembly.", MethodName);
         }
         previous = instruction.OpCode;
     }
@@ -2061,7 +2119,7 @@ class IL2NESWriter : NESWriter
                 Stack.Push(-(_byteArrayLabelIndex)); // Negative marker
                 break;
             default:
-                throw new NotImplementedException($"OpCode {instruction.OpCode} with byte[] operand is not implemented!");
+                throw new TranspileException($"The IL opcode '{instruction.OpCode}' is not yet supported. This C# feature cannot be transpiled to 6502 assembly.", MethodName);
         }
         previous = instruction.OpCode;
     }
@@ -2448,8 +2506,10 @@ class IL2NESWriter : NESWriter
     void HandleLdelema(ILInstruction instruction)
     {
         string? structType = instruction.String;
-        if (structType == null || !StructLayouts.ContainsKey(structType))
-            throw new NotImplementedException($"ldelema for non-struct type '{structType}' is not supported");
+        if (structType == null)
+            throw new TranspileException("Arrays are not supported for this element type. Only byte[], ushort[], and struct arrays are supported.", MethodName);
+        if (!StructLayouts.ContainsKey(structType))
+            throw new TranspileException($"Arrays of type '{structType}' are not supported. Only byte[], ushort[], and struct arrays are supported.", MethodName);
 
         int structSize = GetStructSize(structType);
 
@@ -2516,7 +2576,7 @@ class IL2NESWriter : NESWriter
             }
             else
             {
-                throw new NotImplementedException("ldelema: variable index without tracked local");
+                throw new TranspileException("Struct array access with a variable index requires the index to be stored in a local variable.", MethodName);
             }
         }
         else
@@ -2563,7 +2623,7 @@ class IL2NESWriter : NESWriter
         {
             // General case: decompose into shifts and adds
             // For small struct sizes (common: 2-8 bytes), this covers most cases
-            Emit(Opcode.STA, AddressMode.ZeroPage, 0x17); // TEMP
+            Emit(Opcode.STA, AddressMode.ZeroPage, TEMP); // TEMP
             int remaining = factor;
             bool first = true;
             for (int bit = 0; remaining > 0; bit++)
@@ -2572,19 +2632,19 @@ class IL2NESWriter : NESWriter
                 {
                     if (first)
                     {
-                        Emit(Opcode.LDA, AddressMode.ZeroPage, 0x17); // start with original
+                        Emit(Opcode.LDA, AddressMode.ZeroPage, TEMP); // start with original
                         for (int s = 0; s < bit; s++)
                             Emit(Opcode.ASL, AddressMode.Accumulator);
                         first = false;
                     }
                     else
                     {
-                        Emit(Opcode.STA, AddressMode.ZeroPage, 0x18); // save partial to TEMP+1
-                        Emit(Opcode.LDA, AddressMode.ZeroPage, 0x17);
+                        Emit(Opcode.STA, AddressMode.ZeroPage, TEMP_HI); // save partial to TEMP+1
+                        Emit(Opcode.LDA, AddressMode.ZeroPage, TEMP);
                         for (int s = 0; s < bit; s++)
                             Emit(Opcode.ASL, AddressMode.Accumulator);
                         Emit(Opcode.CLC, AddressMode.Implied);
-                        Emit(Opcode.ADC, AddressMode.ZeroPage, 0x18);
+                        Emit(Opcode.ADC, AddressMode.ZeroPage, TEMP_HI);
                     }
                 }
                 remaining >>= 1;
@@ -2848,11 +2908,11 @@ class IL2NESWriter : NESWriter
                 if (hi != 0)
                 {
                     // Full 16-bit add: also add hi byte to X via TEMP
-                    Emit(Opcode.STA, AddressMode.ZeroPage, 0x17);
+                    Emit(Opcode.STA, AddressMode.ZeroPage, TEMP);
                     Emit(Opcode.TXA, AddressMode.Implied);
                     Emit(Opcode.ADC, AddressMode.Immediate, hi);
                     Emit(Opcode.TAX, AddressMode.Implied);
-                    Emit(Opcode.LDA, AddressMode.ZeroPage, 0x17);
+                    Emit(Opcode.LDA, AddressMode.ZeroPage, TEMP);
                 }
                 else
                 {
@@ -2866,11 +2926,11 @@ class IL2NESWriter : NESWriter
                 Emit(Opcode.SBC, AddressMode.Immediate, lo);
                 if (hi != 0)
                 {
-                    Emit(Opcode.STA, AddressMode.ZeroPage, 0x17);
+                    Emit(Opcode.STA, AddressMode.ZeroPage, TEMP);
                     Emit(Opcode.TXA, AddressMode.Implied);
                     Emit(Opcode.SBC, AddressMode.Immediate, hi);
                     Emit(Opcode.TAX, AddressMode.Implied);
-                    Emit(Opcode.LDA, AddressMode.ZeroPage, 0x17);
+                    Emit(Opcode.LDA, AddressMode.ZeroPage, TEMP);
                 }
                 else
                 {
@@ -3189,7 +3249,7 @@ class IL2NESWriter : NESWriter
         }
         else
         {
-            throw new NotImplementedException($"{nameof(WriteStloc)} not implemented for value larger than ushort: {local.Value}");
+            throw new TranspileException($"Local variable holds a constant value ({local.Value}) that exceeds the maximum supported size of ushort ({ushort.MaxValue}). Only byte and ushort values are supported on the NES.", MethodName);
         }
     }
 
@@ -3312,7 +3372,7 @@ class IL2NESWriter : NESWriter
             }
             else
             {
-                throw new NotImplementedException($"{nameof(WriteLdloc)} not implemented for value larger than ushort: {local.Value}");
+                throw new TranspileException($"Local variable holds a constant value ({local.Value}) that exceeds the maximum supported size of ushort ({ushort.MaxValue}). Only byte and ushort values are supported on the NES.", MethodName);
             }
         }
         else
@@ -4093,9 +4153,9 @@ class IL2NESWriter : NESWriter
         }
 
         if (indexLocalIdx == null && constantIndex == null)
-            throw new NotImplementedException("Ldelem_u1 only supports Ldloc or Ldc_i4 patterns for index");
+            throw new TranspileException("Array element access requires the index to be a local variable or constant. Complex index expressions are not supported.", MethodName);
         if (arrayLocalIdx == null)
-            throw new NotImplementedException("Ldelem_u1 only supports Ldloc patterns for array");
+            throw new TranspileException("Array element access requires the array to be stored in a local variable.", MethodName);
 
         Local? indexLocal = indexLocalIdx != null ? Locals[indexLocalIdx.Value] : null;
         var arrayLocal = Locals[arrayLocalIdx.Value];
@@ -4192,7 +4252,7 @@ class IL2NESWriter : NESWriter
         }
         else
         {
-            throw new NotImplementedException("Ldelem_u1: array local has no address or label");
+            throw new TranspileException("Array element access failed: the array variable has no allocated address. Ensure the array is initialized before use.", MethodName);
         }
 
         Stack.Push(0); // Push a placeholder value
@@ -4458,11 +4518,16 @@ class IL2NESWriter : NESWriter
 
             // Determine the value to store from the value expression
             int? constValue = null;
+            int? storeValueLocalIdx = null;
             for (int i = valueStart; i < Index; i++)
             {
                 int? val = GetLdcValue(Instructions[i]);
                 if (val != null)
                     constValue = val;
+                // Track if the value comes from a local variable
+                int? locIdx = GetLdlocIndex(Instructions[i]);
+                if (locIdx != null)
+                    storeValueLocalIdx = locIdx;
             }
 
             // Check for high-byte extraction: (byte)(ushort_local >> 8)
@@ -4489,7 +4554,16 @@ class IL2NESWriter : NESWriter
             }
 
             if (!constIsHighByte && constValue != null)
+            {
                 Emit(Opcode.LDA, AddressMode.Immediate, checked((byte)constValue.Value));
+            }
+            else if (!constIsHighByte && storeValueLocalIdx != null &&
+                     Locals.TryGetValue(storeValueLocalIdx.Value, out var valueLocal) &&
+                     valueLocal.Address.HasValue)
+            {
+                // Value is a runtime local variable — load it
+                Emit(Opcode.LDA, AddressMode.Absolute, (ushort)valueLocal.Address.Value);
+            }
 
             Emit(Opcode.STA, AddressMode.Absolute, (ushort)(targetArray.Address + constantIndex));
 
@@ -4817,7 +4891,7 @@ class IL2NESWriter : NESWriter
         }
         else
         {
-            throw new NotImplementedException($"Stelem_i1: array local {targetArrayLocalIdx} has no address or label. ArraySize={targetArray.ArraySize}, Address={targetArray.Address}, LabelName={targetArray.LabelName}, Value={targetArray.Value}. Known locals: {string.Join(", ", Locals.Select(kv => $"[{kv.Key}]=(V={kv.Value.Value}, A={kv.Value.Address}, AS={kv.Value.ArraySize}, L={kv.Value.LabelName})"))}");
+            throw new TranspileException("Array element assignment failed: the array variable has no allocated address. Ensure the array is initialized before use.", MethodName);
         }
 
         _immediateInA = null;

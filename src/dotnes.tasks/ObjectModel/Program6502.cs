@@ -658,6 +658,8 @@ public class Program6502
                 size += BuiltInSubroutines.ApuInit().ByteSize;
             if (usedMethods.Contains("vram_unrle"))
                 size += BuiltInSubroutines.VramUnrle().ByteSize;
+            if (usedMethods.Contains("vram_read"))
+                size += BuiltInSubroutines.VramRead().ByteSize;
             if (usedMethods.Contains("split"))
                 size += BuiltInSubroutines.Split().ByteSize;
             if (usedMethods.Contains("vrambuf_clear"))
@@ -682,6 +684,8 @@ public class Program6502
                 size += BuiltInSubroutines.Addysp().ByteSize;
             if (usedMethods.Contains("bcd_add"))
                 size += BuiltInSubroutines.BcdAdd().ByteSize;
+            if (usedMethods.Contains("waitvsync"))
+                size += BuiltInSubroutines.Waitvsync().ByteSize;
         }
         return size;
     }
@@ -748,6 +752,8 @@ public class Program6502
                 AddBlock(BuiltInSubroutines.ApuInit());
             if (usedMethods.Contains("vram_unrle"))
                 AddBlock(BuiltInSubroutines.VramUnrle());
+            if (usedMethods.Contains("vram_read"))
+                AddBlock(BuiltInSubroutines.VramRead());
             if (usedMethods.Contains("split"))
                 AddBlock(BuiltInSubroutines.Split());
             if (usedMethods.Contains("vrambuf_clear"))
@@ -772,6 +778,8 @@ public class Program6502
                 AddBlock(BuiltInSubroutines.Addysp());
             if (usedMethods.Contains("bcd_add"))
                 AddBlock(BuiltInSubroutines.BcdAdd());
+            if (usedMethods.Contains("waitvsync"))
+                AddBlock(BuiltInSubroutines.Waitvsync());
         }
     }
 

@@ -186,6 +186,16 @@ public static class NESLib
     public static void poke(ushort addr, byte value) => throw null!;
 
     /// <summary>
+    /// read a byte value from an absolute memory address
+    /// </summary>
+    public static byte peek(ushort addr) => throw null!;
+
+    /// <summary>
+    /// wait for vertical sync (vblank), busy-loops on PPU status bit 7
+    /// </summary>
+    public static void waitvsync() => throw null!;
+
+    /// <summary>
     /// wait virtual frame, it is always 50hz, frame-to-frame in PAL, frameskip in NTSC
     /// </summary>
     public static void ppu_wait_frame() => throw null!;
@@ -455,6 +465,14 @@ public static class NESLib
     public const ushort NAMETABLE_B = 0x2400;
     public const ushort NAMETABLE_C = 0x2800;
     public const ushort NAMETABLE_D = 0x2c00;
+
+    // PPU register addresses for direct hardware access via poke()/peek()
+    public const ushort PPU_CTRL = 0x2000;
+    public const ushort PPU_MASK = 0x2001;
+    public const ushort PPU_STATUS = 0x2002;
+    public const ushort PPU_SCROLL = 0x2005;
+    public const ushort PPU_ADDR = 0x2006;
+    public const ushort PPU_DATA = 0x2007;
 
     // TODO: Macros below should be computed at compile-time and methods removed
 

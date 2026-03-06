@@ -14,6 +14,8 @@ public class TranspilerTests
     [InlineData("hello", false)]
     [InlineData("attributetable", true)]
     [InlineData("attributetable", false)]
+    [InlineData("multifile", true)]
+    [InlineData("multifile", false)]
     public Task ReadStaticVoidMain(string name, bool debug)
     {
         var suffix = debug ? "debug" : "release";
@@ -80,6 +82,16 @@ public class TranspilerTests
     [InlineData("highbytearray", false)]
     [InlineData("branchsub", true)]
     [InlineData("branchsub", false)]
+    [InlineData("multifile", true)]
+    [InlineData("multifile", false)]
+    [InlineData("fade", true)]
+    [InlineData("fade", false)]
+    [InlineData("ppuhello", true)]
+    [InlineData("ppuhello", false)]
+    [InlineData("scoreboard", true)]
+    [InlineData("scoreboard", false)]
+    [InlineData("bigsprites", true)]
+    [InlineData("bigsprites", false)]
     [InlineData("climber", true)]
     [InlineData("climber", false)]
     public Task Write(string name, bool debug, bool verticalMirroring = false)
