@@ -177,12 +177,9 @@
 
 ### ppuhello.c
 - **Description:** Directly programs PPU registers (`PPU.control`, `PPU.mask`, `PPU.vram.address`, `PPU.vram.data`) to display text — no neslib used.
-- **Status:** 🔴 Complex
-- **Missing Features:**
-  - Direct PPU register access (`PPU.control`, `PPU.mask`, `PPU.vram.address`, `PPU.vram.data`, `PPU.scroll`)
-  - `#include <nes.h>` — CC65 NES hardware header
-  - `waitvsync()` — CC65-specific function
-  - No neslib functions used at all — entirely hardware-register driven
+- **Status:** ✅ Implemented
+- **Implementation:** Uses `poke()` for PPU register writes, `waitvsync()` for vblank wait, PPU register constants (`PPU_CTRL`, `PPU_MASK`, `PPU_ADDR`, `PPU_DATA`, `PPU_SCROLL`)
+- **Sample:** `samples/ppuhello/`
 
 ### bankswitch.c
 - **Description:** Demonstrates MMC3 mapper bank switching for PRG and CHR ROM banks using `POKE` to mapper registers.
