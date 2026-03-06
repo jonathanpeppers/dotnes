@@ -342,5 +342,9 @@ ASALocalRun/
 tools/
 dump_il*
 
+# Test output artifacts
+test_out.txt
+test_err.txt
+
 # Repo-specific, png in root of repo
 /*.png
