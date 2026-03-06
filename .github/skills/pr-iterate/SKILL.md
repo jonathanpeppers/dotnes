@@ -38,6 +38,7 @@ gh pr checks <number> --repo <owner>/<repo>
 
 - Read the PR description to understand the intent and checklist
 - Read the full diff to understand what changed
+- Check mergeability: `gh api repos/<owner>/<repo>/pulls/<number> --jq '{mergeable, mergeable_state}'`
 - Check if the coding agent is still working (look for recent commits, pending
   workflow runs from the Copilot bot). If it's still active, wait before touching
   anything.
@@ -80,7 +81,30 @@ Once the code review passes:
 1. **Remove draft status**: `gh pr ready <number> --repo <owner>/<repo>`
 2. **Update title** (drop `[WIP]`): `gh pr edit <number> --repo <owner>/<repo> --title "<clean title>"`
 
-### 5. Get CI Green
+### 5. Resolve Merge Conflicts
+
+Before monitoring CI, check if the PR has merge conflicts:
+
+```bash
+gh api repos/<owner>/<repo>/pulls/<number> --jq '{mergeable, mergeable_state}'
+```
+
+If `mergeable` is `false` and `mergeable_state` is `"dirty"`:
+
+1. **Fetch and merge main locally**:
+   ```bash
+   git fetch origin main
+   git merge origin/main
+   ```
+2. **Resolve conflicts** — understand both sides of each conflict. If `main`
+   implemented a feature that the PR was throwing an error for, keep main's
+   implementation. If the PR improved code that main also touched, merge the
+   intent of both changes.
+3. **Run tests** to verify the resolution is correct
+4. **Commit the merge** (use `git commit --no-edit` to keep the default merge message)
+5. **Push** and continue to step 6
+
+### 6. Get CI Green
 
 Monitor the workflow run:
 
@@ -98,7 +122,7 @@ gh api repos/<owner>/<repo>/actions/runs/<run-id>/approve -X POST
 If approval via API fails (403), the run may have auto-started on a subsequent
 attempt. Check with `gh run list` for a newer in-progress run.
 
-### 6. Fix Failures
+### 7. Fix Failures
 
 If CI fails:
 
@@ -113,9 +137,9 @@ If CI fails:
    Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>"
    git push origin <branch>
    ```
-5. **Monitor the new CI run**: Go back to step 5
+5. **Monitor the new CI run**: Go back to step 6
 
-### 7. Address Review Feedback
+### 8. Address Review Feedback
 
 After posting your review or after CI goes green, check for review comments from
 humans or other bots:
@@ -138,11 +162,12 @@ For each unresolved review comment:
 4. **Commit and push** the fix (with Co-authored-by trailer)
 
 If a review requests changes, address all comments before re-requesting review.
-After pushing fixes, go back to step 5 to monitor CI.
+After pushing fixes, go back to step 6 to monitor CI.
 
-### 8. Iterate
+### 9. Iterate
 
-Repeat steps 5-7 until CI is fully green and all review comments are addressed.
+Repeat steps 5-8 until CI is fully green, merge conflicts are resolved, and all
+review comments are addressed.
 Then verify:
 
 ```bash
