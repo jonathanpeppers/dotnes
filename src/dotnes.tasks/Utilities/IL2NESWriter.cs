@@ -374,6 +374,18 @@ class IL2NESWriter : NESWriter
                 return;
             }
         }
+        // If the last instruction is an arithmetic result (SBC, ADC, AND, ORA, etc.),
+        // A already has the computed value — just emit CMP without removing.
+        if (block.Count > 0)
+        {
+            var lastInstr = block[block.Count - 1];
+            if (lastInstr.Opcode is Opcode.SBC or Opcode.ADC or Opcode.AND or Opcode.ORA
+                or Opcode.EOR or Opcode.LSR or Opcode.ASL or Opcode.ROR or Opcode.ROL)
+            {
+                Emit(Opcode.CMP, AddressMode.Immediate, checked((byte)(stackValue + adjustValue)));
+                return;
+            }
+        }
         // Constant comparison: remove last LDA #imm, emit CMP #imm
         RemoveLastInstructions(1);
         Emit(Opcode.CMP, AddressMode.Immediate, checked((byte)(stackValue + adjustValue)));
@@ -4357,7 +4369,30 @@ class IL2NESWriter : NESWriter
                     constValue = val;
             }
 
-            if (constValue != null)
+            // Check for high-byte extraction: (byte)(ushort_local >> 8)
+            // The value expression is: ldloc(word), ldc_8, shr, [conv_u1]
+            bool constIsHighByte = false;
+            for (int i = valueStart; i < Index; i++)
+            {
+                if (Instructions[i].OpCode is ILOpCode.Shr or ILOpCode.Shr_un
+                    && i >= valueStart + 2)
+                {
+                    int? shiftAmt = GetLdcValue(Instructions[i - 1]);
+                    if (shiftAmt == 8)
+                    {
+                        var locIdx = GetLdlocIndex(Instructions[i - 2]);
+                        if (locIdx != null && Locals.TryGetValue(locIdx.Value, out var wordLoc)
+                            && wordLoc.IsWord && wordLoc.Address != null)
+                        {
+                            Emit(Opcode.LDA, AddressMode.Absolute, (ushort)(wordLoc.Address + 1));
+                            constIsHighByte = true;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if (!constIsHighByte && constValue != null)
                 Emit(Opcode.LDA, AddressMode.Immediate, checked((byte)constValue.Value));
 
             Emit(Opcode.STA, AddressMode.Absolute, (ushort)(targetArray.Address + constantIndex));
@@ -4395,6 +4430,8 @@ class IL2NESWriter : NESWriter
         bool hasMul = false;
         int mulValue = 0;
         int mulLocalIdx = -1;
+        bool hasShr = false;
+        int shrValue = 0;
         bool hasTwoLdelems = false;
         int sourceArray1Idx = -1;
         int sourceArray2Idx = -1;
@@ -4420,6 +4457,16 @@ class IL2NESWriter : NESWriter
                     break;
                 case ILOpCode.Mul:
                     hasMul = true;
+                    break;
+                case ILOpCode.Shr:
+                case ILOpCode.Shr_un:
+                    hasShr = true;
+                    // Capture the shift amount from the preceding ldc
+                    if (i > valueStart)
+                    {
+                        int? shiftAmt = GetLdcValue(Instructions[i - 1]);
+                        if (shiftAmt != null) shrValue = shiftAmt.Value;
+                    }
                     break;
                 case ILOpCode.Ldelem_u1:
                     if (sourceArray1Idx < 0)
@@ -4612,7 +4659,10 @@ class IL2NESWriter : NESWriter
         {
             // Pattern: arr[i] = local, arr[i] = (local & N), arr[i] = (local + N), etc.
             var valueLoc = Locals[valueLocalIdx];
-            Emit(Opcode.LDA, AddressMode.Absolute, (ushort)valueLoc.Address!);
+            if (hasShr && shrValue == 8 && valueLoc.IsWord)
+                Emit(Opcode.LDA, AddressMode.Absolute, (ushort)(valueLoc.Address! + 1)); // high byte
+            else
+                Emit(Opcode.LDA, AddressMode.Absolute, (ushort)valueLoc.Address!);
             if (hasAnd)
                 Emit(Opcode.AND, AddressMode.Immediate, checked((byte)andMask));
             if (hasAdd)

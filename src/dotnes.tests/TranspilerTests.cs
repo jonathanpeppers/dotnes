@@ -76,6 +76,10 @@ public class TranspilerTests
     [InlineData("horizscroll", false, true)]
     [InlineData("horizmask", true, true)]
     [InlineData("horizmask", false, true)]
+    [InlineData("highbytearray", true)]
+    [InlineData("highbytearray", false)]
+    [InlineData("branchsub", true)]
+    [InlineData("branchsub", false)]
     public Task Write(string name, bool debug, bool verticalMirroring = false)
     {
         var configuration = debug ? "debug" : "release";
