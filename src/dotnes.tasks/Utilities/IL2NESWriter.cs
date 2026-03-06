@@ -674,9 +674,36 @@ class IL2NESWriter : NESWriter
                             for (int i = 0; i < shifts; i++)
                                 Emit(Opcode.LSR, AddressMode.Accumulator);
                         }
+                        else if (_savedRuntimeToTemp)
+                        {
+                            // Runtime divisor (in A) and runtime dividend (in TEMP)
+                            // Save divisor to TEMP2, load dividend from TEMP, then divide
+                            Emit(Opcode.STA, AddressMode.ZeroPage, (byte)NESConstants.TEMP2);
+                            Emit(Opcode.LDA, AddressMode.ZeroPage, (byte)NESConstants.TEMP);
+                            Emit(Opcode.LDX, AddressMode.Immediate, 0xFF);
+                            Emit(Opcode.SEC, AddressMode.Implied);
+                            Emit(Opcode.INX, AddressMode.Implied);
+                            Emit(Opcode.SBC, AddressMode.ZeroPage, (byte)NESConstants.TEMP2);
+                            Emit(Opcode.BCS, AddressMode.Relative, unchecked((byte)-5));
+                            Emit(Opcode.TXA, AddressMode.Implied);
+                            _savedRuntimeToTemp = false;
+                        }
                         else
                         {
-                            throw new NotImplementedException($"Runtime division by non-power-of-2 ({divisor}) not supported");
+                            // General 8-bit division via repeated subtraction
+                            // A = dividend (runtime). Result (quotient) left in A.
+                            //   LDX #$FF      ; 2 bytes (offset 0) quotient = -1
+                            //   SEC            ; 1 byte  (offset 2) set carry
+                            //   INX            ; 1 byte  (offset 3) ← @loop
+                            //   SBC #divisor   ; 2 bytes (offset 4)
+                            //   BCS @loop      ; 2 bytes (offset 6) → -5 to INX
+                            //   TXA            ; 1 byte  (offset 8) quotient to A
+                            Emit(Opcode.LDX, AddressMode.Immediate, 0xFF);
+                            Emit(Opcode.SEC, AddressMode.Implied);
+                            Emit(Opcode.INX, AddressMode.Implied);
+                            Emit(Opcode.SBC, AddressMode.Immediate, (byte)divisor);
+                            Emit(Opcode.BCS, AddressMode.Relative, unchecked((byte)-5));
+                            Emit(Opcode.TXA, AddressMode.Implied);
                         }
                         _runtimeValueInA = true;
                         Stack.Push(0);
