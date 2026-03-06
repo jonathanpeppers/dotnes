@@ -45,7 +45,7 @@ class IL2NESWriter : NESWriter
     readonly Dictionary<string, string> _stringLabelMap = new();
     int _stringLabelIndex;
 
-    readonly ushort local = 0x325;
+    readonly ushort local = LocalStackBase;
     ushort _padReloadAddress; // Address to reload pad_poll result from (set by stloc after pad_poll)
     readonly ReflectionCache _reflectionCache = new();
     ILOpCode previous;
@@ -620,13 +620,13 @@ class IL2NESWriter : NESWriter
                             {
                                 // 16-bit shift (ASL A + ROL TEMP) to capture overflow
                                 Emit(Opcode.LDX, AddressMode.Immediate, 0);
-                                Emit(Opcode.STX, AddressMode.ZeroPage, 0x17); // TEMP = 0 (high byte)
+                                Emit(Opcode.STX, AddressMode.ZeroPage, TEMP); // TEMP = 0 (high byte)
                                 for (int s = 0; s < shifts; s++)
                                 {
                                     Emit(Opcode.ASL, AddressMode.Accumulator);
-                                    Emit(Opcode.ROL, AddressMode.ZeroPage, 0x17);
+                                    Emit(Opcode.ROL, AddressMode.ZeroPage, TEMP);
                                 }
-                                Emit(Opcode.LDX, AddressMode.ZeroPage, 0x17); // X = high byte
+                                Emit(Opcode.LDX, AddressMode.ZeroPage, TEMP); // X = high byte
                                 _ushortInAX = true;
                             }
                             else
@@ -812,10 +812,10 @@ class IL2NESWriter : NESWriter
                             // ushort >> N (N < 8): shift both bytes
                             for (int i = 0; i < shiftCount; i++)
                             {
-                                Emit(Opcode.STX, AddressMode.ZeroPage, 0x17);
-                                Emit(Opcode.LSR, AddressMode.ZeroPage, 0x17);
+                                Emit(Opcode.STX, AddressMode.ZeroPage, TEMP);
+                                Emit(Opcode.LSR, AddressMode.ZeroPage, TEMP);
                                 Emit(Opcode.ROR, AddressMode.Accumulator);
-                                Emit(Opcode.LDX, AddressMode.ZeroPage, 0x17);
+                                Emit(Opcode.LDX, AddressMode.ZeroPage, TEMP);
                             }
                         }
                         else
@@ -1711,7 +1711,7 @@ class IL2NESWriter : NESWriter
                                     {
                                         // OR TEMP (hi) with $80 for vertical sequential
                                         Emit(Opcode.LDA, AddressMode.ZeroPage, TEMP);
-                                        Emit(Opcode.ORA, AddressMode.Immediate, 0x80);
+                                        Emit(Opcode.ORA, AddressMode.Immediate, NT_UPD_VERT);
                                         Emit(Opcode.STA, AddressMode.ZeroPage, TEMP);
                                     }
                                 }
@@ -1725,7 +1725,7 @@ class IL2NESWriter : NESWriter
                                     RemoveLastInstructions(2);
                                     Emit(Opcode.LDA, AddressMode.Absolute, hiAddr);
                                     if (isVertical)
-                                        Emit(Opcode.ORA, AddressMode.Immediate, 0x80);
+                                        Emit(Opcode.ORA, AddressMode.Immediate, NT_UPD_VERT);
                                     Emit(Opcode.STA, AddressMode.ZeroPage, TEMP);
                                     Emit(Opcode.LDA, AddressMode.Absolute, loAddr);
                                     Emit(Opcode.STA, AddressMode.ZeroPage, TEMP2);
@@ -1737,7 +1737,7 @@ class IL2NESWriter : NESWriter
                                     byte addrLo = (byte)(addr & 0xFF);
                                     // Remove the compile-time NTADR instructions (LDX #hi, LDA #lo)
                                     RemoveLastInstructions(2);
-                                    Emit(Opcode.LDA, AddressMode.Immediate, isVertical ? (byte)(addrHi | 0x80) : addrHi);
+                                    Emit(Opcode.LDA, AddressMode.Immediate, isVertical ? (byte)(addrHi | NT_UPD_VERT) : addrHi);
                                     Emit(Opcode.STA, AddressMode.ZeroPage, TEMP);
                                     Emit(Opcode.LDA, AddressMode.Immediate, addrLo);
                                     Emit(Opcode.STA, AddressMode.ZeroPage, TEMP2);
@@ -1774,7 +1774,7 @@ class IL2NESWriter : NESWriter
                                     foreach (var instr in ntadrInstrs)
                                         block.Emit(instr);
                                     Emit(Opcode.LDA, AddressMode.ZeroPage, TEMP);
-                                    Emit(Opcode.ORA, AddressMode.Immediate, 0x40);
+                                    Emit(Opcode.ORA, AddressMode.Immediate, NT_UPD_HORZ);
                                     Emit(Opcode.STA, AddressMode.ZeroPage, TEMP);
                                 }
                                 else
@@ -1782,7 +1782,7 @@ class IL2NESWriter : NESWriter
                                     byte addrHi = (byte)(addr >> 8);
                                     byte addrLo = (byte)(addr & 0xFF);
                                     RemoveLastInstructions(7);
-                                    Emit(Opcode.LDA, AddressMode.Immediate, (byte)(addrHi | 0x40));
+                                    Emit(Opcode.LDA, AddressMode.Immediate, (byte)(addrHi | NT_UPD_HORZ));
                                     Emit(Opcode.STA, AddressMode.ZeroPage, TEMP);
                                     Emit(Opcode.LDA, AddressMode.Immediate, addrLo);
                                     Emit(Opcode.STA, AddressMode.ZeroPage, TEMP2);
@@ -2515,7 +2515,7 @@ class IL2NESWriter : NESWriter
         {
             // General case: decompose into shifts and adds
             // For small struct sizes (common: 2-8 bytes), this covers most cases
-            Emit(Opcode.STA, AddressMode.ZeroPage, 0x17); // TEMP
+            Emit(Opcode.STA, AddressMode.ZeroPage, TEMP); // TEMP
             int remaining = factor;
             bool first = true;
             for (int bit = 0; remaining > 0; bit++)
@@ -2524,19 +2524,19 @@ class IL2NESWriter : NESWriter
                 {
                     if (first)
                     {
-                        Emit(Opcode.LDA, AddressMode.ZeroPage, 0x17); // start with original
+                        Emit(Opcode.LDA, AddressMode.ZeroPage, TEMP); // start with original
                         for (int s = 0; s < bit; s++)
                             Emit(Opcode.ASL, AddressMode.Accumulator);
                         first = false;
                     }
                     else
                     {
-                        Emit(Opcode.STA, AddressMode.ZeroPage, 0x18); // save partial to TEMP+1
-                        Emit(Opcode.LDA, AddressMode.ZeroPage, 0x17);
+                        Emit(Opcode.STA, AddressMode.ZeroPage, TEMP_HI); // save partial to TEMP+1
+                        Emit(Opcode.LDA, AddressMode.ZeroPage, TEMP);
                         for (int s = 0; s < bit; s++)
                             Emit(Opcode.ASL, AddressMode.Accumulator);
                         Emit(Opcode.CLC, AddressMode.Implied);
-                        Emit(Opcode.ADC, AddressMode.ZeroPage, 0x18);
+                        Emit(Opcode.ADC, AddressMode.ZeroPage, TEMP_HI);
                     }
                 }
                 remaining >>= 1;
@@ -2800,11 +2800,11 @@ class IL2NESWriter : NESWriter
                 if (hi != 0)
                 {
                     // Full 16-bit add: also add hi byte to X via TEMP
-                    Emit(Opcode.STA, AddressMode.ZeroPage, 0x17);
+                    Emit(Opcode.STA, AddressMode.ZeroPage, TEMP);
                     Emit(Opcode.TXA, AddressMode.Implied);
                     Emit(Opcode.ADC, AddressMode.Immediate, hi);
                     Emit(Opcode.TAX, AddressMode.Implied);
-                    Emit(Opcode.LDA, AddressMode.ZeroPage, 0x17);
+                    Emit(Opcode.LDA, AddressMode.ZeroPage, TEMP);
                 }
                 else
                 {
@@ -2818,11 +2818,11 @@ class IL2NESWriter : NESWriter
                 Emit(Opcode.SBC, AddressMode.Immediate, lo);
                 if (hi != 0)
                 {
-                    Emit(Opcode.STA, AddressMode.ZeroPage, 0x17);
+                    Emit(Opcode.STA, AddressMode.ZeroPage, TEMP);
                     Emit(Opcode.TXA, AddressMode.Implied);
                     Emit(Opcode.SBC, AddressMode.Immediate, hi);
                     Emit(Opcode.TAX, AddressMode.Implied);
-                    Emit(Opcode.LDA, AddressMode.ZeroPage, 0x17);
+                    Emit(Opcode.LDA, AddressMode.ZeroPage, TEMP);
                 }
                 else
                 {
