@@ -1445,6 +1445,30 @@ public class RoslynTests
     }
 
     [Fact]
+    public void WaitvsyncEmitsJsr()
+    {
+        // waitvsync() should emit JSR to waitvsync subroutine
+        var (program, _) = BuildProgram(
+            """
+            waitvsync();
+            ppu_on_all();
+            while (true) ;
+            """);
+        var mainBlock = program.GetMainBlock();
+        Assert.NotNull(mainBlock);
+        Assert.NotEmpty(mainBlock);
+
+        // Main block should start with JSR (opcode 0x20) for waitvsync call
+        Assert.Equal(0x20, mainBlock[0]);
+
+        // Verify the waitvsync block exists and has correct 6502 instructions
+        var waitvsyncBlock = program.GetBlock("waitvsync");
+        Assert.NotNull(waitvsyncBlock);
+        // Expected: BIT $2002 (2C 02 20), BPL -5 (10 FB), RTS (60)
+        Assert.Equal(3, waitvsyncBlock.Count); // 3 instructions
+    }
+
+    [Fact]
     public void ArrayCopyBasic()
     {
         // Array.Copy between two runtime arrays
