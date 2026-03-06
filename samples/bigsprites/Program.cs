@@ -1,7 +1,7 @@
 /*
 Big sprites demo.
 Display 8x16 sprites using the NES PPU's 8x16 sprite mode via oam_size(1).
-Shows double-height sprites bouncing around the screen.
+Shows double-height sprites moving around the screen (wrapping via byte overflow).
 Based on: https://github.com/sehugg/8bitworkshop/blob/master/presets/nes/sprites.c
 */
 
