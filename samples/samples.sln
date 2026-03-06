@@ -35,6 +35,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "statusbar", "statusbar\stat
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "vrambuffer", "vrambuffer\vrambuffer.csproj", "{AA7BBF01-99D9-4674-BD53-384026D4EB27}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "multifile", "multifile\multifile.csproj", "{0FCAD2E9-3115-4222-9A64-8B99E3E56A5E}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -237,6 +239,18 @@ Global
 		{AA7BBF01-99D9-4674-BD53-384026D4EB27}.Release|x64.Build.0 = Release|Any CPU
 		{AA7BBF01-99D9-4674-BD53-384026D4EB27}.Release|x86.ActiveCfg = Release|Any CPU
 		{AA7BBF01-99D9-4674-BD53-384026D4EB27}.Release|x86.Build.0 = Release|Any CPU
+		{0FCAD2E9-3115-4222-9A64-8B99E3E56A5E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0FCAD2E9-3115-4222-9A64-8B99E3E56A5E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0FCAD2E9-3115-4222-9A64-8B99E3E56A5E}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{0FCAD2E9-3115-4222-9A64-8B99E3E56A5E}.Debug|x64.Build.0 = Debug|Any CPU
+		{0FCAD2E9-3115-4222-9A64-8B99E3E56A5E}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{0FCAD2E9-3115-4222-9A64-8B99E3E56A5E}.Debug|x86.Build.0 = Debug|Any CPU
+		{0FCAD2E9-3115-4222-9A64-8B99E3E56A5E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0FCAD2E9-3115-4222-9A64-8B99E3E56A5E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{0FCAD2E9-3115-4222-9A64-8B99E3E56A5E}.Release|x64.ActiveCfg = Release|Any CPU
+		{0FCAD2E9-3115-4222-9A64-8B99E3E56A5E}.Release|x64.Build.0 = Release|Any CPU
+		{0FCAD2E9-3115-4222-9A64-8B99E3E56A5E}.Release|x86.ActiveCfg = Release|Any CPU
+		{0FCAD2E9-3115-4222-9A64-8B99E3E56A5E}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
