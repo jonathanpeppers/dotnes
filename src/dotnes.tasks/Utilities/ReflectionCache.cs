@@ -75,4 +75,20 @@ class ReflectionCache
         var returnType = GetMethod(name).ReturnType;
         return returnType == typeof(ushort) || returnType == typeof(short) || returnType == typeof(int);
     }
+
+    /// <summary>
+    /// Safe version of Returns16Bit that returns false for unknown methods
+    /// instead of throwing. Used by DetectWordLocals during pre-scan.
+    /// </summary>
+    public bool TryReturns16Bit(string name)
+    {
+        try
+        {
+            return Returns16Bit(name);
+        }
+        catch
+        {
+            return false;
+        }
+    }
 }
