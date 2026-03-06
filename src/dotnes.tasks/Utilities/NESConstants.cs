@@ -22,7 +22,7 @@ internal static class NESConstants
     public const int PPU_CTRL_VAR1 = 0x0F;   // split() saved PPU_CTRL
     public const int NMI_CALLBACK = 0x14;  // 3 bytes: JMP opcode + address ($14-$16)
     public const int TEMP = 0x17;
-    public const int TEMP_HI = 0x18;   // TEMP high byte (also used as DUP_TEMP)
+    public const int TEMP_HI = 0x18;   // TEMP+1 (also used as DUP_TEMP; not always the "high byte")
     public const int RAND_SEED = 0x3C;  // 1 byte: random seed for LFSR PRNG (cc65 compatible)
     public const int TEMP2 = 0x19;  // Additional temporary variable
     public const int TEMP3 = 0x1A;  // Additional temporary variable
