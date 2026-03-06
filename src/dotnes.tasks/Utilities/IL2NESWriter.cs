@@ -1585,6 +1585,24 @@ class IL2NESWriter : NESWriter
                                 _pokeLastValue = (byte)value;
                                 _immediateInA = (byte)value;
                             }
+                            argsAlreadyPopped = true;
+                        }
+                        break;
+                    case nameof(NESLib.peek):
+                        {
+                            // peek(ushort addr) -> LDA abs addr
+                            if (Stack.Count >= 1)
+                            {
+                                int addr = Stack.Pop();
+                                // Remove previously emitted instructions:
+                                // LDX #hi, LDA #lo = 2 instructions
+                                RemoveLastInstructions(2);
+                                Emit(Opcode.LDA, AddressMode.Absolute, (ushort)addr);
+                                _runtimeValueInA = true;
+                                _immediateInA = null;
+                                _pokeLastValue = null;
+                            }
+                            argsAlreadyPopped = true;
                         }
                         break;
                     case "split":
@@ -1837,6 +1855,7 @@ class IL2NESWriter : NESWriter
                         else
                             EmitWithLabel(Opcode.JSR, AddressMode.Absolute, operand);
                         _immediateInA = null;
+                        _pokeLastValue = null;
                         break;
                 }
                 // Pop N times (unless handler already popped)
