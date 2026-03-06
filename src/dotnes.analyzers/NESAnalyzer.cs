@@ -58,11 +58,11 @@ public class NESAnalyzer : DiagnosticAnalyzer
     static readonly DiagnosticDescriptor NES005Rule = new(
         NES005,
         "Unsupported type",
-        "Type '{0}' is not supported; only byte, sbyte, ushort, and user-defined structs of those types are supported",
+        "Type '{0}' is not supported; only byte, sbyte, ushort, int, bool, string, enums, arrays, and user-defined structs are supported",
         Category,
         DiagnosticSeverity.Warning,
         isEnabledByDefault: true,
-        description: "The NES 6502 CPU only supports 8-bit and limited 16-bit operations. Only byte, sbyte, ushort, and user-defined structs of those types are supported.");
+        description: "The NES 6502 CPU only supports 8-bit and limited 16-bit operations. Only byte, sbyte, ushort, int, bool, string, enums, arrays, and user-defined structs are supported.");
 
     static readonly DiagnosticDescriptor NES006Rule = new(
         NES006,
@@ -227,7 +227,7 @@ public class NESAnalyzer : DiagnosticAnalyzer
         for (int i = globalStatements.Count - 1; i >= 0; i--)
         {
             var stmt = globalStatements[i].Statement;
-            if (!(stmt is LocalFunctionStatementSyntax))
+            if (stmt is not LocalFunctionStatementSyntax)
             {
                 lastStatement = stmt;
                 break;
