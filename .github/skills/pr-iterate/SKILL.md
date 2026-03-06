@@ -22,8 +22,8 @@ and ready for human review. The human will review and merge — never merge your
 **Every** comment, review body, or PR description edit you post must start with
 the 🤖 emoji so humans can instantly tell it came from automation. This applies to:
 
-- PR review bodies (`gh pr review --body "🤖 ..."`)
-- PR comments (`gh pr comment --body "🤖 ..."`)
+- PR review bodies (`gh pr review --body-file ...` — always use `--body-file`, see Step 3)
+- PR comments (`gh pr comment --body-file ...`)
 - Commit messages do NOT need the emoji (they already have the Co-authored-by trailer)
 
 ## Workflow
@@ -65,11 +65,27 @@ Get-Content test_out.txt -Tail 30
 
 ### 3. Leave a Review
 
-Submit a review on the PR. Always prefix the body with 🤖:
+Submit a review on the PR. Always prefix the body with 🤖.
 
-```bash
-gh pr review <number> --repo <owner>/<repo> --comment --body "🤖 <your review>"
+**Formatting rule:** Write the review body to a temp file and use `--body-file` to
+avoid shell escaping issues with backticks and special characters:
+
+```powershell
+$body = @'
+🤖 Your review here. Use `backticks` freely — no escaping needed.
+'@
+$tempFile = New-TemporaryFile
+try {
+    $body | Set-Content -Path $tempFile.FullName -Encoding utf8
+    gh pr review <number> --repo <owner>/<repo> --approve --body-file $tempFile.FullName
+}
+finally {
+    Remove-Item $tempFile -ErrorAction SilentlyContinue
+}
 ```
+
+**Never** pass review bodies with backticks directly via `--body` — PowerShell and
+the gh CLI mangle them into backslash-escaped garbage.
 
 Use `--comment` for feedback that needs changes, `--approve` when it looks good.
 Be specific about what you checked and any concerns.
@@ -153,13 +169,17 @@ gh api repos/<owner>/<repo>/pulls/<number>/comments
 For each unresolved review comment:
 
 1. **Understand the feedback** — read the comment in context of the code it references
-2. **Fix the code** if the feedback is actionable and in scope for this PR
-3. **Reply to the comment** explaining what you did (always prefix with 🤖):
+2. **Fix the code** if the feedback is actionable
+3. **⚠️ Reply to EACH comment individually** explaining what you did:
    ```bash
-   gh api repos/<owner>/<repo>/pulls/<number>/comments \
-     -f body="🤖 Fixed — <what you changed and why>" \
-     -F in_reply_to=<comment-id>
+   # Get comment IDs
+   gh api repos/<owner>/<repo>/pulls/<number>/comments --jq '.[].id'
+   # Reply to each one
+   gh api repos/<owner>/<repo>/pulls/<number>/comments/<comment-id>/replies \
+     -f body="Fixed in <sha> — <what you changed and why>"
    ```
+   **This is mandatory.** Every review comment must get its own reply describing
+   the specific fix. Do not batch replies or skip this step.
 4. **Commit and push** the fix (with Co-authored-by trailer)
 5. **File follow-up issues** for valid feedback that is out of scope for this PR.
    Reply to the comment acknowledging the point and linking the new issue:
@@ -193,8 +213,12 @@ gh pr comment <number> --repo <owner>/<repo> --body "🤖 CI is green. Ready for
 
 ## Important Rules
 
+- **Never commit or push directly to `main`** — all changes go through PRs, no exceptions
 - **Never merge** — the human reviews and merges
 - **Never force-push** — always push incremental commits
+- **Always reply to each review comment individually** — use the `/replies` API
+  endpoint for each comment ID. Never skip this even if you addressed all feedback
+  in a single commit.
 - **Always use `dotnet test` without `--no-build`** — the test project requires fresh builds
 - **Use `Start-Process` with redirected output** for `dotnet test` — it hangs in
   interactive PowerShell due to MSBuild terminal output

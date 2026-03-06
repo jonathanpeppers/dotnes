@@ -1,0 +1,4 @@
+﻿ILInstruction { OpCode = Call, Offset = 0, Integer = , String = setup, Bytes =  }
+ILInstruction { OpCode = Call, Offset = 5, Integer = , String = write_message, Bytes =  }
+ILInstruction { OpCode = Call, Offset = 10, Integer = , String = enable, Bytes =  }
+ILInstruction { OpCode = Br_s, Offset = 15, Integer = 254, String = , Bytes =  }

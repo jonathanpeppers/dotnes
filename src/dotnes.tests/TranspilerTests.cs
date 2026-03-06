@@ -14,6 +14,8 @@ public class TranspilerTests
     [InlineData("hello", false)]
     [InlineData("attributetable", true)]
     [InlineData("attributetable", false)]
+    [InlineData("multifile", true)]
+    [InlineData("multifile", false)]
     public Task ReadStaticVoidMain(string name, bool debug)
     {
         var suffix = debug ? "debug" : "release";
@@ -76,6 +78,8 @@ public class TranspilerTests
     [InlineData("horizscroll", false, true)]
     [InlineData("horizmask", true, true)]
     [InlineData("horizmask", false, true)]
+    [InlineData("multifile", true)]
+    [InlineData("multifile", false)]
     public Task Write(string name, bool debug, bool verticalMirroring = false)
     {
         var configuration = debug ? "debug" : "release";
