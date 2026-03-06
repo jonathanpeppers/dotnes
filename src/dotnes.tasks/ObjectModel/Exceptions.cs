@@ -12,7 +12,7 @@ public class TranspileException : Exception
     public string? MethodName { get; }
 
     public TranspileException(string message, string? methodName = null)
-        : base(FormatMessage(message ?? "An unsupported C# feature was encountered during transpilation.", methodName))
+        : base(FormatMessage(message, methodName))
     {
         MethodName = methodName;
     }

@@ -2352,7 +2352,9 @@ class IL2NESWriter : NESWriter
     void HandleLdelema(ILInstruction instruction)
     {
         string? structType = instruction.String;
-        if (structType == null || !StructLayouts.ContainsKey(structType))
+        if (structType == null)
+            throw new TranspileException("Arrays are not supported for this element type. Only byte[], ushort[], and struct arrays are supported.", MethodName);
+        if (!StructLayouts.ContainsKey(structType))
             throw new TranspileException($"Arrays of type '{structType}' are not supported. Only byte[], ushort[], and struct arrays are supported.", MethodName);
 
         int structSize = GetStructSize(structType);
