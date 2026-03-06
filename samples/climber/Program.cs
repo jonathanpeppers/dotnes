@@ -1,6 +1,8 @@
-// climber.c port — A platform game with randomly generated stage
+// Climber — A platform game with a randomly generated stage.
+// Based on the 8bitworkshop.com NES sample by Steven Hugg.
 // Uses FamiTone2 library for music and sound effects.
 // Vertical scrolling (horizontal mirroring) with offscreen row updates.
+// See climber.c for the reference C version (use on 8bitworkshop.com).
 
 #pragma warning disable CS0649, CS8321, CS0219
 
@@ -39,11 +41,6 @@ const byte CLIMBING = 3;
 const byte JUMPING = 4;
 const byte FALLING = 5;
 const byte PACING = 6;
-const byte PAD_A = 0x01;
-const byte PAD_LEFT = 0x40;
-const byte PAD_RIGHT = 0x80;
-const byte PAD_UP = 0x08;
-const byte PAD_DOWN = 0x04;
 
 // Pure utility function (no captured state)
 static byte rndint(byte a, byte b)
@@ -368,7 +365,7 @@ while (true)
         oam_hide_rest(oam_off);
 
         // --- Player movement ---
-        byte joy = (byte)pad_poll(0);
+        PAD joy = pad_poll(0);
         {
             byte pi = 0;
             byte pf = actor_floor[pi];
@@ -383,28 +380,28 @@ while (true)
 
             if (ps == STANDING || ps == WALKING)
             {
-                if ((joy & PAD_A) != 0)
+                if ((joy & PAD.A) != 0)
                 {
                     actor_state[pi] = JUMPING;
                     actor_xvel[pi] = 0;
                     actor_yvel[pi] = JUMP_VELOCITY;
-                    if ((joy & PAD_LEFT) != 0) actor_xvel[pi] = 0xff;
-                    if ((joy & PAD_RIGHT) != 0) actor_xvel[pi] = 1;
+                    if ((joy & PAD.LEFT) != 0) actor_xvel[pi] = 0xff;
+                    if ((joy & PAD.RIGHT) != 0) actor_xvel[pi] = 1;
                     sfx_play(SND_JUMP, 0);
                 }
-                else if ((joy & PAD_LEFT) != 0)
+                else if ((joy & PAD.LEFT) != 0)
                 {
                     actor_x[pi] = (byte)(actor_x[pi] - 1);
                     actor_dir[pi] = 1;
                     actor_state[pi] = WALKING;
                 }
-                else if ((joy & PAD_RIGHT) != 0)
+                else if ((joy & PAD.RIGHT) != 0)
                 {
                     actor_x[pi] = (byte)(actor_x[pi] + 1);
                     actor_dir[pi] = 0;
                     actor_state[pi] = WALKING;
                 }
-                else if ((joy & PAD_UP) != 0)
+                else if ((joy & PAD.UP) != 0)
                 {
                     byte lx = 0;
                     if (floor_ladder1[pf] != 0)
@@ -423,7 +420,7 @@ while (true)
                         actor_state[pi] = CLIMBING;
                     }
                 }
-                else if ((joy & PAD_DOWN) != 0)
+                else if ((joy & PAD.DOWN) != 0)
                 {
                     if (pf > 0)
                     {
@@ -455,7 +452,7 @@ while (true)
 
             if (ps == CLIMBING)
             {
-                if ((joy & PAD_UP) != 0)
+                if ((joy & PAD.UP) != 0)
                 {
                     if (actor_yy_hi[pi] > cyy_hi || (actor_yy_hi[pi] == cyy_hi && actor_yy_lo[pi] >= cyy_lo))
                     {
@@ -468,7 +465,7 @@ while (true)
                         if (actor_yy_lo[pi] == 0) actor_yy_hi[pi] = (byte)(actor_yy_hi[pi] + 1);
                     }
                 }
-                else if ((joy & PAD_DOWN) != 0)
+                else if ((joy & PAD.DOWN) != 0)
                 {
                     if (actor_yy_hi[pi] < fyy_hi || (actor_yy_hi[pi] == fyy_hi && actor_yy_lo[pi] <= fyy_lo))
                     {
@@ -587,13 +584,13 @@ while (true)
 
             if (es == STANDING || es == WALKING)
             {
-                if ((ej & PAD_LEFT) != 0)
+                if ((ej & (byte)PAD.LEFT) != 0)
                 {
                     actor_x[ei] = (byte)(actor_x[ei] - 1);
                     actor_dir[ei] = 1;
                     actor_state[ei] = WALKING;
                 }
-                else if ((ej & PAD_RIGHT) != 0)
+                else if ((ej & (byte)PAD.RIGHT) != 0)
                 {
                     actor_x[ei] = (byte)(actor_x[ei] + 1);
                     actor_dir[ei] = 0;
