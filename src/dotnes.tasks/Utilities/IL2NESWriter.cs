@@ -1560,6 +1560,21 @@ class IL2NESWriter : NESWriter
                             }
                         }
                         break;
+                    case nameof(NESLib.peek):
+                        {
+                            // peek(ushort addr) -> LDA abs addr
+                            if (Stack.Count >= 1)
+                            {
+                                int addr = Stack.Pop();
+                                // Remove previously emitted instructions:
+                                // LDX #hi, LDA #lo = 2 instructions
+                                RemoveLastInstructions(2);
+                                Emit(Opcode.LDA, AddressMode.Absolute, (ushort)addr);
+                                _immediateInA = null;
+                                _pokeLastValue = null;
+                            }
+                        }
+                        break;
                     case "split":
                     case "scroll":
                         // scroll()/split() takes unsigned int params, which use popax (2-byte pop).
