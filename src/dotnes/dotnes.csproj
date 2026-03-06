@@ -8,6 +8,7 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\dotnes.tasks\dotnes.tasks.csproj" />
+    <ProjectReference Include="..\dotnes.analyzers\dotnes.analyzers.csproj" />
     <ProjectReference Include="..\neslib\neslib.csproj" />
   </ItemGroup>
   <ItemGroup>
@@ -21,5 +22,6 @@
     <None Include="../dotnes.tasks/bin/$(Configuration)/netstandard2.0/neslib.dll" Pack="true" PackagePath="build" />
     <None Include="../dotnes.tasks/bin/$(Configuration)/netstandard2.0/neslib.pdb" Pack="true" PackagePath="build" />
     <None Include="../neslib/bin/$(Configuration)/netstandard2.0/ref/neslib.dll" Pack="true" PackagePath="ref/net10.0" />
+    <None Include="../dotnes.analyzers/bin/$(Configuration)/netstandard2.0/dotnes.analyzers.dll" Pack="true" PackagePath="analyzers/dotnet/cs" />
   </ItemGroup>
 </Project>
