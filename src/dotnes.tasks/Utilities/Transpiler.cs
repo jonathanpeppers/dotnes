@@ -107,7 +107,7 @@ class Transpiler : IDisposable
 
         // Write vectors: NMI, RESET, IRQ (little-endian)
         ushort nmi_data = 0x80BC;
-        ushort reset_data = 0x8000;
+        ushort reset_data = NESConstants.PrgRomStart;
         ushort irq_data = 0x8202;
         writer.Write((byte)(nmi_data & 0xFF));
         writer.Write((byte)(nmi_data >> 8));
