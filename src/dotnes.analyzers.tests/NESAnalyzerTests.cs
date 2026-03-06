@@ -83,6 +83,19 @@ public class NESAnalyzerTests
     }
 
     [Fact]
+    public async Task NES001_HasInfiniteLoopWithBody_NoDiagnostic()
+    {
+        // Real NES programs typically have game loop logic inside while (true)
+        var test = """
+            while (true) { ppu_wait_nmi(); }
+
+            static void ppu_wait_nmi() { }
+            """;
+
+        await VerifyAsync(test);
+    }
+
+    [Fact]
     public async Task NES001_NoGlobalStatements_NoDiagnostic()
     {
         // Library code (no top-level statements) should not trigger NES001

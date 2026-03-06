@@ -22,7 +22,7 @@ public class NESAnalyzer : DiagnosticAnalyzer
     static readonly DiagnosticDescriptor NES001Rule = new(
         NES001,
         "NES programs must end with an infinite loop",
-        "NES programs must end with 'while (true) ;' (infinite loop required)",
+        "NES programs must end with 'while (true)' (infinite loop required)",
         Category,
         DiagnosticSeverity.Error,
         isEnabledByDefault: true,
@@ -254,13 +254,8 @@ public class NESAnalyzer : DiagnosticAnalyzer
         if (!literal.IsKind(SyntaxKind.TrueLiteralExpression))
             return false;
 
-        // Body should be empty (just ';') or an empty block
-        if (whileStatement.Statement is EmptyStatementSyntax)
-            return true;
-        if (whileStatement.Statement is BlockSyntax block && block.Statements.Count == 0)
-            return true;
-
-        return false;
+        // Any body is valid — while (true) ; , while (true) { }, while (true) { game_loop(); }
+        return true;
     }
 
     static bool IsSupportedType(ITypeSymbol type)
