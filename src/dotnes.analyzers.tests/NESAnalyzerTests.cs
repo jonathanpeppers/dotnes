@@ -510,13 +510,69 @@ public class NESAnalyzerTests
             {
                 static class NativeMethods
                 {
-                    {|#0:[DllImport("kernel32")]
-                    static extern void Sleep(byte ms);|}
+                    [{|#0:DllImport("kernel32")|}]
+                    static extern void Sleep(byte ms);
                 }
             }
             """;
 
         // NES006 for DllImport (static class no longer triggers NES002)
+        await VerifyLibraryAsync(test,
+            Diagnostic(NESAnalyzer.NES006).WithLocation(0));
+    }
+
+    [Fact]
+    public async Task NES006_DllImportAttribute_FullName_Diagnostic()
+    {
+        var test = """
+            using System.Runtime.InteropServices;
+
+            namespace MyApp
+            {
+                static class NativeMethods
+                {
+                    [{|#0:DllImportAttribute("kernel32")|}]
+                    static extern void Sleep(byte ms);
+                }
+            }
+            """;
+
+        await VerifyLibraryAsync(test,
+            Diagnostic(NESAnalyzer.NES006).WithLocation(0));
+    }
+
+    [Fact]
+    public async Task NES006_DllImport_FullyQualified_Diagnostic()
+    {
+        var test = """
+            namespace MyApp
+            {
+                static class NativeMethods
+                {
+                    [{|#0:System.Runtime.InteropServices.DllImport("kernel32")|}]
+                    static extern void Sleep(byte ms);
+                }
+            }
+            """;
+
+        await VerifyLibraryAsync(test,
+            Diagnostic(NESAnalyzer.NES006).WithLocation(0));
+    }
+
+    [Fact]
+    public async Task NES006_DllImport_GlobalQualified_Diagnostic()
+    {
+        var test = """
+            namespace MyApp
+            {
+                static class NativeMethods
+                {
+                    [{|#0:global::System.Runtime.InteropServices.DllImportAttribute("kernel32")|}]
+                    static extern void Sleep(byte ms);
+                }
+            }
+            """;
+
         await VerifyLibraryAsync(test,
             Diagnostic(NESAnalyzer.NES006).WithLocation(0));
     }

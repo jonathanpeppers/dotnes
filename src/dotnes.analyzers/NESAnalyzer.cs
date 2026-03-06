@@ -188,7 +188,7 @@ public class NESAnalyzer : DiagnosticAnalyzer
     static void AnalyzeMethodDeclaration(SyntaxNodeAnalysisContext context)
     {
         var method = (MethodDeclarationSyntax)context.Node;
-        AnalyzeDllImport(context, method.AttributeLists, method.GetLocation());
+        AnalyzeDllImport(context, method.AttributeLists);
         AnalyzeMethodReturnAndParams(context, method.ReturnType, method.ParameterList);
     }
 
@@ -198,16 +198,21 @@ public class NESAnalyzer : DiagnosticAnalyzer
         AnalyzeMethodReturnAndParams(context, function.ReturnType, function.ParameterList);
     }
 
-    static void AnalyzeDllImport(SyntaxNodeAnalysisContext context, SyntaxList<AttributeListSyntax> attributeLists, Location location)
+    static void AnalyzeDllImport(SyntaxNodeAnalysisContext context, SyntaxList<AttributeListSyntax> attributeLists)
     {
+        var dllImportType = context.SemanticModel.Compilation.GetTypeByMetadataName("System.Runtime.InteropServices.DllImportAttribute");
+        if (dllImportType is null)
+            return;
+
         foreach (var attributeList in attributeLists)
         {
             foreach (var attribute in attributeList.Attributes)
             {
-                var name = attribute.Name.ToString();
-                if (name is "DllImport" or "System.Runtime.InteropServices.DllImport" or "DllImportAttribute" or "System.Runtime.InteropServices.DllImportAttribute")
+                var symbolInfo = context.SemanticModel.GetSymbolInfo(attribute, context.CancellationToken);
+                if (symbolInfo.Symbol is IMethodSymbol attributeConstructor &&
+                    SymbolEqualityComparer.Default.Equals(attributeConstructor.ContainingType, dllImportType))
                 {
-                    context.ReportDiagnostic(Diagnostic.Create(NES006Rule, location));
+                    context.ReportDiagnostic(Diagnostic.Create(NES006Rule, attribute.GetLocation()));
                     return;
                 }
             }
