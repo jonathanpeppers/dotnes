@@ -1,8 +1,4 @@
-Test run for C:\src\dotnes5\src\dotnes.analyzers.tests\bin\Debug\net10.0\dotnes.analyzers.tests.dll (.NETCoreApp,Version=v10.0)
-A total of 1 test files matched the specified pattern.
-Test run for C:\src\dotnes5\src\dotnes.tests\bin\Debug\net10.0\dotnes.tests.dll (.NETCoreApp,Version=v10.0)
+Test run for C:\src\dotnes4\src\dotnes.tests\bin\Debug\net10.0\dotnes.tests.dll (.NETCoreApp,Version=v10.0)
 A total of 1 test files matched the specified pattern.
 
-Passed!  - Failed:     0, Passed:    33, Skipped:     0, Total:    33, Duration: 2 s - dotnes.analyzers.tests.dll (net10.0)
-
-Passed!  - Failed:     0, Passed:   328, Skipped:     0, Total:   328, Duration: 4 s - dotnes.tests.dll (net10.0)
+Passed!  - Failed:     0, Passed:   321, Skipped:     0, Total:   321, Duration: 3 s - dotnes.tests.dll (net10.0)
