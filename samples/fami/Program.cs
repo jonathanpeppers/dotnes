@@ -1,11 +1,9 @@
 // fami.c port — Demonstrates FamiTone2 library for music and sound effects
 // Press controller buttons to hear sound effects.
 
-using System.Runtime.InteropServices;
-
-// Link FamiTone2 functions (from famitone2.s)
-[DllImport("ext")] static extern void music_play(byte song);
-[DllImport("ext")] static extern void sfx_play(byte sound, byte channel);
+// Link FamiTone2 functions (from famitone2.s / sounds.s)
+static extern void music_play(byte song);
+static extern void sfx_play(byte sound, byte channel);
 
 pal_col(1, 0x04);
 pal_col(2, 0x20);
