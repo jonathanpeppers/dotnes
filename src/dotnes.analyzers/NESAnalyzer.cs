@@ -84,6 +84,7 @@ public class NESAnalyzer : DiagnosticAnalyzer
         context.RegisterSyntaxNodeAction(AnalyzeClassDeclaration, SyntaxKind.ClassDeclaration);
         context.RegisterSyntaxNodeAction(AnalyzeStringExpression, SyntaxKind.AddExpression);
         context.RegisterSyntaxNodeAction(AnalyzeInterpolatedString, SyntaxKind.InterpolatedStringExpression);
+        context.RegisterSyntaxNodeAction(AnalyzeInvocation, SyntaxKind.InvocationExpression);
         context.RegisterSyntaxNodeAction(AnalyzeObjectCreation, SyntaxKind.ObjectCreationExpression);
         context.RegisterSyntaxNodeAction(AnalyzeObjectCreation, SyntaxKind.ImplicitObjectCreationExpression);
         context.RegisterSyntaxNodeAction(AnalyzeArrayCreation, SyntaxKind.ArrayCreationExpression, SyntaxKind.ImplicitArrayCreationExpression);
@@ -117,6 +118,51 @@ public class NESAnalyzer : DiagnosticAnalyzer
     static void AnalyzeInterpolatedString(SyntaxNodeAnalysisContext context)
     {
         context.ReportDiagnostic(Diagnostic.Create(NES003Rule, context.Node.GetLocation()));
+    }
+
+    static void AnalyzeInvocation(SyntaxNodeAnalysisContext context)
+    {
+        var invocation = (InvocationExpressionSyntax)context.Node;
+
+        // Cheap syntax pre-filter: only consider calls where the member name is one we care about.
+        if (invocation.Expression is not MemberAccessExpressionSyntax memberAccess)
+            return;
+
+        var memberName = memberAccess.Name.Identifier.Text;
+        if (memberName is not ("Format" or "Concat" or "Invariant"))
+            return;
+
+        var symbolInfo = context.SemanticModel.GetSymbolInfo(invocation, context.CancellationToken);
+        var method = symbolInfo.Symbol as IMethodSymbol
+                     ?? symbolInfo.CandidateSymbols.OfType<IMethodSymbol>().FirstOrDefault();
+        if (method is null)
+            return;
+
+        var containingType = method.ContainingType;
+        if (containingType is null)
+            return;
+
+        // Detect string.Format(...) and string.Concat(...)
+        if (containingType.SpecialType == SpecialType.System_String)
+        {
+            if (method.Name is "Format" or "Concat")
+            {
+                context.ReportDiagnostic(Diagnostic.Create(NES003Rule, invocation.GetLocation()));
+                return;
+            }
+        }
+
+        // FormattableString.Invariant(...)
+        // Skip when the argument is an interpolated string — AnalyzeInterpolatedString already covers it.
+        if (containingType.Name == "FormattableString" &&
+            containingType.ContainingNamespace?.ToDisplayString() == "System" &&
+            method.Name == "Invariant")
+        {
+            var hasInterpolatedArg = invocation.ArgumentList.Arguments
+                .Any(a => a.Expression is InterpolatedStringExpressionSyntax);
+            if (!hasInterpolatedArg)
+                context.ReportDiagnostic(Diagnostic.Create(NES003Rule, invocation.GetLocation()));
+        }
     }
 
     static void AnalyzeObjectCreation(SyntaxNodeAnalysisContext context)
