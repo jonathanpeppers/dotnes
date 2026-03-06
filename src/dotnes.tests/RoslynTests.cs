@@ -1458,12 +1458,14 @@ public class RoslynTests
         Assert.NotNull(mainBlock);
         Assert.NotEmpty(mainBlock);
 
-        var hex = Convert.ToHexString(mainBlock);
-        Assert.Contains("20", hex);  // JSR opcode present
+        // Main block should start with JSR (opcode 0x20) for waitvsync call
+        Assert.Equal(0x20, mainBlock[0]);
 
-        // Verify the waitvsync block exists in the program
+        // Verify the waitvsync block exists and has correct 6502 instructions
         var waitvsyncBlock = program.GetBlock("waitvsync");
         Assert.NotNull(waitvsyncBlock);
+        // Expected: BIT $2002 (2C 02 20), BPL -5 (10 FB), RTS (60)
+        Assert.Equal(3, waitvsyncBlock.Count); // 3 instructions
     }
 
     [Fact]

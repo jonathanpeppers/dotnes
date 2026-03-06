@@ -293,7 +293,7 @@ internal static class BuiltInSubroutines
         // https://github.com/cc65/cc65/blob/master/libsrc/nes/waitvsync.s
         var block = new Block(nameof(NESLib.waitvsync));
         block.Emit(BIT_abs(PPU_STATUS), "@loop")
-             .Emit(BPL(-5))   // branch back to @loop
+             .Emit(BPL(-5))   // -5: back past BPL (2 bytes) + BIT abs (3 bytes) to @loop
              .Emit(RTS());
         return block;
     }
