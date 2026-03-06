@@ -4,7 +4,9 @@
     <Description>.NET for the NES game console: a toy project for creating 6502 NES applications in C#</Description>
     <Authors>Jonathan Peppers</Authors>
     <PackageProjectUrl>https://github.com/jonathanpeppers/dotnes</PackageProjectUrl>
-    <PackageTags>.NET C# NES</PackageTags>
+    <RepositoryUrl>https://github.com/jonathanpeppers/dotnes</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageTags>nes;6502;retro;gamedev;transpiler;nintendo;dotnet;csharp</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageIcon>dotnes.png</PackageIcon>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
