@@ -86,6 +86,8 @@ public class TranspilerTests
     [InlineData("ppuhello", false)]
     [InlineData("scoreboard", true)]
     [InlineData("scoreboard", false)]
+    [InlineData("bigsprites", true)]
+    [InlineData("bigsprites", false)]
     public Task Write(string name, bool debug, bool verticalMirroring = false)
     {
         var configuration = debug ? "debug" : "release";

@@ -39,6 +39,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "multifile", "multifile\mult
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "scoreboard", "scoreboard\scoreboard.csproj", "{349609E7-224D-42E4-80FE-9580119EEC89}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "bigsprites", "bigsprites\bigsprites.csproj", "{6A360A91-6C1C-461C-B13D-BFE448C8861D}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -265,6 +267,18 @@ Global
 		{349609E7-224D-42E4-80FE-9580119EEC89}.Release|x64.Build.0 = Release|Any CPU
 		{349609E7-224D-42E4-80FE-9580119EEC89}.Release|x86.ActiveCfg = Release|Any CPU
 		{349609E7-224D-42E4-80FE-9580119EEC89}.Release|x86.Build.0 = Release|Any CPU
+		{6A360A91-6C1C-461C-B13D-BFE448C8861D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6A360A91-6C1C-461C-B13D-BFE448C8861D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6A360A91-6C1C-461C-B13D-BFE448C8861D}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{6A360A91-6C1C-461C-B13D-BFE448C8861D}.Debug|x64.Build.0 = Debug|Any CPU
+		{6A360A91-6C1C-461C-B13D-BFE448C8861D}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{6A360A91-6C1C-461C-B13D-BFE448C8861D}.Debug|x86.Build.0 = Debug|Any CPU
+		{6A360A91-6C1C-461C-B13D-BFE448C8861D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6A360A91-6C1C-461C-B13D-BFE448C8861D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{6A360A91-6C1C-461C-B13D-BFE448C8861D}.Release|x64.ActiveCfg = Release|Any CPU
+		{6A360A91-6C1C-461C-B13D-BFE448C8861D}.Release|x64.Build.0 = Release|Any CPU
+		{6A360A91-6C1C-461C-B13D-BFE448C8861D}.Release|x86.ActiveCfg = Release|Any CPU
+		{6A360A91-6C1C-461C-B13D-BFE448C8861D}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
