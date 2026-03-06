@@ -1223,9 +1223,10 @@ class IL2NESWriter : NESWriter
                 HandleSwitch(instruction, operand);
                 break;
             case ILOpCode.Sizeof:
-                // sizeof(nint) on the 6502 is 1 byte (8-bit CPU).
-                // Fixed-size types (byte, ushort, int) are folded by Roslyn at compile time
-                // and never reach this opcode — only platform-dependent types like nint do.
+                // Native integer size (nint/IntPtr) on the 6502 is 1 byte (8-bit CPU).
+                // Fixed-size primitive types (byte, ushort, int, etc.) are folded by Roslyn at compile time
+                // and typically never reach this opcode; this implementation only handles platform-dependent
+                // native integer sizeof values and will always push 1 here.
                 WriteLdc(1);
                 break;
             default:
