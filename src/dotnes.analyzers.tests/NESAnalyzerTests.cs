@@ -333,6 +333,28 @@ public class NESAnalyzerTests
         await VerifyAsync(test);
     }
 
+    [Fact]
+    public async Task NES004_ImplicitIntArrayAllocation_Diagnostic()
+    {
+        var test = """
+            int[] data = {|#0:new[] { 1, 2 }|};
+            while (true) ;
+            """;
+
+        var expected = Diagnostic(NESAnalyzer.NES004).WithLocation(0);
+        await VerifyAsync(test, expected);
+    }
+
+    [Fact]
+    public async Task NES004_ImplicitByteArrayAllocation_NoDiagnostic()
+    {
+        var test = """
+            byte[] data = new[] { (byte)1 };
+            while (true) ;
+            """;
+
+        await VerifyAsync(test);
+    }
 
     // ==================== NES005: Unsupported types ====================
 
