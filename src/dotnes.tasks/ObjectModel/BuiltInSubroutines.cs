@@ -286,6 +286,19 @@ internal static class BuiltInSubroutines
     #region PPU Control Subroutines
 
     /// <summary>
+    /// _waitvsync - Wait for vertical blank by polling PPU status bit 7
+    /// </summary>
+    public static Block Waitvsync()
+    {
+        // https://github.com/cc65/cc65/blob/master/libsrc/nes/waitvsync.s
+        var block = new Block(nameof(NESLib.waitvsync));
+        block.Emit(BIT_abs(PPU_STATUS), "@loop")
+             .Emit(BPL(-5))   // branch back to @loop
+             .Emit(RTS());
+        return block;
+    }
+
+    /// <summary>
     /// _ppu_off - Disable rendering
     /// </summary>
     public static Block PpuOff()

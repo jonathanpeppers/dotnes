@@ -1445,6 +1445,28 @@ public class RoslynTests
     }
 
     [Fact]
+    public void WaitvsyncEmitsJsr()
+    {
+        // waitvsync() should emit JSR to waitvsync subroutine
+        var (program, _) = BuildProgram(
+            """
+            waitvsync();
+            ppu_on_all();
+            while (true) ;
+            """);
+        var mainBlock = program.GetMainBlock();
+        Assert.NotNull(mainBlock);
+        Assert.NotEmpty(mainBlock);
+
+        var hex = Convert.ToHexString(mainBlock);
+        Assert.Contains("20", hex);  // JSR opcode present
+
+        // Verify the waitvsync block exists in the program
+        var waitvsyncBlock = program.GetBlock("waitvsync");
+        Assert.NotNull(waitvsyncBlock);
+    }
+
+    [Fact]
     public void ArrayCopyBasic()
     {
         // Array.Copy between two runtime arrays
