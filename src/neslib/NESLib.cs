@@ -491,6 +491,11 @@ public static class NESLib
     public const ushort APU_NOISE_LENGTH = 0x400F;
     public const ushort APU_STATUS = 0x4015;
 
+    // MMC3 mapper register addresses for bank switching via poke()
+    public const ushort MMC3_BANK_SELECT = 0x8000;
+    public const ushort MMC3_BANK_DATA = 0x8001;
+    public const ushort MMC3_MIRRORING = 0xA000;
+
     // TODO: Macros below should be computed at compile-time and methods removed
 
     /// <summary>

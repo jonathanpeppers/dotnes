@@ -17,6 +17,9 @@ class Transpiler : IDisposable
     readonly IList<AssemblyReader> _assemblyFiles;
     readonly ILogger _logger;
     readonly bool _verticalMirroring;
+    readonly int _mapper;
+    readonly int _prgBanks;
+    readonly int _chrBanks;
 
     /// <summary>
     /// A list of methods that were found to be used in the IL code
@@ -41,13 +44,16 @@ class Transpiler : IDisposable
     /// </summary>
     public Dictionary<string, (int argCount, bool hasReturnValue)> ExternMethods { get; } = new(StringComparer.Ordinal);
 
-    public Transpiler(Stream stream, IList<AssemblyReader> assemblyFiles, ILogger? logger = null, bool verticalMirroring = false)
+    public Transpiler(Stream stream, IList<AssemblyReader> assemblyFiles, ILogger? logger = null, bool verticalMirroring = false, int mapper = 0, int prgBanks = 2, int chrBanks = 1)
     {
         _pe = new PEReader(stream);
         _reader = _pe.GetMetadataReader();
         _assemblyFiles = assemblyFiles;
         _logger = logger ?? new NullLogger();
         _verticalMirroring = verticalMirroring;
+        _mapper = mapper;
+        _prgBanks = prgBanks;
+        _chrBanks = chrBanks;
     }
 
     public void Write(Stream stream)
@@ -71,15 +77,19 @@ class Transpiler : IDisposable
         using var writer = new BinaryWriter(stream, Encoding.ASCII, leaveOpen: true);
         
         // Write NES header (16 bytes)
-        _logger.WriteLine($"Writing header...");
+        _logger.WriteLine($"Writing header (mapper={_mapper}, PRG={_prgBanks}, CHR={_chrBanks})...");
         writer.Write('N');
         writer.Write('E');
         writer.Write('S');
         writer.Write((byte)0x1A);
-        writer.Write((byte)2); // PRG_ROM_SIZE (2 * 16KB = 32KB)
-        writer.Write((byte)1); // CHR_ROM_SIZE (1 * 8KB)
-        writer.Write((byte)(_verticalMirroring ? 1 : 0)); // Flags6 (bit 0: 0=horizontal, 1=vertical mirroring)
-        writer.Write((byte)0); // Flags7
+        writer.Write((byte)_prgBanks); // PRG_ROM_SIZE (in 16KB units)
+        writer.Write((byte)_chrBanks); // CHR_ROM_SIZE (in 8KB units)
+        // Flags6: bit 0 = mirroring, bits 4-7 = mapper lower nibble
+        byte flags6 = (byte)((_verticalMirroring ? 1 : 0) | ((_mapper & 0x0F) << 4));
+        writer.Write(flags6);
+        // Flags7: bits 4-7 = mapper upper nibble
+        byte flags7 = (byte)((_mapper & 0xF0));
+        writer.Write(flags7);
         writer.Write((byte)0); // Flags8
         writer.Write((byte)0); // Flags9
         writer.Write((byte)0); // Flags10
@@ -91,21 +101,14 @@ class Transpiler : IDisposable
         _logger.WriteLine($"Writing PRG ROM ({programBytes.Length} bytes)...");
         writer.Write(programBytes);
 
-        // Pad first PRG ROM bank to 16KB
-        int firstBankPadding = NESWriter.PRG_ROM_BLOCK_SIZE - (programBytes.Length % NESWriter.PRG_ROM_BLOCK_SIZE);
-        if (firstBankPadding < NESWriter.PRG_ROM_BLOCK_SIZE)
-        {
-            for (int i = 0; i < firstBankPadding; i++)
-                writer.Write((byte)0);
-        }
-
-        // Write second PRG ROM bank (16KB), with interrupt vectors at the end
+        // Total PRG ROM size = _prgBanks * 16KB
+        int totalPrgSize = _prgBanks * NESWriter.PRG_ROM_BLOCK_SIZE;
         const int VECTOR_ADDRESSES_SIZE = 6;
-        int secondBankPadding = NESWriter.PRG_ROM_BLOCK_SIZE - VECTOR_ADDRESSES_SIZE;
-        for (int i = 0; i < secondBankPadding; i++)
+        int prgPadding = totalPrgSize - programBytes.Length - VECTOR_ADDRESSES_SIZE;
+        for (int i = 0; i < prgPadding; i++)
             writer.Write((byte)0);
 
-        // Write vectors: NMI, RESET, IRQ (little-endian)
+        // Write vectors: NMI, RESET, IRQ (little-endian) at end of last PRG bank
         ushort nmi_data = 0x80BC;
         ushort reset_data = NESConstants.PrgRomStart;
         ushort irq_data = 0x8202;
@@ -120,14 +123,11 @@ class Transpiler : IDisposable
         _logger.WriteLine($"Writing CHR ROM...");
         writer.Write(chr_rom.Bytes);
         
-        // Pad CHR ROM to 8KB boundary
-        int chrPadding = chr_rom.Bytes.Length % NESWriter.CHR_ROM_BLOCK_SIZE;
-        if (chrPadding != 0)
-        {
-            chrPadding = NESWriter.CHR_ROM_BLOCK_SIZE - chrPadding;
-            for (int i = 0; i < chrPadding; i++)
-                writer.Write((byte)0);
-        }
+        // Pad CHR ROM to total CHR size (_chrBanks * 8KB)
+        int totalChrSize = _chrBanks * NESWriter.CHR_ROM_BLOCK_SIZE;
+        int chrPadding = totalChrSize - chr_rom.Bytes.Length;
+        for (int i = 0; i < chrPadding; i++)
+            writer.Write((byte)0);
 
         writer.Flush();
         _logger.WriteLine($"ROM complete. Total size: {stream.Length} bytes");
