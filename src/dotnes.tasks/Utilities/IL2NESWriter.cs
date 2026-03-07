@@ -3365,14 +3365,15 @@ class IL2NESWriter : NESWriter
 
     void WriteLdloc(Local local)
     {
-        if (_ushortInAX && local.LabelName is not null)
+        if (_ushortInAX && (local.LabelName is not null || local.ArraySize > 0))
         {
             // A:X holds a 16-bit runtime value that's about to be destroyed by the
-            // array label load. Save it to TEMP/TEMP2 for the caller (e.g., vrambuf_put)
+            // array/local load. Save it to TEMP/TEMP2 for the caller (e.g., vrambuf_put)
             // to use later via _ntadrRuntimeResult.
             Emit(Opcode.STA, AddressMode.ZeroPage, (byte)NESConstants.TEMP2);
             Emit(Opcode.STX, AddressMode.ZeroPage, TEMP);
             _ntadrRuntimeResult = true;
+            _runtimeValueInA = false; // prevent double-save in the Address path below
         }
         _ushortInAX = false;
         _savedConstantViaPusha = false;

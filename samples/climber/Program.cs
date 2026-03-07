@@ -74,11 +74,6 @@ static void setup_graphics()
     });
     vram_adr(0x2000);
     vram_fill(CH_BLANK, 0x1000);
-    // Set attribute tables: palette 1 for all background tiles
-    vram_adr(0x23C0);
-    vram_fill(0x55, 64);
-    vram_adr(0x2BC0);
-    vram_fill(0x55, 64);
     bank_spr(0);
     bank_bg(0);
     vrambuf_clear();
@@ -127,25 +122,26 @@ while (true)
 
     // Metasprite data (ROM tables)
     // Metasprite format: x_offset, y_offset, tile, attr (4 bytes per sprite, 0x80 = end)
-    // Layout: top-left, top-right, bottom-left, bottom-right
-    byte[] playerRStand = new byte[] { 0, 0, 0xd8, 0, 8, 0, 0xd9, 0, 0, 8, 0xda, 0, 8, 8, 0xdb, 0, 128 };
-    byte[] playerRRun1 = new byte[] { 0, 0, 0xdc, 0, 8, 0, 0xdd, 0, 0, 8, 0xde, 0, 8, 8, 0xdf, 0, 128 };
-    byte[] playerRRun2 = new byte[] { 0, 0, 0xe0, 0, 8, 0, 0xe1, 0, 0, 8, 0xe2, 0, 8, 8, 0xe3, 0, 128 };
-    byte[] playerRRun3 = new byte[] { 0, 0, 0xe4, 0, 8, 0, 0xe5, 0, 0, 8, 0xe6, 0, 8, 8, 0xe7, 0, 128 };
-    byte[] playerRJump = new byte[] { 0, 0, 0xe8, 0, 8, 0, 0xe9, 0, 0, 8, 0xea, 0, 8, 8, 0xeb, 0, 128 };
-    byte[] playerRClimb = new byte[] { 0, 0, 0xec, 0, 8, 0, 0xed, 0, 0, 8, 0xee, 0, 8, 8, 0xef, 0, 128 };
-    byte[] playerRSad = new byte[] { 0, 0, 0xf0, 0, 8, 0, 0xf1, 0, 0, 8, 0xf2, 0, 8, 8, 0xf3, 0, 128 };
-    byte[] playerLStand = new byte[] { 8, 0, 0xd8, 0x40, 0, 0, 0xd9, 0x40, 8, 8, 0xda, 0x40, 0, 8, 0xdb, 0x40, 128 };
-    byte[] playerLRun1 = new byte[] { 8, 0, 0xdc, 0x40, 0, 0, 0xdd, 0x40, 8, 8, 0xde, 0x40, 0, 8, 0xdf, 0x40, 128 };
-    byte[] playerLRun2 = new byte[] { 8, 0, 0xe0, 0x40, 0, 0, 0xe1, 0x40, 8, 8, 0xe2, 0x40, 0, 8, 0xe3, 0x40, 128 };
-    byte[] playerLRun3 = new byte[] { 8, 0, 0xe4, 0x40, 0, 0, 0xe5, 0x40, 8, 8, 0xe6, 0x40, 0, 8, 0xe7, 0x40, 128 };
-    byte[] playerLJump = new byte[] { 8, 0, 0xe8, 0x40, 0, 0, 0xe9, 0x40, 8, 8, 0xea, 0x40, 0, 8, 0xeb, 0x40, 128 };
-    byte[] playerLClimb = new byte[] { 8, 0, 0xec, 0x40, 0, 0, 0xed, 0x40, 8, 8, 0xee, 0x40, 0, 8, 0xef, 0x40, 128 };
-    byte[] playerLSad = new byte[] { 8, 0, 0xf0, 0x40, 0, 0, 0xf1, 0x40, 8, 8, 0xf2, 0x40, 0, 8, 0xf3, 0x40, 128 };
-    byte[] personToSave = new byte[] { 0, 0, 0xba, 3, 8, 0, 0xbb, 3, 0, 8, 0xbc, 0, 8, 8, 0xbd, 0, 128 };
+    // Layout: top-left, bottom-left, top-right, bottom-right (column-major, matches CHR tile order)
+    byte[] playerRStand = new byte[] { 0, 0, 0xd8, 0, 0, 8, 0xd9, 0, 8, 0, 0xda, 0, 8, 8, 0xdb, 0, 128 };
+    byte[] playerRRun1 = new byte[] { 0, 0, 0xdc, 0, 0, 8, 0xdd, 0, 8, 0, 0xde, 0, 8, 8, 0xdf, 0, 128 };
+    byte[] playerRRun2 = new byte[] { 0, 0, 0xe0, 0, 0, 8, 0xe1, 0, 8, 0, 0xe2, 0, 8, 8, 0xe3, 0, 128 };
+    byte[] playerRRun3 = new byte[] { 0, 0, 0xe4, 0, 0, 8, 0xe5, 0, 8, 0, 0xe6, 0, 8, 8, 0xe7, 0, 128 };
+    byte[] playerRJump = new byte[] { 0, 0, 0xe8, 0, 0, 8, 0xe9, 0, 8, 0, 0xea, 0, 8, 8, 0xeb, 0, 128 };
+    byte[] playerRClimb = new byte[] { 0, 0, 0xec, 0, 0, 8, 0xed, 0, 8, 0, 0xee, 0, 8, 8, 0xef, 0, 128 };
+    byte[] playerRSad = new byte[] { 0, 0, 0xf0, 0, 0, 8, 0xf1, 0, 8, 0, 0xf2, 0, 8, 8, 0xf3, 0, 128 };
+    byte[] playerLStand = new byte[] { 8, 0, 0xd8, 0x40, 8, 8, 0xd9, 0x40, 0, 0, 0xda, 0x40, 0, 8, 0xdb, 0x40, 128 };
+    byte[] playerLRun1 = new byte[] { 8, 0, 0xdc, 0x40, 8, 8, 0xdd, 0x40, 0, 0, 0xde, 0x40, 0, 8, 0xdf, 0x40, 128 };
+    byte[] playerLRun2 = new byte[] { 8, 0, 0xe0, 0x40, 8, 8, 0xe1, 0x40, 0, 0, 0xe2, 0x40, 0, 8, 0xe3, 0x40, 128 };
+    byte[] playerLRun3 = new byte[] { 8, 0, 0xe4, 0x40, 8, 8, 0xe5, 0x40, 0, 0, 0xe6, 0x40, 0, 8, 0xe7, 0x40, 128 };
+    byte[] playerLJump = new byte[] { 8, 0, 0xe8, 0x40, 8, 8, 0xe9, 0x40, 0, 0, 0xea, 0x40, 0, 8, 0xeb, 0x40, 128 };
+    byte[] playerLClimb = new byte[] { 8, 0, 0xec, 0x40, 8, 8, 0xed, 0x40, 0, 0, 0xee, 0x40, 0, 8, 0xef, 0x40, 128 };
+    byte[] playerLSad = new byte[] { 8, 0, 0xf0, 0x40, 8, 8, 0xf1, 0x40, 0, 0, 0xf2, 0x40, 0, 8, 0xf3, 0x40, 128 };
+    byte[] personToSave = new byte[] { 0, 0, 0xba, 3, 0, 8, 0xbc, 0, 8, 0, 0xbb, 3, 8, 8, 0xbd, 0, 128 };
 
     // Buffers
     byte[] buf = new byte[COLS];
+    byte[] attrbuf = new byte[8];
 
     // --- make_floors ---
     {
@@ -288,6 +284,40 @@ while (true)
             addr = NTADR_A(1, rowy);
         else
             addr = NTADR_C(1, (byte)(rowy - 30));
+
+        // Write attribute table (every 4th row within each nametable)
+        // NT A boundaries: rowy 0,4,8,...,28 → (rowy & 3)==0 && rowy<30
+        // NT C boundaries: rowy 30,34,38,...,58 → (rowy & 3)==2 && rowy>=30
+        // NOTE: Computed address must go through a ushort local so the
+        // vrambuf_put handler recognizes the LDA/LDX ushort-local pattern.
+        if (rowy < 30)
+        {
+            if ((rowy & 3) == 0)
+            {
+                if (found_dy == 1)
+                    Array.Fill(attrbuf, (byte)0x05);
+                else if (found_dy == 3)
+                    Array.Fill(attrbuf, (byte)0x50);
+                else
+                    Array.Fill(attrbuf, (byte)0x00);
+                ushort attraddr = (ushort)((rowy << 1) + 0x23C0);
+                vrambuf_put(attraddr, attrbuf, 8);
+            }
+        }
+        if (rowy >= 30)
+        {
+            if ((rowy & 3) == 2)
+            {
+                if (found_dy == 1)
+                    Array.Fill(attrbuf, (byte)0x05);
+                else if (found_dy == 3)
+                    Array.Fill(attrbuf, (byte)0x50);
+                else
+                    Array.Fill(attrbuf, (byte)0x00);
+                ushort attraddr = (ushort)((rowy << 1) + 0x2B84);
+                vrambuf_put(attraddr, attrbuf, 8);
+            }
+        }
 
         vrambuf_put(addr, buf, COLS);
         vrambuf_flush();

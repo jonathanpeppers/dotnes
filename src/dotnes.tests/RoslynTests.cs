@@ -2832,4 +2832,54 @@ public class RoslynTests
         Assert.True(foundCorrectPattern, "Expected LSR LSR CLC ADC pattern (runtime div then ushort add). " +
             $"Hex: {Convert.ToHexString(bytes)}");
     }
+
+    [Fact]
+    public void VrambufPut_RuntimeAddress_SavesTempBeforeArrayLoad()
+    {
+        // Tests that when vrambuf_put receives a runtime-computed ushort address
+        // (e.g., (rowy << 1) + 0x23C0) and a newarr byte[], the ushort A:X is
+        // saved to TEMP2/TEMP before loading the array local.
+        // This was a bug: _runtimeValueInA was still true after the save, causing
+        // the Address-path in WriteLdloc to overwrite TEMP with a STA.
+        var bytes = GetProgramBytes(
+            """
+            byte[] buf = new byte[8];
+            byte rowy = 0;
+            while (rowy < 30) {
+                vrambuf_put((ushort)((rowy << 1) + 0x23C0), buf, 8);
+                rowy = (byte)(rowy + 1);
+            }
+            while (true) ;
+            """);
+        _logger.WriteLine($"VrambufPut_RuntimeAddr hex: {Convert.ToHexString(bytes)}");
+
+        // Pattern: ASL (0A) + CLC (18) + ADC #$C0 (69 C0) + LDX #$23 (A2 23)
+        //        + BCC +1 (90 01) + INX (E8)
+        //        + STA $19 (85 19) + STX $17 (86 17) — save to TEMP2/TEMP
+        // Then the array local load should NOT overwrite TEMP with another STA $17.
+        bool foundSave = false;
+        for (int i = 0; i < bytes.Length - 12; i++)
+        {
+            // STA TEMP2 ($19) = 85 19, STX TEMP ($17) = 86 17
+            if (bytes[i] == 0x85 && bytes[i + 1] == 0x19
+                && bytes[i + 2] == 0x86 && bytes[i + 3] == 0x17)
+            {
+                foundSave = true;
+                // Verify no STA $17 immediately follows (which would overwrite hi byte)
+                // The next instructions should be array local loads, NOT STA $17
+                for (int j = i + 4; j < Math.Min(i + 10, bytes.Length - 1); j++)
+                {
+                    if (bytes[j] == 0x85 && bytes[j + 1] == 0x17)
+                    {
+                        Assert.Fail($"Found STA $17 at offset {j} after TEMP2/TEMP save — " +
+                            "this overwrites the hi byte of the runtime address. " +
+                            $"Hex around save: {Convert.ToHexString(bytes[i..(j + 4)])}");
+                    }
+                }
+                break;
+            }
+        }
+        Assert.True(foundSave, "Expected STA $19 (TEMP2) + STX $17 (TEMP) pattern for ushort save " +
+            $"before newarr array load. Hex: {Convert.ToHexString(bytes)}");
+    }
 }
