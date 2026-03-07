@@ -4814,6 +4814,8 @@ class IL2NESWriter : NESWriter
         bool hasMul = false;
         int mulValue = 0;
         int mulLocalIdx = -1;
+        bool hasShr = false;
+        int shrValue = 0;
         bool hasTwoLdelems = false;
         int sourceArray1Idx = -1;
         int sourceArray2Idx = -1;
@@ -4839,6 +4841,10 @@ class IL2NESWriter : NESWriter
                     break;
                 case ILOpCode.Mul:
                     hasMul = true;
+                    break;
+                case ILOpCode.Shr:
+                case ILOpCode.Shr_un:
+                    hasShr = true;
                     break;
                 case ILOpCode.Ldelem_u1:
                     if (sourceArray1Idx < 0)
@@ -4912,6 +4918,8 @@ class IL2NESWriter : NESWriter
                             }
                             else if (Instructions[i + 1].OpCode == ILOpCode.Add)
                                 addValue = val;
+                            else if (Instructions[i + 1].OpCode is ILOpCode.Shr or ILOpCode.Shr_un)
+                                shrValue = val;
                         }
                     }
                     break;
@@ -4935,6 +4943,8 @@ class IL2NESWriter : NESWriter
                             }
                             else if (Instructions[i + 1].OpCode == ILOpCode.Add)
                                 addValue = val;
+                            else if (Instructions[i + 1].OpCode is ILOpCode.Shr or ILOpCode.Shr_un)
+                                shrValue = val;
                         }
                     }
                     break;
@@ -5031,7 +5041,24 @@ class IL2NESWriter : NESWriter
         {
             // Pattern: arr[i] = local, arr[i] = (local & N), arr[i] = (local + N), etc.
             var valueLoc = Locals[valueLocalIdx];
-            Emit(Opcode.LDA, AddressMode.Absolute, (ushort)valueLoc.Address!);
+
+            // Handle ushort high byte extraction: arr[i] = (byte)(ushort_local >> 8)
+            if (hasShr && shrValue == 8 && valueLoc.IsWord)
+            {
+                Emit(Opcode.LDA, AddressMode.Absolute, (ushort)(valueLoc.Address! + 1));
+            }
+            else if (hasShr && shrValue > 0)
+            {
+                // General right shift: load value, then LSR N times
+                Emit(Opcode.LDA, AddressMode.Absolute, (ushort)valueLoc.Address!);
+                for (int s = 0; s < shrValue; s++)
+                    Emit(Opcode.LSR, AddressMode.Accumulator);
+            }
+            else
+            {
+                Emit(Opcode.LDA, AddressMode.Absolute, (ushort)valueLoc.Address!);
+            }
+
             if (hasAnd)
                 Emit(Opcode.AND, AddressMode.Immediate, checked((byte)andMask));
             if (hasAdd)
