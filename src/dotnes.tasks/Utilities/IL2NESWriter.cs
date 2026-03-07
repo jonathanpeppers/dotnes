@@ -646,8 +646,25 @@ class IL2NESWriter : NESWriter
                 {
                     int val2 = Stack.Pop();
                     int val1 = Stack.Count > 0 ? Stack.Pop() : 0;
-                    if (_runtimeValueInA)
+
+                    bool mulLocalInA = _lastLoadedLocalIndex.HasValue &&
+                        Locals.TryGetValue(_lastLoadedLocalIndex.Value, out var mulLocal) && mulLocal.Address != null;
+
+                    if (_runtimeValueInA || mulLocalInA)
                     {
+                        // Remove the LDA #constant emitted by WriteLdc (local value was in A before it).
+                        // WriteLdloc emits LDA Absolute (not Immediate), so WriteLdc does NOT
+                        // emit pusha — only the LDA #constant needs to be removed.
+                        if (!_runtimeValueInA && mulLocalInA
+                            && previous is ILOpCode.Ldc_i4_s or ILOpCode.Ldc_i4
+                            or ILOpCode.Ldc_i4_m1
+                            or ILOpCode.Ldc_i4_0 or ILOpCode.Ldc_i4_1 or ILOpCode.Ldc_i4_2
+                            or ILOpCode.Ldc_i4_3 or ILOpCode.Ldc_i4_4 or ILOpCode.Ldc_i4_5
+                            or ILOpCode.Ldc_i4_6 or ILOpCode.Ldc_i4_7 or ILOpCode.Ldc_i4_8)
+                        {
+                            RemoveLastInstructions(1);
+                        }
+
                         // Runtime multiply: use ASL for power-of-2 constants
                         int constant = val2 >= 0 ? val2 : val1;
                         if (constant > 0 && (constant & (constant - 1)) == 0)
@@ -696,6 +713,7 @@ class IL2NESWriter : NESWriter
                                     Emit(Opcode.ASL, AddressMode.Accumulator);
                             }
                         }
+                        _runtimeValueInA = true;
                         Stack.Push(val1 * val2);
                     }
                     else
@@ -2319,6 +2337,17 @@ class IL2NESWriter : NESWriter
         if (Instructions == null || Index < 2)
             throw new InvalidOperationException("Array.Fill requires at least 2 preceding instructions");
 
+        // Check if fill value comes from a local variable (ldloc before the call)
+        ushort? fillLocalAddr = null;
+        var valueInstr = Instructions[Index - 1];
+        var valueLocalIdx = GetLdlocIndex(valueInstr);
+        if (valueLocalIdx != null)
+        {
+            var valueLocal = Locals[valueLocalIdx.Value];
+            if (valueLocal.Address != null)
+                fillLocalAddr = (ushort)valueLocal.Address;
+        }
+
         // Try to find the array local by scanning for ldloc (stops at dup/newarr)
         int? arrayLocalIdx = null;
         for (int scan = Index - 2; scan >= 0; scan--)
@@ -2384,10 +2413,13 @@ class IL2NESWriter : NESWriter
                 RemoveLastInstructions(instrToRemove);
         }
 
-        // Emit fill loop: LDA #value; LDX #(size-1); @loop: STA arr,X; DEX; BPL @loop
+        // Emit fill loop: LDA value; LDX #(size-1); @loop: STA arr,X; DEX; BPL @loop
         if (arraySize <= 256)
         {
-            Emit(Opcode.LDA, AddressMode.Immediate, (byte)(fillValue & 0xFF));
+            if (fillLocalAddr != null)
+                Emit(Opcode.LDA, AddressMode.Absolute, fillLocalAddr.Value);
+            else
+                Emit(Opcode.LDA, AddressMode.Immediate, (byte)(fillValue & 0xFF));
             Emit(Opcode.LDX, AddressMode.Immediate, (byte)(arraySize - 1));
             // STA arr,X (3) + DEX (1) + BPL (-6 to STA)
             Emit(Opcode.STA, AddressMode.AbsoluteX, arrayAddr);
@@ -3271,7 +3303,7 @@ class IL2NESWriter : NESWriter
         // Check if next instruction can handle the constant directly with A's current value
         bool nextIsAddSub = Instructions is not null && Index + 1 < Instructions.Length &&
             Instructions[Index + 1].OpCode is ILOpCode.Add or ILOpCode.Sub;
-        if (nextIsAddSub && LastLDA)
+        if (nextIsAddSub && (LastLDA || _runtimeValueInA))
         {
             // Keep current A value — the Add/Sub handler will do 16-bit add inline
             Stack.Push(operand);
@@ -3333,6 +3365,15 @@ class IL2NESWriter : NESWriter
 
     void WriteLdloc(Local local)
     {
+        if (_ushortInAX && local.LabelName is not null)
+        {
+            // A:X holds a 16-bit runtime value that's about to be destroyed by the
+            // array label load. Save it to TEMP/TEMP2 for the caller (e.g., vrambuf_put)
+            // to use later via _ntadrRuntimeResult.
+            Emit(Opcode.STA, AddressMode.ZeroPage, (byte)NESConstants.TEMP2);
+            Emit(Opcode.STX, AddressMode.ZeroPage, TEMP);
+            _ntadrRuntimeResult = true;
+        }
         _ushortInAX = false;
         _savedConstantViaPusha = false;
         if (local.LabelName is not null)

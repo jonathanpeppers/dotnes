@@ -2727,4 +2727,109 @@ public class RoslynTests
         Assert.Equal(0x20, mainBlock[0]);  // JSR setup
         Assert.Equal(0x20, mainBlock[3]);  // JSR enable
     }
+
+    [Fact]
+    public void ByteLocalMul2_EmitsASL()
+    {
+        // Tests that byte_local * 2 correctly emits ASL A when the local
+        // has a RAM address (loop counter forces address allocation).
+        // Previously, the multiply was silently dropped because _runtimeValueInA
+        // wasn't set for byte locals loaded from RAM.
+        var bytes = GetProgramBytes(
+            """
+            byte i = 0;
+            while (i < 5) {
+                pal_col(0, (byte)(i * 2));
+                i = (byte)(i + 1);
+            }
+            while (true) ;
+            """);
+        _logger.WriteLine($"ByteLocalMul2 hex: {Convert.ToHexString(bytes)}");
+
+        // Find ASL A (0x0A) — this is the i * 2 shift
+        bool foundASL = false;
+        for (int i = 0; i < bytes.Length - 2; i++)
+        {
+            // Pattern: LDA $abs (AD xx xx) followed by ASL (0A)
+            if (bytes[i] == 0xAD && bytes[i + 3] == 0x0A)
+            {
+                foundASL = true;
+                break;
+            }
+        }
+        Assert.True(foundASL, "Expected LDA absolute + ASL A pattern for (i * 2) in loop body. " +
+            $"Hex: {Convert.ToHexString(bytes)}");
+    }
+
+    [Fact]
+    public void ByteLocalShift_PlusUshortConstant()
+    {
+        // Tests that (byte_local << 1) + ushort_constant produces correct 16-bit result.
+        // Uses a loop so the local is truly runtime (not constant-foldable).
+        var bytes = GetProgramBytes(
+            """
+            byte i = 0;
+            while (i < 5) {
+                vram_adr((ushort)((i << 1) + 0x2000));
+                i = (byte)(i + 1);
+            }
+            while (true) ;
+            """);
+        _logger.WriteLine($"ByteLocalShift_PlusUshort hex: {Convert.ToHexString(bytes)}");
+
+        // After the local load (LDA $abs) and ASL, we should see
+        // CLC + ADC #$00 (lo byte of 0x2000) + LDX #$20 (hi byte)
+        // + BCC +1 + INX (carry propagation)
+        bool foundPattern = false;
+        for (int i = 0; i < bytes.Length - 8; i++)
+        {
+            // Look for: ASL (0A), CLC (18), ADC #imm (69 xx), LDX #imm (A2 xx), BCC +1 (90 01), INX (E8)
+            if (bytes[i] == 0x0A && bytes[i + 1] == 0x18 && bytes[i + 2] == 0x69
+                && bytes[i + 4] == 0xA2 && bytes[i + 6] == 0x90 && bytes[i + 7] == 0x01
+                && bytes[i + 8] == 0xE8)
+            {
+                // Verify: ADC lo byte = 0x00, LDX hi byte = 0x20
+                Assert.Equal(0x00, bytes[i + 3]); // lo byte of 0x2000
+                Assert.Equal(0x20, bytes[i + 5]); // hi byte of 0x2000
+                foundPattern = true;
+                break;
+            }
+        }
+        Assert.True(foundPattern, "Expected ASL + CLC/ADC/LDX/BCC/INX pattern for (i << 1) + 0x2000. " +
+            $"Hex: {Convert.ToHexString(bytes)}");
+    }
+
+    [Fact]
+    public void WriteLdc_Ushort_PreservesRuntimeValueInA()
+    {
+        // Tests that when A holds a runtime value (from division) and a ushort
+        // constant is loaded for addition, the constant is deferred so that
+        // HandleAddSub can use the "byte in A + ushort constant" path.
+        var bytes = GetProgramBytes(
+            """
+            byte i = 0;
+            while (i < 20) {
+                vram_adr((ushort)((i / 4) + 0x2000));
+                i = (byte)(i + 1);
+            }
+            while (true) ;
+            """);
+        _logger.WriteLine($"WriteLdc_Ushort_div hex: {Convert.ToHexString(bytes)}");
+
+        // After LSR LSR (i / 4), should see CLC + ADC #$00 + LDX #$20
+        // NOT an LDA #$00 + LDX #$20 that would overwrite A
+        bool foundCorrectPattern = false;
+        for (int i = 0; i < bytes.Length - 6; i++)
+        {
+            // Look for LSR (4A), LSR (4A), CLC (18), ADC #imm (69 xx)
+            if (bytes[i] == 0x4A && bytes[i + 1] == 0x4A
+                && bytes[i + 2] == 0x18 && bytes[i + 3] == 0x69)
+            {
+                foundCorrectPattern = true;
+                break;
+            }
+        }
+        Assert.True(foundCorrectPattern, "Expected LSR LSR CLC ADC pattern (runtime div then ushort add). " +
+            $"Hex: {Convert.ToHexString(bytes)}");
+    }
 }
