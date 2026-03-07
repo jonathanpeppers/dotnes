@@ -111,7 +111,7 @@ public class TranspilerTests
         var famiDir = Path.Combine(AppContext.BaseDirectory, "Data", "fami");
         if (Directory.Exists(famiDir))
         {
-            foreach (var sFile in Directory.GetFiles(famiDir, "*.s"))
+            foreach (var sFile in Directory.GetFiles(famiDir, "*.s").OrderBy(f => f))
                 assemblyReaders.Add(new AssemblyReader(sFile));
         }
 
