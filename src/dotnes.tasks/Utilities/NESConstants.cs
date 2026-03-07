@@ -84,11 +84,11 @@ internal static class NESConstants
     public const ushort MUSIC_DURATION = 0x0300;  // 1 byte: frames until next note
     public const ushort MUSIC_PTR = 0x0301;       // 2 bytes: current position in music data
     public const ushort MUSIC_CHS = 0x0303;       // 1 byte: channel usage bitmask (static)
-    public const ushort MUSIC_TEMP = 0x0329;      // 1 byte: temp note value
-    public const ushort MUSIC_PERIOD_LO = 0x032A; // 1 byte: temp period low
-    public const ushort MUSIC_PERIOD_HI = 0x032B; // 1 byte: temp period high
-    public const ushort MUSIC_TRI_PERIOD_LO = 0x032C; // 1 byte: triangle period low
-    public const ushort MUSIC_TRI_PERIOD_HI = 0x032D; // 1 byte: triangle period high
+    public const ushort MUSIC_TEMP = 0x0304;      // 1 byte: temp note value
+    public const ushort MUSIC_PERIOD_LO = 0x0305; // 1 byte: temp period low
+    public const ushort MUSIC_PERIOD_HI = 0x0306; // 1 byte: temp period high
+    public const ushort MUSIC_TRI_PERIOD_LO = 0x0307; // 1 byte: triangle period low
+    public const ushort MUSIC_TRI_PERIOD_HI = 0x0308; // 1 byte: triangle period high
 
     // Built-in subroutine addresses (resolved after linking)
     public const ushort skipNtsc = 0x81F9;

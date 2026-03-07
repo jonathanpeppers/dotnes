@@ -153,6 +153,23 @@ class IL2NESWriter : NESWriter
     bool _ushortInAX;
 
     /// <summary>
+    /// True when inside a dup cascade (cascading if-else using dup+ldc+bne/beq pattern).
+    /// Set on the first dup when _runtimeValueInA is true. Causes subsequent dups to
+    /// emit LDA TEMP_HI (reload saved value) and branch handlers to emit STA TEMP_HI
+    /// (save A for the next check). This ensures A holds the correct comparison value
+    /// even after intermediate if-blocks modify A via JSR calls.
+    /// </summary>
+    bool _dupCascadeActive;
+
+    /// <summary>
+    /// Set by the dup handler when the next branch instruction should save A to TEMP_HI.
+    /// Consumed (cleared) by the bne/beq handler after emitting STA TEMP_HI. This ensures
+    /// only the branch immediately following a dup+ldc compare writes to TEMP_HI, not
+    /// unrelated branches inside the if-body.
+    /// </summary>
+    bool _dupPendingSave;
+
+    /// <summary>
     /// Number of parameters for the current user method being transpiled (0 for main).
     /// Used by ldarg handlers to compute cc65 stack offsets.
     /// </summary>
@@ -306,6 +323,30 @@ class IL2NESWriter : NESWriter
     }
 
     /// <summary>
+    /// Checks if the current dup instruction starts a cascading if-else pattern
+    /// (dup → ldc → bne/beq). Returns false for other dup patterns like dup → ldc → and → brfalse
+    /// (button-check bitmasking) or newarr → dup → ldtoken (array init).
+    /// </summary>
+    bool IsDupCascadeStart()
+    {
+        if (Instructions is null || Index + 2 >= Instructions.Length)
+            return false;
+
+        var next1 = Instructions[Index + 1].OpCode;
+        var next2 = Instructions[Index + 2].OpCode;
+
+        bool isLdc = next1 is ILOpCode.Ldc_i4_0 or ILOpCode.Ldc_i4_1 or ILOpCode.Ldc_i4_2
+            or ILOpCode.Ldc_i4_3 or ILOpCode.Ldc_i4_4 or ILOpCode.Ldc_i4_5
+            or ILOpCode.Ldc_i4_6 or ILOpCode.Ldc_i4_7 or ILOpCode.Ldc_i4_8
+            or ILOpCode.Ldc_i4_s or ILOpCode.Ldc_i4 or ILOpCode.Ldc_i4_m1;
+
+        bool isBranchCompare = next2 is ILOpCode.Bne_un_s or ILOpCode.Bne_un
+            or ILOpCode.Beq_s or ILOpCode.Beq;
+
+        return isLdc && isBranchCompare;
+    }
+
+    /// <summary>
     /// Emits a CMP instruction for branch comparison.
     /// Peeks at the last emitted instruction: if it's LDA with Absolute/ZeroPage mode
     /// (runtime variable), uses CMP $addr. Otherwise removes the LDA #imm and uses CMP #imm.
@@ -321,13 +362,34 @@ class IL2NESWriter : NESWriter
 
             // Handle indexed array access: LDA array,X from ldelem.u1
             // Pattern: LDA value1; LDX index; LDA array,X → convert last to CMP array,X
+            // Only apply when there's a prior value in A to compare against. Check the
+            // instruction before LDX: if it's an LDA (loaded a comparison value) or STA to
+            // TEMP (saved a runtime value for comparison), A retains a meaningful comparison
+            // value through the LDX. Otherwise, the LDA array,X IS the value to compare
+            // against a constant (from dup+ldc+bne pattern after ldelem).
             if (lastInstr.Opcode == Opcode.LDA
                 && lastInstr.Mode == AddressMode.AbsoluteX
                 && lastInstr.Operand is AbsoluteOperand idxOp)
             {
-                // Replace LDA array,X with CMP array,X — A still has value1 from earlier
-                RemoveLastInstructions(1);
-                Emit(Opcode.CMP, AddressMode.AbsoluteX, idxOp.Address);
+                bool hasPriorCompareValue = false;
+                if (block.Count >= 3)
+                {
+                    var beforeLdx = block[block.Count - 3];
+                    hasPriorCompareValue = beforeLdx.Opcode == Opcode.LDA
+                        || (beforeLdx.Opcode == Opcode.STA && _savedRuntimeToTemp);
+                }
+
+                if (hasPriorCompareValue)
+                {
+                    // Replace LDA array,X with CMP array,X — A still has value1 from earlier
+                    RemoveLastInstructions(1);
+                    Emit(Opcode.CMP, AddressMode.AbsoluteX, idxOp.Address);
+                }
+                else
+                {
+                    // A holds the runtime value from LDA array,X — compare with the constant
+                    Emit(Opcode.CMP, AddressMode.Immediate, checked((byte)(stackValue + adjustValue)));
+                }
                 return;
             }
 
@@ -400,11 +462,29 @@ class IL2NESWriter : NESWriter
             case ILOpCode.Dup:
                 if (Stack.Count > 0)
                     Stack.Push(Stack.Peek());
+                if (_dupCascadeActive)
+                {
+                    // Subsequent dup in cascading if-else: reload saved value from TEMP_HI
+                    // (the DUP_TEMP scratch location). After an if-block runs (with JSR calls
+                    // that modify A), A no longer holds the original comparison value. Reload
+                    // it from TEMP_HI where the branch handler saved it.
+                    Emit(Opcode.LDA, AddressMode.ZeroPage, TEMP_HI);
+                    _dupPendingSave = true;
+                }
+                else if (_runtimeValueInA && IsDupCascadeStart())
+                {
+                    // First dup in cascade: mark for saving in the branch handler.
+                    // Don't emit anything yet — A still holds the correct value.
+                    _dupCascadeActive = true;
+                    _dupPendingSave = true;
+                }
                 break;
             case ILOpCode.Pop:
                 if (Stack.Count > 0)
                     Stack.Pop();
                 _runtimeValueInA = false;
+                _dupCascadeActive = false;
+                _dupPendingSave = false;
                 break;
             case ILOpCode.Ldc_i4_m1:
                 WriteLdc(0xFF); // -1 in two's complement = 0xFF
@@ -1078,6 +1158,17 @@ class IL2NESWriter : NESWriter
                             && lastInstr.Operand is AbsoluteOperand absOp)
                             Emit(Opcode.LDA, AddressMode.Absolute, absOp.Address);
                     }
+
+                    // In a dup cascade, save A to DUP_TEMP after CMP so subsequent
+                    // checks can reload it. STA does NOT affect processor flags,
+                    // so the branch instruction still sees the CMP result.
+                    // Only save on the branch that immediately follows dup+ldc
+                    // (not on unrelated branches inside the if-body).
+                    if (_dupPendingSave)
+                    {
+                        Emit(Opcode.STA, AddressMode.ZeroPage, TEMP_HI);
+                        _dupPendingSave = false;
+                    }
                     
                     var labelName = InstructionLabel(instruction.Offset + branchOffset + instrSize);
                     if (instruction.OpCode == ILOpCode.Bne_un_s)
@@ -1100,6 +1191,13 @@ class IL2NESWriter : NESWriter
                     int cmpVal = Stack.Count > 0 ? Stack.Pop() : 0;
                     if (Stack.Count > 0) Stack.Pop();
                     EmitBranchCompare(cmpVal);
+
+                    if (_dupPendingSave)
+                    {
+                        Emit(Opcode.STA, AddressMode.ZeroPage, TEMP_HI);
+                        _dupPendingSave = false;
+                    }
+
                     var labelName = InstructionLabel(instruction.Offset + branchOffset + instrSize);
                     if (instruction.OpCode == ILOpCode.Beq_s)
                         EmitWithLabel(Opcode.BEQ, AddressMode.Relative, labelName);
@@ -3365,12 +3463,32 @@ class IL2NESWriter : NESWriter
 
         // oam_spr has 5 args: x, y, tile, attr, id
         // Walk back through IL to find the 5 argument-producing IL instructions.
-        // Args can be: constants, locals, or array elements (ldloc_arr + ldloc_idx + ldelem_u1).
-        var argInfos = new List<(bool isLocal, int localIndex, int constValue, bool hasAdd, int addValue, bool isArrayElem, int arrayLocIdx, int indexLocIdx)>();
+        // Uses stack-depth tracking to correctly handle compound expressions like
+        // (byte)(0x30 + (score >> 4)) as a single argument.
+        //
+        // Depth tracking: scanning backward, binary ops (add/sub/shr/and/etc.) need
+        // 2 inputs and produce 1 output, so they increase depth by 1. Value producers
+        // (ldc/ldloc) at depth > 0 satisfy a pending input (depth--). At depth == 0,
+        // a value producer is a standalone argument.
+
+        var argInfos = new List<(bool isLocal, int localIndex, int constValue,
+            bool hasAdd, int addValue, bool isArrayElem, int arrayLocIdx, int indexLocIdx,
+            bool isCompound, int compoundLocalIdx, ILOpCode compoundBinOp,
+            int compoundBinOpConst, int compoundAddConst,
+            bool isStaticField, string? staticFieldName)>();
+
         int ilIdx = Index - 1;
         int needed = 5;
         int firstArgIlIdx = -1;
-        int? pendingAddValue = null;
+        int depth = 0;
+
+        // Compound expression state (built up during backward scan)
+        ILOpCode compBinOp = ILOpCode.Nop;
+        int compBinOpConst = 0;
+        int compLocalIdx = -1;
+        int compAddConst = 0;
+        bool compHasBinOp = false;
+        bool compBinOpConstAssigned = false;
 
         while (needed > 0 && ilIdx >= 0)
         {
@@ -3379,47 +3497,83 @@ class IL2NESWriter : NESWriter
             {
                 case ILOpCode.Ldelem_u1:
                 {
-                    // Array element: walk back to find index + array locals
-                    ilIdx--;
-                    int idxLoc = -1, arrLoc = -1;
-                    if (ilIdx >= 0) { idxLoc = GetLdlocIndex(Instructions[ilIdx]) ?? -1; ilIdx--; }
-                    if (ilIdx >= 0) { arrLoc = GetLdlocIndex(Instructions[ilIdx]) ?? -1; }
-                    argInfos.Add((false, 0, 0, false, 0, true, arrLoc, idxLoc));
-                    needed--;
-                    firstArgIlIdx = ilIdx;
+                    if (depth > 0)
+                    {
+                        // Array element consumed by binary op — skip its operands
+                        depth--;
+                        ilIdx--;
+                        if (ilIdx >= 0) ilIdx--; // skip index local
+                        // array local is at current ilIdx, will be decremented below
+                    }
+                    else
+                    {
+                        // Standalone array element arg
+                        ilIdx--;
+                        int idxLoc = -1, arrLoc = -1;
+                        if (ilIdx >= 0) { idxLoc = GetLdlocIndex(Instructions[ilIdx]) ?? -1; ilIdx--; }
+                        if (ilIdx >= 0) { arrLoc = GetLdlocIndex(Instructions[ilIdx]) ?? -1; }
+                        argInfos.Add((false, 0, 0, false, 0, true, arrLoc, idxLoc,
+                            false, 0, ILOpCode.Nop, 0, 0, false, null));
+                        needed--;
+                        firstArgIlIdx = ilIdx;
+                    }
                     break;
                 }
                 case ILOpCode.Ldloc_0: case ILOpCode.Ldloc_1:
                 case ILOpCode.Ldloc_2: case ILOpCode.Ldloc_3:
                 {
                     int locIdx = il.OpCode - ILOpCode.Ldloc_0;
-                    if (pendingAddValue != null)
+                    if (depth > 0)
                     {
-                        argInfos.Add((true, locIdx, 0, true, pendingAddValue.Value, false, 0, 0));
-                        pendingAddValue = null;
+                        // Consumed by a pending binary op
+                        compLocalIdx = locIdx;
+                                               depth--;
+                        if (depth == 0)
+                        {
+                            // Compound expression complete
+                            argInfos.Add((false, 0, 0, false, 0, false, 0, 0,
+                                true, compLocalIdx, compBinOp, compBinOpConst, compAddConst, false, null));
+                            needed--;
+                            firstArgIlIdx = ilIdx;
+                            compBinOp = ILOpCode.Nop; compBinOpConst = 0; compLocalIdx = -1;
+                            compAddConst = 0; compHasBinOp = false;
+                            compBinOpConstAssigned = false;
+                        }
                     }
                     else
                     {
-                        argInfos.Add((true, locIdx, 0, false, 0, false, 0, 0));
+                        argInfos.Add((true, locIdx, 0, false, 0, false, 0, 0,
+                            false, 0, ILOpCode.Nop, 0, 0, false, null));
+                        needed--;
+                        firstArgIlIdx = ilIdx;
                     }
-                    needed--;
-                    firstArgIlIdx = ilIdx;
                     break;
                 }
                 case ILOpCode.Ldloc_s:
                 {
                     int locIdx = il.Integer ?? 0;
-                    if (pendingAddValue != null)
+                    if (depth > 0)
                     {
-                        argInfos.Add((true, locIdx, 0, true, pendingAddValue.Value, false, 0, 0));
-                        pendingAddValue = null;
+                        compLocalIdx = locIdx;
+                                               depth--;
+                        if (depth == 0)
+                        {
+                            argInfos.Add((false, 0, 0, false, 0, false, 0, 0,
+                                true, compLocalIdx, compBinOp, compBinOpConst, compAddConst, false, null));
+                            needed--;
+                            firstArgIlIdx = ilIdx;
+                            compBinOp = ILOpCode.Nop; compBinOpConst = 0; compLocalIdx = -1;
+                            compAddConst = 0; compHasBinOp = false;
+                            compBinOpConstAssigned = false;
+                        }
                     }
                     else
                     {
-                        argInfos.Add((true, locIdx, 0, false, 0, false, 0, 0));
+                        argInfos.Add((true, locIdx, 0, false, 0, false, 0, 0,
+                            false, 0, ILOpCode.Nop, 0, 0, false, null));
+                        needed--;
+                        firstArgIlIdx = ilIdx;
                     }
-                    needed--;
-                    firstArgIlIdx = ilIdx;
                     break;
                 }
                 case ILOpCode.Ldc_i4_0: case ILOpCode.Ldc_i4_1: case ILOpCode.Ldc_i4_2:
@@ -3427,13 +3581,35 @@ class IL2NESWriter : NESWriter
                 case ILOpCode.Ldc_i4_6: case ILOpCode.Ldc_i4_7: case ILOpCode.Ldc_i4_8:
                 {
                     int val = il.OpCode - ILOpCode.Ldc_i4_0;
-                    if (IsConsumedByAdd(ilIdx))
+                    if (depth > 0)
                     {
-                        pendingAddValue = val;
+                        // First constant after inner binOp → binOp's operand.
+                        // Subsequent constants → outer add's operand.
+                        if (compHasBinOp && !compBinOpConstAssigned)
+                        {
+                            compBinOpConst = val;
+                            compBinOpConstAssigned = true;
+                        }
+                        else
+                        {
+                            compAddConst = val;
+                        }
+                        depth--;
+                        if (depth == 0)
+                        {
+                            argInfos.Add((false, 0, 0, false, 0, false, 0, 0,
+                                true, compLocalIdx, compBinOp, compBinOpConst, compAddConst, false, null));
+                            needed--;
+                            firstArgIlIdx = ilIdx;
+                            compBinOp = ILOpCode.Nop; compBinOpConst = 0; compLocalIdx = -1;
+                            compAddConst = 0; compHasBinOp = false;
+                            compBinOpConstAssigned = false;
+                        }
                     }
                     else
                     {
-                        argInfos.Add((false, 0, val, false, 0, false, 0, 0));
+                        argInfos.Add((false, 0, val, false, 0, false, 0, 0,
+                            false, 0, ILOpCode.Nop, 0, 0, false, null));
                         needed--;
                         firstArgIlIdx = ilIdx;
                     }
@@ -3444,23 +3620,88 @@ class IL2NESWriter : NESWriter
                 case ILOpCode.Ldc_i4:
                 {
                     int val = il.OpCode == ILOpCode.Ldc_i4_m1 ? -1 : (il.Integer ?? 0);
-                    if (IsConsumedByAdd(ilIdx))
+                    if (depth > 0)
                     {
-                        pendingAddValue = val;
+                        if (compHasBinOp && !compBinOpConstAssigned)
+                        {
+                            compBinOpConst = val;
+                            compBinOpConstAssigned = true;
+                        }
+                        else
+                        {
+                            compAddConst = val;
+                        }
+                        depth--;
+                        if (depth == 0)
+                        {
+                            argInfos.Add((false, 0, 0, false, 0, false, 0, 0,
+                                true, compLocalIdx, compBinOp, compBinOpConst, compAddConst, false, null));
+                            needed--;
+                            firstArgIlIdx = ilIdx;
+                            compBinOp = ILOpCode.Nop; compBinOpConst = 0; compLocalIdx = -1;
+                            compAddConst = 0; compHasBinOp = false;
+                            compBinOpConstAssigned = false;
+                        }
                     }
                     else
                     {
-                        argInfos.Add((false, 0, val, false, 0, false, 0, 0));
+                        argInfos.Add((false, 0, val, false, 0, false, 0, 0,
+                            false, 0, ILOpCode.Nop, 0, 0, false, null));
                         needed--;
                         firstArgIlIdx = ilIdx;
                     }
                     break;
                 }
                 case ILOpCode.Add: case ILOpCode.Sub:
+                case ILOpCode.Shr: case ILOpCode.Shr_un: case ILOpCode.Shl:
+                case ILOpCode.And: case ILOpCode.Or: case ILOpCode.Xor:
+                case ILOpCode.Mul: case ILOpCode.Div: case ILOpCode.Rem:
+                    if (il.OpCode is ILOpCode.Shr or ILOpCode.Shr_un or ILOpCode.Shl
+                        or ILOpCode.And or ILOpCode.Or or ILOpCode.Xor
+                        or ILOpCode.Mul or ILOpCode.Div or ILOpCode.Rem)
+                    {
+                        compBinOp = il.OpCode;
+                        compHasBinOp = true;
+                    }
+                    // Binary op consumes 2 inputs, produces 1 output.
+                    // At depth 0: entering a compound expression, need 2 inputs.
+                    // At depth > 0: provides 1 output (depth--), needs 2 inputs (depth+=2), net: depth++.
+                    if (depth == 0)
+                        depth = 2;
+                    else
+                        depth++;
+                    break;
                 case ILOpCode.Conv_u1: case ILOpCode.Conv_u2:
                 case ILOpCode.Conv_i1: case ILOpCode.Conv_i2: case ILOpCode.Conv_i4:
                 case ILOpCode.Pop:
                     break;
+                case ILOpCode.Ldsfld:
+                {
+                    if (depth > 0)
+                    {
+                        // Static field consumed by binary op — just decrement depth
+                        depth--;
+                        if (depth == 0)
+                        {
+                            argInfos.Add((false, 0, 0, false, 0, false, 0, 0,
+                                true, compLocalIdx, compBinOp, compBinOpConst, compAddConst, false, null));
+                            needed--;
+                            firstArgIlIdx = ilIdx;
+                            compBinOp = ILOpCode.Nop; compBinOpConst = 0; compLocalIdx = -1;
+                            compAddConst = 0; compHasBinOp = false;
+                            compBinOpConstAssigned = false;
+                        }
+                    }
+                    else
+                    {
+                        // Standalone static field argument (e.g., oam_off)
+                        argInfos.Add((false, 0, 0, false, 0, false, 0, 0,
+                            false, 0, ILOpCode.Nop, 0, 0, true, il.String));
+                        needed--;
+                        firstArgIlIdx = ilIdx;
+                    }
+                    break;
+                }
                 default:
                     break;
             }
@@ -3491,7 +3732,68 @@ class IL2NESWriter : NESWriter
         for (int i = 0; i < 4 && i < argInfos.Count; i++)
         {
             var arg = argInfos[i];
-            if (arg.isArrayElem)
+            if (arg.isCompound)
+            {
+                // Compound expression: addConst + (local BINOP binOpConst)
+                // or simple: local + addConst (when compoundBinOp is Add)
+                var loc = Locals[arg.compoundLocalIdx];
+                Emit(Opcode.LDA, AddressMode.Absolute, (ushort)loc.Address!);
+
+                // Apply the inner binary operation
+                switch (arg.compoundBinOp)
+                {
+                    case ILOpCode.Shr:
+                    case ILOpCode.Shr_un:
+                        for (int s = 0; s < arg.compoundBinOpConst; s++)
+                            Emit(Opcode.LSR, AddressMode.Accumulator);
+                        break;
+                    case ILOpCode.Shl:
+                        for (int s = 0; s < arg.compoundBinOpConst; s++)
+                            Emit(Opcode.ASL, AddressMode.Accumulator);
+                        break;
+                    case ILOpCode.And:
+                        Emit(Opcode.AND, AddressMode.Immediate, checked((byte)arg.compoundBinOpConst));
+                        break;
+                    case ILOpCode.Or:
+                        Emit(Opcode.ORA, AddressMode.Immediate, checked((byte)arg.compoundBinOpConst));
+                        break;
+                    case ILOpCode.Xor:
+                        Emit(Opcode.EOR, AddressMode.Immediate, checked((byte)arg.compoundBinOpConst));
+                        break;
+                    case ILOpCode.Mul:
+                    {
+                        // Multiply by power of 2 using ASL shifts
+                        int shifts = 0;
+                        int v = arg.compoundBinOpConst;
+                        while (v > 1) { v >>= 1; shifts++; }
+                        for (int s = 0; s < shifts; s++)
+                            Emit(Opcode.ASL, AddressMode.Accumulator);
+                        break;
+                    }
+                    case ILOpCode.Sub:
+                        Emit(Opcode.SEC, AddressMode.Implied);
+                        Emit(Opcode.SBC, AddressMode.Immediate, checked((byte)arg.compoundBinOpConst));
+                        break;
+                    case ILOpCode.Div: case ILOpCode.Div_un:
+                    case ILOpCode.Rem: case ILOpCode.Rem_un:
+                        throw new TranspileException(
+                            $"Unsupported binary op '{arg.compoundBinOp}' in compound oam_spr argument. " +
+                            "Division and modulo cannot be efficiently compiled for the 6502.", MethodName);
+                }
+
+                // Apply the outer add
+                if (arg.compoundAddConst != 0)
+                {
+                    Emit(Opcode.CLC, AddressMode.Implied);
+                    Emit(Opcode.ADC, AddressMode.Immediate, checked((byte)arg.compoundAddConst));
+                }
+            }
+            else if (arg.isStaticField)
+            {
+                // Static field: emit LDA for the known zero-page address
+                EmitLdsfldForArg(arg.staticFieldName);
+            }
+            else if (arg.isArrayElem)
             {
                 // Array element: LDX index, LDA array,X
                 var idxLocal = Locals[arg.indexLocIdx];
@@ -3528,7 +3830,11 @@ class IL2NESWriter : NESWriter
         if (argInfos.Count >= 5)
         {
             var idArg = argInfos[4];
-            if (idArg.isLocal)
+            if (idArg.isStaticField)
+            {
+                EmitLdsfldForArg(idArg.staticFieldName);
+            }
+            else if (idArg.isLocal)
             {
                 var loc = Locals[idArg.localIndex];
                 Emit(Opcode.LDA, AddressMode.Absolute, (ushort)loc.Address!);
@@ -3569,6 +3875,18 @@ class IL2NESWriter : NESWriter
         // JSR oam_spr
         EmitWithLabel(Opcode.JSR, AddressMode.Absolute, "oam_spr");
         _immediateInA = null;
+    }
+
+    /// <summary>
+    /// Emits LDA for a static field reference used as an oam_spr argument.
+    /// Maps known NES library static fields to their zero-page addresses.
+    /// </summary>
+    void EmitLdsfldForArg(string? fieldName)
+    {
+        if (fieldName == nameof(NESLib.oam_off))
+            Emit(Opcode.LDA, AddressMode.ZeroPage, (byte)NESConstants.OAM_OFF);
+        else
+            throw new TranspileException($"Unsupported static field '{fieldName}' in oam_spr argument.", MethodName);
     }
 
     /// <summary>
@@ -4429,22 +4747,74 @@ class IL2NESWriter : NESWriter
                 int? val = GetLdcValue(Instructions[i]);
                 if (val != null)
                     constValue = val;
-                // Track if the value comes from a local variable
                 int? locIdx = GetLdlocIndex(Instructions[i]);
                 if (locIdx != null)
                     storeValueLocalIdx = locIdx;
             }
 
-            if (constValue != null)
+            // Check for ushort high/low byte extraction: (byte)(ushort_local >> 8) or (byte)ushort_local
+            bool isUshortExtraction = false;
+            if (storeValueLocalIdx != null &&
+                Locals.TryGetValue(storeValueLocalIdx.Value, out var ushortLocal) &&
+                ushortLocal.IsWord && ushortLocal.Address.HasValue)
             {
-                Emit(Opcode.LDA, AddressMode.Immediate, checked((byte)constValue.Value));
+
+                // Pattern: ldloc(ushort), ldc_i4_8, shr, [conv_u1] → high byte
+                bool hasShr8 = false;
+                for (int i = valueStart; i < Index; i++)
+                {
+                    if (Instructions[i].OpCode is ILOpCode.Shr or ILOpCode.Shr_un)
+                    {
+                        // Check if the preceding ldc was 8
+                        if (i > valueStart)
+                        {
+                            int? shrVal = GetLdcValue(Instructions[i - 1]);
+                            if (shrVal == 8)
+                                hasShr8 = true;
+                        }
+                    }
+                }
+
+                if (hasShr8)
+                {
+                    // (byte)(ushort_local >> 8): load high byte directly
+                    Emit(Opcode.LDA, AddressMode.Absolute, (ushort)(ushortLocal.Address.Value + 1));
+                    isUshortExtraction = true;
+                }
+                else
+                {
+                    // Check if this is a simple cast: ldloc(ushort), conv_u1 → low byte
+                    bool hasOnlyConv = true;
+                    for (int i = valueStart; i < Index; i++)
+                    {
+                        var op = Instructions[i].OpCode;
+                        if (op != ILOpCode.Conv_u1 && GetLdlocIndex(Instructions[i]) == null)
+                        {
+                            hasOnlyConv = false;
+                            break;
+                        }
+                    }
+                    if (hasOnlyConv)
+                    {
+                        Emit(Opcode.LDA, AddressMode.Absolute, (ushort)ushortLocal.Address.Value);
+                        isUshortExtraction = true;
+                    }
+                }
             }
-            else if (storeValueLocalIdx != null &&
-                     Locals.TryGetValue(storeValueLocalIdx.Value, out var valueLocal) &&
-                     valueLocal.Address.HasValue)
+
+            if (!isUshortExtraction)
             {
-                // Value is a runtime local variable — load it
-                Emit(Opcode.LDA, AddressMode.Absolute, (ushort)valueLocal.Address.Value);
+                if (constValue != null)
+                {
+                    Emit(Opcode.LDA, AddressMode.Immediate, checked((byte)constValue.Value));
+                }
+                else if (storeValueLocalIdx != null &&
+                         Locals.TryGetValue(storeValueLocalIdx.Value, out var valueLocal) &&
+                         valueLocal.Address.HasValue)
+                {
+                    // Value is a runtime local variable — load it
+                    Emit(Opcode.LDA, AddressMode.Absolute, (ushort)valueLocal.Address.Value);
+                }
             }
 
             Emit(Opcode.STA, AddressMode.Absolute, (ushort)(targetArray.Address + constantIndex));
@@ -4482,6 +4852,8 @@ class IL2NESWriter : NESWriter
         bool hasMul = false;
         int mulValue = 0;
         int mulLocalIdx = -1;
+        bool hasShr = false;
+        int shrValue = 0;
         bool hasTwoLdelems = false;
         int sourceArray1Idx = -1;
         int sourceArray2Idx = -1;
@@ -4507,6 +4879,10 @@ class IL2NESWriter : NESWriter
                     break;
                 case ILOpCode.Mul:
                     hasMul = true;
+                    break;
+                case ILOpCode.Shr:
+                case ILOpCode.Shr_un:
+                    hasShr = true;
                     break;
                 case ILOpCode.Ldelem_u1:
                     if (sourceArray1Idx < 0)
@@ -4580,6 +4956,8 @@ class IL2NESWriter : NESWriter
                             }
                             else if (Instructions[i + 1].OpCode == ILOpCode.Add)
                                 addValue = val;
+                            else if (Instructions[i + 1].OpCode is ILOpCode.Shr or ILOpCode.Shr_un)
+                                shrValue = val;
                         }
                     }
                     break;
@@ -4603,6 +4981,8 @@ class IL2NESWriter : NESWriter
                             }
                             else if (Instructions[i + 1].OpCode == ILOpCode.Add)
                                 addValue = val;
+                            else if (Instructions[i + 1].OpCode is ILOpCode.Shr or ILOpCode.Shr_un)
+                                shrValue = val;
                         }
                     }
                     break;
@@ -4699,7 +5079,24 @@ class IL2NESWriter : NESWriter
         {
             // Pattern: arr[i] = local, arr[i] = (local & N), arr[i] = (local + N), etc.
             var valueLoc = Locals[valueLocalIdx];
-            Emit(Opcode.LDA, AddressMode.Absolute, (ushort)valueLoc.Address!);
+
+            // Handle ushort high byte extraction: arr[i] = (byte)(ushort_local >> 8)
+            if (hasShr && shrValue == 8 && valueLoc.IsWord)
+            {
+                Emit(Opcode.LDA, AddressMode.Absolute, (ushort)(valueLoc.Address! + 1));
+            }
+            else if (hasShr && shrValue > 0)
+            {
+                // General right shift: load value, then LSR N times
+                Emit(Opcode.LDA, AddressMode.Absolute, (ushort)valueLoc.Address!);
+                for (int s = 0; s < shrValue; s++)
+                    Emit(Opcode.LSR, AddressMode.Accumulator);
+            }
+            else
+            {
+                Emit(Opcode.LDA, AddressMode.Absolute, (ushort)valueLoc.Address!);
+            }
+
             if (hasAnd)
                 Emit(Opcode.AND, AddressMode.Immediate, checked((byte)andMask));
             if (hasAdd)
