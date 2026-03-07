@@ -343,7 +343,7 @@ while (true)
             if (actor_yy_lo[ai] < scroll_yy_lo) rel_hi = (byte)(rel_hi - 1);
             if (rel_hi != 0) { actor_onscreen[ai] = 0; continue; }
             byte screen_y = (byte)(SCREEN_Y_BOTTOM - rel_lo);
-            if (screen_y > 224) { actor_onscreen[ai] = 0; continue; }
+            if (screen_y > 200) { actor_onscreen[ai] = 0; continue; }
 
             byte dir = actor_dir[ai];
             byte st = actor_state[ai];
@@ -354,17 +354,17 @@ while (true)
             }
             if (st == WALKING)
             {
-                byte frame = (byte)((actor_x[ai] >> 1) & 7);
+                byte frame = (byte)(((actor_x[ai] >> 1) & 7) % 3);
                 if (dir != 0)
                 {
-                    if (frame < 3) oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerLRun1);
-                    else if (frame < 6) oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerLRun2);
+                    if (frame == 0) oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerLRun1);
+                    else if (frame == 1) oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerLRun2);
                     else oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerLRun3);
                 }
                 else
                 {
-                    if (frame < 3) oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerRRun1);
-                    else if (frame < 6) oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerRRun2);
+                    if (frame == 0) oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerRRun1);
+                    else if (frame == 1) oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerRRun2);
                     else oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerRRun3);
                 }
             }
