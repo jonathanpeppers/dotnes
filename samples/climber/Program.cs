@@ -585,17 +585,159 @@ while (true)
                 }
             }
 
-            // Scroll check
+            // Scroll check — draw new rows on tile boundaries (set_scroll_pixel_yy)
+            byte old_tile_y = (byte)(scroll_yy_hi * 32 + scroll_yy_lo / 8);
+            byte do_scroll_draw = 0;
+            byte scroll_draw_rh = 0;
             if (player_screen_y < ACTOR_SCROLL_UP_Y)
             {
                 byte new_lo = (byte)(scroll_yy_lo + 1);
                 if (new_lo == 0) scroll_yy_hi = (byte)(scroll_yy_hi + 1);
                 scroll_yy_lo = new_lo;
+                if ((scroll_yy_lo & 7) == 0)
+                {
+                    scroll_draw_rh = (byte)(old_tile_y + 30);
+                    do_scroll_draw = 1;
+                }
             }
             if (player_screen_y > ACTOR_SCROLL_DOWN_Y && (scroll_yy_lo != 0 || scroll_yy_hi != 0))
             {
                 if (scroll_yy_lo == 0) scroll_yy_hi = (byte)(scroll_yy_hi - 1);
                 scroll_yy_lo = (byte)(scroll_yy_lo - 1);
+                if ((scroll_yy_lo & 7) == 0)
+                {
+                    scroll_draw_rh = (byte)(old_tile_y - 30);
+                    do_scroll_draw = 1;
+                }
+            }
+            // draw_floor_line(scroll_draw_rh) — update offscreen nametable row
+            if (do_scroll_draw != 0)
+            {
+                Array.Fill(buf, (byte)0);
+                byte dfl_found_dy = 0;
+                for (byte dfl_f = 0; dfl_f < MAX_FLOORS; dfl_f++)
+                {
+                    byte dfl_dy = (byte)(scroll_draw_rh - floor_ypos[dfl_f]);
+                    if (dfl_dy >= 253) dfl_dy = 0;
+                    if (dfl_dy < floor_height[dfl_f])
+                    {
+                        dfl_found_dy = dfl_dy;
+                        if (dfl_dy <= 1)
+                        {
+                            for (byte dfl_col = 0; dfl_col < COLS; dfl_col += 2)
+                            {
+                                if (dfl_dy != 0)
+                                {
+                                    buf[dfl_col] = CH_FLOOR;
+                                    buf[(byte)(dfl_col + 1)] = (byte)(CH_FLOOR + 2);
+                                }
+                                else
+                                {
+                                    buf[dfl_col] = (byte)(CH_FLOOR + 1);
+                                    buf[(byte)(dfl_col + 1)] = (byte)(CH_FLOOR + 3);
+                                }
+                            }
+                            if (floor_gap[dfl_f] != 0)
+                            {
+                                byte dfl_gstart = (byte)(floor_gap[dfl_f] * 2);
+                                for (byte dfl_g = 0; dfl_g < GAPSIZE; dfl_g++)
+                                    buf[(byte)(dfl_gstart + dfl_g)] = 0;
+                            }
+                        }
+                        else
+                        {
+                            if (dfl_f < MAX_FLOORS - 1)
+                            {
+                                buf[0] = (byte)(CH_FLOOR + 1);
+                                buf[COLS - 1] = CH_FLOOR;
+                            }
+                            if (floor_ladder1[dfl_f] != 0)
+                            {
+                                byte dfl_lc = (byte)(floor_ladder1[dfl_f] * 2);
+                                buf[dfl_lc] = CH_LADDER;
+                                buf[(byte)(dfl_lc + 1)] = (byte)(CH_LADDER + 1);
+                            }
+                            if (floor_ladder2[dfl_f] != 0)
+                            {
+                                byte dfl_lc = (byte)(floor_ladder2[dfl_f] * 2);
+                                buf[dfl_lc] = CH_LADDER;
+                                buf[(byte)(dfl_lc + 1)] = (byte)(CH_LADDER + 1);
+                            }
+                        }
+                        if (floor_objtype[dfl_f] != 0)
+                        {
+                            byte dfl_ch = (byte)(floor_objtype[dfl_f] * 4 + CH_ITEM);
+                            if (dfl_dy == 2)
+                            {
+                                buf[(byte)(floor_objpos[dfl_f] * 2)] = (byte)(dfl_ch + 1);
+                                buf[(byte)(floor_objpos[dfl_f] * 2 + 1)] = (byte)(dfl_ch + 3);
+                            }
+                            if (dfl_dy == 3)
+                            {
+                                buf[(byte)(floor_objpos[dfl_f] * 2)] = dfl_ch;
+                                buf[(byte)(floor_objpos[dfl_f] * 2 + 1)] = (byte)(dfl_ch + 2);
+                            }
+                        }
+                        if (dfl_dy == 0 && dfl_f >= 2)
+                        {
+                            byte dfl_aidx = (byte)((byte)(dfl_f % (byte)(MAX_ACTORS - 1)) + 1);
+                            if (actor_onscreen[dfl_aidx] == 0)
+                            {
+                                actor_state[dfl_aidx] = STANDING;
+                                actor_name[dfl_aidx] = 1;
+                                actor_x[dfl_aidx] = rand8();
+                                ushort dfl_ayy = (ushort)(floor_ypos[dfl_f] * 8 + 16);
+                                actor_yy_lo[dfl_aidx] = (byte)dfl_ayy;
+                                actor_yy_hi[dfl_aidx] = (byte)(dfl_ayy >> 8);
+                                actor_floor[dfl_aidx] = dfl_f;
+                                actor_onscreen[dfl_aidx] = 1;
+                                if (dfl_f == MAX_FLOORS - 1)
+                                {
+                                    actor_name[dfl_aidx] = 2;
+                                    actor_state[dfl_aidx] = PACING;
+                                    actor_x[dfl_aidx] = 0;
+                                    actor_pal[dfl_aidx] = 1;
+                                }
+                            }
+                        }
+                        break;
+                    }
+                }
+                byte dfl_rowy = (byte)((byte)(ROWS - 1) - (byte)(scroll_draw_rh % ROWS));
+                ushort dfl_addr;
+                if (dfl_rowy < 30)
+                    dfl_addr = NTADR_A(1, dfl_rowy);
+                else
+                    dfl_addr = NTADR_C(1, (byte)(dfl_rowy - 30));
+                if (dfl_rowy < 30)
+                {
+                    if ((dfl_rowy & 3) == 0)
+                    {
+                        if (dfl_found_dy == 1)
+                            Array.Fill(attrbuf, (byte)0x05);
+                        else if (dfl_found_dy == 3)
+                            Array.Fill(attrbuf, (byte)0x50);
+                        else
+                            Array.Fill(attrbuf, (byte)0x00);
+                        ushort dfl_attraddr = (ushort)((dfl_rowy << 1) + 0x23C0);
+                        vrambuf_put(dfl_attraddr, attrbuf, 8);
+                    }
+                }
+                if (dfl_rowy >= 30)
+                {
+                    if ((dfl_rowy & 3) == 2)
+                    {
+                        if (dfl_found_dy == 1)
+                            Array.Fill(attrbuf, (byte)0x05);
+                        else if (dfl_found_dy == 3)
+                            Array.Fill(attrbuf, (byte)0x50);
+                        else
+                            Array.Fill(attrbuf, (byte)0x00);
+                        ushort dfl_attraddr = (ushort)((dfl_rowy << 1) + 0x2B84);
+                        vrambuf_put(dfl_attraddr, attrbuf, 8);
+                    }
+                }
+                vrambuf_put(dfl_addr, buf, COLS);
             }
         }
 
