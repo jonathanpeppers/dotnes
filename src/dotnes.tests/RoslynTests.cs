@@ -2882,4 +2882,98 @@ public class RoslynTests
         Assert.True(foundSave, "Expected STA $19 (TEMP2) + STX $17 (TEMP) pattern for ushort save " +
             $"before newarr array load. Hex: {Convert.ToHexString(bytes)}");
     }
+
+    /// <summary>
+    /// Verifies that two consecutive oam_spr calls each emit JSR oam_spr.
+    /// Regression test for a bug where EmitOamSprDecsp4 skipped Ldsfld oam_off,
+    /// consuming the loop check as an argument and emitting only one JSR oam_spr.
+    /// </summary>
+    [Fact]
+    public void TwoConsecutiveOamSprCalls_BothEmitJSR()
+    {
+        string source = @"
+oam_off = 0;
+oam_off = oam_spr(24, 24, 0x30, 2, oam_off);
+oam_off = oam_spr(32, 24, 0x30, 2, oam_off);
+oam_hide_rest(oam_off);
+while (true) ;
+";
+        var bytes = GetProgramBytes(source);
+
+        // Collect all JSR targets (opcode 0x20)
+        var jsrTargets = new List<ushort>();
+        for (int i = 0; i < bytes.Length - 2; i++)
+        {
+            if (bytes[i] == 0x20) // JSR
+            {
+                jsrTargets.Add((ushort)(bytes[i + 1] | (bytes[i + 2] << 8)));
+                i += 2;
+            }
+        }
+
+        // Group JSR targets by address
+        var targetCounts = jsrTargets.GroupBy(t => t)
+            .ToDictionary(g => g.Key, g => g.Count());
+
+        // Two JSR targets should appear exactly twice: oam_spr and decsp4
+        var pairsOfTwo = targetCounts.Where(kv => kv.Value == 2).ToList();
+        Assert.True(pairsOfTwo.Count >= 2,
+            $"Expected at least 2 JSR targets appearing exactly twice (decsp4 + oam_spr), " +
+            $"but found: {string.Join(", ", targetCounts.Select(kv => $"${kv.Key:X4}={kv.Value}x"))}");
+    }
+
+    /// <summary>
+    /// Verifies oam_spr calls after a for loop don't consume the loop check instructions.
+    /// Regression test: backward scan in EmitOamSprDecsp4 must not cross blt/for-loop boundary.
+    /// </summary>
+    [Fact]
+    public void OamSprAfterForLoop_LoopCheckPreserved()
+    {
+        string source = @"
+byte MAX = 4;
+byte[] data = new byte[4];
+data[0] = 1;
+
+oam_off = 0;
+for (byte i = 0; i < MAX; i++)
+{
+    if (data[i] == 0) continue;
+}
+oam_off = oam_spr(24, 24, 0x30, 2, oam_off);
+oam_off = oam_spr(32, 24, 0x30, 2, oam_off);
+oam_hide_rest(oam_off);
+while (true) ;
+";
+        var bytes = GetProgramBytes(source);
+
+        // Verify: BCC (0x90) or BCS (0xB0) instruction must exist in the main block
+        // for the loop comparison. If EmitOamSprDecsp4 consumed the loop check,
+        // neither BCC nor BCS would appear.
+        bool hasBranch = false;
+        for (int i = 0; i < bytes.Length; i++)
+        {
+            if (bytes[i] == 0x90 || bytes[i] == 0xB0) // BCC or BCS
+            {
+                hasBranch = true;
+                break;
+            }
+        }
+        Assert.True(hasBranch, "No BCC/BCS found — the for-loop comparison was likely consumed by oam_spr");
+
+        // Also verify we have two JSR oam_spr calls
+        var jsrTargets = new List<ushort>();
+        for (int i = 0; i < bytes.Length - 2; i++)
+        {
+            if (bytes[i] == 0x20)
+            {
+                jsrTargets.Add((ushort)(bytes[i + 1] | (bytes[i + 2] << 8)));
+                i += 2;
+            }
+        }
+        var targetCounts = jsrTargets.GroupBy(t => t).ToDictionary(g => g.Key, g => g.Count());
+        var pairsOfTwo = targetCounts.Where(kv => kv.Value == 2).ToList();
+        Assert.True(pairsOfTwo.Count >= 2,
+            $"Expected 2 JSR targets appearing twice (decsp4 + oam_spr). " +
+            $"Found: {string.Join(", ", targetCounts.Select(kv => $"${kv.Key:X4}={kv.Value}x"))}");
+    }
 }

@@ -3516,7 +3516,7 @@ class IL2NESWriter : NESWriter
         // oam_spr has 5 args: x, y, tile, attr, id
         // Walk back through IL to find the 5 argument-producing IL instructions.
         // Args can be: constants, locals, or array elements (ldloc_arr + ldloc_idx + ldelem_u1).
-        var argInfos = new List<(bool isLocal, int localIndex, int constValue, bool hasAdd, int addValue, bool isArrayElem, int arrayLocIdx, int indexLocIdx)>();
+        var argInfos = new List<(bool isLocal, int localIndex, int constValue, bool hasAdd, int addValue, bool isArrayElem, int arrayLocIdx, int indexLocIdx, bool isField, ushort fieldAddress)>();
         int ilIdx = Index - 1;
         int needed = 5;
         int firstArgIlIdx = -1;
@@ -3534,7 +3534,7 @@ class IL2NESWriter : NESWriter
                     int idxLoc = -1, arrLoc = -1;
                     if (ilIdx >= 0) { idxLoc = GetLdlocIndex(Instructions[ilIdx]) ?? -1; ilIdx--; }
                     if (ilIdx >= 0) { arrLoc = GetLdlocIndex(Instructions[ilIdx]) ?? -1; }
-                    argInfos.Add((false, 0, 0, false, 0, true, arrLoc, idxLoc));
+                    argInfos.Add((false, 0, 0, false, 0, true, arrLoc, idxLoc, false, 0));
                     needed--;
                     firstArgIlIdx = ilIdx;
                     break;
@@ -3545,12 +3545,12 @@ class IL2NESWriter : NESWriter
                     int locIdx = il.OpCode - ILOpCode.Ldloc_0;
                     if (pendingAddValue != null)
                     {
-                        argInfos.Add((true, locIdx, 0, true, pendingAddValue.Value, false, 0, 0));
+                        argInfos.Add((true, locIdx, 0, true, pendingAddValue.Value, false, 0, 0, false, 0));
                         pendingAddValue = null;
                     }
                     else
                     {
-                        argInfos.Add((true, locIdx, 0, false, 0, false, 0, 0));
+                        argInfos.Add((true, locIdx, 0, false, 0, false, 0, 0, false, 0));
                     }
                     needed--;
                     firstArgIlIdx = ilIdx;
@@ -3561,12 +3561,12 @@ class IL2NESWriter : NESWriter
                     int locIdx = il.Integer ?? 0;
                     if (pendingAddValue != null)
                     {
-                        argInfos.Add((true, locIdx, 0, true, pendingAddValue.Value, false, 0, 0));
+                        argInfos.Add((true, locIdx, 0, true, pendingAddValue.Value, false, 0, 0, false, 0));
                         pendingAddValue = null;
                     }
                     else
                     {
-                        argInfos.Add((true, locIdx, 0, false, 0, false, 0, 0));
+                        argInfos.Add((true, locIdx, 0, false, 0, false, 0, 0, false, 0));
                     }
                     needed--;
                     firstArgIlIdx = ilIdx;
@@ -3583,7 +3583,7 @@ class IL2NESWriter : NESWriter
                     }
                     else
                     {
-                        argInfos.Add((false, 0, val, false, 0, false, 0, 0));
+                        argInfos.Add((false, 0, val, false, 0, false, 0, 0, false, 0));
                         needed--;
                         firstArgIlIdx = ilIdx;
                     }
@@ -3600,10 +3600,23 @@ class IL2NESWriter : NESWriter
                     }
                     else
                     {
-                        argInfos.Add((false, 0, val, false, 0, false, 0, 0));
+                        argInfos.Add((false, 0, val, false, 0, false, 0, 0, false, 0));
                         needed--;
                         firstArgIlIdx = ilIdx;
                     }
+                    break;
+                }
+                case ILOpCode.Ldsfld:
+                {
+                    // Handle static field loads (e.g., oam_off → zero page $1B)
+                    ushort addr = 0;
+                    if (il.String == nameof(NESLib.oam_off))
+                        addr = (ushort)NESConstants.OAM_OFF;
+                    else if (il.String != null)
+                        addr = GetOrAllocateStaticField(il.String);
+                    argInfos.Add((false, 0, 0, false, 0, false, 0, 0, true, addr));
+                    needed--;
+                    firstArgIlIdx = ilIdx;
                     break;
                 }
                 case ILOpCode.Add: case ILOpCode.Sub:
@@ -3651,6 +3664,10 @@ class IL2NESWriter : NESWriter
                 if (arrLocal.Address != null)
                     Emit(Opcode.LDA, AddressMode.AbsoluteX, (ushort)arrLocal.Address);
             }
+            else if (arg.isField)
+            {
+                Emit(Opcode.LDA, AddressMode.ZeroPage, (byte)arg.fieldAddress);
+            }
             else if (arg.isLocal)
             {
                 var loc = Locals[arg.localIndex];
@@ -3678,7 +3695,11 @@ class IL2NESWriter : NESWriter
         if (argInfos.Count >= 5)
         {
             var idArg = argInfos[4];
-            if (idArg.isLocal)
+            if (idArg.isField)
+            {
+                Emit(Opcode.LDA, AddressMode.ZeroPage, (byte)idArg.fieldAddress);
+            }
+            else if (idArg.isLocal)
             {
                 var loc = Locals[idArg.localIndex];
                 Emit(Opcode.LDA, AddressMode.Absolute, (ushort)loc.Address!);
