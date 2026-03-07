@@ -753,9 +753,23 @@ while (true)
             byte efyy_lo = (byte)efloor_yy;
             byte efyy_hi = (byte)(efloor_yy >> 8);
 
+            // Compute ceiling for climbing
+            byte eceil_base = (byte)(floor_ypos[ef] + floor_height[ef]);
+            ushort eceil_yy = (ushort)(eceil_base * 8 + 16);
+            byte ecyy_lo = (byte)eceil_yy;
+            byte ecyy_hi = (byte)(eceil_yy >> 8);
+
             if (es == STANDING || es == WALKING)
             {
-                if ((ej & (byte)PAD.LEFT) != 0)
+                if ((ej & (byte)PAD.A) != 0)
+                {
+                    actor_state[ei] = JUMPING;
+                    actor_xvel[ei] = 0;
+                    actor_yvel[ei] = JUMP_VELOCITY;
+                    if ((ej & (byte)PAD.LEFT) != 0) actor_xvel[ei] = 0xff;
+                    if ((ej & (byte)PAD.RIGHT) != 0) actor_xvel[ei] = 1;
+                }
+                else if ((ej & (byte)PAD.LEFT) != 0)
                 {
                     actor_x[ei] = (byte)(actor_x[ei] - 1);
                     actor_dir[ei] = 1;
@@ -767,12 +781,92 @@ while (true)
                     actor_dir[ei] = 0;
                     actor_state[ei] = WALKING;
                 }
+                else if ((ej & (byte)PAD.UP) != 0)
+                {
+                    // Mount ladder up
+                    byte elx = 0;
+                    if (floor_ladder1[ef] != 0)
+                    {
+                        byte eladx = (byte)(floor_ladder1[ef] * 16);
+                        if ((byte)(actor_x[ei] - eladx) < 16) elx = eladx;
+                    }
+                    if (elx == 0 && floor_ladder2[ef] != 0)
+                    {
+                        byte eladx = (byte)(floor_ladder2[ef] * 16);
+                        if ((byte)(actor_x[ei] - eladx) < 16) elx = eladx;
+                    }
+                    if (elx != 0)
+                    {
+                        actor_x[ei] = (byte)(elx + 8);
+                        actor_state[ei] = CLIMBING;
+                    }
+                }
+                else if ((ej & (byte)PAD.DOWN) != 0)
+                {
+                    // Mount ladder down
+                    if (ef > 0)
+                    {
+                        byte ebf = (byte)(ef - 1);
+                        byte elx = 0;
+                        if (floor_ladder1[ebf] != 0)
+                        {
+                            byte eladx = (byte)(floor_ladder1[ebf] * 16);
+                            if ((byte)(actor_x[ei] - eladx) < 16) elx = eladx;
+                        }
+                        if (elx == 0 && floor_ladder2[ebf] != 0)
+                        {
+                            byte eladx = (byte)(floor_ladder2[ebf] * 16);
+                            if ((byte)(actor_x[ei] - eladx) < 16) elx = eladx;
+                        }
+                        if (elx != 0)
+                        {
+                            actor_x[ei] = (byte)(elx + 8);
+                            actor_state[ei] = CLIMBING;
+                            actor_floor[ei] = ebf;
+                        }
+                    }
+                }
                 else
                 {
                     actor_state[ei] = STANDING;
                 }
-                if (actor_x[ei] > ACTOR_MAX_X) actor_x[ei] = ACTOR_MAX_X;
-                if (actor_x[ei] < ACTOR_MIN_X) actor_x[ei] = ACTOR_MIN_X;
+            }
+
+            if (es == CLIMBING)
+            {
+                if ((ej & (byte)PAD.UP) != 0)
+                {
+                    if (actor_yy_hi[ei] > ecyy_hi || (actor_yy_hi[ei] == ecyy_hi && actor_yy_lo[ei] >= ecyy_lo))
+                    {
+                        actor_floor[ei] = (byte)(ef + 1);
+                        actor_state[ei] = STANDING;
+                    }
+                    else
+                    {
+                        actor_yy_lo[ei] = (byte)(actor_yy_lo[ei] + 1);
+                        if (actor_yy_lo[ei] == 0) actor_yy_hi[ei] = (byte)(actor_yy_hi[ei] + 1);
+                    }
+                }
+                else if ((ej & (byte)PAD.DOWN) != 0)
+                {
+                    if (actor_yy_hi[ei] < efyy_hi || (actor_yy_hi[ei] == efyy_hi && actor_yy_lo[ei] <= efyy_lo))
+                    {
+                        actor_state[ei] = STANDING;
+                    }
+                    else
+                    {
+                        if (actor_yy_lo[ei] == 0) actor_yy_hi[ei] = (byte)(actor_yy_hi[ei] - 1);
+                        actor_yy_lo[ei] = (byte)(actor_yy_lo[ei] - 1);
+                    }
+                }
+            }
+
+            // Common: clamp X, check gap fall
+            if (actor_x[ei] > ACTOR_MAX_X) actor_x[ei] = ACTOR_MAX_X;
+            if (actor_x[ei] < ACTOR_MIN_X) actor_x[ei] = ACTOR_MIN_X;
+            es = actor_state[ei];
+            if (es == STANDING || es == WALKING)
+            {
                 byte egap = floor_gap[ef];
                 if (egap != 0)
                 {
