@@ -4810,11 +4810,11 @@ class IL2NESWriter : NESWriter
         ILOpCode.Neg =>
             $"The IL opcode '{opCode}' is not supported. " +
             "This is typically caused by the unary negation operator ('-x'). " +
-            "Use '(256 - x)' or bitwise operations for two's complement negation instead.",
+            "Rewrite the expression using explicit two's-complement negation, such as '0 - x' (and cast to the desired width, e.g., '(byte)(0 - x)' or '(ushort)(0 - x)').",
         ILOpCode.Not =>
             $"The IL opcode '{opCode}' is not supported. " +
             "This is typically caused by the bitwise NOT operator ('~x'). " +
-            "Use XOR with 0xFF instead (e.g., 'x ^ 0xFF').",
+            "Use XOR with an all-ones mask instead (for a byte: 'x ^ 0xFF').",
         ILOpCode.Ceq or ILOpCode.Cgt or ILOpCode.Cgt_un or ILOpCode.Clt or ILOpCode.Clt_un =>
             $"The IL opcode '{opCode}' is not supported. " +
             "This is typically caused by a comparison expression used as a value (e.g., 'bool b = x > y;'). " +
