@@ -96,6 +96,8 @@ public class TranspilerTests
     [InlineData("aputest", false)]
     [InlineData("bankswitch", true, false, 4, 4, 8)]
     [InlineData("bankswitch", false, false, 4, 4, 8)]
+    [InlineData("climber", true)]
+    [InlineData("climber", false)]
     public Task Write(string name, bool debug, bool verticalMirroring = false, int mapper = 0, int prgBanks = 2, int chrBanks = 1)
     {
         var configuration = debug ? "debug" : "release";
@@ -103,8 +105,18 @@ public class TranspilerTests
         var chrStream = typeof(Utilities).Assembly.GetManifestResourceStream(chrName);
         var chr_generic = new StreamReader(chrStream ?? Utilities.GetResource("chr_generic.s"));
 
+        var assemblyReaders = new List<AssemblyReader> { new AssemblyReader(chr_generic) };
+
+        // Include fami assembly files (famitone2.s, demosounds.s, etc.) for samples that use extern methods
+        var famiDir = Path.Combine(AppContext.BaseDirectory, "Data", "fami");
+        if (Directory.Exists(famiDir))
+        {
+            foreach (var sFile in Directory.GetFiles(famiDir, "*.s"))
+                assemblyReaders.Add(new AssemblyReader(sFile));
+        }
+
         using var dll = Utilities.GetResource($"{name}.{configuration}.dll");
-        using var il = new Transpiler(dll, [new AssemblyReader(chr_generic)], _logger, verticalMirroring, mapper, prgBanks, chrBanks);
+        using var il = new Transpiler(dll, assemblyReaders, _logger, verticalMirroring, mapper, prgBanks, chrBanks);
         using var ms = new MemoryStream();
         il.Write(ms);
 

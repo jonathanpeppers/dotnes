@@ -153,6 +153,15 @@ class IL2NESWriter : NESWriter
     bool _ushortInAX;
 
     /// <summary>
+    /// True when inside a dup cascade (cascading if-else using dup+ldc+bne/beq pattern).
+    /// Set on the first dup when _runtimeValueInA is true. Causes subsequent dups to
+    /// emit LDA TEMP_HI (reload saved value) and branch handlers to emit STA TEMP_HI
+    /// (save A for the next check). This ensures A holds the correct comparison value
+    /// even after intermediate if-blocks modify A via JSR calls.
+    /// </summary>
+    bool _dupCascadeActive;
+
+    /// <summary>
     /// Number of parameters for the current user method being transpiled (0 for main).
     /// Used by ldarg handlers to compute cc65 stack offsets.
     /// </summary>
@@ -306,6 +315,30 @@ class IL2NESWriter : NESWriter
     }
 
     /// <summary>
+    /// Checks if the current dup instruction starts a cascading if-else pattern
+    /// (dup → ldc → bne/beq). Returns false for other dup patterns like dup → ldc → and → brfalse
+    /// (button-check bitmasking) or newarr → dup → ldtoken (array init).
+    /// </summary>
+    bool IsDupCascadeStart()
+    {
+        if (Instructions is null || Index + 2 >= Instructions.Length)
+            return false;
+
+        var next1 = Instructions[Index + 1].OpCode;
+        var next2 = Instructions[Index + 2].OpCode;
+
+        bool isLdc = next1 is ILOpCode.Ldc_i4_0 or ILOpCode.Ldc_i4_1 or ILOpCode.Ldc_i4_2
+            or ILOpCode.Ldc_i4_3 or ILOpCode.Ldc_i4_4 or ILOpCode.Ldc_i4_5
+            or ILOpCode.Ldc_i4_6 or ILOpCode.Ldc_i4_7 or ILOpCode.Ldc_i4_8
+            or ILOpCode.Ldc_i4_s or ILOpCode.Ldc_i4 or ILOpCode.Ldc_i4_m1;
+
+        bool isBranchCompare = next2 is ILOpCode.Bne_un_s or ILOpCode.Bne_un
+            or ILOpCode.Beq_s or ILOpCode.Beq;
+
+        return isLdc && isBranchCompare;
+    }
+
+    /// <summary>
     /// Emits a CMP instruction for branch comparison.
     /// Peeks at the last emitted instruction: if it's LDA with Absolute/ZeroPage mode
     /// (runtime variable), uses CMP $addr. Otherwise removes the LDA #imm and uses CMP #imm.
@@ -321,13 +354,34 @@ class IL2NESWriter : NESWriter
 
             // Handle indexed array access: LDA array,X from ldelem.u1
             // Pattern: LDA value1; LDX index; LDA array,X → convert last to CMP array,X
+            // Only apply when there's a prior value in A to compare against. Check the
+            // instruction before LDX: if it's an LDA (loaded a comparison value) or STA to
+            // TEMP (saved a runtime value for comparison), A retains a meaningful comparison
+            // value through the LDX. Otherwise, the LDA array,X IS the value to compare
+            // against a constant (from dup+ldc+bne pattern after ldelem).
             if (lastInstr.Opcode == Opcode.LDA
                 && lastInstr.Mode == AddressMode.AbsoluteX
                 && lastInstr.Operand is AbsoluteOperand idxOp)
             {
-                // Replace LDA array,X with CMP array,X — A still has value1 from earlier
-                RemoveLastInstructions(1);
-                Emit(Opcode.CMP, AddressMode.AbsoluteX, idxOp.Address);
+                bool hasPriorCompareValue = false;
+                if (block.Count >= 3)
+                {
+                    var beforeLdx = block[block.Count - 3];
+                    hasPriorCompareValue = beforeLdx.Opcode == Opcode.LDA
+                        || (beforeLdx.Opcode == Opcode.STA && _savedRuntimeToTemp);
+                }
+
+                if (hasPriorCompareValue)
+                {
+                    // Replace LDA array,X with CMP array,X — A still has value1 from earlier
+                    RemoveLastInstructions(1);
+                    Emit(Opcode.CMP, AddressMode.AbsoluteX, idxOp.Address);
+                }
+                else
+                {
+                    // A holds the runtime value from LDA array,X — compare with the constant
+                    Emit(Opcode.CMP, AddressMode.Immediate, checked((byte)(stackValue + adjustValue)));
+                }
                 return;
             }
 
@@ -400,6 +454,20 @@ class IL2NESWriter : NESWriter
             case ILOpCode.Dup:
                 if (Stack.Count > 0)
                     Stack.Push(Stack.Peek());
+                if (_dupCascadeActive)
+                {
+                    // Subsequent dup in cascading if-else: reload saved value from DUP_TEMP.
+                    // After an if-block runs (with JSR calls that modify A), A no longer holds
+                    // the original comparison value. Reload it from TEMP_HI where the branch
+                    // handler saved it.
+                    Emit(Opcode.LDA, AddressMode.ZeroPage, TEMP_HI);
+                }
+                else if (_runtimeValueInA && IsDupCascadeStart())
+                {
+                    // First dup in cascade: mark for saving in the branch handler.
+                    // Don't emit anything yet — A still holds the correct value.
+                    _dupCascadeActive = true;
+                }
                 break;
             case ILOpCode.Pop:
                 if (Stack.Count > 0)
@@ -1078,6 +1146,12 @@ class IL2NESWriter : NESWriter
                             && lastInstr.Operand is AbsoluteOperand absOp)
                             Emit(Opcode.LDA, AddressMode.Absolute, absOp.Address);
                     }
+
+                    // In a dup cascade, save A to DUP_TEMP after CMP so subsequent
+                    // checks can reload it. STA does NOT affect processor flags,
+                    // so the branch instruction still sees the CMP result.
+                    if (_dupCascadeActive)
+                        Emit(Opcode.STA, AddressMode.ZeroPage, TEMP_HI);
                     
                     var labelName = InstructionLabel(instruction.Offset + branchOffset + instrSize);
                     if (instruction.OpCode == ILOpCode.Bne_un_s)
@@ -1100,6 +1174,10 @@ class IL2NESWriter : NESWriter
                     int cmpVal = Stack.Count > 0 ? Stack.Pop() : 0;
                     if (Stack.Count > 0) Stack.Pop();
                     EmitBranchCompare(cmpVal);
+
+                    if (_dupCascadeActive)
+                        Emit(Opcode.STA, AddressMode.ZeroPage, TEMP_HI);
+
                     var labelName = InstructionLabel(instruction.Offset + branchOffset + instrSize);
                     if (instruction.OpCode == ILOpCode.Beq_s)
                         EmitWithLabel(Opcode.BEQ, AddressMode.Relative, labelName);
