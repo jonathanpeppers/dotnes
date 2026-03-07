@@ -271,4 +271,32 @@ public class IL2NESWriterTests
         // Return value should be on stack
         Assert.Single(writer.Stack);
     }
+
+    [Theory]
+    [InlineData(ILOpCode.Conv_i8, "long", "byte", "sbyte")]
+    [InlineData(ILOpCode.Conv_r4, "float", "double", "integer")]
+    [InlineData(ILOpCode.Conv_r8, "float", "double", "integer")]
+    [InlineData(ILOpCode.Box, "boxing", "object", "generics")]
+    [InlineData(ILOpCode.Newobj, "new", "byte[]", "ushort[]")]
+    [InlineData(ILOpCode.Callvirt, "virtual method", "static methods", "NESLib")]
+    [InlineData(ILOpCode.Throw, "throw", "try/catch", "not supported")]
+    [InlineData(ILOpCode.Ldlen, ".Length", "array", "variable")]
+    public void GetUnsupportedOpcodeMessage_KnownOpcodes_ContainsHelpfulGuidance(ILOpCode opCode, string expectedTerm1, string expectedTerm2, string expectedTerm3)
+    {
+        var message = IL2NESWriter.GetUnsupportedOpcodeMessage(opCode);
+        Assert.Contains(opCode.ToString(), message);
+        Assert.Contains(expectedTerm1, message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(expectedTerm2, message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(expectedTerm3, message, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("not yet supported", message);
+    }
+
+    [Fact]
+    public void GetUnsupportedOpcodeMessage_UnknownOpcode_FallsBackToGenericMessage()
+    {
+        // Use an opcode unlikely to get a specific message
+        var message = IL2NESWriter.GetUnsupportedOpcodeMessage(ILOpCode.Arglist);
+        Assert.Contains("not yet supported", message);
+        Assert.Contains("Arglist", message);
+    }
 }
