@@ -82,6 +82,8 @@ public class TranspilerTests
     [InlineData("animation", false)]
     [InlineData("multifile", true)]
     [InlineData("multifile", false)]
+    [InlineData("peekpoke", true)]
+    [InlineData("peekpoke", false)]
     [InlineData("fade", true)]
     [InlineData("fade", false)]
     [InlineData("ppuhello", true)]
