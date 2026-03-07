@@ -72,6 +72,9 @@ internal static class NESConstants
     public const ushort APU_TRIANGLE_CTRL = 0x4008;
     public const ushort APU_TRIANGLE_TIMER_LO = 0x400A;
     public const ushort APU_TRIANGLE_TIMER_HI = 0x400B;
+    public const ushort APU_NOISE_CTRL = 0x400C;
+    public const ushort APU_NOISE_PERIOD = 0x400E;
+    public const ushort APU_NOISE_LENGTH = 0x400F;
     public const ushort APU_STATUS = 0x4015;
     public const ushort DMC_FREQ = 0x4010;
     public const ushort PPU_OAM_DMA = 0x4014;

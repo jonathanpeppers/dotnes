@@ -474,6 +474,23 @@ public static class NESLib
     public const ushort PPU_ADDR = 0x2006;
     public const ushort PPU_DATA = 0x2007;
 
+    // APU register addresses for direct hardware access via poke()/peek()
+    public const ushort APU_PULSE1_CTRL = 0x4000;
+    public const ushort APU_PULSE1_SWEEP = 0x4001;
+    public const ushort APU_PULSE1_TIMER_LO = 0x4002;
+    public const ushort APU_PULSE1_TIMER_HI = 0x4003;
+    public const ushort APU_PULSE2_CTRL = 0x4004;
+    public const ushort APU_PULSE2_SWEEP = 0x4005;
+    public const ushort APU_PULSE2_TIMER_LO = 0x4006;
+    public const ushort APU_PULSE2_TIMER_HI = 0x4007;
+    public const ushort APU_TRIANGLE_CTRL = 0x4008;
+    public const ushort APU_TRIANGLE_TIMER_LO = 0x400A;
+    public const ushort APU_TRIANGLE_TIMER_HI = 0x400B;
+    public const ushort APU_NOISE_CTRL = 0x400C;
+    public const ushort APU_NOISE_PERIOD = 0x400E;
+    public const ushort APU_NOISE_LENGTH = 0x400F;
+    public const ushort APU_STATUS = 0x4015;
+
     // MMC3 mapper register addresses for bank switching via poke()
     public const ushort MMC3_BANK_SELECT = 0x8000;
     public const ushort MMC3_BANK_DATA = 0x8001;

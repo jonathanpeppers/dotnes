@@ -92,6 +92,8 @@ public class TranspilerTests
     [InlineData("scoreboard", false)]
     [InlineData("bigsprites", true)]
     [InlineData("bigsprites", false)]
+    [InlineData("aputest", true)]
+    [InlineData("aputest", false)]
     [InlineData("bankswitch", true, false, 4, 4, 8)]
     [InlineData("bankswitch", false, false, 4, 4, 8)]
     public Task Write(string name, bool debug, bool verticalMirroring = false, int mapper = 0, int prgBanks = 2, int chrBanks = 1)
