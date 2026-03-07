@@ -107,12 +107,15 @@ public class TranspilerTests
 
         var assemblyReaders = new List<AssemblyReader> { new AssemblyReader(chr_generic) };
 
-        // Include fami assembly files (famitone2.s, demosounds.s, etc.) for samples that use extern methods
-        var famiDir = Path.Combine(AppContext.BaseDirectory, "Data", "fami");
-        if (Directory.Exists(famiDir))
+        // Include fami assembly files (famitone2.s, demosounds.s, etc.) only for samples that use extern methods
+        if (name is "climber" or "fami")
         {
-            foreach (var sFile in Directory.GetFiles(famiDir, "*.s").OrderBy(f => f))
-                assemblyReaders.Add(new AssemblyReader(sFile));
+            var famiDir = Path.Combine(AppContext.BaseDirectory, "Data", "fami");
+            if (Directory.Exists(famiDir))
+            {
+                foreach (var sFile in Directory.GetFiles(famiDir, "*.s").OrderBy(f => f))
+                    assemblyReaders.Add(new AssemblyReader(sFile));
+            }
         }
 
         using var dll = Utilities.GetResource($"{name}.{configuration}.dll");

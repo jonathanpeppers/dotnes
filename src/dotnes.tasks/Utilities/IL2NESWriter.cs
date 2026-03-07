@@ -456,10 +456,10 @@ class IL2NESWriter : NESWriter
                     Stack.Push(Stack.Peek());
                 if (_dupCascadeActive)
                 {
-                    // Subsequent dup in cascading if-else: reload saved value from DUP_TEMP.
-                    // After an if-block runs (with JSR calls that modify A), A no longer holds
-                    // the original comparison value. Reload it from TEMP_HI where the branch
-                    // handler saved it.
+                    // Subsequent dup in cascading if-else: reload saved value from TEMP_HI
+                    // (the DUP_TEMP scratch location). After an if-block runs (with JSR calls
+                    // that modify A), A no longer holds the original comparison value. Reload
+                    // it from TEMP_HI where the branch handler saved it.
                     Emit(Opcode.LDA, AddressMode.ZeroPage, TEMP_HI);
                 }
                 else if (_runtimeValueInA && IsDupCascadeStart())
@@ -473,6 +473,7 @@ class IL2NESWriter : NESWriter
                 if (Stack.Count > 0)
                     Stack.Pop();
                 _runtimeValueInA = false;
+                _dupCascadeActive = false;
                 break;
             case ILOpCode.Ldc_i4_m1:
                 WriteLdc(0xFF); // -1 in two's complement = 0xFF
