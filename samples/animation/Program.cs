@@ -39,15 +39,14 @@ byte[] PALETTE = [
     0x0d, 0x27, 0x2a         // sprite palette 3
 ];
 
-byte x = 0;
-byte y = 112;
-byte frame_counter = 0;
-
-// setup
+// setup — must be before scalar locals so PALETTE address isn't lost
 oam_clear();
 pal_all(PALETTE);
 ppu_on_all();
 
+byte x = 0;
+byte y = 112;
+byte frame_counter = 0;
 // main loop
 while (true)
 {
