@@ -16,6 +16,12 @@ public class NESAnalyzer : DiagnosticAnalyzer
     public const string NES004 = nameof(NES004);
     public const string NES005 = nameof(NES005);
     public const string NES006 = nameof(NES006);
+    public const string NES007 = nameof(NES007);
+    public const string NES008 = nameof(NES008);
+    public const string NES009 = nameof(NES009);
+    public const string NES010 = nameof(NES010);
+    public const string NES011 = nameof(NES011);
+    public const string NES012 = nameof(NES012);
 
     const string Category = "NES";
 
@@ -73,8 +79,63 @@ public class NESAnalyzer : DiagnosticAnalyzer
         isEnabledByDefault: true,
         description: "NES projects can use 'static extern' methods without [DllImport] to link to assembly (.s) files.");
 
+    static readonly DiagnosticDescriptor NES007Rule = new(
+        NES007,
+        "Recursive functions are not supported",
+        "Method '{0}' calls itself recursively; the NES 6502 stack is only 256 bytes and recursion will overflow it",
+        Category,
+        DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "The NES 6502 CPU has a hardware stack of only 256 bytes ($0100-$01FF). Recursive calls will quickly overflow this stack and crash. Use iterative loops instead.");
+
+    static readonly DiagnosticDescriptor NES008Rule = new(
+        NES008,
+        "LINQ is not supported",
+        "LINQ is not supported on the NES; remove 'using System.Linq' and use loops instead",
+        Category,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "LINQ requires delegates, generics, and heap allocation which are not available on the NES. Use simple while loops instead.");
+
+    static readonly DiagnosticDescriptor NES009Rule = new(
+        NES009,
+        "Delegates and lambdas are not supported",
+        "Delegates and lambda expressions are not supported on the NES",
+        Category,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "The NES has no support for delegates, lambda expressions, or anonymous methods. Use static methods instead.");
+
+    static readonly DiagnosticDescriptor NES010Rule = new(
+        NES010,
+        "foreach loops are not supported",
+        "'foreach' is not supported; use 'while' loops instead",
+        Category,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "The NES transpiler only supports 'while' loops. 'foreach' compiles to IEnumerator calls that cannot be transpiled.");
+
+    static readonly DiagnosticDescriptor NES011Rule = new(
+        NES011,
+        "Exception handling is not supported",
+        "try/catch/finally is not supported on the NES",
+        Category,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "The NES 6502 CPU has no exception handling mechanism. Use conditional checks instead.");
+
+    static readonly DiagnosticDescriptor NES012Rule = new(
+        NES012,
+        "Property declarations are not supported",
+        "Property '{0}' is not supported; use fields instead",
+        Category,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "Properties generate hidden getter/setter methods that the NES transpiler cannot handle. Use public fields instead.");
+
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics =>
-        ImmutableArray.Create(NES001Rule, NES002Rule, NES003Rule, NES004Rule, NES005Rule, NES006Rule);
+        ImmutableArray.Create(NES001Rule, NES002Rule, NES003Rule, NES004Rule, NES005Rule, NES006Rule,
+            NES007Rule, NES008Rule, NES009Rule, NES010Rule, NES011Rule, NES012Rule);
 
     public override void Initialize(AnalysisContext context)
     {
@@ -92,6 +153,13 @@ public class NESAnalyzer : DiagnosticAnalyzer
         context.RegisterSyntaxNodeAction(AnalyzeMethodDeclaration, SyntaxKind.MethodDeclaration);
         context.RegisterSyntaxNodeAction(AnalyzeLocalFunctionStatement, SyntaxKind.LocalFunctionStatement);
         context.RegisterSemanticModelAction(AnalyzeInfiniteLoop);
+        context.RegisterSyntaxNodeAction(AnalyzeUsingDirective, SyntaxKind.UsingDirective);
+        context.RegisterSyntaxNodeAction(AnalyzeLambdaExpression, SyntaxKind.SimpleLambdaExpression, SyntaxKind.ParenthesizedLambdaExpression);
+        context.RegisterSyntaxNodeAction(AnalyzeAnonymousMethod, SyntaxKind.AnonymousMethodExpression);
+        context.RegisterSyntaxNodeAction(AnalyzeDelegateDeclaration, SyntaxKind.DelegateDeclaration);
+        context.RegisterSyntaxNodeAction(AnalyzeForEach, SyntaxKind.ForEachStatement);
+        context.RegisterSyntaxNodeAction(AnalyzeTryCatchFinally, SyntaxKind.TryStatement);
+        context.RegisterSyntaxNodeAction(AnalyzePropertyDeclaration, SyntaxKind.PropertyDeclaration);
     }
 
     static void AnalyzeClassDeclaration(SyntaxNodeAnalysisContext context)
@@ -236,12 +304,14 @@ public class NESAnalyzer : DiagnosticAnalyzer
         var method = (MethodDeclarationSyntax)context.Node;
         AnalyzeDllImport(context, method.AttributeLists);
         AnalyzeMethodReturnAndParams(context, method.ReturnType, method.ParameterList);
+        AnalyzeRecursion(context, method.Identifier, method.Body, method.ExpressionBody);
     }
 
     static void AnalyzeLocalFunctionStatement(SyntaxNodeAnalysisContext context)
     {
         var function = (LocalFunctionStatementSyntax)context.Node;
         AnalyzeMethodReturnAndParams(context, function.ReturnType, function.ParameterList);
+        AnalyzeRecursion(context, function.Identifier, function.Body, function.ExpressionBody);
     }
 
     static void AnalyzeDllImport(SyntaxNodeAnalysisContext context, SyntaxList<AttributeListSyntax> attributeLists)
@@ -367,6 +437,97 @@ public class NESAnalyzer : DiagnosticAnalyzer
             }
         }
         return false;
+    }
+
+    static void AnalyzeRecursion(SyntaxNodeAnalysisContext context, SyntaxToken identifier, BlockSyntax? body, ArrowExpressionClauseSyntax? expressionBody)
+    {
+        IMethodSymbol? declaredSymbol = identifier.Parent switch
+        {
+            MethodDeclarationSyntax methodDecl => context.SemanticModel.GetDeclaredSymbol(methodDecl, context.CancellationToken),
+            LocalFunctionStatementSyntax localFunc => context.SemanticModel.GetDeclaredSymbol(localFunc, context.CancellationToken),
+            _ => null
+        };
+
+        if (declaredSymbol is null)
+            return;
+
+        SyntaxNode? searchNode = (SyntaxNode?)body ?? expressionBody;
+        if (searchNode is null)
+            return;
+
+        foreach (var invocation in searchNode.DescendantNodes().OfType<InvocationExpressionSyntax>())
+        {
+            var symbolInfo = context.SemanticModel.GetSymbolInfo(invocation, context.CancellationToken);
+            if (symbolInfo.Symbol is not IMethodSymbol invokedSymbol)
+                continue;
+
+            if (SymbolEqualityComparer.Default.Equals(declaredSymbol, invokedSymbol))
+            {
+                context.ReportDiagnostic(Diagnostic.Create(NES007Rule, invocation.GetLocation(), declaredSymbol.Name));
+                break;
+            }
+        }
+    }
+
+    static void AnalyzeUsingDirective(SyntaxNodeAnalysisContext context)
+    {
+        var usingDirective = (UsingDirectiveSyntax)context.Node;
+        if (usingDirective.Name is null)
+            return;
+
+        var symbolInfo = context.SemanticModel.GetSymbolInfo(usingDirective.Name, context.CancellationToken);
+        var symbol = symbolInfo.Symbol ?? symbolInfo.CandidateSymbols.FirstOrDefault();
+
+        if (symbol is INamespaceSymbol ns && IsUnderSystemLinq(ns))
+        {
+            context.ReportDiagnostic(Diagnostic.Create(NES008Rule, usingDirective.GetLocation()));
+        }
+        else if (symbol is INamedTypeSymbol type && type.ContainingNamespace is not null && IsUnderSystemLinq(type.ContainingNamespace))
+        {
+            context.ReportDiagnostic(Diagnostic.Create(NES008Rule, usingDirective.GetLocation()));
+        }
+    }
+
+    static bool IsUnderSystemLinq(INamespaceSymbol ns)
+    {
+        while (!ns.IsGlobalNamespace)
+        {
+            if (ns.Name == "Linq" && ns.ContainingNamespace is { IsGlobalNamespace: false } systemNs && systemNs.Name == "System")
+                return true;
+            ns = ns.ContainingNamespace;
+        }
+        return false;
+    }
+
+    static void AnalyzeLambdaExpression(SyntaxNodeAnalysisContext context)
+    {
+        context.ReportDiagnostic(Diagnostic.Create(NES009Rule, context.Node.GetLocation()));
+    }
+
+    static void AnalyzeAnonymousMethod(SyntaxNodeAnalysisContext context)
+    {
+        context.ReportDiagnostic(Diagnostic.Create(NES009Rule, context.Node.GetLocation()));
+    }
+
+    static void AnalyzeDelegateDeclaration(SyntaxNodeAnalysisContext context)
+    {
+        context.ReportDiagnostic(Diagnostic.Create(NES009Rule, context.Node.GetLocation()));
+    }
+
+    static void AnalyzeForEach(SyntaxNodeAnalysisContext context)
+    {
+        context.ReportDiagnostic(Diagnostic.Create(NES010Rule, context.Node.GetLocation()));
+    }
+
+    static void AnalyzeTryCatchFinally(SyntaxNodeAnalysisContext context)
+    {
+        context.ReportDiagnostic(Diagnostic.Create(NES011Rule, context.Node.GetLocation()));
+    }
+
+    static void AnalyzePropertyDeclaration(SyntaxNodeAnalysisContext context)
+    {
+        var property = (PropertyDeclarationSyntax)context.Node;
+        context.ReportDiagnostic(Diagnostic.Create(NES012Rule, property.Identifier.GetLocation(), property.Identifier.Text));
     }
 
     static bool IsSupportedType(ITypeSymbol type)

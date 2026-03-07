@@ -656,4 +656,311 @@ public class NESAnalyzerTests
 
         await VerifyAsync(test);
     }
+
+    // ==================== NES007: Recursive functions ====================
+
+    [Fact]
+    public async Task NES007_DirectRecursion_Diagnostic()
+    {
+        var test = """
+            while (true) ;
+
+            static void CountDown(byte n)
+            {
+                if (n == 0) return;
+                {|#0:CountDown((byte)(n - 1))|};
+            }
+            """;
+
+        var expected = Diagnostic(NESAnalyzer.NES007).WithLocation(0).WithArguments("CountDown");
+        await VerifyAsync(test, expected);
+    }
+
+    [Fact]
+    public async Task NES007_DirectRecursionInLocalFunction_Diagnostic()
+    {
+        var test = """
+            countdown(5);
+            while (true) ;
+
+            void countdown(byte n)
+            {
+                if (n == 0) return;
+                {|#0:countdown((byte)(n - 1))|};
+            }
+            """;
+
+        var expected = Diagnostic(NESAnalyzer.NES007).WithLocation(0).WithArguments("countdown");
+        await VerifyAsync(test, expected);
+    }
+
+    [Fact]
+    public async Task NES007_NoRecursion_NoDiagnostic()
+    {
+        var test = """
+            setup();
+            while (true) ;
+
+            static void setup() { }
+            """;
+
+        await VerifyAsync(test);
+    }
+
+    [Fact]
+    public async Task NES007_SameNameDifferentMethod_NoDiagnostic()
+    {
+        var test = """
+            while (true) ;
+
+            static void DoWork()
+            {
+                Helper.DoWork();
+            }
+
+            static class Helper
+            {
+                public static void DoWork() { }
+            }
+            """;
+
+        await VerifyAsync(test);
+    }
+
+    [Fact]
+    public async Task NES007_ExpressionBodiedRecursion_Diagnostic()
+    {
+        var test = """
+            while (true) ;
+
+            static byte factorial(byte n) => n == 0 ? (byte)1 : (byte)(n * {|#0:factorial((byte)(n - 1))|});
+            """;
+
+        var expected = Diagnostic(NESAnalyzer.NES007).WithLocation(0).WithArguments("factorial");
+        await VerifyAsync(test, expected);
+    }
+
+    // ==================== NES008: LINQ not supported ====================
+
+    [Fact]
+    public async Task NES008_UsingSystemLinq_Diagnostic()
+    {
+        var test = """
+            {|#0:using System.Linq;|}
+
+            namespace MyGame
+            {
+                static class Helpers
+                {
+                    public static byte First(byte[] data) => data[0];
+                }
+            }
+            """;
+
+        var expected = Diagnostic(NESAnalyzer.NES008).WithLocation(0);
+        await VerifyLibraryAsync(test, expected);
+    }
+
+    [Fact]
+    public async Task NES008_UsingSystemCollections_NoDiagnostic()
+    {
+        // Only System.Linq should trigger, not other System.* namespaces
+        var test = """
+            using System.Runtime.InteropServices;
+
+            namespace MyGame
+            {
+                static class Helpers
+                {
+                    public static byte Add(byte a, byte b) => (byte)(a + b);
+                }
+            }
+            """;
+
+        await VerifyLibraryAsync(test);
+    }
+
+    // ==================== NES009: Delegates and lambdas ====================
+
+    [Fact]
+    public async Task NES009_LambdaExpression_Diagnostic()
+    {
+        var test = """
+            System.Action {|#1:a|} = {|#0:() => { }|};
+            while (true) ;
+            """;
+
+        await VerifyAsync(test,
+            Diagnostic(NESAnalyzer.NES009).WithLocation(0),
+            Diagnostic(NESAnalyzer.NES005).WithLocation(1).WithArguments("System.Action"));
+    }
+
+    [Fact]
+    public async Task NES009_SimpleLambdaExpression_Diagnostic()
+    {
+        var test = """
+            System.Func<byte, byte> {|#1:f|} = {|#0:x => x|};
+            while (true) ;
+            """;
+
+        await VerifyAsync(test,
+            Diagnostic(NESAnalyzer.NES009).WithLocation(0),
+            Diagnostic(NESAnalyzer.NES005).WithLocation(1).WithArguments("System.Func<byte, byte>"));
+    }
+
+    [Fact]
+    public async Task NES009_AnonymousMethod_Diagnostic()
+    {
+        var test = """
+            System.Action {|#1:a|} = {|#0:delegate { }|};
+            while (true) ;
+            """;
+
+        await VerifyAsync(test,
+            Diagnostic(NESAnalyzer.NES009).WithLocation(0),
+            Diagnostic(NESAnalyzer.NES005).WithLocation(1).WithArguments("System.Action"));
+    }
+
+    [Fact]
+    public async Task NES009_DelegateDeclaration_Diagnostic()
+    {
+        var test = """
+            namespace MyGame
+            {
+                {|#0:delegate void MyCallback(byte value);|}
+            }
+            """;
+
+        var expected = Diagnostic(NESAnalyzer.NES009).WithLocation(0);
+        await VerifyLibraryAsync(test, expected);
+    }
+
+    [Fact]
+    public async Task NES009_NoLambda_NoDiagnostic()
+    {
+        var test = """
+            setup();
+            while (true) ;
+
+            static void setup() { }
+            """;
+
+        await VerifyAsync(test);
+    }
+
+    // ==================== NES010: foreach not supported ====================
+
+    [Fact]
+    public async Task NES010_ForEachLoop_Diagnostic()
+    {
+        var test = """
+            byte[] data = new byte[] { 1, 2, 3 };
+            {|#0:foreach (byte b in data) { }|}
+            while (true) ;
+            """;
+
+        var expected = Diagnostic(NESAnalyzer.NES010).WithLocation(0);
+        await VerifyAsync(test, expected);
+    }
+
+    [Fact]
+    public async Task NES010_WhileLoop_NoDiagnostic()
+    {
+        var test = """
+            byte x = 0;
+            while (x < 10) { x = (byte)(x + 1); }
+            while (true) ;
+            """;
+
+        await VerifyAsync(test);
+    }
+
+    // ==================== NES011: try/catch/finally not supported ====================
+
+    [Fact]
+    public async Task NES011_TryCatch_Diagnostic()
+    {
+        var test = """
+            {|#0:try { } catch { }|}
+            while (true) ;
+            """;
+
+        var expected = Diagnostic(NESAnalyzer.NES011).WithLocation(0);
+        await VerifyAsync(test, expected);
+    }
+
+    [Fact]
+    public async Task NES011_TryFinally_Diagnostic()
+    {
+        var test = """
+            {|#0:try { } finally { }|}
+            while (true) ;
+            """;
+
+        var expected = Diagnostic(NESAnalyzer.NES011).WithLocation(0);
+        await VerifyAsync(test, expected);
+    }
+
+    [Fact]
+    public async Task NES011_NoTryCatch_NoDiagnostic()
+    {
+        var test = """
+            byte x = 0;
+            while (true) ;
+            """;
+
+        await VerifyAsync(test);
+    }
+
+    // ==================== NES012: Property declarations not supported ====================
+
+    [Fact]
+    public async Task NES012_PropertyDeclaration_Diagnostic()
+    {
+        var test = """
+            namespace MyGame
+            {
+                struct Player
+                {
+                    public byte {|#0:X|} { get; set; }
+                }
+            }
+            """;
+
+        var expected = Diagnostic(NESAnalyzer.NES012).WithLocation(0).WithArguments("X");
+        await VerifyLibraryAsync(test, expected);
+    }
+
+    [Fact]
+    public async Task NES012_FieldDeclaration_NoDiagnostic()
+    {
+        var test = """
+            namespace MyGame
+            {
+                struct Player
+                {
+                    public byte X;
+                }
+            }
+            """;
+
+        await VerifyLibraryAsync(test);
+    }
+
+    [Fact]
+    public async Task NES012_PropertyInStaticClass_Diagnostic()
+    {
+        var test = """
+            namespace MyGame
+            {
+                static class Config
+                {
+                    public static byte {|#0:Speed|} { get; set; }
+                }
+            }
+            """;
+
+        var expected = Diagnostic(NESAnalyzer.NES012).WithLocation(0).WithArguments("Speed");
+        await VerifyLibraryAsync(test, expected);
+    }
 }
