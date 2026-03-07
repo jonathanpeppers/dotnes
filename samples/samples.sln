@@ -37,6 +37,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "vrambuffer", "vrambuffer\vr
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "multifile", "multifile\multifile.csproj", "{0FCAD2E9-3115-4222-9A64-8B99E3E56A5E}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "peekpoke", "peekpoke\peekpoke.csproj", "{D9FA0DC2-735A-4C3C-9A9D-2BDDE2E2145F}"
+EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "scoreboard", "scoreboard\scoreboard.csproj", "{349609E7-224D-42E4-80FE-9580119EEC89}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "bigsprites", "bigsprites\bigsprites.csproj", "{6A360A91-6C1C-461C-B13D-BFE448C8861D}"
@@ -255,6 +257,18 @@ Global
 		{0FCAD2E9-3115-4222-9A64-8B99E3E56A5E}.Release|x64.Build.0 = Release|Any CPU
 		{0FCAD2E9-3115-4222-9A64-8B99E3E56A5E}.Release|x86.ActiveCfg = Release|Any CPU
 		{0FCAD2E9-3115-4222-9A64-8B99E3E56A5E}.Release|x86.Build.0 = Release|Any CPU
+		{D9FA0DC2-735A-4C3C-9A9D-2BDDE2E2145F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D9FA0DC2-735A-4C3C-9A9D-2BDDE2E2145F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D9FA0DC2-735A-4C3C-9A9D-2BDDE2E2145F}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{D9FA0DC2-735A-4C3C-9A9D-2BDDE2E2145F}.Debug|x64.Build.0 = Debug|Any CPU
+		{D9FA0DC2-735A-4C3C-9A9D-2BDDE2E2145F}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{D9FA0DC2-735A-4C3C-9A9D-2BDDE2E2145F}.Debug|x86.Build.0 = Debug|Any CPU
+		{D9FA0DC2-735A-4C3C-9A9D-2BDDE2E2145F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D9FA0DC2-735A-4C3C-9A9D-2BDDE2E2145F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D9FA0DC2-735A-4C3C-9A9D-2BDDE2E2145F}.Release|x64.ActiveCfg = Release|Any CPU
+		{D9FA0DC2-735A-4C3C-9A9D-2BDDE2E2145F}.Release|x64.Build.0 = Release|Any CPU
+		{D9FA0DC2-735A-4C3C-9A9D-2BDDE2E2145F}.Release|x86.ActiveCfg = Release|Any CPU
+		{D9FA0DC2-735A-4C3C-9A9D-2BDDE2E2145F}.Release|x86.Build.0 = Release|Any CPU
 		{349609E7-224D-42E4-80FE-9580119EEC89}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{349609E7-224D-42E4-80FE-9580119EEC89}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{349609E7-224D-42E4-80FE-9580119EEC89}.Debug|x64.ActiveCfg = Debug|Any CPU

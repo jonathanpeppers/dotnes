@@ -1572,19 +1572,32 @@ class IL2NESWriter : NESWriter
                             {
                                 int value = Stack.Pop();
                                 int addr = Stack.Pop();
+
+                                // Check if the value is from a runtime local variable
+                                Local? pokeLocal = null;
+                                bool valueIsLocal = _lastLoadedLocalIndex.HasValue &&
+                                    Locals.TryGetValue(_lastLoadedLocalIndex.Value, out pokeLocal) &&
+                                    pokeLocal.Address.HasValue;
+
                                 // Remove previously emitted instructions:
                                 // LDX #hi, LDA #lo, JSR pusha, LDA #value = 4 instructions
                                 RemoveLastInstructions(4);
-                                // After removal, _immediateInA may be stale; only trust
-                                // the value if the PREVIOUS poke set it (STA doesn't change A)
-                                if (_pokeLastValue != (byte)value)
+
+                                if (valueIsLocal)
+                                {
+                                    Emit(Opcode.LDA, AddressMode.Absolute, (ushort)pokeLocal!.Address!.Value);
+                                    _pokeLastValue = null;
+                                    _immediateInA = null;
+                                }
+                                else if (_pokeLastValue != (byte)value)
                                 {
                                     Emit(Opcode.LDA, AddressMode.Immediate, (byte)value);
+                                    _pokeLastValue = (byte)value;
+                                    _immediateInA = (byte)value;
                                 }
                                 Emit(Opcode.STA, AddressMode.Absolute, (ushort)addr);
-                                _pokeLastValue = (byte)value;
-                                _immediateInA = (byte)value;
                             }
+                            _lastLoadedLocalIndex = null;
                             argsAlreadyPopped = true;
                         }
                         break;
