@@ -92,7 +92,9 @@ public class TranspilerTests
     [InlineData("scoreboard", false)]
     [InlineData("bigsprites", true)]
     [InlineData("bigsprites", false)]
-    public Task Write(string name, bool debug, bool verticalMirroring = false)
+    [InlineData("bankswitch", true, false, 4, 4, 8)]
+    [InlineData("bankswitch", false, false, 4, 4, 8)]
+    public Task Write(string name, bool debug, bool verticalMirroring = false, int mapper = 0, int prgBanks = 2, int chrBanks = 1)
     {
         var configuration = debug ? "debug" : "release";
         var chrName = $"chr_{name}.s";
@@ -100,7 +102,7 @@ public class TranspilerTests
         var chr_generic = new StreamReader(chrStream ?? Utilities.GetResource("chr_generic.s"));
 
         using var dll = Utilities.GetResource($"{name}.{configuration}.dll");
-        using var il = new Transpiler(dll, [new AssemblyReader(chr_generic)], _logger, verticalMirroring);
+        using var il = new Transpiler(dll, [new AssemblyReader(chr_generic)], _logger, verticalMirroring, mapper, prgBanks, chrBanks);
         using var ms = new MemoryStream();
         il.Write(ms);
 

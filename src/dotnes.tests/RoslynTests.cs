@@ -2727,4 +2727,44 @@ public class RoslynTests
         Assert.Equal(0x20, mainBlock[0]);  // JSR setup
         Assert.Equal(0x20, mainBlock[3]);  // JSR enable
     }
+
+    [Fact]
+    public void Strlen_ReturnsCompileTimeLength()
+    {
+        // strlen() should resolve to a compile-time constant byte length
+        var bytes = GetProgramBytes(
+            """
+            byte len = strlen("HELLO");
+            pal_col(0, len);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        // strlen("HELLO") = 5 => LDA #$05 (A905)
+        Assert.Contains("A905", hex);
+    }
+
+    [Fact]
+    public void Poke_To_MMC3_Registers()
+    {
+        // poke() to MMC3 mapper registers should emit STA to correct addresses
+        var bytes = GetProgramBytes(
+            """
+            poke(0x8000, 0x06);
+            poke(0x8001, 0x00);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        // STA $8000 = 8D0080
+        Assert.Contains("8D0080", hex);
+        // STA $8001 = 8D0180
+        Assert.Contains("8D0180", hex);
+    }
 }

@@ -191,6 +191,11 @@ public static class NESLib
     public static byte peek(ushort addr) => throw null!;
 
     /// <summary>
+    /// return the length of a null-terminated string
+    /// </summary>
+    public static byte strlen(string s) => throw null!;
+
+    /// <summary>
     /// wait for vertical sync (vblank), busy-loops on PPU status bit 7
     /// </summary>
     public static void waitvsync() => throw null!;
@@ -473,6 +478,11 @@ public static class NESLib
     public const ushort PPU_SCROLL = 0x2005;
     public const ushort PPU_ADDR = 0x2006;
     public const ushort PPU_DATA = 0x2007;
+
+    // MMC3 mapper register addresses for bank switching via poke()
+    public const ushort MMC3_BANK_SELECT = 0x8000;
+    public const ushort MMC3_BANK_DATA = 0x8001;
+    public const ushort MMC3_MIRRORING = 0xA000;
 
     // TODO: Macros below should be computed at compile-time and methods removed
 

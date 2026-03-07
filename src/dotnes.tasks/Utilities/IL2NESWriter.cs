@@ -1618,6 +1618,26 @@ class IL2NESWriter : NESWriter
                             argsAlreadyPopped = true;
                         }
                         break;
+                    case nameof(NESLib.strlen):
+                        {
+                            // strlen(string) -> compile-time constant length
+                            // After ldstr, the 6502 code has:
+                            //   LDA #lo(label), LDX #hi(label), JSR pushax, LDX #0, LDA #length
+                            // strlen just needs the length that's already in A.
+                            // Remove the address push (LDA #lo, LDX #hi, JSR pushax) — 3 instructions
+                            // Keep the LDX #0 and LDA #length that WriteLdc emitted.
+                            if (Stack.Count >= 1)
+                            {
+                                int length = Stack.Pop();
+                                // Remove: LDA #lo, LDX #hi, JSR pushax, LDX #0, LDA #length = 5 instructions
+                                RemoveLastInstructions(5);
+                                Emit(Opcode.LDA, AddressMode.Immediate, (byte)length);
+                                _immediateInA = (byte)length;
+                                _runtimeValueInA = false;
+                            }
+                            argsAlreadyPopped = true;
+                        }
+                        break;
                     case "split":
                     case "scroll":
                         // scroll()/split() takes unsigned int params, which use popax (2-byte pop).
