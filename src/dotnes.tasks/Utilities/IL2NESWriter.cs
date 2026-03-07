@@ -147,6 +147,13 @@ class IL2NESWriter : NESWriter
     bool _ntadrRuntimeResult;
 
     /// <summary>
+    /// True when a dup'd runtime value has been saved to TEMP_HI ($18) for cascading
+    /// if-else comparisons. When dup is encountered with _runtimeValueInA=false but
+    /// this flag is true, A is reloaded from TEMP_HI.
+    /// </summary>
+    bool _dupSavedValue;
+
+    /// <summary>
     /// True when A and X hold a 16-bit value (A=lo, X=hi) from a ushort load.
     /// Used by WriteLdc to emit pushax instead of pusha.
     /// </summary>
@@ -321,13 +328,32 @@ class IL2NESWriter : NESWriter
 
             // Handle indexed array access: LDA array,X from ldelem.u1
             // Pattern: LDA value1; LDX index; LDA array,X → convert last to CMP array,X
+            // Only valid when there are two runtime values — either _savedRuntimeToTemp
+            // or a preceding LDA in the block (before the LDX+LDA pair).
             if (lastInstr.Opcode == Opcode.LDA
                 && lastInstr.Mode == AddressMode.AbsoluteX
                 && lastInstr.Operand is AbsoluteOperand idxOp)
             {
-                // Replace LDA array,X with CMP array,X — A still has value1 from earlier
-                RemoveLastInstructions(1);
-                Emit(Opcode.CMP, AddressMode.AbsoluteX, idxOp.Address);
+                bool hasPrecedingRuntimeLDA = _savedRuntimeToTemp;
+                if (!hasPrecedingRuntimeLDA && block.Count >= 3)
+                {
+                    // Look past the LDX at block[-2] for a preceding LDA (Absolute/ZeroPage)
+                    var beforeLDX = block[block.Count - 3];
+                    hasPrecedingRuntimeLDA = beforeLDX.Opcode == Opcode.LDA
+                        && beforeLDX.Mode is AddressMode.Absolute or AddressMode.ZeroPage;
+                }
+                if (hasPrecedingRuntimeLDA)
+                {
+                    // Two runtime values: A has value1, replace LDA with CMP
+                    RemoveLastInstructions(1);
+                    Emit(Opcode.CMP, AddressMode.AbsoluteX, idxOp.Address);
+                    _savedRuntimeToTemp = false;
+                }
+                else
+                {
+                    // Single runtime array value vs constant: keep the LDA, emit CMP #imm
+                    Emit(Opcode.CMP, AddressMode.Immediate, checked((byte)(stackValue + adjustValue)));
+                }
                 return;
             }
 
@@ -374,6 +400,26 @@ class IL2NESWriter : NESWriter
                 return;
             }
         }
+        // If the last instruction is an arithmetic result (SBC, ADC, AND, ORA, etc.),
+        // A already has the computed value — just emit CMP without removing.
+        if (block.Count > 0)
+        {
+            var lastInstr = block[block.Count - 1];
+            if (lastInstr.Opcode is Opcode.SBC or Opcode.ADC or Opcode.AND or Opcode.ORA
+                or Opcode.EOR or Opcode.LSR or Opcode.ASL or Opcode.ROR or Opcode.ROL)
+            {
+                Emit(Opcode.CMP, AddressMode.Immediate, checked((byte)(stackValue + adjustValue)));
+                return;
+            }
+            // If the dup handler saved A to TEMP_HI, the last instruction is STA $18 (first save)
+            // or LDA $18 (subsequent reload). Keep it, just emit CMP.
+            if (_dupSavedValue && (lastInstr.Opcode == Opcode.STA || lastInstr.Opcode == Opcode.LDA)
+                && lastInstr.Mode == AddressMode.ZeroPage)
+            {
+                Emit(Opcode.CMP, AddressMode.Immediate, checked((byte)(stackValue + adjustValue)));
+                return;
+            }
+        }
         // Constant comparison: remove last LDA #imm, emit CMP #imm
         RemoveLastInstructions(1);
         Emit(Opcode.CMP, AddressMode.Immediate, checked((byte)(stackValue + adjustValue)));
@@ -400,11 +446,25 @@ class IL2NESWriter : NESWriter
             case ILOpCode.Dup:
                 if (Stack.Count > 0)
                     Stack.Push(Stack.Peek());
+                if (_runtimeValueInA && !_dupSavedValue && IsDupCascadeComparison())
+                {
+                    // First dup in a cascading equality comparison (e.g., if (st==1)...else if (st==2)...)
+                    // Save A to TEMP_HI so subsequent dup points can reload it after case bodies clobber A
+                    Emit(Opcode.STA, AddressMode.ZeroPage, TEMP_HI);
+                    _dupSavedValue = true;
+                }
+                else if (!_runtimeValueInA && _dupSavedValue)
+                {
+                    // Subsequent dup after a case body clobbered A: reload from TEMP_HI
+                    Emit(Opcode.LDA, AddressMode.ZeroPage, TEMP_HI);
+                    _runtimeValueInA = true;
+                }
                 break;
             case ILOpCode.Pop:
                 if (Stack.Count > 0)
                     Stack.Pop();
                 _runtimeValueInA = false;
+                _dupSavedValue = false;
                 break;
             case ILOpCode.Ldc_i4_m1:
                 WriteLdc(0xFF); // -1 in two's complement = 0xFF
@@ -1266,6 +1326,31 @@ class IL2NESWriter : NESWriter
 
     public int Index { get; set; }
 
+    /// <summary>
+    /// Checks if the current dup is part of a cascading equality comparison pattern:
+    /// dup → ldc → bne/beq (e.g., if (x==1)...else if (x==2)...).
+    /// Returns false for bit-mask patterns: dup → ldc → and → brfalse.
+    /// </summary>
+    bool IsDupCascadeComparison()
+    {
+        if (Instructions is null || Index + 2 >= Instructions.Length)
+            return false;
+
+        var next1 = Instructions[Index + 1].OpCode;
+        var next2 = Instructions[Index + 2].OpCode;
+
+        // Check: dup is followed by ldc_i4* then a branch (not and/or/sub)
+        bool isLdc = next1 is ILOpCode.Ldc_i4_0 or ILOpCode.Ldc_i4_1 or ILOpCode.Ldc_i4_2
+            or ILOpCode.Ldc_i4_3 or ILOpCode.Ldc_i4_4 or ILOpCode.Ldc_i4_5
+            or ILOpCode.Ldc_i4_6 or ILOpCode.Ldc_i4_7 or ILOpCode.Ldc_i4_8
+            or ILOpCode.Ldc_i4_s or ILOpCode.Ldc_i4 or ILOpCode.Ldc_i4_m1;
+
+        bool isBranch = next2 is ILOpCode.Bne_un_s or ILOpCode.Bne_un
+            or ILOpCode.Beq_s or ILOpCode.Beq;
+
+        return isLdc && isBranch;
+    }
+
     byte NumberOfInstructionsForBranch(int stopAt)
     {
         _logger.WriteLine($"Reading forward until IL_{stopAt:x4}...");
@@ -1357,6 +1442,29 @@ class IL2NESWriter : NESWriter
                             var lastInstr = block[block.Count - 1];
                             bool yIsRuntime = lastInstr.Mode == AddressMode.Absolute
                                 && lastInstr.Opcode == Opcode.LDA;
+
+                            // When _runtimeValueInA is true and lastInstr is LDA Absolute,
+                            // it could be either y-runtime (NTADR(const_x, runtime_y)) or
+                            // x-runtime (NTADR(runtime_x, const_y) where WriteLdc skipped).
+                            // Disambiguate by checking if there's a constant LDA #x before.
+                            if (yIsRuntime && _runtimeValueInA)
+                            {
+                                bool hasConstXBefore = false;
+                                if (block.Count >= 2 && block[block.Count - 2] is
+                                    { Opcode: Opcode.LDA, Mode: AddressMode.Immediate })
+                                    hasConstXBefore = true;
+                                else if (block.Count >= 3 && block[block.Count - 2] is
+                                    { Opcode: Opcode.JSR } && block[block.Count - 3] is
+                                    { Opcode: Opcode.LDA, Mode: AddressMode.Immediate })
+                                    hasConstXBefore = true;
+
+                                if (!hasConstXBefore)
+                                {
+                                    // No constant x before the LDA Absolute — x is runtime,
+                                    // y was a skipped WriteLdc constant. Correct the detection.
+                                    yIsRuntime = false;
+                                }
+                            }
 
                             // Check if y is a runtime expression (e.g. row + 10):
                             // _runtimeValueInA is true AND there's a JSR pusha in the block
@@ -4435,11 +4543,34 @@ class IL2NESWriter : NESWriter
                     storeValueLocalIdx = locIdx;
             }
 
-            if (constValue != null)
+            // Check for high-byte extraction: (byte)(ushort_local >> 8)
+            // The value expression is: ldloc(word), ldc_8, shr, [conv_u1]
+            bool constIsHighByte = false;
+            for (int i = valueStart; i < Index; i++)
+            {
+                if (Instructions[i].OpCode is ILOpCode.Shr or ILOpCode.Shr_un
+                    && i >= valueStart + 2)
+                {
+                    int? shiftAmt = GetLdcValue(Instructions[i - 1]);
+                    if (shiftAmt == 8)
+                    {
+                        var locIdx = GetLdlocIndex(Instructions[i - 2]);
+                        if (locIdx != null && Locals.TryGetValue(locIdx.Value, out var wordLoc)
+                            && wordLoc.IsWord && wordLoc.Address != null)
+                        {
+                            Emit(Opcode.LDA, AddressMode.Absolute, (ushort)(wordLoc.Address + 1));
+                            constIsHighByte = true;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if (!constIsHighByte && constValue != null)
             {
                 Emit(Opcode.LDA, AddressMode.Immediate, checked((byte)constValue.Value));
             }
-            else if (storeValueLocalIdx != null &&
+            else if (!constIsHighByte && storeValueLocalIdx != null &&
                      Locals.TryGetValue(storeValueLocalIdx.Value, out var valueLocal) &&
                      valueLocal.Address.HasValue)
             {
@@ -4482,6 +4613,8 @@ class IL2NESWriter : NESWriter
         bool hasMul = false;
         int mulValue = 0;
         int mulLocalIdx = -1;
+        bool hasShr = false;
+        int shrValue = 0;
         bool hasTwoLdelems = false;
         int sourceArray1Idx = -1;
         int sourceArray2Idx = -1;
@@ -4507,6 +4640,16 @@ class IL2NESWriter : NESWriter
                     break;
                 case ILOpCode.Mul:
                     hasMul = true;
+                    break;
+                case ILOpCode.Shr:
+                case ILOpCode.Shr_un:
+                    hasShr = true;
+                    // Capture the shift amount from the preceding ldc
+                    if (i > valueStart)
+                    {
+                        int? shiftAmt = GetLdcValue(Instructions[i - 1]);
+                        if (shiftAmt != null) shrValue = shiftAmt.Value;
+                    }
                     break;
                 case ILOpCode.Ldelem_u1:
                     if (sourceArray1Idx < 0)
@@ -4699,7 +4842,10 @@ class IL2NESWriter : NESWriter
         {
             // Pattern: arr[i] = local, arr[i] = (local & N), arr[i] = (local + N), etc.
             var valueLoc = Locals[valueLocalIdx];
-            Emit(Opcode.LDA, AddressMode.Absolute, (ushort)valueLoc.Address!);
+            if (hasShr && shrValue == 8 && valueLoc.IsWord)
+                Emit(Opcode.LDA, AddressMode.Absolute, (ushort)(valueLoc.Address! + 1)); // high byte
+            else
+                Emit(Opcode.LDA, AddressMode.Absolute, (ushort)valueLoc.Address!);
             if (hasAnd)
                 Emit(Opcode.AND, AddressMode.Immediate, checked((byte)andMask));
             if (hasAdd)

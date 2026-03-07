@@ -1,6 +1,8 @@
-// climber.c port — A platform game with randomly generated stage
+// Climber — A platform game with a randomly generated stage.
+// Based on the 8bitworkshop.com NES sample by Steven Hugg.
 // Uses FamiTone2 library for music and sound effects.
 // Vertical scrolling (horizontal mirroring) with offscreen row updates.
+// See climber.c for the reference C version (use on 8bitworkshop.com).
 
 #pragma warning disable CS0649, CS8321, CS0219
 
@@ -37,11 +39,6 @@ const byte CLIMBING = 3;
 const byte JUMPING = 4;
 const byte FALLING = 5;
 const byte PACING = 6;
-const byte PAD_A = 0x01;
-const byte PAD_LEFT = 0x40;
-const byte PAD_RIGHT = 0x80;
-const byte PAD_UP = 0x08;
-const byte PAD_DOWN = 0x04;
 
 // Pure utility function (no captured state)
 static byte rndint(byte a, byte b)
@@ -77,6 +74,11 @@ static void setup_graphics()
     });
     vram_adr(0x2000);
     vram_fill(CH_BLANK, 0x1000);
+    // Set attribute tables: palette 1 for all background tiles
+    vram_adr(0x23C0);
+    vram_fill(0x55, 64);
+    vram_adr(0x2BC0);
+    vram_fill(0x55, 64);
     bank_spr(0);
     bank_bg(0);
     vrambuf_clear();
@@ -124,25 +126,26 @@ while (true)
     byte vbright = 4;
 
     // Metasprite data (ROM tables)
-    byte[] playerRStand = new byte[] { 0, 0, 0xd8, 0, 0, 8, 0xd9, 0, 8, 0, 0xda, 0, 8, 8, 0xdb, 0, 128 };
-    byte[] playerRRun1 = new byte[] { 0, 0, 0xdc, 0, 0, 8, 0xdd, 0, 8, 0, 0xde, 0, 8, 8, 0xdf, 0, 128 };
-    byte[] playerRRun2 = new byte[] { 0, 0, 0xe0, 0, 0, 8, 0xe1, 0, 8, 0, 0xe2, 0, 8, 8, 0xe3, 0, 128 };
-    byte[] playerRRun3 = new byte[] { 0, 0, 0xe4, 0, 0, 8, 0xe5, 0, 8, 0, 0xe6, 0, 8, 8, 0xe7, 0, 128 };
-    byte[] playerRJump = new byte[] { 0, 0, 0xe8, 0, 0, 8, 0xe9, 0, 8, 0, 0xea, 0, 8, 8, 0xeb, 0, 128 };
-    byte[] playerRClimb = new byte[] { 0, 0, 0xec, 0, 0, 8, 0xed, 0, 8, 0, 0xee, 0, 8, 8, 0xef, 0, 128 };
-    byte[] playerRSad = new byte[] { 0, 0, 0xf0, 0, 0, 8, 0xf1, 0, 8, 0, 0xf2, 0, 8, 8, 0xf3, 0, 128 };
-    byte[] playerLStand = new byte[] { 8, 0, 0xd8, 0x40, 8, 8, 0xd9, 0x40, 0, 0, 0xda, 0x40, 0, 8, 0xdb, 0x40, 128 };
-    byte[] playerLRun1 = new byte[] { 8, 0, 0xdc, 0x40, 8, 8, 0xdd, 0x40, 0, 0, 0xde, 0x40, 0, 8, 0xdf, 0x40, 128 };
-    byte[] playerLRun2 = new byte[] { 8, 0, 0xe0, 0x40, 8, 8, 0xe1, 0x40, 0, 0, 0xe2, 0x40, 0, 8, 0xe3, 0x40, 128 };
-    byte[] playerLRun3 = new byte[] { 8, 0, 0xe4, 0x40, 8, 8, 0xe5, 0x40, 0, 0, 0xe6, 0x40, 0, 8, 0xe7, 0x40, 128 };
-    byte[] playerLJump = new byte[] { 8, 0, 0xe8, 0x40, 8, 8, 0xe9, 0x40, 0, 0, 0xea, 0x40, 0, 8, 0xeb, 0x40, 128 };
-    byte[] playerLClimb = new byte[] { 8, 0, 0xec, 0x40, 8, 8, 0xed, 0x40, 0, 0, 0xee, 0x40, 0, 8, 0xef, 0x40, 128 };
-    byte[] playerLSad = new byte[] { 8, 0, 0xf0, 0x40, 8, 8, 0xf1, 0x40, 0, 0, 0xf2, 0x40, 0, 8, 0xf3, 0x40, 128 };
-    byte[] personToSave = new byte[] { 0, 0, 0xba, 3, 0, 8, 0xbc, 0, 8, 0, 0xbb, 3, 8, 8, 0xbd, 0, 128 };
+    // Metasprite format: x_offset, y_offset, tile, attr (4 bytes per sprite, 0x80 = end)
+    // Layout: top-left, top-right, bottom-left, bottom-right
+    byte[] playerRStand = new byte[] { 0, 0, 0xd8, 0, 8, 0, 0xd9, 0, 0, 8, 0xda, 0, 8, 8, 0xdb, 0, 128 };
+    byte[] playerRRun1 = new byte[] { 0, 0, 0xdc, 0, 8, 0, 0xdd, 0, 0, 8, 0xde, 0, 8, 8, 0xdf, 0, 128 };
+    byte[] playerRRun2 = new byte[] { 0, 0, 0xe0, 0, 8, 0, 0xe1, 0, 0, 8, 0xe2, 0, 8, 8, 0xe3, 0, 128 };
+    byte[] playerRRun3 = new byte[] { 0, 0, 0xe4, 0, 8, 0, 0xe5, 0, 0, 8, 0xe6, 0, 8, 8, 0xe7, 0, 128 };
+    byte[] playerRJump = new byte[] { 0, 0, 0xe8, 0, 8, 0, 0xe9, 0, 0, 8, 0xea, 0, 8, 8, 0xeb, 0, 128 };
+    byte[] playerRClimb = new byte[] { 0, 0, 0xec, 0, 8, 0, 0xed, 0, 0, 8, 0xee, 0, 8, 8, 0xef, 0, 128 };
+    byte[] playerRSad = new byte[] { 0, 0, 0xf0, 0, 8, 0, 0xf1, 0, 0, 8, 0xf2, 0, 8, 8, 0xf3, 0, 128 };
+    byte[] playerLStand = new byte[] { 8, 0, 0xd8, 0x40, 0, 0, 0xd9, 0x40, 8, 8, 0xda, 0x40, 0, 8, 0xdb, 0x40, 128 };
+    byte[] playerLRun1 = new byte[] { 8, 0, 0xdc, 0x40, 0, 0, 0xdd, 0x40, 8, 8, 0xde, 0x40, 0, 8, 0xdf, 0x40, 128 };
+    byte[] playerLRun2 = new byte[] { 8, 0, 0xe0, 0x40, 0, 0, 0xe1, 0x40, 8, 8, 0xe2, 0x40, 0, 8, 0xe3, 0x40, 128 };
+    byte[] playerLRun3 = new byte[] { 8, 0, 0xe4, 0x40, 0, 0, 0xe5, 0x40, 8, 8, 0xe6, 0x40, 0, 8, 0xe7, 0x40, 128 };
+    byte[] playerLJump = new byte[] { 8, 0, 0xe8, 0x40, 0, 0, 0xe9, 0x40, 8, 8, 0xea, 0x40, 0, 8, 0xeb, 0x40, 128 };
+    byte[] playerLClimb = new byte[] { 8, 0, 0xec, 0x40, 0, 0, 0xed, 0x40, 8, 8, 0xee, 0x40, 0, 8, 0xef, 0x40, 128 };
+    byte[] playerLSad = new byte[] { 8, 0, 0xf0, 0x40, 0, 0, 0xf1, 0x40, 8, 8, 0xf2, 0x40, 0, 8, 0xf3, 0x40, 128 };
+    byte[] personToSave = new byte[] { 0, 0, 0xba, 3, 8, 0, 0xbb, 3, 0, 8, 0xbc, 0, 8, 8, 0xbd, 0, 128 };
 
     // Buffers
     byte[] buf = new byte[COLS];
-    byte[] attrbuf = new byte[8];
 
     // --- make_floors ---
     {
@@ -286,11 +289,6 @@ while (true)
         else
             addr = NTADR_C(1, (byte)(rowy - 30));
 
-        // TODO: Attribute table writes disabled for now (transpiler doesn't handle
-        // runtime ushort address in vrambuf_put yet)
-        // byte tile_y_attr = (byte)(rowy < 30 ? rowy : (byte)(rowy - 30));
-        // ... attribute writes ...
-
         vrambuf_put(addr, buf, COLS);
         vrambuf_flush();
     }
@@ -366,7 +364,7 @@ while (true)
         oam_hide_rest(oam_off);
 
         // --- Player movement ---
-        byte joy = (byte)pad_poll(0);
+        PAD joy = pad_poll(0);
         {
             byte pi = 0;
             byte pf = actor_floor[pi];
@@ -381,28 +379,28 @@ while (true)
 
             if (ps == STANDING || ps == WALKING)
             {
-                if ((joy & PAD_A) != 0)
+                if ((joy & PAD.A) != 0)
                 {
                     actor_state[pi] = JUMPING;
                     actor_xvel[pi] = 0;
                     actor_yvel[pi] = JUMP_VELOCITY;
-                    if ((joy & PAD_LEFT) != 0) actor_xvel[pi] = 0xff;
-                    if ((joy & PAD_RIGHT) != 0) actor_xvel[pi] = 1;
+                    if ((joy & PAD.LEFT) != 0) actor_xvel[pi] = 0xff;
+                    if ((joy & PAD.RIGHT) != 0) actor_xvel[pi] = 1;
                     sfx_play(SND_JUMP, 0);
                 }
-                else if ((joy & PAD_LEFT) != 0)
+                else if ((joy & PAD.LEFT) != 0)
                 {
                     actor_x[pi] = (byte)(actor_x[pi] - 1);
                     actor_dir[pi] = 1;
                     actor_state[pi] = WALKING;
                 }
-                else if ((joy & PAD_RIGHT) != 0)
+                else if ((joy & PAD.RIGHT) != 0)
                 {
                     actor_x[pi] = (byte)(actor_x[pi] + 1);
                     actor_dir[pi] = 0;
                     actor_state[pi] = WALKING;
                 }
-                else if ((joy & PAD_UP) != 0)
+                else if ((joy & PAD.UP) != 0)
                 {
                     byte lx = 0;
                     if (floor_ladder1[pf] != 0)
@@ -421,7 +419,7 @@ while (true)
                         actor_state[pi] = CLIMBING;
                     }
                 }
-                else if ((joy & PAD_DOWN) != 0)
+                else if ((joy & PAD.DOWN) != 0)
                 {
                     if (pf > 0)
                     {
@@ -453,7 +451,7 @@ while (true)
 
             if (ps == CLIMBING)
             {
-                if ((joy & PAD_UP) != 0)
+                if ((joy & PAD.UP) != 0)
                 {
                     if (actor_yy_hi[pi] > cyy_hi || (actor_yy_hi[pi] == cyy_hi && actor_yy_lo[pi] >= cyy_lo))
                     {
@@ -466,7 +464,7 @@ while (true)
                         if (actor_yy_lo[pi] == 0) actor_yy_hi[pi] = (byte)(actor_yy_hi[pi] + 1);
                     }
                 }
-                else if ((joy & PAD_DOWN) != 0)
+                else if ((joy & PAD.DOWN) != 0)
                 {
                     if (actor_yy_hi[pi] < fyy_hi || (actor_yy_hi[pi] == fyy_hi && actor_yy_lo[pi] <= fyy_lo))
                     {
@@ -585,13 +583,13 @@ while (true)
 
             if (es == STANDING || es == WALKING)
             {
-                if ((ej & PAD_LEFT) != 0)
+                if ((ej & (byte)PAD.LEFT) != 0)
                 {
                     actor_x[ei] = (byte)(actor_x[ei] - 1);
                     actor_dir[ei] = 1;
                     actor_state[ei] = WALKING;
                 }
-                else if ((ej & PAD_RIGHT) != 0)
+                else if ((ej & (byte)PAD.RIGHT) != 0)
                 {
                     actor_x[ei] = (byte)(actor_x[ei] + 1);
                     actor_dir[ei] = 0;

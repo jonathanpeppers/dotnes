@@ -78,6 +78,10 @@ public class TranspilerTests
     [InlineData("horizscroll", false, true)]
     [InlineData("horizmask", true, true)]
     [InlineData("horizmask", false, true)]
+    [InlineData("highbytearray", true)]
+    [InlineData("highbytearray", false)]
+    [InlineData("branchsub", true)]
+    [InlineData("branchsub", false)]
     [InlineData("multifile", true)]
     [InlineData("multifile", false)]
     [InlineData("peekpoke", true)]
@@ -90,6 +94,8 @@ public class TranspilerTests
     [InlineData("scoreboard", false)]
     [InlineData("bigsprites", true)]
     [InlineData("bigsprites", false)]
+    [InlineData("climber", true)]
+    [InlineData("climber", false)]
     public Task Write(string name, bool debug, bool verticalMirroring = false)
     {
         var configuration = debug ? "debug" : "release";
@@ -97,8 +103,18 @@ public class TranspilerTests
         var chrStream = typeof(Utilities).Assembly.GetManifestResourceStream(chrName);
         var chr_generic = new StreamReader(chrStream ?? Utilities.GetResource("chr_generic.s"));
 
+        var assemblyFiles = new List<AssemblyReader> { new AssemblyReader(chr_generic) };
+
+        // Samples with extern methods need additional .s assembly files
+        if (name is "climber" or "fami")
+        {
+            var famiDir = Path.Combine(AppContext.BaseDirectory, "Data", "fami");
+            foreach (var sFile in Directory.GetFiles(famiDir, "*.s"))
+                assemblyFiles.Add(new AssemblyReader(sFile));
+        }
+
         using var dll = Utilities.GetResource($"{name}.{configuration}.dll");
-        using var il = new Transpiler(dll, [new AssemblyReader(chr_generic)], _logger, verticalMirroring);
+        using var il = new Transpiler(dll, assemblyFiles, _logger, verticalMirroring);
         using var ms = new MemoryStream();
         il.Write(ms);
 
