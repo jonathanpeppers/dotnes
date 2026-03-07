@@ -451,6 +451,7 @@ public class NESAnalyzer : DiagnosticAnalyzer
             string? calledName = invocation.Expression switch
             {
                 IdentifierNameSyntax id => id.Identifier.Text,
+                MemberAccessExpressionSyntax memberAccess => memberAccess.Name.Identifier.Text,
                 _ => null
             };
 
