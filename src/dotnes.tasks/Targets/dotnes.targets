@@ -12,6 +12,9 @@
         OutputPath="$(NESTargetPath)"
         DiagnosticLogging="$(NESDiagnosticLogging)"
         NESVerticalMirroring="$(NESVerticalMirroring)"
+        NESMapper="$(NESMapper)"
+        NESPrgBanks="$(NESPrgBanks)"
+        NESChrBanks="$(NESChrBanks)"
     />
     <ItemGroup>
       <FileWrites Include="$(NESTargetPath)" />
