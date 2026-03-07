@@ -4508,22 +4508,74 @@ class IL2NESWriter : NESWriter
                 int? val = GetLdcValue(Instructions[i]);
                 if (val != null)
                     constValue = val;
-                // Track if the value comes from a local variable
                 int? locIdx = GetLdlocIndex(Instructions[i]);
                 if (locIdx != null)
                     storeValueLocalIdx = locIdx;
             }
 
-            if (constValue != null)
+            // Check for ushort high/low byte extraction: (byte)(ushort_local >> 8) or (byte)ushort_local
+            bool isUshortExtraction = false;
+            if (storeValueLocalIdx != null &&
+                Locals.TryGetValue(storeValueLocalIdx.Value, out var ushortLocal) &&
+                ushortLocal.IsWord && ushortLocal.Address.HasValue)
             {
-                Emit(Opcode.LDA, AddressMode.Immediate, checked((byte)constValue.Value));
+
+                // Pattern: ldloc(ushort), ldc_i4_8, shr, [conv_u1] → high byte
+                bool hasShr8 = false;
+                for (int i = valueStart; i < Index; i++)
+                {
+                    if (Instructions[i].OpCode is ILOpCode.Shr or ILOpCode.Shr_un)
+                    {
+                        // Check if the preceding ldc was 8
+                        if (i > valueStart)
+                        {
+                            int? shrVal = GetLdcValue(Instructions[i - 1]);
+                            if (shrVal == 8)
+                                hasShr8 = true;
+                        }
+                    }
+                }
+
+                if (hasShr8)
+                {
+                    // (byte)(ushort_local >> 8): load high byte directly
+                    Emit(Opcode.LDA, AddressMode.Absolute, (ushort)(ushortLocal.Address.Value + 1));
+                    isUshortExtraction = true;
+                }
+                else
+                {
+                    // Check if this is a simple cast: ldloc(ushort), conv_u1 → low byte
+                    bool hasOnlyConv = true;
+                    for (int i = valueStart; i < Index; i++)
+                    {
+                        var op = Instructions[i].OpCode;
+                        if (op != ILOpCode.Conv_u1 && GetLdlocIndex(Instructions[i]) == null)
+                        {
+                            hasOnlyConv = false;
+                            break;
+                        }
+                    }
+                    if (hasOnlyConv)
+                    {
+                        Emit(Opcode.LDA, AddressMode.Absolute, (ushort)ushortLocal.Address.Value);
+                        isUshortExtraction = true;
+                    }
+                }
             }
-            else if (storeValueLocalIdx != null &&
-                     Locals.TryGetValue(storeValueLocalIdx.Value, out var valueLocal) &&
-                     valueLocal.Address.HasValue)
+
+            if (!isUshortExtraction)
             {
-                // Value is a runtime local variable — load it
-                Emit(Opcode.LDA, AddressMode.Absolute, (ushort)valueLocal.Address.Value);
+                if (constValue != null)
+                {
+                    Emit(Opcode.LDA, AddressMode.Immediate, checked((byte)constValue.Value));
+                }
+                else if (storeValueLocalIdx != null &&
+                         Locals.TryGetValue(storeValueLocalIdx.Value, out var valueLocal) &&
+                         valueLocal.Address.HasValue)
+                {
+                    // Value is a runtime local variable — load it
+                    Emit(Opcode.LDA, AddressMode.Absolute, (ushort)valueLocal.Address.Value);
+                }
             }
 
             Emit(Opcode.STA, AddressMode.Absolute, (ushort)(targetArray.Address + constantIndex));
