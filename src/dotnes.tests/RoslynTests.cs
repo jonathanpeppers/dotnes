@@ -2729,25 +2729,6 @@ public class RoslynTests
     }
 
     [Fact]
-    public void Strlen_ReturnsCompileTimeLength()
-    {
-        // strlen() should resolve to a compile-time constant byte length
-        var bytes = GetProgramBytes(
-            """
-            byte len = strlen("HELLO");
-            pal_col(0, len);
-            ppu_on_all();
-            while (true) ;
-            """);
-        Assert.NotNull(bytes);
-        Assert.NotEmpty(bytes);
-
-        var hex = Convert.ToHexString(bytes);
-        // strlen("HELLO") = 5 => LDA #$05 (A905)
-        Assert.Contains("A905", hex);
-    }
-
-    [Fact]
     public void Poke_To_MMC3_Registers()
     {
         // poke() to MMC3 mapper registers should emit STA to correct addresses

@@ -191,11 +191,6 @@ public static class NESLib
     public static byte peek(ushort addr) => throw null!;
 
     /// <summary>
-    /// return the length of a null-terminated string
-    /// </summary>
-    public static byte strlen(string s) => throw null!;
-
-    /// <summary>
     /// wait for vertical sync (vblank), busy-loops on PPU status bit 7
     /// </summary>
     public static void waitvsync() => throw null!;

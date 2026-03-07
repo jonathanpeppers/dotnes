@@ -31,10 +31,8 @@ vram_write("MMC3 BANK SWITCH");
 vram_adr(NTADR_A(2, 4));
 vram_write("MAPPER 4 ACTIVE");
 
-// use strlen to get string length
-byte len = strlen("HELLO MMC3");
 vram_adr(NTADR_A(2, 6));
-vram_write("STRLEN WORKS!");
+vram_write("CHR BANKS: 64");
 
 // enable PPU rendering
 ppu_on_all();
