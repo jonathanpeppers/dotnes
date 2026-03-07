@@ -162,6 +162,14 @@ class IL2NESWriter : NESWriter
     bool _dupCascadeActive;
 
     /// <summary>
+    /// Set by the dup handler when the next branch instruction should save A to TEMP_HI.
+    /// Consumed (cleared) by the bne/beq handler after emitting STA TEMP_HI. This ensures
+    /// only the branch immediately following a dup+ldc compare writes to TEMP_HI, not
+    /// unrelated branches inside the if-body.
+    /// </summary>
+    bool _dupPendingSave;
+
+    /// <summary>
     /// Number of parameters for the current user method being transpiled (0 for main).
     /// Used by ldarg handlers to compute cc65 stack offsets.
     /// </summary>
@@ -461,12 +469,14 @@ class IL2NESWriter : NESWriter
                     // that modify A), A no longer holds the original comparison value. Reload
                     // it from TEMP_HI where the branch handler saved it.
                     Emit(Opcode.LDA, AddressMode.ZeroPage, TEMP_HI);
+                    _dupPendingSave = true;
                 }
                 else if (_runtimeValueInA && IsDupCascadeStart())
                 {
                     // First dup in cascade: mark for saving in the branch handler.
                     // Don't emit anything yet — A still holds the correct value.
                     _dupCascadeActive = true;
+                    _dupPendingSave = true;
                 }
                 break;
             case ILOpCode.Pop:
@@ -474,6 +484,7 @@ class IL2NESWriter : NESWriter
                     Stack.Pop();
                 _runtimeValueInA = false;
                 _dupCascadeActive = false;
+                _dupPendingSave = false;
                 break;
             case ILOpCode.Ldc_i4_m1:
                 WriteLdc(0xFF); // -1 in two's complement = 0xFF
@@ -1151,8 +1162,13 @@ class IL2NESWriter : NESWriter
                     // In a dup cascade, save A to DUP_TEMP after CMP so subsequent
                     // checks can reload it. STA does NOT affect processor flags,
                     // so the branch instruction still sees the CMP result.
-                    if (_dupCascadeActive)
+                    // Only save on the branch that immediately follows dup+ldc
+                    // (not on unrelated branches inside the if-body).
+                    if (_dupPendingSave)
+                    {
                         Emit(Opcode.STA, AddressMode.ZeroPage, TEMP_HI);
+                        _dupPendingSave = false;
+                    }
                     
                     var labelName = InstructionLabel(instruction.Offset + branchOffset + instrSize);
                     if (instruction.OpCode == ILOpCode.Bne_un_s)
@@ -1176,8 +1192,11 @@ class IL2NESWriter : NESWriter
                     if (Stack.Count > 0) Stack.Pop();
                     EmitBranchCompare(cmpVal);
 
-                    if (_dupCascadeActive)
+                    if (_dupPendingSave)
+                    {
                         Emit(Opcode.STA, AddressMode.ZeroPage, TEMP_HI);
+                        _dupPendingSave = false;
+                    }
 
                     var labelName = InstructionLabel(instruction.Offset + branchOffset + instrSize);
                     if (instruction.OpCode == ILOpCode.Beq_s)
@@ -3741,6 +3760,25 @@ class IL2NESWriter : NESWriter
                     case ILOpCode.Xor:
                         Emit(Opcode.EOR, AddressMode.Immediate, checked((byte)arg.compoundBinOpConst));
                         break;
+                    case ILOpCode.Mul:
+                    {
+                        // Multiply by power of 2 using ASL shifts
+                        int shifts = 0;
+                        int v = arg.compoundBinOpConst;
+                        while (v > 1) { v >>= 1; shifts++; }
+                        for (int s = 0; s < shifts; s++)
+                            Emit(Opcode.ASL, AddressMode.Accumulator);
+                        break;
+                    }
+                    case ILOpCode.Sub:
+                        Emit(Opcode.SEC, AddressMode.Implied);
+                        Emit(Opcode.SBC, AddressMode.Immediate, checked((byte)arg.compoundBinOpConst));
+                        break;
+                    case ILOpCode.Div: case ILOpCode.Div_un:
+                    case ILOpCode.Rem: case ILOpCode.Rem_un:
+                        throw new TranspileException(
+                            $"Unsupported binary op '{arg.compoundBinOp}' in compound oam_spr argument. " +
+                            "Division and modulo cannot be efficiently compiled for the 6502.", MethodName);
                 }
 
                 // Apply the outer add
