@@ -441,23 +441,30 @@ public class NESAnalyzer : DiagnosticAnalyzer
 
     static void AnalyzeRecursion(SyntaxNodeAnalysisContext context, SyntaxToken identifier, BlockSyntax? body, ArrowExpressionClauseSyntax? expressionBody)
     {
-        var methodName = identifier.Text;
+        IMethodSymbol? declaredSymbol = identifier.Parent switch
+        {
+            MethodDeclarationSyntax methodDecl => context.SemanticModel.GetDeclaredSymbol(methodDecl, context.CancellationToken),
+            LocalFunctionStatementSyntax localFunc => context.SemanticModel.GetDeclaredSymbol(localFunc, context.CancellationToken),
+            _ => null
+        };
+
+        if (declaredSymbol is null)
+            return;
+
         SyntaxNode? searchNode = (SyntaxNode?)body ?? expressionBody;
         if (searchNode is null)
             return;
 
         foreach (var invocation in searchNode.DescendantNodes().OfType<InvocationExpressionSyntax>())
         {
-            string? calledName = invocation.Expression switch
-            {
-                IdentifierNameSyntax id => id.Identifier.Text,
-                MemberAccessExpressionSyntax memberAccess => memberAccess.Name.Identifier.Text,
-                _ => null
-            };
+            var symbolInfo = context.SemanticModel.GetSymbolInfo(invocation, context.CancellationToken);
+            if (symbolInfo.Symbol is not IMethodSymbol invokedSymbol)
+                continue;
 
-            if (calledName == methodName)
+            if (SymbolEqualityComparer.Default.Equals(declaredSymbol, invokedSymbol))
             {
-                context.ReportDiagnostic(Diagnostic.Create(NES007Rule, invocation.GetLocation(), methodName));
+                context.ReportDiagnostic(Diagnostic.Create(NES007Rule, invocation.GetLocation(), declaredSymbol.Name));
+                break;
             }
         }
     }
@@ -465,11 +472,31 @@ public class NESAnalyzer : DiagnosticAnalyzer
     static void AnalyzeUsingDirective(SyntaxNodeAnalysisContext context)
     {
         var usingDirective = (UsingDirectiveSyntax)context.Node;
-        var name = usingDirective.Name?.ToString();
-        if (name == "System.Linq")
+        if (usingDirective.Name is null)
+            return;
+
+        var symbolInfo = context.SemanticModel.GetSymbolInfo(usingDirective.Name, context.CancellationToken);
+        var symbol = symbolInfo.Symbol ?? symbolInfo.CandidateSymbols.FirstOrDefault();
+
+        if (symbol is INamespaceSymbol ns && IsUnderSystemLinq(ns))
         {
             context.ReportDiagnostic(Diagnostic.Create(NES008Rule, usingDirective.GetLocation()));
         }
+        else if (symbol is INamedTypeSymbol type && type.ContainingNamespace is not null && IsUnderSystemLinq(type.ContainingNamespace))
+        {
+            context.ReportDiagnostic(Diagnostic.Create(NES008Rule, usingDirective.GetLocation()));
+        }
+    }
+
+    static bool IsUnderSystemLinq(INamespaceSymbol ns)
+    {
+        while (!ns.IsGlobalNamespace)
+        {
+            if (ns.Name == "Linq" && ns.ContainingNamespace is { IsGlobalNamespace: false } systemNs && systemNs.Name == "System")
+                return true;
+            ns = ns.ContainingNamespace;
+        }
+        return false;
     }
 
     static void AnalyzeLambdaExpression(SyntaxNodeAnalysisContext context)

@@ -708,6 +708,26 @@ public class NESAnalyzerTests
     }
 
     [Fact]
+    public async Task NES007_SameNameDifferentMethod_NoDiagnostic()
+    {
+        var test = """
+            while (true) ;
+
+            static void DoWork()
+            {
+                Helper.DoWork();
+            }
+
+            static class Helper
+            {
+                public static void DoWork() { }
+            }
+            """;
+
+        await VerifyAsync(test);
+    }
+
+    [Fact]
     public async Task NES007_ExpressionBodiedRecursion_Diagnostic()
     {
         var test = """
