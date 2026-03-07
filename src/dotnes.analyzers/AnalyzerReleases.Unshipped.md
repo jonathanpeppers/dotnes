@@ -12,8 +12,8 @@ NES004 | NES | Warning | Unsupported allocation type
 NES005 | NES | Warning | Unsupported type
 NES006 | NES | Info | Consider using static extern
 NES007 | NES | Warning | Recursive functions are not supported
-NES008 | NES | Warning | LINQ is not supported
-NES009 | NES | Warning | Delegates and lambdas are not supported
-NES010 | NES | Warning | foreach loops are not supported
-NES011 | NES | Warning | Exception handling is not supported
-NES012 | NES | Warning | Property declarations are not supported
+NES008 | NES | Error | LINQ is not supported
+NES009 | NES | Error | Delegates and lambdas are not supported
+NES010 | NES | Error | foreach loops are not supported
+NES011 | NES | Error | Exception handling is not supported
+NES012 | NES | Error | Property declarations are not supported

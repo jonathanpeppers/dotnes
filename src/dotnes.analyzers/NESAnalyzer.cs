@@ -93,7 +93,7 @@ public class NESAnalyzer : DiagnosticAnalyzer
         "LINQ is not supported",
         "LINQ is not supported on the NES; remove 'using System.Linq' and use loops instead",
         Category,
-        DiagnosticSeverity.Warning,
+        DiagnosticSeverity.Error,
         isEnabledByDefault: true,
         description: "LINQ requires delegates, generics, and heap allocation which are not available on the NES. Use simple while loops instead.");
 
@@ -102,7 +102,7 @@ public class NESAnalyzer : DiagnosticAnalyzer
         "Delegates and lambdas are not supported",
         "Delegates and lambda expressions are not supported on the NES",
         Category,
-        DiagnosticSeverity.Warning,
+        DiagnosticSeverity.Error,
         isEnabledByDefault: true,
         description: "The NES has no support for delegates, lambda expressions, or anonymous methods. Use static methods instead.");
 
@@ -111,7 +111,7 @@ public class NESAnalyzer : DiagnosticAnalyzer
         "foreach loops are not supported",
         "'foreach' is not supported; use 'while' loops instead",
         Category,
-        DiagnosticSeverity.Warning,
+        DiagnosticSeverity.Error,
         isEnabledByDefault: true,
         description: "The NES transpiler only supports 'while' loops. 'foreach' compiles to IEnumerator calls that cannot be transpiled.");
 
@@ -120,7 +120,7 @@ public class NESAnalyzer : DiagnosticAnalyzer
         "Exception handling is not supported",
         "try/catch/finally is not supported on the NES",
         Category,
-        DiagnosticSeverity.Warning,
+        DiagnosticSeverity.Error,
         isEnabledByDefault: true,
         description: "The NES 6502 CPU has no exception handling mechanism. Use conditional checks instead.");
 
@@ -129,7 +129,7 @@ public class NESAnalyzer : DiagnosticAnalyzer
         "Property declarations are not supported",
         "Property '{0}' is not supported; use fields instead",
         Category,
-        DiagnosticSeverity.Warning,
+        DiagnosticSeverity.Error,
         isEnabledByDefault: true,
         description: "Properties generate hidden getter/setter methods that the NES transpiler cannot handle. Use public fields instead.");
 
