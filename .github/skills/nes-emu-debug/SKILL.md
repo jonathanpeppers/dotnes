@@ -39,7 +39,14 @@ CPU/PPU/APU state, all memory types, screen buffer, frame callbacks, etc.
 ### Basic Invocation
 
 ```powershell
-$mesen = (Resolve-Path "src/dotnes.mesen/obj/Debug/mesen/Mesen.exe").Path
+# Find the Mesen executable (works on any OS / config)
+$mesenDir = Get-ChildItem "src/dotnes.mesen/obj/*/mesen" -Directory | Select-Object -First 1
+$mesenExe = if ($IsWindows -or $env:OS -match 'Windows') {
+  Join-Path $mesenDir "Mesen.exe"
+} else {
+  Join-Path $mesenDir "Mesen"
+}
+$mesen = (Resolve-Path $mesenExe).Path
 $rom   = (Resolve-Path "path/to/rom.nes").Path
 $script = (Resolve-Path "path/to/script.lua").Path
 
@@ -220,19 +227,34 @@ end, emu.eventType.endFrame)
 
 ### Template 2: Read NES Library Zero Page Variables
 
-The NES library stores state in zero page. Key addresses:
+The NES library stores state in zero page. Key addresses
+(from `src/dotnes.tasks/Utilities/NESConstants.cs`):
 
 | Address | Name | Description |
 |---------|------|-------------|
-| $00 | PPU_CTRL_VAR | Shadow of PPU control register |
-| $01 | FRAME_CNT1 | Frame counter (increments each NMI) |
-| $02 | FRAME_CNT2 | Frame counter 2 |
+| $01 | STARTUP | Startup flag |
+| $02 | NES_PRG_BANKS | Number of PRG banks |
 | $03 | VRAM_UPDATE | Non-zero = VRAM update pending |
-| $0D | SCROLL_X | Horizontal scroll position |
-| $0E | SCROLL_Y | Vertical scroll position |
-| $11 | PAD_STATE | Joypad 1 current state |
-| $12 | PAD_STATEL | Joypad 1 previous state |
+| $04-$05 | NAME_UPD_ADR | Nametable update address (16-bit) |
+| $06 | NAME_UPD_ENABLE | Nametable update enable flag |
+| $07 | PAL_UPDATE | Palette update pending |
+| $08-$09 | PAL_BG_PTR | Background palette pointer (16-bit) |
+| $0A-$0B | PAL_SPR_PTR | Sprite palette pointer (16-bit) |
+| $0C | SCROLL_X | Horizontal scroll position |
+| $0D | SCROLL_Y | Vertical scroll position |
+| $0E | SCROLL_X1 | split() saved X scroll |
+| $0F | PPU_CTRL_VAR1 | split() saved PPU_CTRL |
+| $10 | PRG_FILEOFFS | PRG file offset |
+| $12 | PPU_MASK_VAR | Shadow of PPU mask register |
+| $14-$16 | NMI_CALLBACK | JMP opcode + address for NMI callback |
 | $17 | TEMP | Temporary variable |
+| $18 | TEMP_HI | Temp high byte / DUP_TEMP |
+| $19 | TEMP2 | Additional temp |
+| $1A | TEMP3 | Additional temp |
+| $1B | OAM_OFF | OAM buffer offset |
+| $1C | UPDPTR | VRAM update buffer index |
+| $22 | sp | C stack pointer |
+| $3C | RAND_SEED | Random seed for PRNG |
 
 ```lua
 -- read_zeropage.lua
@@ -243,11 +265,16 @@ emu.addEventCallback(function()
   frameCount = frameCount + 1
   if frameCount == 120 then
     f:write("=== NES Library Zero Page ===\n")
+    -- Names from src/dotnes.tasks/Utilities/NESConstants.cs
     local names = {
-      [0x00]="PPU_CTRL_VAR", [0x01]="FRAME_CNT1", [0x02]="FRAME_CNT2",
-      [0x03]="VRAM_UPDATE", [0x0D]="SCROLL_X", [0x0E]="SCROLL_Y",
-      [0x10]="PPU_MASK_VAR", [0x11]="PAD_STATE", [0x12]="PAD_STATEL",
-      [0x17]="TEMP", [0x19]="RAND_SEED"
+      [0x01]="STARTUP", [0x02]="NES_PRG_BANKS", [0x03]="VRAM_UPDATE",
+      [0x04]="NAME_UPD_ADR", [0x06]="NAME_UPD_ENABLE", [0x07]="PAL_UPDATE",
+      [0x08]="PAL_BG_PTR", [0x0A]="PAL_SPR_PTR",
+      [0x0C]="SCROLL_X", [0x0D]="SCROLL_Y", [0x0E]="SCROLL_X1",
+      [0x0F]="PPU_CTRL_VAR1", [0x10]="PRG_FILEOFFS", [0x12]="PPU_MASK_VAR",
+      [0x14]="NMI_CALLBACK", [0x17]="TEMP", [0x18]="TEMP_HI",
+      [0x19]="TEMP2", [0x1A]="TEMP3", [0x1B]="OAM_OFF", [0x1C]="UPDPTR",
+      [0x22]="sp", [0x3C]="RAND_SEED"
     }
 
     for addr = 0, 31 do
@@ -415,7 +442,8 @@ Then check `$proc.ExitCode` — 0 means the value matched.
   differ from where you launched it. Resolve paths in PowerShell first, then
   embed them in the Lua script.
 - **PowerShell string interpolation**: Use `@"..."@` (expandable here-string) to
-  embed paths into Lua scripts. Replace `\` with `/` first:
+  embed paths into Lua scripts. Replace `\` with `/` first.
+  **Note:** The closing `"@` must be at column 1 (no leading whitespace):
   ```powershell
   $outPath = ($PWD.Path) -replace '\\','/'
   $luaScript = @"
