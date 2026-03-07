@@ -1,0 +1,46 @@
+<Project Sdk="Microsoft.Build.NoTargets">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <MesenVersion>2.1.1</MesenVersion>
+    <WindowsUrl>https://github.com/SourMesen/Mesen2/releases/download/$(MesenVersion)/Mesen_$(MesenVersion)_Windows.zip</WindowsUrl>
+    <GithubLicenseUrl>https://raw.githubusercontent.com/SourMesen/Mesen2/$(MesenVersion)/LICENSE</GithubLicenseUrl>
+    <MesenDir>$(MSBuildThisFileDirectory)obj\$(Configuration)\mesen\</MesenDir>
+    <GenerateDependencyFile>false</GenerateDependencyFile>
+    <!-- Skip on CI — this is a local dev tool only -->
+    <_SkipMesenDownload Condition="'$(CI)' == 'true'">true</_SkipMesenDownload>
+    <_SkipMesenDownload Condition="'$(GITHUB_ACTIONS)' == 'true'">true</_SkipMesenDownload>
+    <_SkipMesenDownload Condition="'$(TF_BUILD)' == 'true'">true</_SkipMesenDownload>
+  </PropertyGroup>
+  <ItemGroup>
+    <_Downloads Include="$(IntermediateOutputPath)Mesen_$(MesenVersion)_Windows.zip" />
+    <_Downloads Include="$(IntermediateOutputPath)LICENSE" />
+  </ItemGroup>
+  <Target Name="_Download" BeforeTargets="Build"
+      Condition="'$(_SkipMesenDownload)' != 'true'"
+      Inputs="$(MSBuildThisFile)"
+      Outputs="@(_Downloads)">
+    <Message Importance="high" Text="Downloading Mesen $(MesenVersion) for Windows..." />
+    <Delete Files="@(_Downloads)" />
+    <DownloadFile SourceUrl="$(WindowsUrl)" DestinationFolder="$(IntermediateOutputPath)" />
+    <DownloadFile SourceUrl="$(GithubLicenseUrl)" DestinationFolder="$(IntermediateOutputPath)" />
+    <ItemGroup>
+      <FileWrites Include="@(_Downloads)" />
+    </ItemGroup>
+  </Target>
+  <Target Name="_Unzip" AfterTargets="_Download"
+      Condition="'$(_SkipMesenDownload)' != 'true'"
+      Inputs="$(MSBuildThisFile)"
+      Outputs="$(IntermediateOutputPath)_Unzip.stamp">
+    <RemoveDir Directories="$(MesenDir)" />
+    <Unzip SourceFiles="$(IntermediateOutputPath)Mesen_$(MesenVersion)_Windows.zip" DestinationFolder="$(MesenDir)" />
+    <Copy SourceFiles="$(IntermediateOutputPath)LICENSE" DestinationFolder="$(MesenDir)" />
+    <Touch AlwaysCreate="true" Files="$(IntermediateOutputPath)_Unzip.stamp" />
+    <ItemGroup>
+      <FileWrites Include="$(IntermediateOutputPath)_Unzip.stamp" />
+    </ItemGroup>
+  </Target>
+  <Target Name="_SkipMessage" BeforeTargets="Build"
+      Condition="'$(_SkipMesenDownload)' == 'true'">
+    <Message Importance="high" Text="Skipping Mesen download (CI detected)" />
+  </Target>
+</Project>
