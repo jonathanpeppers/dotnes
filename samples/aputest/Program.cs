@@ -34,13 +34,13 @@ poke(APU_PULSE1_SWEEP, 0x00);
 poke(APU_PULSE1_TIMER_LO, 0xFD);
 poke(APU_PULSE1_TIMER_HI, 0x00);
 
-// Pulse 2: 25% duty, constant volume 10, period ~330Hz
+// Pulse 2: 25% duty, constant volume 10, period ~262Hz
 poke(APU_PULSE2_CTRL, 0x7A);
 poke(APU_PULSE2_SWEEP, 0x00);
 poke(APU_PULSE2_TIMER_LO, 0xA9);
 poke(APU_PULSE2_TIMER_HI, 0x01);
 
-// Triangle: linear counter max, period ~262Hz
+// Triangle: linear counter max, period ~835Hz
 poke(APU_TRIANGLE_CTRL, 0xFF);
 poke(APU_TRIANGLE_TIMER_LO, 0x42);
 poke(APU_TRIANGLE_TIMER_HI, 0x00);
