@@ -5098,6 +5098,33 @@ class IL2NESWriter : NESWriter
                 Emit(Opcode.ADC, AddressMode.Immediate, checked((byte)addValue));
             }
         }
+        else if (sourceArray1Idx >= 0 && !hasTwoLdelems && sourceArray1Idx == targetArrayLocalIdx
+            && (hasSub || hasAdd || hasAnd))
+        {
+            // Pattern: arr[i] = arr[i] ± N or arr[i] = arr[i] & N (self-referencing update)
+            // ldloc arr, ldloc idx, ldloc arr, ldloc idx, ldelem_u1, ldc N, sub/add/and, conv_u1, stelem_i1
+            Emit(Opcode.LDX, AddressMode.Absolute, (ushort)targetIndex.Address!);
+            Emit(Opcode.LDA, AddressMode.AbsoluteX, (ushort)targetArray.Address!);
+            if (hasAnd)
+                Emit(Opcode.AND, AddressMode.Immediate, checked((byte)andMask));
+            if (hasAdd)
+            {
+                Emit(Opcode.CLC, AddressMode.Implied);
+                Emit(Opcode.ADC, AddressMode.Immediate, checked((byte)addValue));
+            }
+            if (hasSub)
+            {
+                Emit(Opcode.SEC, AddressMode.Implied);
+                Emit(Opcode.SBC, AddressMode.Immediate, checked((byte)subValue));
+            }
+            Emit(Opcode.STA, AddressMode.AbsoluteX, (ushort)targetArray.Address!);
+
+            _immediateInA = null;
+            _lastLoadedLocalIndex = null;
+            _runtimeValueInA = false;
+            _savedRuntimeToTemp = false;
+            return;
+        }
         else if (valueLocalIdx >= 0)
         {
             // Pattern: arr[i] = local, arr[i] = (local & N), arr[i] = (local + N), etc.
