@@ -673,17 +673,17 @@ class IL2NESWriter : NESWriter
 
                     if (_runtimeValueInA || mulLocalInA)
                     {
-                        // For ldloc;ldc;mul pattern: WriteLdc emitted JSR pusha + LDA #N
-                        // Remove both to restore A to the local's runtime value
+                        // For ldloc;ldc;mul pattern, the last instruction is the constant load (LDA #N)
+                        // Remove that LDA #constant to restore A to the local's runtime value
                         if (mulLocalInA && !_runtimeValueInA
                             && previous is ILOpCode.Ldc_i4_s or ILOpCode.Ldc_i4
                             or ILOpCode.Ldc_i4_0 or ILOpCode.Ldc_i4_1 or ILOpCode.Ldc_i4_2
                             or ILOpCode.Ldc_i4_3 or ILOpCode.Ldc_i4_4 or ILOpCode.Ldc_i4_5
                             or ILOpCode.Ldc_i4_6 or ILOpCode.Ldc_i4_7 or ILOpCode.Ldc_i4_8)
                         {
-                            // Block has: ..., LDA $local, JSR pusha, LDA #constant
-                            // Remove JSR pusha + LDA #constant (2 instructions)
-                            RemoveLastInstructions(2);
+                            // WriteLdloc emits LDA $local (Absolute), which sets LastLDA=false,
+                            // so WriteLdc only emitted LDA #constant (no pusha). Remove 1.
+                            RemoveLastInstructions(1);
                         }
 
                         // Runtime multiply: use ASL for power-of-2 constants
