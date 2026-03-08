@@ -666,8 +666,26 @@ class IL2NESWriter : NESWriter
                 {
                     int val2 = Stack.Pop();
                     int val1 = Stack.Count > 0 ? Stack.Pop() : 0;
-                    if (_runtimeValueInA)
+
+                    // Same class of bug as AND/Add/Sub: ldloc emits LDA $addr but doesn't set _runtimeValueInA
+                    bool mulLocalInA = _lastLoadedLocalIndex.HasValue &&
+                        Locals.TryGetValue(_lastLoadedLocalIndex.Value, out var mulLocal) && mulLocal.Address != null;
+
+                    if (_runtimeValueInA || mulLocalInA)
                     {
+                        // For ldloc;ldc;mul pattern: WriteLdc emitted JSR pusha + LDA #N
+                        // Remove both to restore A to the local's runtime value
+                        if (mulLocalInA && !_runtimeValueInA
+                            && previous is ILOpCode.Ldc_i4_s or ILOpCode.Ldc_i4
+                            or ILOpCode.Ldc_i4_0 or ILOpCode.Ldc_i4_1 or ILOpCode.Ldc_i4_2
+                            or ILOpCode.Ldc_i4_3 or ILOpCode.Ldc_i4_4 or ILOpCode.Ldc_i4_5
+                            or ILOpCode.Ldc_i4_6 or ILOpCode.Ldc_i4_7 or ILOpCode.Ldc_i4_8)
+                        {
+                            // Block has: ..., LDA $local, JSR pusha, LDA #constant
+                            // Remove JSR pusha + LDA #constant (2 instructions)
+                            RemoveLastInstructions(2);
+                        }
+
                         // Runtime multiply: use ASL for power-of-2 constants
                         int constant = val2 >= 0 ? val2 : val1;
                         if (constant > 0 && (constant & (constant - 1)) == 0)
@@ -717,6 +735,7 @@ class IL2NESWriter : NESWriter
                             }
                         }
                         Stack.Push(val1 * val2);
+                        _runtimeValueInA = true;
                     }
                     else
                     {
@@ -3298,17 +3317,21 @@ class IL2NESWriter : NESWriter
             _ushortInAX = false;
             _immediateInA = null;
         }
-        else if (LastLDA)
-        {
-            EmitJSR("pusha");
-            _immediateInA = null;
-        }
         if (_runtimeValueInA)
         {
             // Don't emit LDA — the runtime value in A must be preserved.
             // The constant is tracked on the Stack for the next operation (AND, ADD, SUB, etc.)
+            // NOTE: This check must come BEFORE the LastLDA/pusha check below.
+            // When _runtimeValueInA is true, we return early without emitting a new LDA,
+            // so there's no need to save A via pusha (it won't be overwritten).
+            // Emitting pusha here would leak stack bytes that are never popped.
             Stack.Push(operand);
             return;
+        }
+        else if (LastLDA)
+        {
+            EmitJSR("pusha");
+            _immediateInA = null;
         }
         if (DeferredByteArrayMode && _immediateInA.HasValue && _immediateInA.Value == operand)
         {
