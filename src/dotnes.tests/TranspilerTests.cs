@@ -98,6 +98,8 @@ public class TranspilerTests
     [InlineData("bankswitch", false, false, 4, 4, 8)]
     [InlineData("climber", true)]
     [InlineData("climber", false)]
+    [InlineData("transtable", true, false, 0, 2, 0)]
+    [InlineData("transtable", false, false, 0, 2, 0)]
     public Task Write(string name, bool debug, bool verticalMirroring = false, int mapper = 0, int prgBanks = 2, int chrBanks = 1)
     {
         var configuration = debug ? "debug" : "release";

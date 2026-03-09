@@ -58,12 +58,17 @@ class Transpiler : IDisposable
 
     public void Write(Stream stream)
     {
-        if (_assemblyFiles.Count == 0)
-            throw new InvalidOperationException("At least one 'chr_generic.s' file must be present!");
+        Segment? chr_rom = null;
 
-        var assemblyReader = _assemblyFiles.FirstOrDefault(a => Path.GetFileName(a.Path) == "chr_generic.s") ?? _assemblyFiles[0];
-        var chr_rom = assemblyReader.GetSegments().FirstOrDefault(s => s.Name == "CHARS") ??
-            throw new InvalidOperationException($"At least one 'CHARS' segment must be present in: {assemblyReader.Path}");
+        if (_chrBanks > 0)
+        {
+            if (_assemblyFiles.Count == 0)
+                throw new InvalidOperationException("At least one 'chr_generic.s' file must be present!");
+
+            var assemblyReader = _assemblyFiles.FirstOrDefault(a => Path.GetFileName(a.Path) == "chr_generic.s") ?? _assemblyFiles[0];
+            chr_rom = assemblyReader.GetSegments().FirstOrDefault(s => s.Name == "CHARS") ??
+                throw new InvalidOperationException($"At least one 'CHARS' segment must be present in: {assemblyReader.Path}");
+        }
 
         _logger.WriteLine($"Building program...");
 
@@ -83,7 +88,7 @@ class Transpiler : IDisposable
         writer.Write('S');
         writer.Write((byte)0x1A);
         writer.Write((byte)_prgBanks); // PRG_ROM_SIZE (in 16KB units)
-        writer.Write((byte)_chrBanks); // CHR_ROM_SIZE (in 8KB units)
+        writer.Write((byte)_chrBanks); // CHR_ROM_SIZE (in 8KB units, 0 = CHR RAM)
         // Flags6: bit 0 = mirroring, bits 4-7 = mapper lower nibble
         byte flags6 = (byte)((_verticalMirroring ? 1 : 0) | ((_mapper & 0x0F) << 4));
         writer.Write(flags6);
@@ -119,15 +124,22 @@ class Transpiler : IDisposable
         writer.Write((byte)(irq_data & 0xFF));
         writer.Write((byte)(irq_data >> 8));
 
-        // Write CHR ROM
-        _logger.WriteLine($"Writing CHR ROM...");
-        writer.Write(chr_rom.Bytes);
-        
-        // Pad CHR ROM to total CHR size (_chrBanks * 8KB)
-        int totalChrSize = _chrBanks * NESWriter.CHR_ROM_BLOCK_SIZE;
-        int chrPadding = totalChrSize - chr_rom.Bytes.Length;
-        for (int i = 0; i < chrPadding; i++)
-            writer.Write((byte)0);
+        // Write CHR ROM (skip when chrBanks=0, which means CHR RAM mode)
+        if (_chrBanks > 0 && chr_rom != null)
+        {
+            _logger.WriteLine($"Writing CHR ROM...");
+            writer.Write(chr_rom.Bytes);
+            
+            // Pad CHR ROM to total CHR size (_chrBanks * 8KB)
+            int totalChrSize = _chrBanks * NESWriter.CHR_ROM_BLOCK_SIZE;
+            int chrPadding = totalChrSize - chr_rom.Bytes.Length;
+            for (int i = 0; i < chrPadding; i++)
+                writer.Write((byte)0);
+        }
+        else
+        {
+            _logger.WriteLine($"CHR RAM mode (no CHR ROM)...");
+        }
 
         writer.Flush();
         _logger.WriteLine($"ROM complete. Total size: {stream.Length} bytes");
