@@ -80,7 +80,7 @@ static void setup_graphics()
     // Set attribute tables to palette 1 for blue platform colors
     vram_adr(0x23C0);
     vram_fill(0x55, 64);
-    vram_adr(0x27C0);
+    vram_adr(0x2BC0);
     vram_fill(0x55, 64);
     bank_spr(0);
     bank_bg(0);
@@ -342,16 +342,8 @@ while (true)
                 byte frame = (byte)((actor_x[ai] >> 1) & 7);
                 if (ai != 0)
                 {
-                    if (dir != 0)
-                    {
-                        if (frame < 4) oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerLClimb);
-                        else oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerLJump);
-                    }
-                    else
-                    {
-                        if (frame < 4) oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerRClimb);
-                        else oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerRJump);
-                    }
+                    if (dir != 0) oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerLJump);
+                    else oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerRJump);
                 }
                 else
                 {
