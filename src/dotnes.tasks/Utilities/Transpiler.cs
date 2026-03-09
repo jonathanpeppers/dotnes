@@ -233,7 +233,7 @@ class Transpiler : IDisposable
         // User function locals must start AFTER main's locals to avoid memory overlap
         int mainLocalCount = writer.LocalCount;
         int userMethodsTotalSize = 0;
-        foreach (var kvp in UserMethods)
+        foreach (var kvp in UserMethods.OrderBy(x => x.Key, StringComparer.Ordinal))
         {
             var methodName = kvp.Key;
             var methodIL = kvp.Value;
@@ -347,7 +347,7 @@ class Transpiler : IDisposable
 
         // Store named ushort[] arrays (note tables) as interleaved 16-bit data (cc65 compatible)
         var noteTableData = new List<(string label, byte[] data)>();
-        foreach (var kvp in writer.UShortArrays)
+        foreach (var kvp in writer.UShortArrays.OrderBy(x => x.Key, StringComparer.Ordinal))
         {
             // Keep raw bytes as-is: interleaved lo/hi pairs (little-endian 16-bit)
             noteTableData.Add((kvp.Key, kvp.Value.ToArray()));

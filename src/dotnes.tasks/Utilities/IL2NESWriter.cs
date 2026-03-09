@@ -2298,7 +2298,7 @@ class IL2NESWriter : NESWriter
             return knownType;
 
         // Search all struct layouts for a matching field name
-        foreach (var kvp in StructLayouts)
+        foreach (var kvp in StructLayouts.OrderBy(x => x.Key, StringComparer.Ordinal))
         {
             foreach (var f in kvp.Value)
             {
