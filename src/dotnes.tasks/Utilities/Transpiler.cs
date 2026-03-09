@@ -33,10 +33,10 @@ class Transpiler : IDisposable
     public Dictionary<string, ILInstruction[]> UserMethods { get; } = new(StringComparer.Ordinal);
 
     /// <summary>
-    /// User-defined method metadata (name -> arg count, has return value).
+    /// User-defined method metadata (name -> arg count, has return value, param types).
     /// Populated by ReadStaticVoidMain().
     /// </summary>
-    public Dictionary<string, (int argCount, bool hasReturnValue)> UserMethodMetadata { get; } = new(StringComparer.Ordinal);
+    public Dictionary<string, (int argCount, bool hasReturnValue, bool[] isArrayParam)> UserMethodMetadata { get; } = new(StringComparer.Ordinal);
 
     /// <summary>
     /// Extern methods declared with 'static extern' (name -> arg count, has return value).
@@ -250,16 +250,19 @@ class Transpiler : IDisposable
             var methodName = kvp.Key;
             var methodIL = kvp.Value;
             int paramCount = UserMethodMetadata.TryGetValue(methodName, out var meta) ? meta.argCount : 0;
+            bool[] isArrayParam = meta.isArrayParam ?? Array.Empty<bool>();
             using var methodWriter = new IL2NESWriter(new MemoryStream(), logger: _logger, reflectionCache: reflectionCache)
             {
                 Instructions = methodIL,
                 UsedMethods = UsedMethods,
                 UserMethodNames = new HashSet<string>(UserMethods.Keys, StringComparer.Ordinal),
                 MethodParamCount = paramCount,
+                ParamIsArray = isArrayParam,
                 MethodName = methodName,
                 WordLocals = DetectWordLocals(methodIL, reflectionCache),
                 StructLayouts = structLayouts,
                 ByteArrayLabelStartIndex = writer.ByteArrays.Count,
+                StringLabelStartIndex = writer.StringTable.Count,
                 LocalCount = mainLocalCount,
             };
             methodWriter.StartBlockBuffering();
@@ -267,7 +270,11 @@ class Transpiler : IDisposable
             // If method has parameters, emit prologue to push last arg onto cc65 stack
             if (paramCount > 0)
             {
-                methodWriter.EmitJSR("pusha");
+                // byte[] params are 16-bit pointers: use pushax (2 bytes) instead of pusha (1 byte)
+                if (isArrayParam.Length > 0 && isArrayParam[paramCount - 1])
+                    methodWriter.EmitJSR("pushax");
+                else
+                    methodWriter.EmitJSR("pusha");
             }
 
             for (int i = 0; i < methodWriter.Instructions.Length; i++)
@@ -293,9 +300,14 @@ class Transpiler : IDisposable
             if (methodBlock != null)
             {
                 // Clean up cc65 stack for params, then return
+                // byte[] params take 2 bytes on the cc65 stack, byte params take 1
                 if (paramCount > 0)
                 {
-                    switch (paramCount)
+                    int stackBytes = 0;
+                    for (int p = 0; p < paramCount; p++)
+                        stackBytes += (p < isArrayParam.Length && isArrayParam[p]) ? 2 : 1;
+
+                    switch (stackBytes)
                     {
                         case 1:
                             methodBlock.Emit(JSR("incsp1"));
@@ -305,7 +317,7 @@ class Transpiler : IDisposable
                             methodBlock.Emit(JSR("incsp2"));
                             break;
                         default:
-                            methodBlock.Emit(LDY((byte)paramCount));
+                            methodBlock.Emit(LDY((byte)stackBytes));
                             methodBlock.Emit(JSR("addysp"));
                             UsedMethods.Add("addysp");
                             break;
@@ -537,7 +549,18 @@ class Transpiler : IDisposable
                 int paramCount = sig.ReadCompressedInteger();
                 byte retTypeByte = sig.ReadByte(); // ELEMENT_TYPE_VOID = 0x01
                 bool hasReturnValue = retTypeByte != 0x01;
-                UserMethodMetadata[cleanName] = (paramCount, hasReturnValue);
+                // Parse parameter types to detect byte[] (ELEMENT_TYPE_SZARRAY = 0x1D)
+                bool[] isArrayParam = new bool[paramCount];
+                for (int i = 0; i < paramCount; i++)
+                {
+                    byte paramTypeByte = sig.ReadByte();
+                    if (paramTypeByte == 0x1D) // ELEMENT_TYPE_SZARRAY
+                    {
+                        sig.ReadByte(); // skip element type (e.g., 0x05 for byte[])
+                        isArrayParam[i] = true;
+                    }
+                }
+                UserMethodMetadata[cleanName] = (paramCount, hasReturnValue, isArrayParam);
             }
         }
     }

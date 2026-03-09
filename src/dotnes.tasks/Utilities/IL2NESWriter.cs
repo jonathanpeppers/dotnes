@@ -176,6 +176,12 @@ class IL2NESWriter : NESWriter
     public int MethodParamCount { get; init; }
 
     /// <summary>
+    /// Per-parameter array type flags. true = byte[] (16-bit pointer, 2 stack bytes),
+    /// false = byte (8-bit value, 1 stack byte). Used by WriteLdarg for correct offsets.
+    /// </summary>
+    public bool[] ParamIsArray { get; init; } = Array.Empty<bool>();
+
+    /// <summary>
     /// Name of the current method being transpiled (null for main).
     /// Used to scope branch labels so they don't collide across methods.
     /// </summary>
@@ -2104,6 +2110,12 @@ class IL2NESWriter : NESWriter
     /// Used to offset user method writers so their labels don't collide with the main writer's.
     /// </summary>
     internal int ByteArrayLabelStartIndex { set => _byteArrayLabelIndex = value; }
+
+    /// <summary>
+    /// Gets or sets the starting index for string labels.
+    /// Used to offset user method writers so their string labels don't collide.
+    /// </summary>
+    internal int StringLabelStartIndex { set => _stringLabelIndex = value; }
     
     /// <summary>
     /// Track the last byte array label for Stloc handling
@@ -3449,10 +3461,27 @@ class IL2NESWriter : NESWriter
             _argStackAdjust++;
         }
 
-        // cc65 stack offset: first arg (index 0) is deepest, adjusted for extra pushes
-        byte offset = checked((byte)(MethodParamCount - 1 - argIndex + _argStackAdjust));
-        Emit(Opcode.LDY, AddressMode.Immediate, offset);
-        Emit(Opcode.LDA, AddressMode.IndirectIndexed, (byte)sp);
+        // Calculate cc65 stack offset considering byte[] params take 2 bytes
+        int offset = _argStackAdjust;
+        for (int j = argIndex + 1; j < MethodParamCount; j++)
+            offset += (j < ParamIsArray.Length && ParamIsArray[j]) ? 2 : 1;
+
+        bool isArray = argIndex < ParamIsArray.Length && ParamIsArray[argIndex];
+        if (isArray)
+        {
+            // byte[] param: load 16-bit pointer into A:X (lo in A, hi in X)
+            Emit(Opcode.LDY, AddressMode.Immediate, (byte)(offset + 1));
+            Emit(Opcode.LDA, AddressMode.IndirectIndexed, (byte)sp); // high byte
+            Emit(Opcode.TAX, AddressMode.Implied);                   // X = high byte
+            Emit(Opcode.LDY, AddressMode.Immediate, (byte)offset);
+            Emit(Opcode.LDA, AddressMode.IndirectIndexed, (byte)sp); // A = low byte
+            _ushortInAX = true;
+        }
+        else
+        {
+            Emit(Opcode.LDY, AddressMode.Immediate, (byte)offset);
+            Emit(Opcode.LDA, AddressMode.IndirectIndexed, (byte)sp);
+        }
         _immediateInA = null;
         _runtimeValueInA = true;
         Stack.Push(0); // placeholder for runtime value
