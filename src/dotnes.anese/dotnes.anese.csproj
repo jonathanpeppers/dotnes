@@ -24,16 +24,22 @@
     <_Downloads Include="$(IntermediateOutputPath)ANESE_$(PackageVersion)_macOS.zip" />
     <_Downloads Include="$(IntermediateOutputPath)LICENSE" />
   </ItemGroup>
-  <Target Name="_DownloadAndUnzip" BeforeTargets="Build"
+  <Target Name="_Download" BeforeTargets="Build"
       Inputs="$(MSBuildThisFile)"
-      Outputs="$(IntermediateOutputPath)_Unzip.stamp">
+      Outputs="@(_Downloads)">
     <Delete Files="@(_Downloads)" />
-    <DownloadFile SourceUrl="$(WindowsUrl)" DestinationFolder="$(IntermediateOutputPath)" DestinationFileName="ANESE_$(PackageVersion)_win.zip" Retries="3" RetryDelayMilliseconds="2000" />
-    <DownloadFile SourceUrl="$(MacUrl)"     DestinationFolder="$(IntermediateOutputPath)" DestinationFileName="ANESE_$(PackageVersion)_macOS.zip" Retries="3" RetryDelayMilliseconds="2000" />
-    <DownloadFile SourceUrl="$(GithubLicenseUrl)" DestinationFolder="$(IntermediateOutputPath)" DestinationFileName="LICENSE" Retries="3" RetryDelayMilliseconds="2000" />
+    <DownloadFile SourceUrl="$(WindowsUrl)" DestinationFolder="$(IntermediateOutputPath)" DestinationFileName="ANESE_$(PackageVersion)_win.zip" Retries="$(DownloadFileRetries)" RetryDelayMilliseconds="$(DownloadFileRetryDelayMilliseconds)" />
+    <DownloadFile SourceUrl="$(MacUrl)"     DestinationFolder="$(IntermediateOutputPath)" DestinationFileName="ANESE_$(PackageVersion)_macOS.zip" Retries="$(DownloadFileRetries)" RetryDelayMilliseconds="$(DownloadFileRetryDelayMilliseconds)" />
+    <DownloadFile SourceUrl="$(GithubLicenseUrl)" DestinationFolder="$(IntermediateOutputPath)" DestinationFileName="LICENSE" Retries="$(DownloadFileRetries)" RetryDelayMilliseconds="$(DownloadFileRetryDelayMilliseconds)" />
+    <Error Condition="!Exists('$(IntermediateOutputPath)ANESE_$(PackageVersion)_win.zip')" Text="Failed to download ANESE Windows zip" />
+    <Error Condition="!Exists('$(IntermediateOutputPath)ANESE_$(PackageVersion)_macOS.zip')" Text="Failed to download ANESE macOS zip" />
     <ItemGroup>
       <FileWrites Include="@(_Downloads)" />
     </ItemGroup>
+  </Target>
+  <Target Name="_Unzip" AfterTargets="_Download"
+      Inputs="$(MSBuildThisFile)"
+      Outputs="$(IntermediateOutputPath)_Unzip.stamp">
     <RemoveDir Directories="$(IntermediateOutputPath)win;$(IntermediateOutputPath)osx" />
     <Unzip SourceFiles="$(IntermediateOutputPath)ANESE_$(PackageVersion)_win.zip"   DestinationFolder="$(IntermediateOutputPath)win" />
     <Unzip SourceFiles="$(IntermediateOutputPath)ANESE_$(PackageVersion)_macOS.zip" DestinationFolder="$(IntermediateOutputPath)osx" />
