@@ -1610,6 +1610,8 @@ class IL2NESWriter : NESWriter
                         break;
                     case "oam_spr":
                         EmitOamSprDecsp4();
+                        _lastByteArrayLabel = null;
+                        _needsByteArrayLoadInCall = false;
                         break;
                     case nameof(NESLib.oam_meta_spr):
                         EmitOamMetaSpr();
@@ -1978,6 +1980,7 @@ class IL2NESWriter : NESWriter
                                 EmitWithLabel(Opcode.LDA, AddressMode.Immediate_LowByte, _lastByteArrayLabel);
                                 EmitWithLabel(Opcode.LDX, AddressMode.Immediate_HighByte, _lastByteArrayLabel);
                                 _needsByteArrayLoadInCall = false;
+                                _lastByteArrayLabel = null;
                             }
                         }
                         // Emit JSR — extern methods use cc65 _prefix convention
