@@ -613,14 +613,10 @@ public class Program6502
         size += BuiltInSubroutines.Popax().ByteSize;
         size += BuiltInSubroutines.Incsp2().ByteSize;
         size += BuiltInSubroutines.Popa().ByteSize;
-        if (!needsDecsp4)
+        if (!needsDecsp4
+            || (usedMethods != null && (usedMethods.Contains("scroll") || usedMethods.Contains("split")
+                || usedMethods.Contains("pusha") || usedMethods.Contains("pushax"))))
         {
-            size += BuiltInSubroutines.Pusha().ByteSize;
-            size += BuiltInSubroutines.Pushax().ByteSize;
-        }
-        else if (usedMethods != null && (usedMethods.Contains("scroll") || usedMethods.Contains("split")))
-        {
-            // scroll/split handlers emit JSR pushax for 16-bit argument passing
             size += BuiltInSubroutines.Pusha().ByteSize;
             size += BuiltInSubroutines.Pushax().ByteSize;
         }
@@ -708,9 +704,11 @@ public class Program6502
         AddBlock(BuiltInSubroutines.Popa());
 
         // Pusha/Pushax needed for standard calling convention (not decsp4),
-        // but also needed when scroll/split handlers emit JSR pushax
+        // but also needed when code actually emits JSR pusha/pushax (e.g., byte
+        // array or string parameter passing, scroll/split handlers, user methods)
         bool needsPushaPushax = !needsDecsp4
-            || (usedMethods != null && (usedMethods.Contains("scroll") || usedMethods.Contains("split")));
+            || (usedMethods != null && (usedMethods.Contains("scroll") || usedMethods.Contains("split")
+                || usedMethods.Contains("pusha") || usedMethods.Contains("pushax")));
         if (needsPushaPushax)
         {
             AddBlock(BuiltInSubroutines.Pusha());

@@ -376,7 +376,23 @@ class Transpiler : IDisposable
         // Add final built-ins (before data tables)
         // Program layout: built-ins -> main -> final built-ins -> byte/string tables -> destructor
         program.ResolveAddresses(); // Resolve to get current size
-        
+
+        // Scan emitted blocks for JSR pusha/pushax label references.
+        // These may be emitted for byte array/string parameter passing even in programs
+        // that use decsp4. We must detect actual usage AFTER code generation (not during
+        // EmitJSR) because block buffering can remove instructions before flushing.
+        foreach (var block in program.Blocks)
+        {
+            foreach (var (instr, _) in block.InstructionsWithLabels)
+            {
+                if (instr.Opcode == Opcode.JSR && instr.Operand is LabelOperand lo
+                    && lo.Label is "pusha" or "pushax")
+                {
+                    UsedMethods.Add(lo.Label);
+                }
+            }
+        }
+
         // totalSize is used for donelib/copydata - points past the data tables
         // PRG_LAST already accounts for the standard final built-ins size (donelib, copydata, popax,
         // incsp2, popa, pusha, pushax, zerobss with 0 locals). When optional methods change the
