@@ -40,8 +40,8 @@ const byte PACING = 6;
 const byte PAD_A = 0x01;
 const byte PAD_LEFT = 0x40;
 const byte PAD_RIGHT = 0x80;
-const byte PAD_UP = 0x08;
-const byte PAD_DOWN = 0x04;
+const byte PAD_UP = 0x10;
+const byte PAD_DOWN = 0x20;
 
 // Pure utility function (no captured state)
 static byte rndint(byte a, byte b)
@@ -77,6 +77,11 @@ static void setup_graphics()
     });
     vram_adr(0x2000);
     vram_fill(CH_BLANK, 0x1000);
+    // Set attribute tables to palette 1 for blue platform colors
+    vram_adr(0x23C0);
+    vram_fill(0x55, 64);
+    vram_adr(0x27C0);
+    vram_fill(0x55, 64);
     bank_spr(0);
     bank_bg(0);
     vrambuf_clear();
@@ -286,10 +291,10 @@ while (true)
         else
             addr = NTADR_C(1, (byte)(rowy - 30));
 
-        // TODO: Attribute table writes disabled for now (transpiler doesn't handle
-        // runtime ushort address in vrambuf_put yet)
-        // byte tile_y_attr = (byte)(rowy < 30 ? rowy : (byte)(rowy - 30));
-        // ... attribute writes ...
+        // TODO: Attribute table writes cause stack leaks — investigate transpiler
+        // vrambuf_put with runtime-filled byte arrays
+        // byte eff_rowy = rowy < 30 ? rowy : (byte)(rowy - 30);
+        // ...
 
         vrambuf_put(addr, buf, COLS);
         vrambuf_flush();
@@ -321,23 +326,47 @@ while (true)
             byte st = actor_state[ai];
             if (st == STANDING)
             {
-                if (dir != 0) oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerLStand);
-                else oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerRStand);
+                if (ai != 0)
+                {
+                    if (dir != 0) oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerLJump);
+                    else oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerRJump);
+                }
+                else
+                {
+                    if (dir != 0) oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerLStand);
+                    else oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerRStand);
+                }
             }
             if (st == WALKING)
             {
                 byte frame = (byte)((actor_x[ai] >> 1) & 7);
-                if (dir != 0)
+                if (ai != 0)
                 {
-                    if (frame < 3) oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerLRun1);
-                    else if (frame < 6) oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerLRun2);
-                    else oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerLRun3);
+                    if (dir != 0)
+                    {
+                        if (frame < 4) oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerLClimb);
+                        else oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerLJump);
+                    }
+                    else
+                    {
+                        if (frame < 4) oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerRClimb);
+                        else oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerRJump);
+                    }
                 }
                 else
                 {
-                    if (frame < 3) oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerRRun1);
-                    else if (frame < 6) oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerRRun2);
-                    else oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerRRun3);
+                    if (dir != 0)
+                    {
+                        if (frame < 3) oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerLRun1);
+                        else if (frame < 6) oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerLRun2);
+                        else oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerLRun3);
+                    }
+                    else
+                    {
+                        if (frame < 3) oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerRRun1);
+                        else if (frame < 6) oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerRRun2);
+                        else oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerRRun3);
+                    }
                 }
             }
             if (st == JUMPING)
