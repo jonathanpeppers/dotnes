@@ -2021,6 +2021,13 @@ class IL2NESWriter : NESWriter
                         _runtimeValueInA = true;
                         // 16-bit return (e.g. bcd_add returns ushort): result in A/X
                         _ushortInAX = _reflectionCache.Returns16Bit(operand);
+                        // A now has a new return value; any previous pad_poll result is gone.
+                        // pad_poll sets its own flag after this block, so this only clears
+                        // the flag for non-pad_poll calls (e.g. rand8).
+                        if (operand != "pad_poll")
+                        {
+                            _padPollResultAvailable = false;
+                        }
                     }
                     // Push return value placeholder (except for NTADR which already pushed)
                     if (operand is not (nameof(NTADR_A) or nameof(NTADR_B) or nameof(NTADR_C) or nameof(NTADR_D)))

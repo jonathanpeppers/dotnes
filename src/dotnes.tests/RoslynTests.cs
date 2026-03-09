@@ -2847,4 +2847,77 @@ public class RoslynTests
         // vram_fill value 0x55: LDA #$55 (A955)
         Assert.Contains("A955", hex);
     }
+
+    [Fact]
+    public void PadPollAndRand8_IndependentAndOperations()
+    {
+        // Regression: the AND handler had a _padPollResultAvailable flag that was never
+        // cleared after non-pad_poll calls, so AND operations on rand8() results would
+        // reload the pad_poll address instead of using the correct local. Enemy movement
+        // read player's joy instead of its own random byte.
+        //
+        // This test verifies that after rand8() (which clears _padPollResultAvailable),
+        // subsequent AND operations don't emit a pad reload address. The intervening
+        // code between rand8() and its AND check forces Roslyn to use stloc/ldloc
+        // instead of dup optimization.
+        var bytes = GetProgramBytes(
+            """
+            byte y = 100;
+            byte x = 50;
+            byte ai = 0;
+            ppu_on_all();
+            while (true)
+            {
+                ppu_wait_nmi();
+                PAD joy = pad_poll(0);
+                if ((joy & PAD.LEFT) != 0) x--;
+                if ((joy & PAD.RIGHT) != 0) x++;
+                byte ej = rand8();
+                ai = (byte)(ej & 3);
+                oam_spr(x, y, ai, 0, 0);
+                if ((ej & (byte)PAD.LEFT) != 0) y--;
+            }
+            """);
+        Assert.NotNull(bytes);
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"PadPollAndRand8 hex: {hex}");
+
+        // The pad reload address is the first STA after pad_poll JSR.
+        // Find LDA #$00; JSR xxxx; STA xxxx pattern (pad_poll(0)).
+        int padStaIdx = -1;
+        ushort padReloadAddr = 0;
+        for (int i = 0; i < bytes.Length - 8; i++)
+        {
+            if (bytes[i] == 0xA9 && bytes[i + 1] == 0x00 && bytes[i + 2] == 0x20
+                && bytes[i + 5] == 0x8D)
+            {
+                padStaIdx = i + 5;
+                padReloadAddr = (ushort)(bytes[i + 6] | (bytes[i + 7] << 8));
+                break;
+            }
+        }
+        Assert.True(padStaIdx > 0, "Could not find pad_poll STA pattern");
+        _logger.WriteLine($"Pad reload address: ${padReloadAddr:X4}");
+
+        // Find all AND #$40 (PAD.LEFT = 0x40) instructions
+        var andPositions = new List<int>();
+        for (int i = 0; i < bytes.Length - 1; i++)
+        {
+            if (bytes[i] == 0x29 && bytes[i + 1] == 0x40)
+                andPositions.Add(i);
+        }
+        // At least 2 AND #$40: one for pad_poll, one for rand8
+        Assert.True(andPositions.Count >= 2, $"Expected at least 2 AND #$40, found {andPositions.Count}");
+
+        // The LAST AND #$40 should be for the rand8 ej variable.
+        // It should NOT have LDA $padReloadAddr immediately before it.
+        int lastAndPos = andPositions[^1];
+        if (lastAndPos >= 3 && bytes[lastAndPos - 3] == 0xAD)
+        {
+            ushort loadAddr = (ushort)(bytes[lastAndPos - 2] | (bytes[lastAndPos - 1] << 8));
+            Assert.NotEqual(padReloadAddr, loadAddr);
+            _logger.WriteLine($"Last AND #$40 loads from ${loadAddr:X4} (not pad address ${padReloadAddr:X4})");
+        }
+        // If no LDA abs before last AND, the value comes from a different source (also correct)
+    }
 }
