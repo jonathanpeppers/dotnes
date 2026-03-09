@@ -1954,6 +1954,11 @@ class IL2NESWriter : NESWriter
                             EmitWithLabel(Opcode.LDA, AddressMode.Immediate_LowByte, _ldlocByteArrayLabel);
                             EmitWithLabel(Opcode.LDX, AddressMode.Immediate_HighByte, _ldlocByteArrayLabel);
                         }
+                        else if (_ldlocByteArrayLabel != null)
+                        {
+                            // pushax was kept (not a fastcall function) — track its usage
+                            UsedMethods?.Add("pushax");
+                        }
                         _ldlocByteArrayLabel = null;
                         if (_lastByteArrayLabel != null && previous != ILOpCode.Ldtoken
                             && !_byteArrayAddressEmitted)
@@ -1976,6 +1981,14 @@ class IL2NESWriter : NESWriter
                             {
                                 EmitWithLabel(Opcode.LDA, AddressMode.Immediate_LowByte, _lastByteArrayLabel);
                                 EmitWithLabel(Opcode.LDX, AddressMode.Immediate_HighByte, _lastByteArrayLabel);
+                                // vram_write uses cc65 calling convention: pointer on stack, size in A:X
+                                if (operand is nameof(NESLib.vram_write))
+                                {
+                                    EmitJSR("pushax");
+                                    UsedMethods?.Add("pushax");
+                                    Emit(Opcode.LDX, AddressMode.Immediate, (byte)(_lastByteArraySize >> 8));
+                                    Emit(Opcode.LDA, AddressMode.Immediate, (byte)(_lastByteArraySize & 0xFF));
+                                }
                                 _needsByteArrayLoadInCall = false;
                             }
                         }
@@ -2298,7 +2311,7 @@ class IL2NESWriter : NESWriter
             return knownType;
 
         // Search all struct layouts for a matching field name
-        foreach (var kvp in StructLayouts)
+        foreach (var kvp in StructLayouts.OrderBy(x => x.Key, StringComparer.Ordinal))
         {
             foreach (var f in kvp.Value)
             {
@@ -3354,9 +3367,9 @@ class IL2NESWriter : NESWriter
             EmitWithLabel(Opcode.LDA, AddressMode.Immediate_LowByte, local.LabelName);
             EmitWithLabel(Opcode.LDX, AddressMode.Immediate_HighByte, local.LabelName);
             EmitJSR("pushax");
-            Emit(Opcode.LDX, AddressMode.Immediate, 0x00);
-            Emit(Opcode.LDA, AddressMode.Immediate, (byte)local.Value); // Size of array
-            _immediateInA = (byte)local.Value;
+            Emit(Opcode.LDX, AddressMode.Immediate, (byte)(local.Value >> 8));
+            Emit(Opcode.LDA, AddressMode.Immediate, (byte)(local.Value & 0xFF)); // Size of array (16-bit)
+            _immediateInA = (byte)(local.Value & 0xFF);
             _ldlocByteArrayLabel = local.LabelName;
         }
         else if (local.Address is not null)

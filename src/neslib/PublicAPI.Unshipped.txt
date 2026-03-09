@@ -1,0 +1,136 @@
+#nullable enable
+NES.MASK
+NES.NESLib
+NES.PAD
+NES.PAD.A = 1 -> NES.PAD
+NES.PAD.B = 2 -> NES.PAD
+NES.PAD.DOWN = 32 -> NES.PAD
+NES.PAD.LEFT = 64 -> NES.PAD
+NES.PAD.RIGHT = 128 -> NES.PAD
+NES.PAD.SELECT = 4 -> NES.PAD
+NES.PAD.START = 8 -> NES.PAD
+NES.PAD.UP = 16 -> NES.PAD
+const NES.MASK.BG = 8 -> byte
+const NES.MASK.EDGE_BG = 2 -> byte
+const NES.MASK.EDGE_SPR = 4 -> byte
+const NES.MASK.MONO = 1 -> byte
+const NES.MASK.SPR = 16 -> byte
+const NES.MASK.TINT_BLUE = 128 -> byte
+const NES.MASK.TINT_GREEN = 64 -> byte
+const NES.MASK.TINT_RED = 32 -> byte
+const NES.NESLib.APU_NOISE_CTRL = 16396 -> ushort
+const NES.NESLib.APU_NOISE_LENGTH = 16399 -> ushort
+const NES.NESLib.APU_NOISE_PERIOD = 16398 -> ushort
+const NES.NESLib.APU_PULSE1_CTRL = 16384 -> ushort
+const NES.NESLib.APU_PULSE1_SWEEP = 16385 -> ushort
+const NES.NESLib.APU_PULSE1_TIMER_HI = 16387 -> ushort
+const NES.NESLib.APU_PULSE1_TIMER_LO = 16386 -> ushort
+const NES.NESLib.APU_PULSE2_CTRL = 16388 -> ushort
+const NES.NESLib.APU_PULSE2_SWEEP = 16389 -> ushort
+const NES.NESLib.APU_PULSE2_TIMER_HI = 16391 -> ushort
+const NES.NESLib.APU_PULSE2_TIMER_LO = 16390 -> ushort
+const NES.NESLib.APU_STATUS = 16405 -> ushort
+const NES.NESLib.APU_TRIANGLE_CTRL = 16392 -> ushort
+const NES.NESLib.APU_TRIANGLE_TIMER_HI = 16395 -> ushort
+const NES.NESLib.APU_TRIANGLE_TIMER_LO = 16394 -> ushort
+const NES.NESLib.MMC3_BANK_DATA = 32769 -> ushort
+const NES.NESLib.MMC3_BANK_SELECT = 32768 -> ushort
+const NES.NESLib.MMC3_MIRRORING = 40960 -> ushort
+const NES.NESLib.NAMETABLE_A = 8192 -> ushort
+const NES.NESLib.NAMETABLE_B = 9216 -> ushort
+const NES.NESLib.NAMETABLE_C = 10240 -> ushort
+const NES.NESLib.NAMETABLE_D = 11264 -> ushort
+const NES.NESLib.NT_UPD_EOF = 255 -> byte
+const NES.NESLib.NT_UPD_HORZ = 64 -> byte
+const NES.NESLib.NT_UPD_VERT = 128 -> byte
+const NES.NESLib.PPU_ADDR = 8198 -> ushort
+const NES.NESLib.PPU_CTRL = 8192 -> ushort
+const NES.NESLib.PPU_DATA = 8199 -> ushort
+const NES.NESLib.PPU_MASK = 8193 -> ushort
+const NES.NESLib.PPU_SCROLL = 8197 -> ushort
+const NES.NESLib.PPU_STATUS = 8194 -> ushort
+const NES.NESLib.VRAMBUF_VERT = 32768 -> ushort
+const NES.NESLib.updbuf = 256 -> ushort
+static NES.NESLib.LSB(ushort x) -> byte
+static NES.NESLib.MSB(ushort x) -> byte
+static NES.NESLib.NTADR_A(byte x, byte y) -> ushort
+static NES.NESLib.NTADR_B(byte x, byte y) -> ushort
+static NES.NESLib.NTADR_C(byte x, byte y) -> ushort
+static NES.NESLib.NTADR_D(byte x, byte y) -> ushort
+static NES.NESLib.apu_init() -> void
+static NES.NESLib.bank_bg(byte n) -> void
+static NES.NESLib.bank_spr(byte n) -> void
+static NES.NESLib.bcd_add(ushort a, ushort b) -> ushort
+static NES.NESLib.delay(byte frames) -> void
+static NES.NESLib.famitone_init(string! musicDataLabel) -> void
+static NES.NESLib.flush_vram_update(byte[]! buf) -> void
+static NES.NESLib.get_ppu_ctrl_var() -> byte
+static NES.NESLib.memfill(object! dst, byte value, uint len) -> void
+static NES.NESLib.music_pause(byte pause) -> void
+static NES.NESLib.music_play(byte song) -> void
+static NES.NESLib.music_stop() -> void
+static NES.NESLib.nesclock() -> byte
+static NES.NESLib.nmi_set_callback(string! callbackName) -> void
+static NES.NESLib.oam_clear() -> void
+static NES.NESLib.oam_clear_fast() -> void
+static NES.NESLib.oam_hide_rest(byte sprid) -> void
+static NES.NESLib.oam_meta_spr(byte x, byte y, byte sprid, byte[]! data) -> byte
+static NES.NESLib.oam_meta_spr_clip(int x, byte y, byte[]! metasprite) -> void
+static NES.NESLib.oam_meta_spr_pal(byte x, byte y, byte pal, byte[]! data) -> void
+static NES.NESLib.oam_off -> byte
+static NES.NESLib.oam_size(byte size) -> void
+static NES.NESLib.oam_spr(byte x, byte y, byte chrnum, byte attr, byte sprid) -> byte
+static NES.NESLib.pad_poll(byte pad) -> NES.PAD
+static NES.NESLib.pad_state(byte pad) -> byte
+static NES.NESLib.pad_trigger(byte pad) -> byte
+static NES.NESLib.pal_all(byte[]! data) -> void
+static NES.NESLib.pal_bg(byte[]! data) -> void
+static NES.NESLib.pal_bg_bright(byte bright) -> void
+static NES.NESLib.pal_bright(byte bright) -> void
+static NES.NESLib.pal_clear() -> void
+static NES.NESLib.pal_col(byte index, byte color) -> void
+static NES.NESLib.pal_spr(byte[]! data) -> void
+static NES.NESLib.pal_spr_bright(byte bright) -> void
+static NES.NESLib.peek(ushort addr) -> byte
+static NES.NESLib.play_music() -> void
+static NES.NESLib.poke(ushort addr, byte value) -> void
+static NES.NESLib.ppu_mask(byte mask) -> void
+static NES.NESLib.ppu_off() -> void
+static NES.NESLib.ppu_on_all() -> void
+static NES.NESLib.ppu_on_bg() -> void
+static NES.NESLib.ppu_on_spr() -> void
+static NES.NESLib.ppu_system() -> byte
+static NES.NESLib.ppu_wait_frame() -> void
+static NES.NESLib.ppu_wait_nmi() -> void
+static NES.NESLib.rand() -> byte
+static NES.NESLib.rand16() -> ushort
+static NES.NESLib.rand8() -> byte
+static NES.NESLib.sample_play(byte sample) -> void
+static NES.NESLib.scroll(int x, int y) -> void
+static NES.NESLib.set_music_pulse_table(ushort[]! table) -> void
+static NES.NESLib.set_music_triangle_table(ushort[]! table) -> void
+static NES.NESLib.set_ppu_ctrl_var(byte var) -> void
+static NES.NESLib.set_rand(byte seed) -> void
+static NES.NESLib.set_vram_update(byte[]! buf) -> void
+static NES.NESLib.set_vram_update(ushort addr) -> void
+static NES.NESLib.sfx_init(string! soundDataLabel) -> void
+static NES.NESLib.sfx_play(byte sound, byte channel) -> void
+static NES.NESLib.split(int x, int y) -> void
+static NES.NESLib.start_music(byte[]! data) -> void
+static NES.NESLib.vram_adr(ushort adr) -> void
+static NES.NESLib.vram_fill(byte n, uint len) -> void
+static NES.NESLib.vram_inc(byte n) -> void
+static NES.NESLib.vram_put(byte n) -> void
+static NES.NESLib.vram_read(byte[]! dst, uint size) -> void
+static NES.NESLib.vram_unlz4(byte[]! input, byte[]! output, uint uncompressedSize) -> void
+static NES.NESLib.vram_unrle(byte[]! data) -> void
+static NES.NESLib.vram_write(byte[]! src) -> void
+static NES.NESLib.vram_write(byte[]! src, uint size) -> void
+static NES.NESLib.vram_write(string! src) -> void
+static NES.NESLib.vrambuf_clear() -> void
+static NES.NESLib.vrambuf_end() -> void
+static NES.NESLib.vrambuf_flush() -> void
+static NES.NESLib.vrambuf_put(ushort addr, byte[]! buf, byte len) -> void
+static NES.NESLib.vrambuf_put(ushort addr, string! str) -> void
+static NES.NESLib.vrambuf_put_vert(ushort addr, byte[]! buf, byte len) -> void
+static NES.NESLib.waitvsync() -> void

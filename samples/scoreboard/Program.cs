@@ -20,7 +20,7 @@ vram_write("PRESS A TO ADD SCORE");
 
 // set up VRAM buffer for dynamic updates
 vrambuf_clear();
-set_vram_update(0x0100);
+set_vram_update(updbuf);
 ppu_on_all();
 
 // Track digits as tile indices directly (0x30='0' .. 0x39='9')
@@ -34,7 +34,7 @@ byte[] digits = new byte[4];
 while (true)
 {
     byte trig = pad_trigger(0);
-    if ((trig & 1) != 0)
+    if ((trig & (byte)PAD.A) != 0)
     {
         d3 = (byte)(d3 + 1);
         if (d3 == 0x3A) { d3 = 0x30; d2 = (byte)(d2 + 1); }

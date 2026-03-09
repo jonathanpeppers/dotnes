@@ -49,6 +49,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "aputest", "aputest\aputest.
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "siegegame", "siegegame\siegegame.csproj", "{77956FD6-6728-4DC5-9BEF-4AD476CA09FF}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "transtable", "transtable\transtable.csproj", "{D3CEFAF2-F208-414E-ACD7-789116521E1C}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -335,6 +337,18 @@ Global
 		{77956FD6-6728-4DC5-9BEF-4AD476CA09FF}.Release|x64.Build.0 = Release|Any CPU
 		{77956FD6-6728-4DC5-9BEF-4AD476CA09FF}.Release|x86.ActiveCfg = Release|Any CPU
 		{77956FD6-6728-4DC5-9BEF-4AD476CA09FF}.Release|x86.Build.0 = Release|Any CPU
+		{D3CEFAF2-F208-414E-ACD7-789116521E1C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D3CEFAF2-F208-414E-ACD7-789116521E1C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D3CEFAF2-F208-414E-ACD7-789116521E1C}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{D3CEFAF2-F208-414E-ACD7-789116521E1C}.Debug|x64.Build.0 = Debug|Any CPU
+		{D3CEFAF2-F208-414E-ACD7-789116521E1C}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{D3CEFAF2-F208-414E-ACD7-789116521E1C}.Debug|x86.Build.0 = Debug|Any CPU
+		{D3CEFAF2-F208-414E-ACD7-789116521E1C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D3CEFAF2-F208-414E-ACD7-789116521E1C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D3CEFAF2-F208-414E-ACD7-789116521E1C}.Release|x64.ActiveCfg = Release|Any CPU
+		{D3CEFAF2-F208-414E-ACD7-789116521E1C}.Release|x64.Build.0 = Release|Any CPU
+		{D3CEFAF2-F208-414E-ACD7-789116521E1C}.Release|x86.ActiveCfg = Release|Any CPU
+		{D3CEFAF2-F208-414E-ACD7-789116521E1C}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
