@@ -613,14 +613,10 @@ public class Program6502
         size += BuiltInSubroutines.Popax().ByteSize;
         size += BuiltInSubroutines.Incsp2().ByteSize;
         size += BuiltInSubroutines.Popa().ByteSize;
-        if (!needsDecsp4)
+        bool needsPushaPushax = !needsDecsp4
+            || (usedMethods != null && (usedMethods.Contains("scroll") || usedMethods.Contains("split") || usedMethods.Contains("pushax")));
+        if (needsPushaPushax)
         {
-            size += BuiltInSubroutines.Pusha().ByteSize;
-            size += BuiltInSubroutines.Pushax().ByteSize;
-        }
-        else if (usedMethods != null && (usedMethods.Contains("scroll") || usedMethods.Contains("split")))
-        {
-            // scroll/split handlers emit JSR pushax for 16-bit argument passing
             size += BuiltInSubroutines.Pusha().ByteSize;
             size += BuiltInSubroutines.Pushax().ByteSize;
         }
