@@ -15,18 +15,20 @@ byte[] PALETTE = [
     0x0F, 0x30, 0x30, 0x0,  // spr palette 0 (white)
     0x0F, 0x30, 0x30, 0x0,  // spr palette 1
     0x0F, 0x30, 0x30, 0x0,  // spr palette 2
-    0x0F, 0x30, 0x30         // spr palette 3
+    0x0F, 0x30, 0x30, 0x0   // spr palette 3
 ];
 
 // paddle y positions
 byte p1_y = 104;
 byte p2_y = 104;
 
-// ball position and direction
+// ball position
 byte ball_x = 124;
 byte ball_y = 120;
-byte ball_dx = 2;    // 2=right, 254=left
-byte ball_dy = 1;    // 1=down, 255=up
+
+// ball direction flags (1=positive, 0=negative)
+byte ball_right = 1;
+byte ball_down = 1;
 
 // score digits (tile indices: 0x30='0')
 byte s1 = 0x30;
@@ -54,80 +56,86 @@ while (true)
     ppu_wait_nmi();
     vrambuf_clear();
 
-    // read controllers
-    PAD pad1 = pad_poll(0);
-    PAD pad2 = pad_poll(1);
-
-    // paddle 1 movement
-    if ((pad1 & PAD.UP) != 0)
+    // read controller 1 and move paddle 1
+    PAD pad = pad_poll(0);
+    if ((pad & PAD.UP) != 0)
     {
         if (p1_y > 16)
             p1_y = (byte)(p1_y - 2);
     }
-    if ((pad1 & PAD.DOWN) != 0)
+    if ((pad & PAD.DOWN) != 0)
     {
         if (p1_y < 200)
             p1_y = (byte)(p1_y + 2);
     }
 
-    // paddle 2 movement
-    if ((pad2 & PAD.UP) != 0)
+    // read controller 2 and move paddle 2
+    pad = pad_poll(1);
+    if ((pad & PAD.UP) != 0)
     {
         if (p2_y > 16)
             p2_y = (byte)(p2_y - 2);
     }
-    if ((pad2 & PAD.DOWN) != 0)
+    if ((pad & PAD.DOWN) != 0)
     {
         if (p2_y < 200)
             p2_y = (byte)(p2_y + 2);
     }
 
-    // move ball
-    ball_x = (byte)(ball_x + ball_dx);
-    ball_y = (byte)(ball_y + ball_dy);
+    // move ball horizontally (constant speed, direction flag)
+    if (ball_right != 0)
+        ball_x = (byte)(ball_x + 2);
+    if (ball_right == 0)
+        ball_x = (byte)(ball_x - 2);
+
+    // move ball vertically
+    if (ball_down != 0)
+        ball_y = (byte)(ball_y + 1);
+    if (ball_down == 0)
+        ball_y = (byte)(ball_y - 1);
 
     // top wall bounce
     if (ball_y < 16)
     {
         ball_y = 16;
-        ball_dy = 1;
+        ball_down = 1;
     }
 
     // bottom wall bounce
     if (ball_y > 216)
     {
         ball_y = 216;
-        ball_dy = 255;
+        ball_down = 0;
     }
 
-    // paddle 1 collision (left, x=16)
+    // paddle 1 collision (left side)
     if (ball_x < 24)
     {
-        if (ball_dx > 127)
+        if (ball_right == 0)
         {
             if (ball_y >= p1_y)
             {
                 byte p1_end = (byte)(p1_y + 24);
                 if (ball_y < p1_end)
                 {
-                    ball_dx = 2;
+                    ball_right = 1;
                     ball_x = 24;
                 }
             }
         }
     }
 
-    // paddle 2 collision (right, x=232)
+    // paddle 2 collision (right side)
     if (ball_x > 224)
     {
-        if (ball_dx < 128)
+        if (ball_right != 0)
         {
             if (ball_y >= p2_y)
             {
                 byte p2_end = (byte)(p2_y + 24);
                 if (ball_y < p2_end)
                 {
-                    ball_dx = 254;
+                    ball_right = 0;
                     ball_x = 224;
                 }
             }
@@ -135,7 +143,7 @@ while (true)
     }
 
     // player 2 scores (ball passed left edge)
-    if (ball_dx > 127)
+    if (ball_right == 0)
     {
         if (ball_x > 240)
         {
@@ -144,15 +152,15 @@ while (true)
                 s2 = 0x30;
             ball_x = 124;
             ball_y = 120;
-            ball_dx = 254;
-            ball_dy = 1;
+            ball_right = 1;
+            ball_down = 1;
             sbuf[0] = s2;
             vrambuf_put(NTADR_A(18, 2), sbuf, 1);
         }
     }
 
     // player 1 scores (ball passed right edge)
-    if (ball_dx < 128)
+    if (ball_right != 0)
     {
         if (ball_x < 8)
         {
@@ -161,8 +169,8 @@ while (true)
                 s1 = 0x30;
             ball_x = 124;
             ball_y = 120;
-            ball_dx = 2;
-            ball_dy = 1;
+            ball_right = 0;
+            ball_down = 1;
             sbuf[0] = s1;
             vrambuf_put(NTADR_A(12, 2), sbuf, 1);
         }
