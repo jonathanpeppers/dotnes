@@ -39,22 +39,17 @@
     <_Downloads Include="$(IntermediateOutputPath)$(_MesenZipName)" />
     <_Downloads Include="$(IntermediateOutputPath)LICENSE" />
   </ItemGroup>
-  <Target Name="_Download" BeforeTargets="Build"
-      Condition="'$(_SkipMesenDownload)' != 'true' And '$(_MesenZipName)' != ''"
-      Inputs="$(MSBuildThisFile)"
-      Outputs="@(_Downloads)">
-    <Message Importance="high" Text="Downloading Mesen $(MesenVersion) for $([System.Runtime.InteropServices.RuntimeInformation]::RuntimeIdentifier)..." />
-    <Delete Files="@(_Downloads)" />
-    <DownloadFile SourceUrl="$(_MesenDownloadUrl)" DestinationFolder="$(IntermediateOutputPath)" />
-    <DownloadFile SourceUrl="$(GithubLicenseUrl)" DestinationFolder="$(IntermediateOutputPath)" />
-    <ItemGroup>
-      <FileWrites Include="@(_Downloads)" />
-    </ItemGroup>
-  </Target>
-  <Target Name="_Unzip" AfterTargets="_Download"
+  <Target Name="_DownloadAndUnzip" BeforeTargets="Build"
       Condition="'$(_SkipMesenDownload)' != 'true' And '$(_MesenZipName)' != ''"
       Inputs="$(MSBuildThisFile)"
       Outputs="$(IntermediateOutputPath)_Unzip.stamp">
+    <Message Importance="high" Text="Downloading Mesen $(MesenVersion) for $([System.Runtime.InteropServices.RuntimeInformation]::RuntimeIdentifier)..." />
+    <Delete Files="@(_Downloads)" />
+    <DownloadFile SourceUrl="$(_MesenDownloadUrl)" DestinationFolder="$(IntermediateOutputPath)" DestinationFileName="$(_MesenZipName)" Retries="3" RetryDelayMilliseconds="2000" />
+    <DownloadFile SourceUrl="$(GithubLicenseUrl)" DestinationFolder="$(IntermediateOutputPath)" DestinationFileName="LICENSE" Retries="3" RetryDelayMilliseconds="2000" />
+    <ItemGroup>
+      <FileWrites Include="@(_Downloads)" />
+    </ItemGroup>
     <RemoveDir Directories="$(MesenDir)" />
     <Unzip SourceFiles="$(IntermediateOutputPath)$(_MesenZipName)" DestinationFolder="$(MesenDir)" />
     <Copy SourceFiles="$(IntermediateOutputPath)LICENSE" DestinationFolder="$(MesenDir)" />

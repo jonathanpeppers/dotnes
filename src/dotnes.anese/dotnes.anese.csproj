@@ -24,20 +24,16 @@
     <_Downloads Include="$(IntermediateOutputPath)ANESE_$(PackageVersion)_macOS.zip" />
     <_Downloads Include="$(IntermediateOutputPath)LICENSE" />
   </ItemGroup>
-  <Target Name="_Download" BeforeTargets="Build"
+  <Target Name="_DownloadAndUnzip" BeforeTargets="Build"
       Inputs="$(MSBuildThisFile)"
-      Outputs="@(_Downloads)">
+      Outputs="$(IntermediateOutputPath)_Unzip.stamp">
     <Delete Files="@(_Downloads)" />
-    <DownloadFile SourceUrl="$(WindowsUrl)" DestinationFolder="$(IntermediateOutputPath)" />
-    <DownloadFile SourceUrl="$(MacUrl)"     DestinationFolder="$(IntermediateOutputPath)" />
-    <DownloadFile SourceUrl="$(GithubLicenseUrl)" DestinationFolder="$(IntermediateOutputPath)" />
+    <DownloadFile SourceUrl="$(WindowsUrl)" DestinationFolder="$(IntermediateOutputPath)" DestinationFileName="ANESE_$(PackageVersion)_win.zip" Retries="3" RetryDelayMilliseconds="2000" />
+    <DownloadFile SourceUrl="$(MacUrl)"     DestinationFolder="$(IntermediateOutputPath)" DestinationFileName="ANESE_$(PackageVersion)_macOS.zip" Retries="3" RetryDelayMilliseconds="2000" />
+    <DownloadFile SourceUrl="$(GithubLicenseUrl)" DestinationFolder="$(IntermediateOutputPath)" DestinationFileName="LICENSE" Retries="3" RetryDelayMilliseconds="2000" />
     <ItemGroup>
       <FileWrites Include="@(_Downloads)" />
     </ItemGroup>
-  </Target>
-  <Target Name="_Unzip" AfterTargets="_Download"
-      Inputs="$(MSBuildThisFile)"
-      Outputs="$(IntermediateOutputPath)_Unzip.stamp">
     <RemoveDir Directories="$(IntermediateOutputPath)win;$(IntermediateOutputPath)osx" />
     <Unzip SourceFiles="$(IntermediateOutputPath)ANESE_$(PackageVersion)_win.zip"   DestinationFolder="$(IntermediateOutputPath)win" />
     <Unzip SourceFiles="$(IntermediateOutputPath)ANESE_$(PackageVersion)_macOS.zip" DestinationFolder="$(IntermediateOutputPath)osx" />
