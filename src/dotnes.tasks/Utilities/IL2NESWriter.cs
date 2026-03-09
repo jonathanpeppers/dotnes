@@ -1976,6 +1976,13 @@ class IL2NESWriter : NESWriter
                             {
                                 EmitWithLabel(Opcode.LDA, AddressMode.Immediate_LowByte, _lastByteArrayLabel);
                                 EmitWithLabel(Opcode.LDX, AddressMode.Immediate_HighByte, _lastByteArrayLabel);
+                                // vram_write uses cc65 calling convention: pointer on stack, size in A:X
+                                if (operand is nameof(NESLib.vram_write))
+                                {
+                                    EmitJSR("pushax");
+                                    Emit(Opcode.LDX, AddressMode.Immediate, (byte)(_lastByteArraySize >> 8));
+                                    Emit(Opcode.LDA, AddressMode.Immediate, (byte)(_lastByteArraySize & 0xFF));
+                                }
                                 _needsByteArrayLoadInCall = false;
                             }
                         }
@@ -3354,9 +3361,9 @@ class IL2NESWriter : NESWriter
             EmitWithLabel(Opcode.LDA, AddressMode.Immediate_LowByte, local.LabelName);
             EmitWithLabel(Opcode.LDX, AddressMode.Immediate_HighByte, local.LabelName);
             EmitJSR("pushax");
-            Emit(Opcode.LDX, AddressMode.Immediate, 0x00);
-            Emit(Opcode.LDA, AddressMode.Immediate, (byte)local.Value); // Size of array
-            _immediateInA = (byte)local.Value;
+            Emit(Opcode.LDX, AddressMode.Immediate, (byte)(local.Value >> 8));
+            Emit(Opcode.LDA, AddressMode.Immediate, (byte)(local.Value & 0xFF)); // Size of array (16-bit)
+            _immediateInA = (byte)(local.Value & 0xFF);
             _ldlocByteArrayLabel = local.LabelName;
         }
         else if (local.Address is not null)
