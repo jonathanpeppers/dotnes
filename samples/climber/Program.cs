@@ -75,7 +75,7 @@ static void setup_graphics()
         0x0d, 0x2d, 0x3a, 0x00,
         0x0d, 0x27, 0x2a
     });
-    vram_adr(0x2000);
+    vram_adr(NAMETABLE_A);
     vram_fill(CH_BLANK, 0x1000);
     bank_spr(0);
     bank_bg(0);
