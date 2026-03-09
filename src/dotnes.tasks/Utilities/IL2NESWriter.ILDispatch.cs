@@ -5,6 +5,7 @@ using dotnes.ObjectModel;
 using static NES.NESLib;
 using static dotnes.NESConstants;
 using static dotnes.ObjectModel.Asm;
+using Local = dotnes.LocalVariableManager.Local;
 
 namespace dotnes;
 

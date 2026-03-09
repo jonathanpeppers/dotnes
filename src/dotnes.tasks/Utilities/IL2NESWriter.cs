@@ -5,6 +5,7 @@ using dotnes.ObjectModel;
 using static NES.NESLib;
 using static dotnes.NESConstants;
 using static dotnes.ObjectModel.Asm;
+using Local = dotnes.LocalVariableManager.Local;
 
 namespace dotnes;
 
@@ -23,14 +24,19 @@ partial class IL2NESWriter : NESWriter
     }
 
     /// <summary>
+    /// Manages local variable zero-page allocation, struct field tracking, and static field addresses.
+    /// </summary>
+    internal readonly LocalVariableManager Variables = new();
+
+    // Forwarding properties for backward compatibility with existing partial class code
+    Dictionary<int, Local> Locals => Variables.Locals;
+    static ushort local => LocalStackBase;
+
+    /// <summary>
     /// The local evaluation stack
     /// </summary>
     internal readonly Stack<int> Stack = new();
-    
-    /// <summary>
-    /// Dictionary of local variables
-    /// </summary>
-    readonly Dictionary<int, Local> Locals = new();
+
     /// <summary>
     /// List of byte[] data (accessible for Program6502 building)
     /// </summary>
@@ -50,7 +56,6 @@ partial class IL2NESWriter : NESWriter
     readonly Dictionary<string, string> _stringLabelMap = new();
     int _stringLabelIndex;
 
-    readonly ushort local = LocalStackBase;
     ushort _padReloadAddress; // Address to reload pad_poll result from (set by stloc after pad_poll)
     readonly ReflectionCache _reflectionCache = new();
     ILOpCode previous;
@@ -193,22 +198,15 @@ partial class IL2NESWriter : NESWriter
     int _argStackAdjust;
 
     /// <summary>
-    /// Local variable indices that are word-sized (ushort). Detected by pre-scanning
-    /// for conv.u2 + stloc patterns in the IL. Word locals get 2 bytes of zero page.
+    /// Local variable indices that are word-sized (ushort). Forwarded to <see cref="Variables"/>.
     /// </summary>
-    public HashSet<int> WordLocals { get; init; } = new();
+    public HashSet<int> WordLocals { get => Variables.WordLocals; init => Variables.WordLocals = value; }
 
     /// <summary>
     /// Struct type layouts: type name → ordered list of (fieldName, fieldSizeInBytes).
-    /// Field offsets are cumulative from the first field.
+    /// Forwarded to <see cref="Variables"/>.
     /// </summary>
-    public Dictionary<string, List<(string Name, int Size)>> StructLayouts { get; init; } = new(StringComparer.Ordinal);
-
-    /// <summary>
-    /// Maps local variable index → struct type name for struct-typed locals.
-    /// Set when ldloca.s + stfld/ldfld patterns are detected.
-    /// </summary>
-    readonly Dictionary<int, string> _structLocalTypes = new();
+    public Dictionary<string, List<(string Name, int Size)>> StructLayouts { get => Variables.StructLayouts; init => Variables.StructLayouts = value; }
 
     /// <summary>
     /// The local index targeted by the most recent ldloca.s instruction.
@@ -241,32 +239,10 @@ partial class IL2NESWriter : NESWriter
     ushort _structArrayBaseForRuntimeIndex;
 
     /// <summary>
-    /// Maps user-defined static field names to their allocated absolute addresses.
-    /// Static fields are allocated in the same region as locals ($0325+).
+    /// Cumulative bytes allocated for locals on zero page.
+    /// Forwarded to <see cref="Variables"/>.
     /// </summary>
-    readonly Dictionary<string, ushort> _staticFieldAddresses = new(StringComparer.Ordinal);
-
-    /// <summary>
-    /// NOTE: may not be exactly correct, this is the instructions inside zerobss:
-    /// A925           LDA #$25                      ; zerobss
-    /// 852A STA ptr1                      
-    /// A903            LDA #$03                      
-    /// 852B STA ptr1+1                    
-    /// A900            LDA #$00                      
-    /// A8              TAY                           
-    /// A200 LDX #$00                      
-    /// F00A BEQ $85DE                     
-    /// 912A STA(ptr1),y                  
-    /// C8 INY                           
-    /// D0FB BNE $85D4                     
-    /// E62B INC ptr1+1                    
-    /// CA              DEX                           
-    /// D0F6            BNE $85D4                     
-    /// C002            CPY #$02
-    /// ...
-    /// A program with 0 locals has C000
-    /// </summary>
-    public int LocalCount { get; set; }
+    public int LocalCount { get => Variables.LocalCount; set => Variables.LocalCount = value; }
 
     /// <summary>
     /// Set of user-defined method names (for detecting user method calls).
@@ -302,8 +278,6 @@ partial class IL2NESWriter : NESWriter
         _byteArrays.Add(data);
         _byteArrayLabelIndex++; // Keep label indices in sync with merged arrays
     }
-    record Local(int Value, int? Address = null, string? LabelName = null, int ArraySize = 0, bool IsWord = false, string? StructArrayType = null);
-
     /// <summary>
     /// Tracks the buffered block instruction count at the START of processing each IL instruction.
     /// Key = IL instruction offset, Value = block instruction count before processing.

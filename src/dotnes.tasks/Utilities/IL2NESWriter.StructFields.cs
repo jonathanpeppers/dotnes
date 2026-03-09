@@ -3,27 +3,22 @@ using dotnes.ObjectModel;
 using static NES.NESLib;
 using static dotnes.NESConstants;
 using static dotnes.ObjectModel.Asm;
+using Local = dotnes.LocalVariableManager.Local;
 
 namespace dotnes;
 
 /// <summary>
 /// Struct field management — field offset calculation, load/store, static fields.
+/// Delegates to <see cref="LocalVariableManager"/> for pure allocation and query methods.
 /// </summary>
 partial class IL2NESWriter
 {
-    /// <summary>
-    /// Allocates an absolute address for a user-defined static field.
-    /// Static fields share the same $0325+ address space as locals.
-    /// </summary>
-    ushort GetOrAllocateStaticField(string fieldName)
-    {
-        if (_staticFieldAddresses.TryGetValue(fieldName, out var addr))
-            return addr;
-        addr = (ushort)(local + LocalCount);
-        LocalCount += 1;
-        _staticFieldAddresses[fieldName] = addr;
-        return addr;
-    }
+    // Forwarding methods for backward compatibility — delegate to Variables
+    ushort GetOrAllocateStaticField(string fieldName) => Variables.GetOrAllocateStaticField(fieldName);
+    ushort GetOrAllocateStructLocal(int localIndex, string structType) => Variables.GetOrAllocateStructLocal(localIndex, structType);
+    int GetFieldOffset(string structType, string fieldName) => Variables.GetFieldOffset(structType, fieldName);
+    int GetStructSize(string structType) => Variables.GetStructSize(structType);
+    string ResolveStructType(int localIndex, string fieldName) => Variables.ResolveStructType(localIndex, fieldName);
 
     void HandleStsfld(string fieldName)
     {
@@ -55,86 +50,6 @@ partial class IL2NESWriter
         _runtimeValueInA = true;
         _immediateInA = null;
         Stack.Push(0);
-    }
-
-    /// <summary>
-    /// Gets the zero-page address and allocates storage for a struct local.
-    /// </summary>
-    ushort GetOrAllocateStructLocal(int localIndex, string structType)
-    {
-        if (Locals.TryGetValue(localIndex, out var existing) && existing.Address is not null)
-            return (ushort)existing.Address;
-
-        // Allocate struct on zero page
-        int structSize = 0;
-        if (StructLayouts.TryGetValue(structType, out var fields))
-        {
-            foreach (var f in fields)
-                structSize += f.Size;
-        }
-        if (structSize == 0)
-            structSize = 1;
-
-        ushort addr = (ushort)(local + LocalCount);
-        LocalCount += structSize;
-        Locals[localIndex] = new Local(0, addr);
-        _structLocalTypes[localIndex] = structType;
-        return addr;
-    }
-
-    /// <summary>
-    /// Gets the byte offset of a field within a struct type.
-    /// </summary>
-    int GetFieldOffset(string structType, string fieldName)
-    {
-        if (!StructLayouts.TryGetValue(structType, out var fields))
-            throw new InvalidOperationException($"Unknown struct type '{structType}'");
-
-        int offset = 0;
-        foreach (var f in fields)
-        {
-            if (f.Name == fieldName)
-                return offset;
-            offset += f.Size;
-        }
-        throw new InvalidOperationException($"Field '{fieldName}' not found in struct '{structType}'");
-    }
-
-    /// <summary>
-    /// Gets the total size in bytes of a struct type.
-    /// </summary>
-    int GetStructSize(string structType)
-    {
-        if (!StructLayouts.TryGetValue(structType, out var fields))
-            throw new InvalidOperationException($"Unknown struct type '{structType}'");
-        int size = 0;
-        foreach (var f in fields)
-            size += f.Size;
-        return size > 0 ? size : 1;
-    }
-
-    /// <summary>
-    /// Resolves the struct type for a local by checking _structLocalTypes or matching
-    /// the field name against known struct layouts.
-    /// </summary>
-    string ResolveStructType(int localIndex, string fieldName)
-    {
-        if (_structLocalTypes.TryGetValue(localIndex, out var knownType))
-            return knownType;
-
-        // Search all struct layouts for a matching field name
-        foreach (var kvp in StructLayouts.OrderBy(x => x.Key, StringComparer.Ordinal))
-        {
-            foreach (var f in kvp.Value)
-            {
-                if (f.Name == fieldName)
-                {
-                    _structLocalTypes[localIndex] = kvp.Key;
-                    return kvp.Key;
-                }
-            }
-        }
-        throw new InvalidOperationException($"Cannot resolve struct type for local {localIndex} with field '{fieldName}'");
     }
 
     /// <summary>
@@ -265,7 +180,7 @@ partial class IL2NESWriter
                 localIndex = _pendingStructLocal.Value;
                 _pendingStructLocal = null;
             }
-            else if (_lastLoadedLocalIndex is not null && _lastLoadedLocalIndex >= 0 && _structLocalTypes.ContainsKey(_lastLoadedLocalIndex.Value))
+            else if (_lastLoadedLocalIndex is not null && _lastLoadedLocalIndex >= 0 && Variables.IsStructLocal(_lastLoadedLocalIndex.Value))
             {
                 // ldloc loaded the struct value — undo the WriteLdloc LDA and use field access instead
                 localIndex = _lastLoadedLocalIndex.Value;
