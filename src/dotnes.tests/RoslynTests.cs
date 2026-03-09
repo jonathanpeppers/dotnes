@@ -1906,6 +1906,43 @@ public class RoslynTests
     }
 
     [Fact]
+    public void LocalTimesConstant_PreservesLocalLoad()
+    {
+        // Regression test: ldloc;ldc;mul must keep the LDA $local instruction.
+        // A previous bug had RemoveLastInstructions(2) which removed both
+        // the LDA #constant AND the LDA $local, leaving ASL shifts with
+        // a stale accumulator value.
+        //
+        // The pal_col call between gap's definition and usage forces the
+        // compiler to store gap to a local and reload it, producing the
+        // ldloc;ldc;mul IL pattern that triggered the bug.
+        var bytes = GetProgramBytes(
+            """
+            byte x = rand8();
+            byte gap = (byte)(x & 7);
+            pal_col(0, gap);
+            ushort offset = (ushort)(gap * 16);
+            pal_col(1, (byte)(offset >> 8));
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+
+        // 16-bit multiply by 16 uses LDX #0 (A200), STX $17 (8617), then ASL A + ROL $17
+        string shiftSetup = "A20086170A2617";
+        int setupIdx = hex.IndexOf(shiftSetup);
+        Assert.True(setupIdx >= 6, "Could not find LDX #0 + STX $17 + ASL A + ROL $17 sequence");
+
+        // The 3 bytes (6 hex chars) immediately before the shift setup must be
+        // LDA Absolute (AD xx xx) — the local variable reload.
+        // If RemoveLastInstructions removes too many, it would be a JSR (20 xx xx) instead.
+        string instrBefore = hex.Substring(setupIdx - 6, 2);
+        Assert.Equal("AD", instrBefore);
+    }
+
+    [Fact]
     public void Ushort16BitAdd()
     {
         // ushort + byte constant with carry propagation
