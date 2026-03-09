@@ -319,25 +319,44 @@ while (true)
 
             byte dir = actor_dir[ai];
             byte st = actor_state[ai];
+            byte isEnemy = actor_name[ai]; // 0=player, 1=enemy, 2=rescue
             if (st == STANDING)
             {
-                if (dir != 0) oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerLStand);
-                else oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerRStand);
-            }
-            if (st == WALKING)
-            {
-                byte frame = (byte)((actor_x[ai] >> 1) & 7);
-                if (dir != 0)
+                if (isEnemy != 0)
                 {
-                    if (frame < 3) oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerLRun1);
-                    else if (frame < 6) oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerLRun2);
-                    else oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerLRun3);
+                    // Enemies use jump sprites for standing/walking
+                    if (dir != 0) oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerLJump);
+                    else oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerRJump);
                 }
                 else
                 {
-                    if (frame < 3) oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerRRun1);
-                    else if (frame < 6) oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerRRun2);
-                    else oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerRRun3);
+                    if (dir != 0) oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerLStand);
+                    else oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerRStand);
+                }
+            }
+            if (st == WALKING)
+            {
+                if (isEnemy != 0)
+                {
+                    // Enemies use jump sprites for standing/walking
+                    if (dir != 0) oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerLJump);
+                    else oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerRJump);
+                }
+                else
+                {
+                    byte frame = (byte)((actor_x[ai] >> 1) & 7);
+                    if (dir != 0)
+                    {
+                        if (frame < 3) oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerLRun1);
+                        else if (frame < 6) oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerLRun2);
+                        else oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerLRun3);
+                    }
+                    else
+                    {
+                        if (frame < 3) oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerRRun1);
+                        else if (frame < 6) oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerRRun2);
+                        else oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerRRun3);
+                    }
                 }
             }
             if (st == JUMPING)

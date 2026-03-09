@@ -2787,7 +2787,7 @@ public class RoslynTests
     }
 
     [Fact]
-    public void PadPollUpDown_CorrectAndValues()
+    public void PadPollUpDown_UsesCorrectAndImmediateOperands()
     {
         // Regression: climber had PAD_UP=0x08 (START) and PAD_DOWN=0x04 (SELECT).
         // Correct values are PAD.UP=0x10 and PAD.DOWN=0x20.
