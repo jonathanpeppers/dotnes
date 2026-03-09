@@ -2920,4 +2920,53 @@ public class RoslynTests
         }
         // If no LDA abs before last AND, the value comes from a different source (also correct)
     }
+
+    [Fact]
+    public void DupCascade_InterveningStloc_ReloadsFromTemp()
+    {
+        // Regression: In the climber sample, the pattern:
+        //   byte st = actor_state[ai]; byte isEnemy = actor_name[ai];
+        //   if (st == 1) { ... } if (st == 2) { ... }
+        // The C# compiler (Release) emits IL that loads isEnemy BETWEEN st and the
+        // dup cascade. HandleLdelemU1 saves st to TEMP ($17), but then stloc (for
+        // isEnemy) clears _runtimeValueInA. Without the fix, the dup handler can't
+        // start the cascade and CMP compares isEnemy instead of st.
+        var bytes = GetProgramBytes(
+            """
+            byte[] states = new byte[8];
+            byte[] names = new byte[8];
+            states[0] = 1;
+            names[0] = 5;
+            for (byte i = 0; i < 4; i++)
+            {
+                byte st = states[i];
+                byte nm = names[i];
+                if (st == 1)
+                {
+                    pal_col(0, nm);
+                }
+                if (st == 2)
+                {
+                    pal_col(1, nm);
+                }
+            }
+            ppu_on_all();
+            while (true) ;
+            """);
+
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"DupCascade hex: {hex}");
+
+        // STA $17 (85 17) — save st to TEMP before nm load clobbers A
+        Assert.Contains("8517", hex);
+
+        // LDA $17 (A5 17) — reload st from TEMP before the cascade comparison
+        Assert.Contains("A517", hex);
+
+        // The sequence LDA $17 → CMP #$01 must appear (reload st, then compare)
+        Assert.Contains("A517C901", hex);
+    }
 }

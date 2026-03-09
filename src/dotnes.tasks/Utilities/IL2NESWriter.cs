@@ -435,6 +435,17 @@ class IL2NESWriter : NESWriter
                 }
                 return;
             }
+
+            // Handle LDA ZeroPage (ImmediateOperand — byte overload in Emit).
+            // This occurs when the dup cascade handler reloads a value from TEMP.
+            if (lastInstr.Opcode == Opcode.LDA
+                && lastInstr.Mode == AddressMode.ZeroPage
+                && lastInstr.Operand is ImmediateOperand)
+            {
+                // Single runtime value from zero page — keep the LDA, emit CMP #constant.
+                Emit(Opcode.CMP, AddressMode.Immediate, checked((byte)(stackValue + adjustValue)));
+                return;
+            }
         }
         // Constant comparison: remove last LDA #imm, emit CMP #imm
         RemoveLastInstructions(1);
@@ -471,12 +482,33 @@ class IL2NESWriter : NESWriter
                     Emit(Opcode.LDA, AddressMode.ZeroPage, TEMP_HI);
                     _dupPendingSave = true;
                 }
-                else if (_runtimeValueInA && IsDupCascadeStart())
+                else if (IsDupCascadeStart())
                 {
-                    // First dup in cascade: mark for saving in the branch handler.
-                    // Don't emit anything yet — A still holds the correct value.
-                    _dupCascadeActive = true;
-                    _dupPendingSave = true;
+                    if (!_runtimeValueInA)
+                    {
+                        // The cascade value was pushed before intervening operations
+                        // (e.g., stloc between ldelem and dup) that clobbered A.
+                        // Check if HandleLdelemU1 saved it to TEMP ($17).
+                        var block = CurrentBlock!;
+                        for (int i = block.Count - 1; i >= 0; i--)
+                        {
+                            var instr = block[i];
+                            if (instr.Opcode == Opcode.STA && instr.Mode == AddressMode.ZeroPage
+                                && instr.Operand is ImmediateOperand op && op.Value == TEMP)
+                            {
+                                Emit(Opcode.LDA, AddressMode.ZeroPage, TEMP);
+                                _runtimeValueInA = true;
+                                break;
+                            }
+                        }
+                    }
+                    if (_runtimeValueInA)
+                    {
+                        // First dup in cascade: mark for saving in the branch handler.
+                        // A holds the correct value (either natively or reloaded from TEMP).
+                        _dupCascadeActive = true;
+                        _dupPendingSave = true;
+                    }
                 }
                 break;
             case ILOpCode.Pop:
