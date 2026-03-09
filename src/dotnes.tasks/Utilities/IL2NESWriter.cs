@@ -1954,6 +1954,11 @@ class IL2NESWriter : NESWriter
                             EmitWithLabel(Opcode.LDA, AddressMode.Immediate_LowByte, _ldlocByteArrayLabel);
                             EmitWithLabel(Opcode.LDX, AddressMode.Immediate_HighByte, _ldlocByteArrayLabel);
                         }
+                        else if (_ldlocByteArrayLabel != null)
+                        {
+                            // pushax was kept (not a fastcall function) — track its usage
+                            UsedMethods?.Add("pushax");
+                        }
                         _ldlocByteArrayLabel = null;
                         if (_lastByteArrayLabel != null && previous != ILOpCode.Ldtoken
                             && !_byteArrayAddressEmitted)
@@ -1980,6 +1985,7 @@ class IL2NESWriter : NESWriter
                                 if (operand is nameof(NESLib.vram_write))
                                 {
                                     EmitJSR("pushax");
+                                    UsedMethods?.Add("pushax");
                                     Emit(Opcode.LDX, AddressMode.Immediate, (byte)(_lastByteArraySize >> 8));
                                     Emit(Opcode.LDA, AddressMode.Immediate, (byte)(_lastByteArraySize & 0xFF));
                                 }
