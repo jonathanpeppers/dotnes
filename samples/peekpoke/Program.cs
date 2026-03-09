@@ -35,11 +35,11 @@ while (true)
 
     // peek: reading $2002 resets the PPU address latch
     // this is REQUIRED before writing scroll registers
-    peek(0x2002);
+    peek(PPU_STATUS);
 
     // poke: write X and Y scroll directly to $2005
-    poke(0x2005, scroll_x);
-    poke(0x2005, 0);
+    poke(PPU_SCROLL, scroll_x);
+    poke(PPU_SCROLL, 0);
 
     scroll_x = (byte)(scroll_x + 1);
 
@@ -51,14 +51,14 @@ while (true)
         if (grayscale != 0)
         {
             grayscale = 0;
-            // ppu_mask: normal rendering ($1E)
-            ppu_mask(0x1E);
+            // ppu_mask: normal rendering
+            ppu_mask(MASK.BG | MASK.SPR | MASK.EDGE_BG | MASK.EDGE_SPR);
         }
         else
         {
             grayscale = 1;
-            // ppu_mask: grayscale mode ($1F)
-            ppu_mask(0x1F);
+            // ppu_mask: grayscale mode
+            ppu_mask(MASK.MONO | MASK.BG | MASK.SPR | MASK.EDGE_BG | MASK.EDGE_SPR);
         }
     }
 }

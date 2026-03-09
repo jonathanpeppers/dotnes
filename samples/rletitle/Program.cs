@@ -54,7 +54,7 @@ byte[] climbr_title_rle = [
 ppu_off();
 pal_bg(climbr_title_pal);
 pal_bright(0);
-vram_adr(0x2000);
+vram_adr(NAMETABLE_A);
 vram_unrle(climbr_title_rle);
 ppu_on_all();
 
