@@ -708,9 +708,9 @@ public class Program6502
         AddBlock(BuiltInSubroutines.Popa());
 
         // Pusha/Pushax needed for standard calling convention (not decsp4),
-        // but also needed when scroll/split handlers emit JSR pushax
+        // but also needed when scroll/split handlers or ldstr/ldloc emit JSR pushax
         bool needsPushaPushax = !needsDecsp4
-            || (usedMethods != null && (usedMethods.Contains("scroll") || usedMethods.Contains("split")));
+            || (usedMethods != null && (usedMethods.Contains("scroll") || usedMethods.Contains("split") || usedMethods.Contains("pushax")));
         if (needsPushaPushax)
         {
             AddBlock(BuiltInSubroutines.Pusha());
