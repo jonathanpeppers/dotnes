@@ -10,14 +10,14 @@
 
 | | |
 |:---:|:---:|
+| **metasprites** ⬇️ | **sprites** ⬇️ |
 | ![metasprites](samples/metasprites/metasprites.gif) | ![sprites](samples/sprites/sprites.gif) |
-| metasprites | sprites |
+| **climber** ⬇️ | **horizscroll** ⬇️ |
 | ![climber](samples/climber/climber.gif) | ![horizscroll](samples/horizscroll/horizscroll.gif) |
-| climber | horizscroll |
+| **rletitle** ⬇️ | **flicker** ⬇️ |
 | ![rletitle](samples/rletitle/rletitle.png) | ![flicker](samples/flicker/flicker.gif) |
-| rletitle | flicker |
+| **attributetable** ⬇️ | **statusbar** ⬇️ |
 | ![attributetable](samples/attributetable/attributetable.png) | ![statusbar](samples/statusbar/statusbar.gif) |
-| attributetable | statusbar |
 
 > See the [samples/](samples/) folder for all 25 sample projects. Generate images with `dotnet run scripts/record-all-samples.cs`.
 
