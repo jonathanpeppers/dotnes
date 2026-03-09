@@ -77,6 +77,8 @@ Tests in [src/dotnes.tests/](src/dotnes.tests/) use **Verify snapshots**:
 
 **Required:** Programs MUST end with `while (true) ;` (NES has no exit)
 
+**⚠️ NEVER redefine constants or enums that are already provided by neslib.** The `PAD` enum (`PAD.A`, `PAD.UP`, `PAD.LEFT`, etc.), `MASK` constants, PPU register constants, and APU constants are all built-in. Use them directly — do not create local `const byte PAD_A = 0x01` or similar redefinitions. This leads to bugs when the values are wrong and makes code harder to maintain.
+
 ## Adding IL Opcode Support
 1. Add case in `IL2NESWriter.Write(ILInstruction)` switch
 2. Emit via `Write(NESInstruction.*, value)`
