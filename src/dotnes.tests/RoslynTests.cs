@@ -2785,4 +2785,66 @@ public class RoslynTests
         // STA $8001 = 8D0180
         Assert.Contains("8D0180", hex);
     }
+
+    [Fact]
+    public void PadPollUpDown_CorrectAndValues()
+    {
+        // Regression: climber had PAD_UP=0x08 (START) and PAD_DOWN=0x04 (SELECT).
+        // Correct values are PAD.UP=0x10 and PAD.DOWN=0x20.
+        // Verify the AND immediate operands in the emitted 6502.
+        var bytes = GetProgramBytes(
+            """
+            byte y = 100;
+            ppu_on_all();
+            while (true)
+            {
+                ppu_wait_nmi();
+                PAD pad = pad_poll(0);
+                if ((pad & PAD.UP) != 0) y--;
+                if ((pad & PAD.DOWN) != 0) y++;
+                oam_spr(40, y, 0xD8, 0, 0);
+            }
+            """);
+        Assert.NotNull(bytes);
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"PadUpDown hex: {hex}");
+
+        // AND #$10 for PAD.UP (29 10), NOT AND #$08
+        Assert.Contains("2910", hex);
+        Assert.DoesNotContain("2908", hex);
+        // AND #$20 for PAD.DOWN (29 20), NOT AND #$04
+        Assert.Contains("2920", hex);
+        // 2904 could appear as part of addresses, so just verify 2910/2920 are present
+    }
+
+    [Fact]
+    public void VramFillAttributeTable_CorrectAddresses()
+    {
+        // Regression: climber attribute table fill used $27C0 (nametable B) instead
+        // of $2BC0 (nametable C). Verify vram_adr + vram_fill emit correct addresses.
+        var bytes = GetProgramBytes(
+            """
+            vram_adr(0x2000);
+            vram_fill(0, 0x1000);
+            vram_adr(0x23C0);
+            vram_fill(0x55, 64);
+            vram_adr(0x2BC0);
+            vram_fill(0x55, 64);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"VramFillAttr hex: {hex}");
+
+        // vram_adr loads high byte into X, low byte into A
+        // vram_adr($23C0): LDX #$23 (A223), LDA #$C0 (A9C0)
+        Assert.Contains("A223", hex);
+        Assert.Contains("A9C0", hex);
+        // vram_adr($2BC0): LDX #$2B (A22B) — NOT $27 (nametable B)
+        Assert.Contains("A22B", hex);
+        Assert.DoesNotContain("A227", hex);
+        // vram_fill value 0x55: LDA #$55 (A955)
+        Assert.Contains("A955", hex);
+    }
 }
