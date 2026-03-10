@@ -170,6 +170,13 @@ class IL2NESWriter : NESWriter
     bool _dupPendingSave;
 
     /// <summary>
+    /// Set by dup when _ushortInAX was true, indicating X still holds the high byte
+    /// of a duplicated ushort value. Used by shr to emit TXA for the high byte extraction
+    /// after a dup+conv_u1+stloc pattern extracts the low byte.
+    /// </summary>
+    bool _dupPreservedUshortHi;
+
+    /// <summary>
     /// Number of parameters for the current user method being transpiled (0 for main).
     /// Used by ldarg handlers to compute cc65 stack offsets.
     /// </summary>
@@ -483,12 +490,22 @@ class IL2NESWriter : NESWriter
                     Stack.Push(Stack.Peek());
                 if (_dupCascadeActive)
                 {
-                    // Subsequent dup in cascading if-else: reload saved value from TEMP_HI
-                    // (the DUP_TEMP scratch location). After an if-block runs (with JSR calls
-                    // that modify A), A no longer holds the original comparison value. Reload
-                    // it from TEMP_HI where the branch handler saved it.
-                    Emit(Opcode.LDA, AddressMode.ZeroPage, TEMP_HI);
-                    _dupPendingSave = true;
+                    if (IsDupCascadeStart())
+                    {
+                        // Subsequent dup in cascading if-else: reload saved value from TEMP_HI
+                        // (the DUP_TEMP scratch location). After an if-block runs (with JSR calls
+                        // that modify A), A no longer holds the original comparison value. Reload
+                        // it from TEMP_HI where the branch handler saved it.
+                        Emit(Opcode.LDA, AddressMode.ZeroPage, TEMP_HI);
+                        _dupPendingSave = true;
+                    }
+                    else
+                    {
+                        // Not a cascade continuation (e.g., dup for lo/hi byte extraction).
+                        // Clear the stale cascade flag so it doesn't corrupt non-cascade dups.
+                        _dupCascadeActive = false;
+                        if (_ushortInAX) _dupPreservedUshortHi = true;
+                    }
                 }
                 else if (IsDupCascadeStart())
                 {
@@ -518,6 +535,7 @@ class IL2NESWriter : NESWriter
                         _dupPendingSave = true;
                     }
                 }
+                if (_ushortInAX && !_dupCascadeActive) _dupPreservedUshortHi = true;
                 break;
             case ILOpCode.Pop:
                 if (Stack.Count > 0)
@@ -928,7 +946,7 @@ class IL2NESWriter : NESWriter
                     bool shrLocalInA = _lastLoadedLocalIndex.HasValue &&
                         Locals.TryGetValue(_lastLoadedLocalIndex.Value, out var shrLocal) && shrLocal.Address != null;
 
-                    if (_runtimeValueInA || shrLocalInA || _ushortInAX)
+                    if (_runtimeValueInA || shrLocalInA || _ushortInAX || _dupPreservedUshortHi)
                     {
                         if (!_runtimeValueInA && !_ushortInAX
                             && previous is ILOpCode.Ldc_i4_s or ILOpCode.Ldc_i4
@@ -938,13 +956,14 @@ class IL2NESWriter : NESWriter
                         {
                             RemoveLastInstructions(1);
                         }
-                        if (_ushortInAX && shiftCount >= 8)
+                        if ((_ushortInAX || _dupPreservedUshortHi) && shiftCount >= 8)
                         {
                             // ushort >> 8+: high byte to A, then shift remaining
                             Emit(Opcode.TXA, AddressMode.Implied);
                             for (int i = 0; i < shiftCount - 8; i++)
                                 Emit(Opcode.LSR, AddressMode.Accumulator);
                             _ushortInAX = false;
+                            _dupPreservedUshortHi = false;
                         }
                         else if (_ushortInAX)
                         {

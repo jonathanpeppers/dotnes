@@ -3066,4 +3066,75 @@ public class RoslynTests
         Assert.StartsWith("AD", bodyHex);
         Assert.False(bodyHex.StartsWith("A9"), "Bug: local-to-local copy emitted LDA #constant instead of LDA $address");
     }
+
+    [Fact]
+    public void DupShr_UshortLoHiByteExtraction()
+    {
+        // Regression test: dup + conv_u1 + stloc (lo byte) + ldc_i4 8 + shr + conv_u1 + stloc (hi byte)
+        // The transpiler must emit TXA (8A) for the hi byte (>> 8) instead of 8 LSR instructions
+        // or LDA #$00. The ushort result of mul*8+16 has lo in A and hi in X.
+        var bytes = GetProgramBytes("""
+            byte pf = (byte)pad_poll(0);
+            ushort floor_yy = (ushort)(pf * 8 + 16);
+            byte fyy_lo = (byte)floor_yy;
+            byte fyy_hi = (byte)(floor_yy >> 8);
+            pal_col(0, fyy_lo);
+            pal_col(1, fyy_hi);
+            while (true) ;
+            """);
+
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"DupShr hex: {hex}");
+
+        // After the 16-bit mul (ASL/ROL) + ADC #$10 + BCC/INX sequence,
+        // the lo byte is stored with STA $addr1, then TXA (8A) transfers
+        // the hi byte from X to A, followed by STA $addr2.
+        // Pattern: STA abs (8D xx xx) + TXA (8A) + STA abs (8D xx xx)
+        int txaIdx = hex.IndexOf("8A8D");
+        Assert.True(txaIdx >= 0, "TXA + STA pattern not found — hi byte extraction may be wrong");
+
+        // The 3 bytes before TXA should be STA Absolute (8D xx xx)
+        Assert.True(txaIdx >= 6, "Not enough bytes before TXA");
+        string beforeTxa = hex.Substring(txaIdx - 6, 2);
+        Assert.Equal("8D", beforeTxa); // STA Absolute before TXA
+    }
+
+    [Fact]
+    public void DupCascade_StaleFlag_DoesNotCorruptSubsequentDup()
+    {
+        // Regression test: a dup cascade (dup + ldc + beq/bne) sets _dupCascadeActive,
+        // which must be cleared before a subsequent non-cascade dup (e.g., lo/hi extraction).
+        // Without the fix, the stale flag causes the later dup to emit LDA $18 (TEMP_HI),
+        // corrupting the accumulator.
+        var bytes = GetProgramBytes("""
+            byte state = (byte)pad_poll(0);
+            // dup cascade: if-else chain
+            if (state == 1) pal_col(0, 0x10);
+            else if (state == 2) pal_col(0, 0x20);
+
+            // Non-cascade dup for lo/hi byte extraction
+            byte pf = (byte)pad_poll(0);
+            ushort val = (ushort)(pf * 8 + 16);
+            byte lo = (byte)val;
+            byte hi = (byte)(val >> 8);
+            pal_col(1, lo);
+            pal_col(2, hi);
+            while (true) ;
+            """);
+
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"DupCascadeStale hex: {hex}");
+
+        // After the cascade, the lo/hi extraction must use TXA (8A) for the hi byte,
+        // NOT LDA $18 (A5 18) from the stale cascade path.
+        // Verify TXA appears (correct hi byte extraction)
+        int txaIdx = hex.IndexOf("8A8D");
+        Assert.True(txaIdx >= 0, "TXA + STA pattern not found after cascade — stale _dupCascadeActive may corrupt dup");
+    }
 }
