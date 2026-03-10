@@ -448,7 +448,15 @@ class IL2NESWriter : NESWriter
             }
         }
         // Constant comparison: remove last LDA #imm, emit CMP #imm
-        RemoveLastInstructions(1);
+        // When _runtimeValueInA is true, WriteLdc skips emitting LDA — the last
+        // instruction is the actual computation (SBC, ADC, AND, etc.) and must not
+        // be removed.
+        if (block.Count > 0)
+        {
+            var last = block[block.Count - 1];
+            if (last.Opcode == Opcode.LDA && last.Mode == AddressMode.Immediate)
+                RemoveLastInstructions(1);
+        }
         Emit(Opcode.CMP, AddressMode.Immediate, checked((byte)(stackValue + adjustValue)));
     }
 

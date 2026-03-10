@@ -2969,4 +2969,53 @@ public class RoslynTests
         // The sequence LDA $17 → CMP #$01 must appear (reload st, then compare)
         Assert.Contains("A517C901", hex);
     }
+
+    [Fact]
+    public void SubThenCompare_RuntimeSubNotStripped()
+    {
+        // Regression: EmitBranchCompare's default path blindly removed the last
+        // instruction, assuming it was LDA #imm from WriteLdc. But when
+        // _runtimeValueInA is true, WriteLdc returns without emitting LDA, so
+        // the last instruction is the SBC from HandleAddSub. The fix checks
+        // that the instruction being removed is actually LDA Immediate.
+        //
+        // Pattern: (byte)(arr[idx] - localVar) < 16
+        // IL: ldelem.u1; ldloc localVar; sub; conv.u1; ldc.i4.s 16; bge.s
+        var bytes = GetProgramBytes(
+            """
+            byte[] arr = new byte[4];
+            byte[] lad = new byte[4];
+            for (byte i = 0; i < 4; i++)
+            {
+                arr[i] = rand8();
+                lad[i] = rand8();
+            }
+            byte idx = 0;
+            byte ladx = (byte)(lad[idx] * 16);
+            byte check = (byte)(arr[idx] - ladx);
+            if (check < 16)
+            {
+                pal_col(0, 0x30);
+            }
+            ppu_on_all();
+            while (true) ;
+            """);
+
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"SubThenCompare hex: {hex}");
+
+        // The SEC+SBC sequence (38 E5 18) must exist:
+        // SEC=38, SBC ZeroPage=E5, TEMP+1=18
+        // This ensures the subtraction wasn't stripped by EmitBranchCompare.
+        Assert.Contains("38E518", hex);
+
+        // After SBC, there should be CMP #$10 (C9 10) for the < 16 check
+        Assert.Contains("C910", hex);
+
+        // The full sequence: SEC; SBC $18; CMP #$10 (38 E5 18 C9 10)
+        Assert.Contains("38E518C910", hex);
+    }
 }
