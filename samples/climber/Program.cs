@@ -286,14 +286,83 @@ while (true)
         else
             addr = NTADR_C(1, (byte)(rowy - 30));
 
-        // TODO: Attribute table writes cause stack leaks — investigate transpiler
-        // vrambuf_put with runtime-filled byte arrays
-        // byte eff_rowy = rowy < 30 ? rowy : (byte)(rowy - 30);
-        // ...
-
         vrambuf_put(addr, buf, COLS);
         vrambuf_flush();
     }
+
+    // --- Set nametable attributes based on floor positions ---
+    // Floor surface rows (dy <= 1) use palette 1 (teal blocks);
+    // all other rows use palette 0 (yellow for ladders/items).
+    // Turn PPU off briefly for direct VRAM writes.
+    ppu_off();
+
+    // Nametable A attributes (rows map to rh = 59 - nt_row)
+    vram_adr(0x23C0);
+    for (byte ar = 0; ar < 8; ar++)
+    {
+        byte top_pal = 0;
+        byte bot_pal = 0;
+        for (byte f = 0; f < MAX_FLOORS; f++)
+        {
+            for (byte qr = 0; qr < 4; qr++)
+            {
+                byte nt_row = (byte)(ar * 4 + qr);
+                if (nt_row < 30)
+                {
+                    byte rh_val = (byte)(59 - nt_row);
+                    byte dy = (byte)(rh_val - floor_ypos[f]);
+                    if (dy <= 1)
+                    {
+                        if (qr < 2)
+                            top_pal = 1;
+                        else
+                            bot_pal = 1;
+                    }
+                }
+            }
+        }
+        byte attr_val;
+        if (top_pal != 0 && bot_pal != 0) attr_val = 0x55;
+        else if (top_pal != 0) attr_val = 0x05;
+        else if (bot_pal != 0) attr_val = 0x50;
+        else attr_val = 0x00;
+        for (byte c = 0; c < 8; c++) vram_put(attr_val);
+    }
+
+    // Nametable C attributes (rows map to rh = 29 - nt_row)
+    vram_adr(0x2BC0);
+    for (byte ar = 0; ar < 8; ar++)
+    {
+        byte top_pal = 0;
+        byte bot_pal = 0;
+        for (byte f = 0; f < MAX_FLOORS; f++)
+        {
+            for (byte qr = 0; qr < 4; qr++)
+            {
+                byte nt_row = (byte)(ar * 4 + qr);
+                if (nt_row < 30)
+                {
+                    byte rh_val = (byte)(29 - nt_row);
+                    byte dy = (byte)(rh_val - floor_ypos[f]);
+                    if (dy <= 1)
+                    {
+                        if (qr < 2)
+                            top_pal = 1;
+                        else
+                            bot_pal = 1;
+                    }
+                }
+            }
+        }
+        byte attr_val;
+        if (top_pal != 0 && bot_pal != 0) attr_val = 0x55;
+        else if (top_pal != 0) attr_val = 0x05;
+        else if (bot_pal != 0) attr_val = 0x50;
+        else attr_val = 0x00;
+        for (byte c = 0; c < 8; c++) vram_put(attr_val);
+    }
+
+    ppu_on_all();
 
     // --- Main game loop ---
     while (actor_floor[0] != MAX_FLOORS - 1)
