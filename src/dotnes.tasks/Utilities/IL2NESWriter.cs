@@ -3291,16 +3291,25 @@ class IL2NESWriter : NESWriter
             }
             else
             {
-                // Store scalar local: remove previous LDA, re-emit with STA
-                RemoveLastInstructions(1);
-                Emit(Opcode.LDA, AddressMode.Immediate, (byte)local.Value);
-                Emit(Opcode.STA, AddressMode.Absolute, (ushort)local.Address);
-                if (_lastByteArrayLabel != null)
+                if (LastLDA)
                 {
-                    // Byte array address needs to be in A:X for upcoming call — use label resolution
-                    EmitWithLabel(Opcode.LDA, AddressMode.Immediate_LowByte, _lastByteArrayLabel);
-                    EmitWithLabel(Opcode.LDX, AddressMode.Immediate_HighByte, _lastByteArrayLabel);
-                    _byteArrayAddressEmitted = true;
+                    // Store scalar local: remove previous LDA #constant, re-emit with STA
+                    RemoveLastInstructions(1);
+                    Emit(Opcode.LDA, AddressMode.Immediate, (byte)local.Value);
+                    Emit(Opcode.STA, AddressMode.Absolute, (ushort)local.Address);
+                    if (_lastByteArrayLabel != null)
+                    {
+                        // Byte array address needs to be in A:X for upcoming call — use label resolution
+                        EmitWithLabel(Opcode.LDA, AddressMode.Immediate_LowByte, _lastByteArrayLabel);
+                        EmitWithLabel(Opcode.LDX, AddressMode.Immediate_HighByte, _lastByteArrayLabel);
+                        _byteArrayAddressEmitted = true;
+                    }
+                }
+                else
+                {
+                    // Previous instruction loaded a value into A (e.g., ldloc from another local)
+                    // Don't remove it — just emit STA to store it
+                    Emit(Opcode.STA, AddressMode.Absolute, (ushort)local.Address);
                 }
                 _immediateInA = null;
             }

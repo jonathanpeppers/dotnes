@@ -3018,4 +3018,52 @@ public class RoslynTests
         // The full sequence: SEC; SBC $18; CMP #$10 (38 E5 18 C9 10)
         Assert.Contains("38E518C910", hex);
     }
+
+    [Fact]
+    public void LdlocStloc_LocalToLocalCopy()
+    {
+        // Regression test: `lx = ladx` (local-to-local copy) must load from ladx's
+        // runtime address, not use a stale constant 0. Previously WriteStloc's scalar
+        // branch would RemoveLastInstructions(1) even when the previous LDA was Absolute
+        // (from WriteLdloc), replacing `LDA $addr` with `LDA #$00`.
+        var bytes = GetProgramBytes("""
+            byte[] arr = new byte[8];
+            byte[] lad = new byte[8];
+            for (byte i = 0; i < 8; i++)
+            {
+                arr[i] = rand8();
+                lad[i] = rand8();
+            }
+            byte idx = 0;
+            byte lx = 0;
+            byte ladx = (byte)(lad[idx] * 16);
+            if ((byte)(arr[idx] - ladx) < 16) lx = ladx;
+            if (lx != 0)
+            {
+                pal_col(0, lx);
+            }
+            ppu_on_all();
+            while (true) ;
+            """);
+
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"LdlocStloc hex: {hex}");
+
+        // After BCS (B0), the body must load ladx from its Absolute address (AD xx xx)
+        // then store to lx (8D xx xx). It must NOT be LDA #$00 (A9 00).
+        // Find the BCS instruction after CMP #$10 (C9 10 B0)
+        int cmpIdx = hex.IndexOf("C910B0");
+        Assert.True(cmpIdx >= 0, "CMP #$10; BCS pattern not found");
+
+        // The BCS operand is 1 byte (2 hex chars) after B0
+        int bodyStart = cmpIdx + 8; // past "C910B0xx"
+        string bodyHex = hex.Substring(bodyStart, 6); // first 3 bytes of body
+
+        // Must be LDA Absolute (AD xx xx), not LDA Immediate (A9 00)
+        Assert.StartsWith("AD", bodyHex);
+        Assert.False(bodyHex.StartsWith("A9"), "Bug: local-to-local copy emitted LDA #constant instead of LDA $address");
+    }
 }
