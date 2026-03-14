@@ -187,6 +187,12 @@ partial class IL2NESWriter : NESWriter
     bool _dupPreservedUshortHi;
 
     /// <summary>
+    /// Set by ldftn handler with the method name. Consumed by nmi_set_callback/irq_set_callback
+    /// to resolve the callback label from a function pointer instead of a string literal.
+    /// </summary>
+    string? _lastLdftnMethod;
+
+    /// <summary>
     /// Number of parameters for the current user method being transpiled (0 for main).
     /// Used by ldarg handlers to compute cc65 stack offsets.
     /// </summary>

@@ -11,11 +11,9 @@
  * a fixed RAM address (0x0309) to avoid closure capture.
  */
 
-#pragma warning disable CS8321
-
 // IRQ handler - called when MMC3 scanline counter fires
 // Uses RAM address 0x0309 as a shared IRQ counter
-void irq_handler()
+static void irq_handler()
 {
     // Read current IRQ scroll counter from shared RAM
     byte count = peek(0x0309);
@@ -51,7 +49,7 @@ poke(MMC3_IRQ_ENABLE, 0);
 cli();
 
 // Set IRQ callback
-irq_set_callback("irq_handler");
+unsafe { irq_set_callback(&irq_handler); }
 
 // Set palette colors
 pal_col(1, 0x04);

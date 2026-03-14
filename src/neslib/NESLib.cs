@@ -122,18 +122,30 @@ public static class NESLib
     public static void sample_play(byte sample) => throw null!;
 
     /// <summary>
-    /// set NMI callback function by label name
+    /// set NMI callback function by label name (for extern labels in .s files)
     /// The named function will be called every NMI frame.
     /// Usage: nmi_set_callback("famitone_update")
     /// </summary>
     public static void nmi_set_callback(string callbackName) => throw null!;
 
     /// <summary>
-    /// set IRQ callback function by label name
+    /// set NMI callback to a C# function
+    /// Usage: nmi_set_callback(&amp;my_nmi_handler)
+    /// </summary>
+    public static unsafe void nmi_set_callback(delegate*<void> callback) => throw null!;
+
+    /// <summary>
+    /// set IRQ callback function by label name (for extern labels in .s files)
     /// The named function will be called when a hardware IRQ fires (e.g., MMC3 scanline IRQ).
     /// Usage: irq_set_callback("my_irq_handler")
     /// </summary>
     public static void irq_set_callback(string callbackName) => throw null!;
+
+    /// <summary>
+    /// set IRQ callback to a C# function
+    /// Usage: irq_set_callback(&amp;my_irq_handler)
+    /// </summary>
+    public static unsafe void irq_set_callback(delegate*<void> callback) => throw null!;
 
     /// <summary>
     /// enable CPU interrupts (6502 CLI instruction)

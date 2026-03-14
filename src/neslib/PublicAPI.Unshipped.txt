@@ -49,11 +49,13 @@ static NES.NESLib.bcd_add(ushort a, ushort b) -> ushort
 static NES.NESLib.cli() -> void
 static NES.NESLib.famitone_init(string! musicDataLabel) -> void
 static NES.NESLib.irq_set_callback(string! callbackName) -> void
+static NES.NESLib.irq_set_callback(delegate*<void> callback) -> void
 static NES.NESLib.memfill(object! dst, byte value, uint len) -> void
 static NES.NESLib.music_pause(byte pause) -> void
 static NES.NESLib.music_play(byte song) -> void
 static NES.NESLib.music_stop() -> void
 static NES.NESLib.nmi_set_callback(string! callbackName) -> void
+static NES.NESLib.nmi_set_callback(delegate*<void> callback) -> void
 static NES.NESLib.oam_clear_fast() -> void
 static NES.NESLib.oam_meta_spr_clip(int x, byte y, byte[]! metasprite) -> void
 static NES.NESLib.oam_meta_spr_pal(byte x, byte y, byte pal, byte[]! data) -> void

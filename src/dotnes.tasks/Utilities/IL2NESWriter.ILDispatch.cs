@@ -1055,6 +1055,10 @@ partial class IL2NESWriter
         {
             case ILOpCode.Nop:
                 break;
+            case ILOpCode.Ldftn:
+                // Function pointer: store the method name for the callback handler
+                _lastLdftnMethod = operand;
+                break;
             case ILOpCode.Ldstr:
                 // Deduplicate: reuse label if same string was already seen
                 if (!_stringLabelMap.TryGetValue(operand, out string? stringLabel))
@@ -1269,27 +1273,36 @@ partial class IL2NESWriter
                     case nameof(NESLib.famitone_init):
                     case nameof(NESLib.sfx_init):
                         {
-                            // These functions take a string label name as argument.
-                            // The Ldstr emitted: LDA #<string_N, LDX #>string_N, JSR pushax, LDX #0, LDA #len
-                            // Replace with: LDA #<_label, LDX #>_label, JSR target
-                            var block = CurrentBlock!;
                             string? labelName = null;
-                            if (block.Count >= 5)
+
+                            if (_lastLdftnMethod != null)
                             {
-                                var ldaStringInstr = block[block.Count - 5];
-                                if (ldaStringInstr.Operand is LowByteOperand lbo)
+                                // Function pointer path: ldftn already gave us the method name, no instructions to remove
+                                labelName = _lastLdftnMethod;
+                                _lastLdftnMethod = null;
+                            }
+                            else
+                            {
+                                // String literal path: Ldstr emitted LDA #<string_N, LDX #>string_N, JSR pushax, LDX #0, LDA #len
+                                var block = CurrentBlock!;
+                                if (block.Count >= 5)
                                 {
-                                    foreach (var entry in _stringLabelMap)
+                                    var ldaStringInstr = block[block.Count - 5];
+                                    if (ldaStringInstr.Operand is LowByteOperand lbo)
                                     {
-                                        if (entry.Value == lbo.Label)
+                                        foreach (var entry in _stringLabelMap)
                                         {
-                                            labelName = entry.Key;
-                                            break;
+                                            if (entry.Value == lbo.Label)
+                                            {
+                                                labelName = entry.Key;
+                                                break;
+                                            }
                                         }
                                     }
                                 }
+                                RemoveLastInstructions(5);
                             }
-                            RemoveLastInstructions(5);
+
                             if (labelName != null)
                             {
                                 // User-defined methods use their name as-is; extern methods use _ prefix (cc65 convention)
