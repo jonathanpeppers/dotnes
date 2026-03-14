@@ -388,10 +388,10 @@ while (true)
 
             byte dir = actor_dir[ai];
             byte st = actor_state[ai];
-            byte actorType = actor_name[ai]; // 0=player, 1=enemy, 2=rescue
             if (st == STANDING)
             {
-                if (actorType != 0)
+                // Check actor type inline to avoid IL stack interleaving with st cascade
+                if (actor_name[ai] != 0)
                 {
                     // Enemies use jump sprites for standing/walking
                     if (dir != 0) oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerLJump);
@@ -405,7 +405,7 @@ while (true)
             }
             if (st == WALKING)
             {
-                if (actorType != 0)
+                if (actor_name[ai] != 0)
                 {
                     // Enemies use jump sprites for standing/walking
                     if (dir != 0) oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerLJump);
