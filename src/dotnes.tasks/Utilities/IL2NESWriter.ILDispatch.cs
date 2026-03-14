@@ -161,9 +161,9 @@ partial class IL2NESWriter
                 }
                 else
                 {
-                    var addr = Locals.TryGetValue(0, out var existing) && existing.Address is not null
-                        ? (ushort)existing.Address : (ushort)(local + LocalCount);
-                    WriteStloc(Locals[0] = new Local(Stack.Pop(), addr, IsWord: WordLocals.Contains(0) || (_runtimeValueInA && _ushortInAX) || _ntadrRuntimeResult));
+                    bool isNew = !(Locals.TryGetValue(0, out var existing) && existing.Address is not null);
+                    var addr = isNew ? (ushort)(local + LocalCount) : (ushort)existing!.Address!.Value;
+                    WriteStloc(Locals[0] = new Local(Stack.Pop(), addr, IsWord: WordLocals.Contains(0) || (_runtimeValueInA && _ushortInAX) || _ntadrRuntimeResult), isNewAllocation: isNew);
                 }
                 break;
             case ILOpCode.Stloc_1:
@@ -184,9 +184,9 @@ partial class IL2NESWriter
                 }
                 else
                 {
-                    var addr = Locals.TryGetValue(1, out var existing) && existing.Address is not null
-                        ? (ushort)existing.Address : (ushort)(local + LocalCount);
-                    WriteStloc(Locals[1] = new Local(Stack.Pop(), addr, IsWord: WordLocals.Contains(1) || (_runtimeValueInA && _ushortInAX) || _ntadrRuntimeResult));
+                    bool isNew = !(Locals.TryGetValue(1, out var existing) && existing.Address is not null);
+                    var addr = isNew ? (ushort)(local + LocalCount) : (ushort)existing!.Address!.Value;
+                    WriteStloc(Locals[1] = new Local(Stack.Pop(), addr, IsWord: WordLocals.Contains(1) || (_runtimeValueInA && _ushortInAX) || _ntadrRuntimeResult), isNewAllocation: isNew);
                 }
                 break;
             case ILOpCode.Stloc_2:
@@ -207,9 +207,9 @@ partial class IL2NESWriter
                 }
                 else
                 {
-                    var addr = Locals.TryGetValue(2, out var existing) && existing.Address is not null
-                        ? (ushort)existing.Address : (ushort)(local + LocalCount);
-                    WriteStloc(Locals[2] = new Local(Stack.Pop(), addr, IsWord: WordLocals.Contains(2) || (_runtimeValueInA && _ushortInAX) || _ntadrRuntimeResult));
+                    bool isNew = !(Locals.TryGetValue(2, out var existing) && existing.Address is not null);
+                    var addr = isNew ? (ushort)(local + LocalCount) : (ushort)existing!.Address!.Value;
+                    WriteStloc(Locals[2] = new Local(Stack.Pop(), addr, IsWord: WordLocals.Contains(2) || (_runtimeValueInA && _ushortInAX) || _ntadrRuntimeResult), isNewAllocation: isNew);
                 }
                 break;
             case ILOpCode.Stloc_3:
@@ -230,9 +230,9 @@ partial class IL2NESWriter
                 }
                 else
                 {
-                    var addr = Locals.TryGetValue(3, out var existing) && existing.Address is not null
-                        ? (ushort)existing.Address : (ushort)(local + LocalCount);
-                    WriteStloc(Locals[3] = new Local(Stack.Pop(), addr, IsWord: WordLocals.Contains(3) || (_runtimeValueInA && _ushortInAX) || _ntadrRuntimeResult));
+                    bool isNew = !(Locals.TryGetValue(3, out var existing) && existing.Address is not null);
+                    var addr = isNew ? (ushort)(local + LocalCount) : (ushort)existing!.Address!.Value;
+                    WriteStloc(Locals[3] = new Local(Stack.Pop(), addr, IsWord: WordLocals.Contains(3) || (_runtimeValueInA && _ushortInAX) || _ntadrRuntimeResult), isNewAllocation: isNew);
                 }
                 break;
             case ILOpCode.Ldloc_0:
@@ -774,9 +774,9 @@ partial class IL2NESWriter
                     else
                     {
                         // Regular local — allocate address and store
-                        var addr = Locals.TryGetValue(localIdx, out var existing) && existing.Address is not null
-                            ? (ushort)existing.Address : (ushort)(local + LocalCount);
-                        WriteStloc(Locals[localIdx] = new Local(Stack.Pop(), addr, IsWord: WordLocals.Contains(localIdx) || (_runtimeValueInA && _ushortInAX) || _ntadrRuntimeResult));
+                        bool isNew = !(Locals.TryGetValue(localIdx, out var existing) && existing.Address is not null);
+                        var addr = isNew ? (ushort)(local + LocalCount) : (ushort)existing!.Address!.Value;
+                        WriteStloc(Locals[localIdx] = new Local(Stack.Pop(), addr, IsWord: WordLocals.Contains(localIdx) || (_runtimeValueInA && _ushortInAX) || _ntadrRuntimeResult), isNewAllocation: isNew);
                     }
                 }
                 break;
