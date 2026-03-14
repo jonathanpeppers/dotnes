@@ -246,8 +246,9 @@ class Transpiler : IDisposable
         }
 
         // Transpile user-defined methods into separate blocks
-        // User function locals must start AFTER main's locals to avoid memory overlap
+        // Each method's locals must use unique addresses to prevent collisions in nested calls
         int mainLocalCount = writer.LocalCount;
+        var methodFrameOffsets = ComputeMethodFrameOffsets(UserMethods, reflectionCache, mainLocalCount);
         int userMethodsTotalSize = 0;
         foreach (var kvp in UserMethods.OrderBy(x => x.Key, StringComparer.Ordinal))
         {
@@ -267,7 +268,7 @@ class Transpiler : IDisposable
                 StructLayouts = structLayouts,
                 ByteArrayLabelStartIndex = writer.ByteArrays.Count,
                 StringLabelStartIndex = writer.StringTable.Count,
-                LocalCount = mainLocalCount,
+                LocalCount = methodFrameOffsets[methodName],
             };
             methodWriter.StartBlockBuffering();
 
@@ -874,6 +875,97 @@ class Transpiler : IDisposable
                 result.Add(idx.Value);
         }
         return result;
+    }
+
+    /// <summary>
+    /// Pre-scan IL to estimate the number of local variable bytes a method will allocate.
+    /// Counts distinct stloc targets, using 2 bytes for word-sized locals and 1 byte for byte-sized.
+    /// </summary>
+    static int EstimateMethodLocalBytes(ILInstruction[] instructions, HashSet<int> wordLocals)
+    {
+        var localIndices = new HashSet<int>();
+        foreach (var inst in instructions)
+        {
+            int? idx = inst.OpCode switch
+            {
+                ILOpCode.Stloc_0 => 0,
+                ILOpCode.Stloc_1 => 1,
+                ILOpCode.Stloc_2 => 2,
+                ILOpCode.Stloc_3 => 3,
+                ILOpCode.Stloc_s or ILOpCode.Stloc => inst.Integer,
+                _ => null
+            };
+            if (idx.HasValue)
+                localIndices.Add(idx.Value);
+        }
+        int bytes = 0;
+        foreach (var idx in localIndices)
+            bytes += wordLocals.Contains(idx) ? 2 : 1;
+        return bytes;
+    }
+
+    /// <summary>
+    /// Compute frame offsets for each user method based on the call graph.
+    /// Methods called by other user methods get offsets that avoid overlapping
+    /// with their callers' locals. Methods not in any call chain use the base offset.
+    /// </summary>
+    static Dictionary<string, int> ComputeMethodFrameOffsets(
+        Dictionary<string, ILInstruction[]> userMethods,
+        ReflectionCache? reflectionCache,
+        int baseOffset)
+    {
+        // Step 1: Estimate local byte counts for each method
+        var localByteCounts = new Dictionary<string, int>(StringComparer.Ordinal);
+        foreach (var kvp in userMethods)
+        {
+            var wordLocals = DetectWordLocals(kvp.Value, reflectionCache);
+            localByteCounts[kvp.Key] = EstimateMethodLocalBytes(kvp.Value, wordLocals);
+        }
+
+        // Step 2: Build call graph — which user methods does each method call?
+        var callGraph = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
+        foreach (var kvp in userMethods)
+        {
+            var callees = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var inst in kvp.Value)
+            {
+                if (inst.OpCode == ILOpCode.Call && inst.String is not null
+                    && userMethods.ContainsKey(inst.String))
+                {
+                    callees.Add(inst.String);
+                }
+            }
+            callGraph[kvp.Key] = callees;
+        }
+
+        // Step 3: Fixed-point iteration to propagate offsets along call edges
+        // For edge caller → callee: callee.offset >= caller.offset + caller.localBytes
+        var offsets = new Dictionary<string, int>(StringComparer.Ordinal);
+        foreach (var method in userMethods.Keys)
+            offsets[method] = baseOffset;
+
+        bool changed = true;
+        int maxIterations = userMethods.Count + 1; // guard against cycles
+        int iteration = 0;
+        while (changed && iteration < maxIterations)
+        {
+            iteration++;
+            changed = false;
+            foreach (var kvp in callGraph)
+            {
+                int callerEnd = offsets[kvp.Key] + localByteCounts[kvp.Key];
+                foreach (var callee in kvp.Value)
+                {
+                    if (callerEnd > offsets[callee])
+                    {
+                        offsets[callee] = callerEnd;
+                        changed = true;
+                    }
+                }
+            }
+        }
+
+        return offsets;
     }
 
     /// <summary>

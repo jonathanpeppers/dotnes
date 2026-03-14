@@ -3209,4 +3209,45 @@ public class RoslynTests
         int txaIdx = hex.IndexOf("8A8D");
         Assert.True(txaIdx >= 0, "TXA + STA pattern not found after cascade — stale _dupCascadeActive may corrupt dup");
     }
+
+    [Fact]
+    public void NestedFunctionCallsGetSeparateLocalAddresses()
+    {
+        // When outer_func calls inner_func, each must have its own local storage
+        // to prevent inner_func from clobbering outer_func's locals.
+        var (program, _) = BuildProgram(
+            """
+            outer_func();
+            ppu_on_all();
+            while (true) ;
+
+            static void outer_func()
+            {
+                byte local_outer = 42;
+                inner_func();
+                pal_col(0, local_outer);
+            }
+
+            static void inner_func()
+            {
+                byte local_inner = 99;
+                pal_col(1, local_inner);
+            }
+            """);
+
+        // Get full program bytes (main + user methods)
+        var allBytes = program.ToBytes();
+        var hex = Convert.ToHexString(allBytes);
+        _logger.WriteLine($"NestedFunctionCalls full hex: {hex}");
+
+        // Both literal values must appear: LDA #42 (A92A) and LDA #99 (A963)
+        Assert.Contains("A92A", hex);
+        Assert.Contains("A963", hex);
+
+        // outer_func's local is stored at $0325 (STA $0325 = 8D2503)
+        Assert.Contains("8D2503", hex);
+        // inner_func's local must be at a DIFFERENT address ($0326 = 8D2603)
+        // because outer_func calls inner_func and both are on the stack simultaneously
+        Assert.Contains("8D2603", hex);
+    }
 }
