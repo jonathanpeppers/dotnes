@@ -105,13 +105,14 @@ class NESWriter : IDisposable
         addr = currentAddress;
 
         // Helper to resolve label from local labels or global Labels dictionary
-        ushort ResolveLabel(string name)
+        ushort ResolveLabel(string name, string? context = null)
         {
             if (localLabels.TryGetValue(name, out ushort resolved))
                 return resolved;
             if (Labels.TryGetValue(name, out resolved))
                 return resolved;
-            throw new InvalidOperationException($"Unresolved label: {name}");
+            var ctx = context != null ? $" for {context}" : "";
+            throw new InvalidOperationException($"Unresolved label{ctx}: {name}");
         }
 
         foreach (var (instruction, _) in block.InstructionsWithLabels)
@@ -136,11 +137,11 @@ class NESWriter : IDisposable
                         break;
                     
                     case LowByteOperand lowOp:
-                        _writer.Write((byte)(ResolveLabel(lowOp.Label) & 0xFF));
+                        _writer.Write((byte)(ResolveLabel(lowOp.Label, "low byte") & 0xFF));
                         break;
                     
                     case HighByteOperand highOp:
-                        _writer.Write((byte)(ResolveLabel(highOp.Label) >> 8));
+                        _writer.Write((byte)(ResolveLabel(highOp.Label, "high byte") >> 8));
                         break;
                         
                     case RelativeOperand relOp:
