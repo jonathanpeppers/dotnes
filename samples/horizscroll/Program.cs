@@ -58,7 +58,7 @@ oam_spr(1, 30, 0xa0, 0, 0);
 
 // clear vram buffer and set NMI to use it
 vrambuf_clear();
-set_vram_update(0x0100);
+set_vram_update(updbuf);
 
 // enable PPU rendering
 ppu_on_all();

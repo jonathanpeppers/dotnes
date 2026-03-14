@@ -8,7 +8,7 @@ pal_col(3, 0x30);  // white
 vrambuf_clear();
 
 // set NMI handler to use update buffer at $0100
-set_vram_update(0x0100);
+set_vram_update(updbuf);
 
 // enable PPU rendering
 ppu_on_all();

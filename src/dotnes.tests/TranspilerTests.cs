@@ -100,14 +100,22 @@ public class TranspilerTests
     [InlineData("climber", false)]
     [InlineData("pong", true)]
     [InlineData("pong", false)]
+    [InlineData("transtable", true, false, 0, 2, 0)]
+    [InlineData("transtable", false, false, 0, 2, 0)]
     public Task Write(string name, bool debug, bool verticalMirroring = false, int mapper = 0, int prgBanks = 2, int chrBanks = 1)
     {
         var configuration = debug ? "debug" : "release";
-        var chrName = $"chr_{name}.s";
-        var chrStream = typeof(Utilities).Assembly.GetManifestResourceStream(chrName);
-        var chr_generic = new StreamReader(chrStream ?? Utilities.GetResource("chr_generic.s"));
 
-        var assemblyReaders = new List<AssemblyReader> { new AssemblyReader(chr_generic) };
+        var assemblyReaders = new List<AssemblyReader>();
+
+        // CHR RAM samples (chrBanks=0) don't need a CHR assembly file
+        if (chrBanks > 0)
+        {
+            var chrName = $"chr_{name}.s";
+            var chrStream = typeof(Utilities).Assembly.GetManifestResourceStream(chrName);
+            var chr_generic = new StreamReader(chrStream ?? Utilities.GetResource("chr_generic.s"));
+            assemblyReaders.Add(new AssemblyReader(chr_generic));
+        }
 
         // Include fami assembly files (famitone2.s, demosounds.s, etc.) only for samples that use extern methods
         if (name is "climber" or "fami")
