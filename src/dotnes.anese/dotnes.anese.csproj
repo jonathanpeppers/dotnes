@@ -28,9 +28,11 @@
       Inputs="$(MSBuildThisFile)"
       Outputs="@(_Downloads)">
     <Delete Files="@(_Downloads)" />
-    <DownloadFile SourceUrl="$(WindowsUrl)" DestinationFolder="$(IntermediateOutputPath)" />
-    <DownloadFile SourceUrl="$(MacUrl)"     DestinationFolder="$(IntermediateOutputPath)" />
-    <DownloadFile SourceUrl="$(GithubLicenseUrl)" DestinationFolder="$(IntermediateOutputPath)" />
+    <DownloadFile SourceUrl="$(WindowsUrl)" DestinationFolder="$(IntermediateOutputPath)" DestinationFileName="ANESE_$(PackageVersion)_win.zip" Retries="$(DownloadFileRetries)" RetryDelayMilliseconds="$(DownloadFileRetryDelayMilliseconds)" />
+    <DownloadFile SourceUrl="$(MacUrl)"     DestinationFolder="$(IntermediateOutputPath)" DestinationFileName="ANESE_$(PackageVersion)_macOS.zip" Retries="$(DownloadFileRetries)" RetryDelayMilliseconds="$(DownloadFileRetryDelayMilliseconds)" />
+    <DownloadFile SourceUrl="$(GithubLicenseUrl)" DestinationFolder="$(IntermediateOutputPath)" DestinationFileName="LICENSE" Retries="$(DownloadFileRetries)" RetryDelayMilliseconds="$(DownloadFileRetryDelayMilliseconds)" />
+    <Error Condition="!Exists('$(IntermediateOutputPath)ANESE_$(PackageVersion)_win.zip')" Text="Failed to download ANESE Windows zip" />
+    <Error Condition="!Exists('$(IntermediateOutputPath)ANESE_$(PackageVersion)_macOS.zip')" Text="Failed to download ANESE macOS zip" />
     <ItemGroup>
       <FileWrites Include="@(_Downloads)" />
     </ItemGroup>

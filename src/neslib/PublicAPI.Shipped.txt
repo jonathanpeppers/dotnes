@@ -1,0 +1,61 @@
+#nullable enable
+NES.NESLib
+NES.PAD
+NES.PAD.A = 1 -> NES.PAD
+NES.PAD.B = 2 -> NES.PAD
+NES.PAD.DOWN = 32 -> NES.PAD
+NES.PAD.LEFT = 64 -> NES.PAD
+NES.PAD.RIGHT = 128 -> NES.PAD
+NES.PAD.SELECT = 4 -> NES.PAD
+NES.PAD.START = 8 -> NES.PAD
+NES.PAD.UP = 16 -> NES.PAD
+const NES.NESLib.NAMETABLE_A = 8192 -> ushort
+const NES.NESLib.NAMETABLE_B = 9216 -> ushort
+const NES.NESLib.NAMETABLE_C = 10240 -> ushort
+const NES.NESLib.NAMETABLE_D = 11264 -> ushort
+static NES.NESLib.NTADR_A(byte x, byte y) -> ushort
+static NES.NESLib.NTADR_B(byte x, byte y) -> ushort
+static NES.NESLib.NTADR_C(byte x, byte y) -> ushort
+static NES.NESLib.NTADR_D(byte x, byte y) -> ushort
+static NES.NESLib.bank_bg(byte n) -> void
+static NES.NESLib.bank_spr(byte n) -> void
+static NES.NESLib.delay(byte frames) -> void
+static NES.NESLib.flush_vram_update(byte[]! buf) -> void
+static NES.NESLib.get_ppu_ctrl_var() -> byte
+static NES.NESLib.nesclock() -> byte
+static NES.NESLib.oam_clear() -> void
+static NES.NESLib.oam_hide_rest(byte sprid) -> void
+static NES.NESLib.oam_meta_spr(byte x, byte y, byte sprid, byte[]! data) -> byte
+static NES.NESLib.oam_size(byte size) -> void
+static NES.NESLib.oam_spr(byte x, byte y, byte chrnum, byte attr, byte sprid) -> byte
+static NES.NESLib.pad_poll(byte pad) -> NES.PAD
+static NES.NESLib.pal_all(byte[]! data) -> void
+static NES.NESLib.pal_bg(byte[]! data) -> void
+static NES.NESLib.pal_bg_bright(byte bright) -> void
+static NES.NESLib.pal_bright(byte bright) -> void
+static NES.NESLib.pal_clear() -> void
+static NES.NESLib.pal_col(byte index, byte color) -> void
+static NES.NESLib.pal_spr(byte[]! data) -> void
+static NES.NESLib.pal_spr_bright(byte bright) -> void
+static NES.NESLib.ppu_mask(byte mask) -> void
+static NES.NESLib.ppu_off() -> void
+static NES.NESLib.ppu_on_all() -> void
+static NES.NESLib.ppu_on_bg() -> void
+static NES.NESLib.ppu_on_spr() -> void
+static NES.NESLib.ppu_system() -> byte
+static NES.NESLib.ppu_wait_frame() -> void
+static NES.NESLib.ppu_wait_nmi() -> void
+static NES.NESLib.rand() -> byte
+static NES.NESLib.rand16() -> ushort
+static NES.NESLib.rand8() -> byte
+static NES.NESLib.scroll(int x, int y) -> void
+static NES.NESLib.set_ppu_ctrl_var(byte var) -> void
+static NES.NESLib.set_vram_update(byte[]! buf) -> void
+static NES.NESLib.split(int x, int y) -> void
+static NES.NESLib.vram_adr(ushort adr) -> void
+static NES.NESLib.vram_fill(byte n, uint len) -> void
+static NES.NESLib.vram_inc(byte n) -> void
+static NES.NESLib.vram_put(byte n) -> void
+static NES.NESLib.vram_unrle(byte[]! data) -> void
+static NES.NESLib.vram_write(byte[]! src) -> void
+static NES.NESLib.vram_write(string! src) -> void

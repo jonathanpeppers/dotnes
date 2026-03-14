@@ -3,6 +3,8 @@
     <Version>0.2.0</Version>
     <PackageVersion>$(Version)-alpha</PackageVersion>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <DownloadFileRetries>3</DownloadFileRetries>
+    <DownloadFileRetryDelayMilliseconds>2000</DownloadFileRetryDelayMilliseconds>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.SourceLink.GitHub" Version="10.0.102" PrivateAssets="All" />
