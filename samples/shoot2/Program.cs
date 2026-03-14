@@ -200,9 +200,9 @@ byte[] exp_y = new byte[MAX_EXPLOSIONS];
 byte[] exp_timer = new byte[MAX_EXPLOSIONS];
 
 // Zero-initialize guard arrays (new byte[N] doesn't zero memory on NES)
-for (byte i = 0; i < MAX_BULLETS; i++) bullet_active[i] = 0;
-for (byte i = 0; i < MAX_ENEMIES; i++) enemy_active[i] = 0;
-for (byte i = 0; i < MAX_EXPLOSIONS; i++) exp_timer[i] = 0;
+for (byte zi = 0; zi < MAX_BULLETS; zi++) bullet_active[zi] = 0;
+for (byte zi = 0; zi < MAX_ENEMIES; zi++) enemy_active[zi] = 0;
+for (byte zi = 0; zi < MAX_EXPLOSIONS; zi++) exp_timer[zi] = 0;
 
 // Initialize stars
 for (byte i = 0; i < MAX_STARS; i++)
@@ -460,68 +460,63 @@ static void enable_apu()
     poke(APU_STATUS, 0x0F);
 }
 
-// APU pulse channel 1 with decay envelope
-static void apu_pulse1_decay(byte duty_vol, byte period_lo, byte period_hi)
+// APU pulse channel 1 — caller passes pre-computed register values
+// (avoids runtime expressions in poke which leak C stack bytes)
+static void apu_pulse1_write(byte ctrl, byte timer_lo, byte timer_hi)
 {
-    byte val = (byte)(0x30 | duty_vol);
-    poke(APU_PULSE1_CTRL, val);
+    poke(APU_PULSE1_CTRL, ctrl);
     poke(APU_PULSE1_SWEEP, 0x00);
-    poke(APU_PULSE1_TIMER_LO, period_lo);
-    val = (byte)(0xF8 | period_hi);
-    poke(APU_PULSE1_TIMER_HI, val);
+    poke(APU_PULSE1_TIMER_LO, timer_lo);
+    poke(APU_PULSE1_TIMER_HI, timer_hi);
 }
 
-// APU pulse channel 2 with sustain
-static void apu_pulse2_sustain(byte duty_vol, byte period_lo, byte period_hi)
+// APU pulse channel 2 — caller passes pre-computed register values
+static void apu_pulse2_write(byte ctrl, byte timer_lo, byte timer_hi)
 {
-    byte val = (byte)(0xB0 | duty_vol);
-    poke(APU_PULSE2_CTRL, val);
+    poke(APU_PULSE2_CTRL, ctrl);
     poke(APU_PULSE2_SWEEP, 0x00);
-    poke(APU_PULSE2_TIMER_LO, period_lo);
-    val = (byte)(0xF8 | period_hi);
-    poke(APU_PULSE2_TIMER_HI, val);
+    poke(APU_PULSE2_TIMER_LO, timer_lo);
+    poke(APU_PULSE2_TIMER_HI, timer_hi);
 }
 
-// APU noise channel with decay envelope
-static void apu_noise_decay(byte period, byte vol)
+// APU noise channel — caller passes pre-computed register values
+static void apu_noise_write(byte ctrl, byte period)
 {
-    byte val = (byte)(0x30 | vol);
-    poke(APU_NOISE_CTRL, val);
+    poke(APU_NOISE_CTRL, ctrl);
     poke(APU_NOISE_PERIOD, period);
     poke(APU_NOISE_LENGTH, 0xF8);
 }
 
-// APU triangle channel with sustain
-static void apu_triangle_sustain(byte period_lo, byte period_hi)
+// APU triangle channel — caller passes pre-computed register values
+static void apu_triangle_write(byte timer_lo, byte timer_hi)
 {
     poke(APU_TRIANGLE_CTRL, 0xFF);
-    poke(APU_TRIANGLE_TIMER_LO, period_lo);
-    byte val = (byte)(0xF8 | period_hi);
-    poke(APU_TRIANGLE_TIMER_HI, val);
+    poke(APU_TRIANGLE_TIMER_LO, timer_lo);
+    poke(APU_TRIANGLE_TIMER_HI, timer_hi);
 }
 
-// Sound effect: player fires
+// Sound effect: player fires (pulse1 decay: 0x30|0x4A=0x7A, timer $0180, length 0xF8|0x01=0xF9)
 static void sfx_shoot()
 {
-    apu_pulse1_decay(0x4A, 0x80, 0x01);
+    apu_pulse1_write(0x7A, 0x80, 0xF9);
 }
 
-// Sound effect: enemy hit
+// Sound effect: enemy hit (noise decay: 0x30|0x0A=0x3A, period 4)
 static void sfx_hit()
 {
-    apu_noise_decay(0x04, 0x0A);
+    apu_noise_write(0x3A, 0x04);
 }
 
-// Sound effect: explosion
+// Sound effect: explosion (noise: 0x30|0x0F=0x3F, period 6; triangle: timer $0140, 0xF8|0x01=0xF9)
 static void sfx_explode()
 {
-    apu_noise_decay(0x06, 0x0F);
-    apu_triangle_sustain(0x40, 0x01);
+    apu_noise_write(0x3F, 0x06);
+    apu_triangle_write(0x40, 0xF9);
 }
 
-// Sound effect: player destroyed
+// Sound effect: player destroyed (pulse1: 0x30|0x8F=0xBF, timer $0200, 0xF8|0x02=0xFA; noise: 0x30|0x0F=0x3F, period 8)
 static void sfx_player_die()
 {
-    apu_pulse1_decay(0x8F, 0x00, 0x02);
-    apu_noise_decay(0x08, 0x0F);
+    apu_pulse1_write(0xBF, 0x00, 0xFA);
+    apu_noise_write(0x3F, 0x08);
 }
