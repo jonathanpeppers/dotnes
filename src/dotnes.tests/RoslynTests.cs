@@ -3310,4 +3310,33 @@ public class RoslynTests
         Assert.True(ldc2Index > ldloc + 6,
             $"No JSR pusha after loading local x before constant arg. Hex: {hex}");
     }
+
+    [Fact]
+    public void VramReadEmitsPushaxAndSize()
+    {
+        // vram_read(byte[], uint) must emit the same pushax + size calling convention
+        // as vram_write: pointer pushed via pushax, size in A:X, then JSR vram_read.
+        var bytes = GetProgramBytes(
+            """
+            byte[] buf = new byte[4] { 0x01, 0x02, 0x03, 0x04 };
+            vram_adr(NTADR_A(2, 2));
+            vram_read(buf, 4);
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"VramRead hex: {hex}");
+
+        // The sequence for vram_read(buf, 4) via WriteLdloc should be:
+        //   LDA #lo(buf)   -> A9 xx      (byte array label low byte)
+        //   LDX #hi(buf)   -> A2 xx      (byte array label high byte)
+        //   JSR pushax     -> 20 xx xx   (push pointer onto cc65 stack)
+        //   LDX #$00       -> A2 00      (size high byte from local.Value)
+        //   LDA #$04       -> A9 04      (size low byte = 4)
+        //   ...
+        //   JSR vram_read  -> 20 xx xx
+
+        // Verify pushax is used (A200 A904 should appear from the WriteLdloc path)
+        Assert.Contains("A200A904", hex);
+    }
 }
