@@ -3209,4 +3209,42 @@ public class RoslynTests
         int txaIdx = hex.IndexOf("8A8D");
         Assert.True(txaIdx >= 0, "TXA + STA pattern not found after cascade — stale _dupCascadeActive may corrupt dup");
     }
+
+    [Fact]
+    public void MultiParamUserFunction_LocalVarArgs()
+    {
+        // Troubleshoot: calling a user-defined function with 2 runtime local variable args.
+        // Use rand8() to prevent the compiler from constant-folding.
+        // The transpiler should push the first arg via pusha before loading the second.
+        var bytes = GetProgramBytes(
+            """
+            byte x = rand8();
+            byte y = rand8();
+            my_func(x, y);
+            ppu_on_all();
+            while (true) ;
+
+            static void my_func(byte a, byte b) { pal_col(a, b); }
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"MultiParamUserFunction_LocalVarArgs hex: {hex}");
+
+        // Local 0 (x) is at $0325, local 1 (y) at $0326
+        // Loading local 0: AD2503 (LDA $0325)
+        // Loading local 1: AD2603 (LDA $0326)
+        int idx0 = hex.IndexOf("AD2503");
+        int idx1 = hex.IndexOf("AD2603");
+        Assert.True(idx0 >= 0, $"LDA $0325 (load local 0) not found. Hex: {hex}");
+        Assert.True(idx1 >= 0, $"LDA $0326 (load local 1) not found. Hex: {hex}");
+        Assert.True(idx1 > idx0, "LDA $0326 should come after LDA $0325");
+
+        // The two LDA instructions should NOT be adjacent — there must be a JSR pusha between them.
+        // AD2503 is 6 hex chars, so if idx1 == idx0 + 6, they're adjacent (no pusha).
+        Assert.True(idx1 > idx0 + 6,
+            $"No JSR pusha between loading local args — first arg will be lost. " +
+            $"LDA $0325 at {idx0}, LDA $0326 at {idx1}. Hex: {hex}");
+    }
 }
