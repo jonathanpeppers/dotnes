@@ -1144,13 +1144,65 @@ partial class IL2NESWriter
                                 }
                                 else if (yIsRuntime)
                                 {
-                                    // Runtime y: block has LDA #x, JSR pusha, LDA $y_addr (3 instrs)
-                                    var xConstInstr = block[block.Count - 3];
-                                    byte cx = ((ImmediateOperand)xConstInstr.Operand!).Value;
-                                    RemoveLastInstructions(3);
-                                    Emit(Opcode.LDA, AddressMode.Immediate, cx);
-                                    Emit(Opcode.STA, AddressMode.ZeroPage, TEMP);
-                                    block.Emit(lastInstr); // re-emit LDA $y_addr
+                                    // Runtime y: block has [x load], JSR pusha, LDA $y_addr
+                                    // x could be constant (ImmediateOperand) or runtime (AbsoluteOperand)
+                                    if (block.Count >= 3
+                                        && block[block.Count - 2].Opcode == Opcode.JSR
+                                        && block[block.Count - 2].Operand is LabelOperand pushaLbl
+                                        && pushaLbl.Label == "pusha")
+                                    {
+                                        var xLoadInstr = block[block.Count - 3];
+                                        if (xLoadInstr.Operand is ImmediateOperand immX)
+                                        {
+                                            // Constant x (pusha'd), runtime y
+                                            RemoveLastInstructions(3);
+                                            Emit(Opcode.LDA, AddressMode.Immediate, immX.Value);
+                                            Emit(Opcode.STA, AddressMode.ZeroPage, TEMP);
+                                            block.Emit(lastInstr); // re-emit LDA $y_addr
+                                        }
+                                        else if (xLoadInstr.Mode == AddressMode.Absolute
+                                            && xLoadInstr.Opcode == Opcode.LDA)
+                                        {
+                                            // Both runtime: x pusha'd to cc65 stack, y in absolute LDA
+                                            RemoveLastInstructions(3);
+                                            block.Emit(lastInstr); // re-emit LDA $y_addr → A = y
+                                            Emit(Opcode.STA, AddressMode.ZeroPage, TEMP2);
+                                            EmitJSR("popa"); // A = x (from cc65 stack)
+                                            Emit(Opcode.STA, AddressMode.ZeroPage, TEMP); // TEMP = x
+                                            Emit(Opcode.LDA, AddressMode.ZeroPage, TEMP2); // A = y
+                                        }
+                                        else
+                                        {
+                                            throw new TranspileException(
+                                                $"Unsupported NTADR x argument pattern: {xLoadInstr.Operand?.GetType().Name}",
+                                                MethodName);
+                                        }
+                                    }
+                                    else if (block.Count >= 2)
+                                    {
+                                        // No pusha between: direct consecutive LDA $x, LDA $y
+                                        var prevInstr = block[block.Count - 2];
+                                        if (prevInstr.Mode == AddressMode.Absolute
+                                            && prevInstr.Opcode == Opcode.LDA)
+                                        {
+                                            RemoveLastInstructions(2);
+                                            block.Emit(prevInstr); // re-emit LDA $x_addr
+                                            Emit(Opcode.STA, AddressMode.ZeroPage, TEMP); // TEMP = x
+                                            block.Emit(lastInstr); // re-emit LDA $y_addr → A = y
+                                        }
+                                        else
+                                        {
+                                            throw new TranspileException(
+                                                $"Unsupported NTADR pattern: expected LDA absolute at block[-2], got {prevInstr.Opcode} {prevInstr.Mode}",
+                                                MethodName);
+                                        }
+                                    }
+                                    else
+                                    {
+                                        throw new TranspileException(
+                                            "Unsupported NTADR pattern: insufficient instructions in block for runtime y",
+                                            MethodName);
+                                    }
                                 }
                                 else if (xFromFlag)
                                 {
@@ -1578,6 +1630,10 @@ partial class IL2NESWriter
                                     Emit(Opcode.LDA, AddressMode.Immediate, (byte)(_lastByteArraySize & 0xFF));
                                 }
                                 _needsByteArrayLoadInCall = false;
+                                // Label consumed by this call — clear to prevent leaking
+                                // to subsequent stlocs and function calls
+                                _lastByteArrayLabel = null;
+                                _lastByteArraySize = 0;
                             }
                         }
                         // Emit JSR — extern methods use cc65 _prefix convention
@@ -1635,6 +1691,9 @@ partial class IL2NESWriter
                     _runtimeValueInA = false;
                     _ushortInAX = false;
                 }
+                // Clear NTADR result flag for all non-NTADR calls (result consumed or discarded)
+                if (operand is not (nameof(NTADR_A) or nameof(NTADR_B) or nameof(NTADR_C) or nameof(NTADR_D)))
+                    _ntadrRuntimeResult = false;
                 break;
             case ILOpCode.Stsfld:
                 if (operand == nameof(NESLib.oam_off))

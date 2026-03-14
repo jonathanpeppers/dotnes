@@ -4,18 +4,29 @@ Based on: https://8bitworkshop.com/ (siegegame.c)
 A tower-defense siege game for NES.
 Enemies march from the right side toward the castle on the left.
 The player places walls to block enemy paths.
-Uses vram_read for collision detection and 20+ user functions.
+
+NOTE: The dotnes transpiler currently has these limitations:
+  1. Multi-param user function calls don't push intermediate args
+  2. Local variable slot 0 maps to TEMP ($17), which NESLib routines overwrite
+  3. Nested function calls with loops share the same local variable addresses
+  4. _lastByteArrayLabel leaks across calls after byte[] array access
+  5. vram_read is not implemented in the transpiler
+Workarounds: all user functions take 0-1 params; use globals for state
+that must survive across function calls; enemies drawn as sprites;
+wall state tracked in arrays instead of reading VRAM.
 */
 
 #pragma warning disable CS0649, CS0219
 
-// Tile constants
+// Tile constants (background layer)
 const byte CH_BLANK = 0x00;
 const byte CH_WALL = 0x01;
 const byte CH_CASTLE = 0x02;
-const byte CH_ENEMY = 0x03;
-const byte CH_CURSOR = 0x04;
 const byte CH_FLOOR = 0x05;
+
+// Sprite tile indices
+const byte SPR_CURSOR = 0x04;
+const byte SPR_ENEMY = 0x03;
 
 // Game constants
 const byte BOARD_X = 2;
@@ -23,6 +34,7 @@ const byte BOARD_Y = 4;
 const byte BOARD_W = 26;
 const byte BOARD_H = 20;
 const byte MAX_ENEMIES = 8;
+const byte MAX_WALLS = 24;
 const byte STATE_TITLE = 0;
 const byte STATE_PLAY = 1;
 const byte STATE_OVER = 2;
@@ -39,7 +51,7 @@ byte[] palette = new byte[] {
     0x0f, 0x09, 0x19, 0x29
 };
 
-// Game state
+// Game state — all globals so they survive across function calls
 byte gameState = STATE_TITLE;
 byte cursorX = 14;
 byte cursorY = 14;
@@ -49,6 +61,19 @@ byte lives = 3;
 byte frameCount = 0;
 byte spawnTimer = 0;
 byte spawnRate = 60;
+byte lastTrigger = 0;
+byte castleHits = 0;
+byte activeCount = 0;
+
+// Flags to defer VRAM updates outside array-heavy code
+byte doPlaceWall = 0;
+byte doRemoveWall = 0;
+
+// Temp globals for collision checks (avoids local variable slot collisions)
+byte hitWall = 0;
+byte freeSlot = 0;
+byte tempNX = 0;
+byte tempNY = 0;
 
 // Enemy arrays (Structure of Arrays)
 byte[] enemyX = new byte[MAX_ENEMIES];
@@ -56,8 +81,11 @@ byte[] enemyY = new byte[MAX_ENEMIES];
 byte[] enemyActive = new byte[MAX_ENEMIES];
 byte[] enemyTimer = new byte[MAX_ENEMIES];
 
-// Tile read buffer for vram_read collision detection
-byte[] tileBuf = new byte[1];
+// Wall arrays (Structure of Arrays) — tracked in memory since vram_read
+// is not implemented in the transpiler
+byte[] wallX = new byte[MAX_WALLS];
+byte[] wallY = new byte[MAX_WALLS];
+byte[] wallActive = new byte[MAX_WALLS];
 
 // --- Setup ---
 
@@ -71,12 +99,11 @@ static void setup_graphics(byte[] pal)
     ppu_on_all();
 }
 
-// --- Title screen functions ---
+// --- Title screen ---
 
 static void draw_title_text()
 {
     ppu_off();
-    // Center "SIEGE GAME" (10 chars) on 30-column screen: (30-10)/2 = 10
     vram_adr(NTADR_A(10, 10));
     vram_write("SIEGE GAME");
     vram_adr(NTADR_A(7, 14));
@@ -85,6 +112,8 @@ static void draw_title_text()
     vram_write("DEFEND THE CASTLE!");
     ppu_on_all();
 }
+
+// --- HUD (1-param functions only) ---
 
 static void draw_hud_score(byte sc)
 {
@@ -119,150 +148,17 @@ static void draw_hud_lives(byte lv)
     ppu_on_all();
 }
 
-static void draw_hud(byte sc, byte w, byte lv)
-{
-    draw_hud_score(sc);
-    draw_hud_wave(w);
-    draw_hud_lives(lv);
-}
-
-// --- Board drawing ---
-
-static void draw_board_row(byte row)
-{
-    ppu_off();
-    for (byte col = 0; col < BOARD_W; col++)
-    {
-        vram_adr(NTADR_A((byte)(BOARD_X + col), (byte)(BOARD_Y + row)));
-        if (col == 0)
-            vram_put(CH_CASTLE);
-        else
-            vram_put(CH_FLOOR);
-    }
-    ppu_on_all();
-}
-
-static void draw_board()
-{
-    for (byte row = 0; row < BOARD_H; row++)
-    {
-        draw_board_row(row);
-    }
-}
-
 static void draw_gameover_text()
 {
     ppu_off();
     vram_adr(NTADR_A(11, 12));
     vram_write("GAME OVER");
     vram_adr(NTADR_A(7, 16));
-    vram_write("PRESS START TO RETRY");
+    vram_write("PRESS A TO RETRY");
     ppu_on_all();
 }
 
-// --- Tile functions using vram_read ---
-
-static void read_tile_at(byte x, byte y, byte[] buf)
-{
-    vram_adr(NTADR_A(x, y));
-    vram_read(buf, 1);
-}
-
-static byte is_wall_tile(byte tile)
-{
-    if (tile == CH_WALL)
-        return 1;
-    return 0;
-}
-
-static byte is_castle_tile(byte tile)
-{
-    if (tile == CH_CASTLE)
-        return 1;
-    return 0;
-}
-
-static byte is_floor_tile(byte tile)
-{
-    if (tile == CH_FLOOR)
-        return 1;
-    return 0;
-}
-
-static void write_tile(byte x, byte y, byte tile)
-{
-    vram_adr(NTADR_A(x, y));
-    vram_put(tile);
-}
-
-// --- Enemy initialization (write-only to arrays) ---
-
-static void clear_enemies(byte[] ea, byte[] et)
-{
-    for (byte i = 0; i < MAX_ENEMIES; i++)
-    {
-        ea[i] = 0;
-        et[i] = 0;
-    }
-}
-
-static void set_enemy(byte[] ex, byte[] ey, byte[] ea, byte[] et,
-    byte idx, byte x, byte y)
-{
-    ex[idx] = x;
-    ey[idx] = y;
-    ea[idx] = 1;
-    et[idx] = 0;
-}
-
-static void deactivate_enemy(byte[] ea, byte idx)
-{
-    ea[idx] = 0;
-}
-
-// --- Cursor drawing ---
-
-static void draw_cursor(byte x, byte y)
-{
-    oam_clear();
-    byte sx = (byte)(x * 8);
-    byte sy = (byte)(y * 8 - 1);
-    oam_spr(sx, sy, CH_CURSOR, 0, 0);
-}
-
-// --- Input handling ---
-
-static byte move_cursor_x(byte pad, byte cx)
-{
-    if ((byte)(pad & (byte)PAD.LEFT) != 0)
-    {
-        if (cx > (byte)(BOARD_X + 1))
-            return (byte)(cx - 1);
-    }
-    if ((byte)(pad & (byte)PAD.RIGHT) != 0)
-    {
-        if (cx < (byte)(BOARD_X + BOARD_W - 1))
-            return (byte)(cx + 1);
-    }
-    return cx;
-}
-
-static byte move_cursor_y(byte pad, byte cy)
-{
-    if ((byte)(pad & (byte)PAD.UP) != 0)
-    {
-        if (cy > BOARD_Y)
-            return (byte)(cy - 1);
-    }
-    if ((byte)(pad & (byte)PAD.DOWN) != 0)
-    {
-        if (cy < (byte)(BOARD_Y + BOARD_H - 1))
-            return (byte)(cy + 1);
-    }
-    return cy;
-}
-
-// --- Wave management ---
+// --- Wave management (1-param) ---
 
 static byte advance_wave(byte w)
 {
@@ -302,22 +198,49 @@ while (true)
         while (gameState == STATE_TITLE)
         {
             ppu_wait_nmi();
-            pad_poll(0);
-            byte trigger = pad_trigger(0);
-            if ((byte)(trigger & (byte)PAD.A) != 0)
+            lastTrigger = pad_trigger(0);
+            if ((byte)(lastTrigger & (byte)PAD.A) != 0)
             {
                 score = 0;
                 wave = 1;
                 lives = 3;
                 frameCount = 0;
                 spawnTimer = 0;
-                spawnRate = get_spawn_rate(wave);
                 cursorX = 14;
                 cursorY = 14;
-                clear_enemies(enemyActive, enemyTimer);
+                // get_spawn_rate BEFORE any array access (avoids label leak)
+                spawnRate = get_spawn_rate(wave);
+                // Clear enemies
+                for (byte ce = 0; ce < MAX_ENEMIES; ce++)
+                {
+                    enemyActive[ce] = 0;
+                    enemyTimer[ce] = 0;
+                }
+                // Clear walls
+                for (byte cw = 0; cw < MAX_WALLS; cw++)
+                {
+                    wallActive[cw] = 0;
+                }
                 clear_screen();
-                draw_board();
-                draw_hud(score, wave, lives);
+                // Draw board with constant NTADR_A (avoids runtime args)
+                ppu_off();
+                vram_adr(NTADR_A(0, BOARD_Y));
+                for (byte row = 0; row < BOARD_H; row++)
+                {
+                    for (byte col = 0; col < 32; col++)
+                    {
+                        if (col == BOARD_X)
+                            vram_put(CH_CASTLE);
+                        else if (col > BOARD_X && col < (byte)(BOARD_X + BOARD_W))
+                            vram_put(CH_FLOOR);
+                        else
+                            vram_put(CH_BLANK);
+                    }
+                }
+                ppu_on_all();
+                draw_hud_score(score);
+                draw_hud_wave(wave);
+                draw_hud_lives(lives);
                 gameState = STATE_PLAY;
             }
         }
@@ -328,43 +251,106 @@ while (true)
         while (gameState == STATE_PLAY)
         {
             ppu_wait_nmi();
-            pad_poll(0);
-            byte trigger = pad_trigger(0);
+            lastTrigger = pad_trigger(0);
 
-            // Update cursor
-            cursorX = move_cursor_x(trigger, cursorX);
-            cursorY = move_cursor_y(trigger, cursorY);
-            draw_cursor(cursorX, cursorY);
+            // Cursor movement
+            if ((byte)(lastTrigger & (byte)PAD.LEFT) != 0)
+            {
+                if (cursorX > (byte)(BOARD_X + 1))
+                    cursorX = (byte)(cursorX - 1);
+            }
+            if ((byte)(lastTrigger & (byte)PAD.RIGHT) != 0)
+            {
+                if (cursorX < (byte)(BOARD_X + BOARD_W - 1))
+                    cursorX = (byte)(cursorX + 1);
+            }
+            if ((byte)(lastTrigger & (byte)PAD.UP) != 0)
+            {
+                if (cursorY > BOARD_Y)
+                    cursorY = (byte)(cursorY - 1);
+            }
+            if ((byte)(lastTrigger & (byte)PAD.DOWN) != 0)
+            {
+                if (cursorY < (byte)(BOARD_Y + BOARD_H - 1))
+                    cursorY = (byte)(cursorY + 1);
+            }
 
-            // --- VRAM section: single ppu_off/ppu_on_all for all reads/writes ---
-            ppu_off();
-
-            // Place wall with A — uses vram_read for collision check
-            if ((byte)(trigger & (byte)PAD.A) != 0)
+            // Place wall with A — check wall arrays for collision
+            doPlaceWall = 0;
+            if ((byte)(lastTrigger & (byte)PAD.A) != 0)
             {
                 if (cursorX > BOARD_X)
                 {
-                    read_tile_at(cursorX, cursorY, tileBuf);
-                    byte placeTile = tileBuf[0];
-                    if (is_floor_tile(placeTile) == 1)
+                    // Check no wall already at cursor and find free slot
+                    hitWall = 0;
+                    freeSlot = 255;
+                    for (byte w = 0; w < MAX_WALLS; w++)
                     {
-                        write_tile(cursorX, cursorY, CH_WALL);
+                        if (wallActive[w] != 0)
+                        {
+                            if (wallX[w] == cursorX)
+                            {
+                                if (wallY[w] == cursorY)
+                                    hitWall = 1;
+                            }
+                        }
+                        else
+                        {
+                            if (freeSlot == 255)
+                                freeSlot = w;
+                        }
+                    }
+                    if (hitWall == 0)
+                    {
+                        if (freeSlot != 255)
+                        {
+                            wallX[freeSlot] = cursorX;
+                            wallY[freeSlot] = cursorY;
+                            wallActive[freeSlot] = 1;
+                            doPlaceWall = 1;
+                        }
                     }
                 }
             }
 
-            // Remove wall with B
-            if ((byte)(trigger & (byte)PAD.B) != 0)
+            // Remove wall with B — scan wall arrays
+            doRemoveWall = 0;
+            if ((byte)(lastTrigger & (byte)PAD.B) != 0)
             {
-                read_tile_at(cursorX, cursorY, tileBuf);
-                byte removeTile = tileBuf[0];
-                if (is_wall_tile(removeTile) == 1)
+                for (byte w = 0; w < MAX_WALLS; w++)
                 {
-                    write_tile(cursorX, cursorY, CH_FLOOR);
+                    if (wallActive[w] != 0)
+                    {
+                        if (wallX[w] == cursorX)
+                        {
+                            if (wallY[w] == cursorY)
+                            {
+                                wallActive[w] = 0;
+                                doRemoveWall = 1;
+                            }
+                        }
+                    }
                 }
             }
 
-            // Spawn enemies (array reads happen here where arrays are local)
+            // VRAM updates — separated from array operations to keep
+            // clean block state for NTADR_A with runtime args
+            if (doPlaceWall != 0)
+            {
+                ppu_off();
+                vram_adr(NTADR_A(cursorX, cursorY));
+                vram_put(CH_WALL);
+                ppu_on_all();
+            }
+            if (doRemoveWall != 0)
+            {
+                ppu_off();
+                vram_adr(NTADR_A(cursorX, cursorY));
+                vram_put(CH_FLOOR);
+                ppu_on_all();
+            }
+
+            // Spawn enemies
             frameCount = (byte)(frameCount + 1);
             spawnTimer = (byte)(spawnTimer + 1);
             if (spawnTimer >= spawnRate)
@@ -374,81 +360,76 @@ while (true)
                 {
                     if (enemyActive[s] == 0)
                     {
-                        byte sy = (byte)(BOARD_Y + (byte)(rand8() % BOARD_H));
-                        set_enemy(enemyX, enemyY, enemyActive, enemyTimer,
-                            s, (byte)(BOARD_X + BOARD_W - 1), sy);
-                        break;
+                        enemyX[s] = (byte)(BOARD_X + BOARD_W - 1);
+                        enemyY[s] = (byte)(BOARD_Y + (byte)(rand8() % BOARD_H));
+                        enemyActive[s] = 1;
+                        enemyTimer[s] = 0;
+                        s = MAX_ENEMIES; // exit loop (avoid break)
                     }
                 }
             }
 
-            // Move enemies — uses vram_read for pathfinding
-            byte castleHits = 0;
+            // Move enemies — check wall arrays for collisions
+            castleHits = 0;
             for (byte i = 0; i < MAX_ENEMIES; i++)
             {
-                if (enemyActive[i] == 0)
-                    continue;
-
-                enemyTimer[i] = (byte)(enemyTimer[i] + 1);
-                if (enemyTimer[i] < 15)
-                    continue;
-                enemyTimer[i] = 0;
-
-                byte nx = (byte)(enemyX[i] - 1);
-                byte ny = enemyY[i];
-
-                // Read tile ahead using vram_read
-                read_tile_at(nx, ny, tileBuf);
-                byte ahead = tileBuf[0];
-
-                if (is_castle_tile(ahead) == 1)
+                if (enemyActive[i] != 0)
                 {
-                    // Enemy reached castle
-                    write_tile(enemyX[i], enemyY[i], CH_FLOOR);
-                    deactivate_enemy(enemyActive, i);
-                    castleHits = (byte)(castleHits + 1);
-                }
-                else if (is_wall_tile(ahead) == 1)
-                {
-                    // Try pathfinding around wall
-                    byte moved = 0;
-                    byte upY = (byte)(ny - 1);
-                    if (upY >= BOARD_Y && moved == 0)
+                    enemyTimer[i] = (byte)(enemyTimer[i] + 1);
+                    if (enemyTimer[i] >= 15)
                     {
-                        read_tile_at(enemyX[i], upY, tileBuf);
-                        byte upTile = tileBuf[0];
-                        if (is_floor_tile(upTile) == 1)
+                        enemyTimer[i] = 0;
+                        tempNX = (byte)(enemyX[i] - 1);
+                        tempNY = enemyY[i];
+
+                        if (tempNX <= BOARD_X)
                         {
-                            write_tile(enemyX[i], enemyY[i], CH_FLOOR);
-                            enemyY[i] = upY;
-                            write_tile(enemyX[i], enemyY[i], CH_ENEMY);
-                            moved = 1;
+                            // Hit castle
+                            enemyActive[i] = 0;
+                            castleHits = (byte)(castleHits + 1);
+                        }
+                        else
+                        {
+                            // Check wall at (tempNX, tempNY)
+                            hitWall = 0;
+                            for (byte w = 0; w < MAX_WALLS; w++)
+                            {
+                                if (wallActive[w] != 0)
+                                {
+                                    if (wallX[w] == tempNX)
+                                    {
+                                        if (wallY[w] == tempNY)
+                                            hitWall = 1;
+                                    }
+                                }
+                            }
+                            if (hitWall == 0)
+                            {
+                                // Move forward
+                                enemyX[i] = tempNX;
+                            }
+                            // If wall, enemy stays in place (blocked)
                         }
                     }
-                    byte downY = (byte)(ny + 1);
-                    if (downY < (byte)(BOARD_Y + BOARD_H) && moved == 0)
-                    {
-                        read_tile_at(enemyX[i], downY, tileBuf);
-                        byte downTile = tileBuf[0];
-                        if (is_floor_tile(downTile) == 1)
-                        {
-                            write_tile(enemyX[i], enemyY[i], CH_FLOOR);
-                            enemyY[i] = downY;
-                            write_tile(enemyX[i], enemyY[i], CH_ENEMY);
-                            moved = 1;
-                        }
-                    }
-                }
-                else if (is_floor_tile(ahead) == 1)
-                {
-                    // Move forward
-                    write_tile(enemyX[i], enemyY[i], CH_FLOOR);
-                    enemyX[i] = nx;
-                    write_tile(enemyX[i], enemyY[i], CH_ENEMY);
                 }
             }
 
-            ppu_on_all();
+            // Draw sprites: cursor + enemies
+            oam_clear();
+            oam_off = 0;
+            tempNX = (byte)(cursorX * 8);
+            tempNY = (byte)(cursorY * 8);
+            oam_off = oam_spr(tempNX, tempNY, SPR_CURSOR, 0, oam_off);
+            for (byte i = 0; i < MAX_ENEMIES; i++)
+            {
+                if (enemyActive[i] != 0)
+                {
+                    tempNX = (byte)(enemyX[i] * 8);
+                    tempNY = (byte)(enemyY[i] * 8);
+                    oam_off = oam_spr(tempNX, tempNY, SPR_ENEMY, 1, oam_off);
+                }
+            }
+            oam_hide_rest(oam_off);
 
             // Apply castle damage
             if (castleHits > 0)
@@ -466,8 +447,8 @@ while (true)
                 }
             }
 
-            // Check wave complete (array reads in main scope)
-            byte activeCount = 0;
+            // Check wave complete
+            activeCount = 0;
             for (byte i = 0; i < MAX_ENEMIES; i++)
             {
                 if (enemyActive[i] != 0)
@@ -480,7 +461,9 @@ while (true)
                 spawnRate = get_spawn_rate(wave);
                 frameCount = 0;
                 spawnTimer = 0;
-                draw_hud(score, wave, lives);
+                draw_hud_score(score);
+                draw_hud_wave(wave);
+                draw_hud_lives(lives);
             }
         }
     }
@@ -490,9 +473,8 @@ while (true)
         while (gameState == STATE_OVER)
         {
             ppu_wait_nmi();
-            pad_poll(0);
-            byte trigger = pad_trigger(0);
-            if ((byte)(trigger & (byte)PAD.A) != 0)
+            lastTrigger = pad_trigger(0);
+            if ((byte)(lastTrigger & (byte)PAD.A) != 0)
             {
                 clear_screen();
                 gameState = STATE_TITLE;

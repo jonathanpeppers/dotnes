@@ -1594,7 +1594,7 @@ internal static class BuiltInSubroutines
     {
         var block = new Block(nameof(incsp1));
         block.Emit(INC_zpg(sp))
-             .Emit(BNE(3))     // BNE to RTS
+             .Emit(BNE(2))     // BNE to RTS (skip INC sp+1: 2 bytes)
              .Emit(INC_zpg(sp + 1))
              .Emit(RTS());
         return block;
