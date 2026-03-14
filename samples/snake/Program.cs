@@ -5,16 +5,18 @@ Eat food to grow and score. Game over on wall or self collision.
 APIs: pad_trigger, oam_spr, oam_hide_rest, rand8, vrambuf_put, ppu_wait_nmi.
 */
 
+#pragma warning disable CS0649, CS0219
+
 byte[] PALETTE = [
-    0x0F,                    // screen color (black)
-    0x00, 0x10, 0x30, 0x0,  // bg palette 0
-    0x00, 0x10, 0x30, 0x0,  // bg palette 1
-    0x00, 0x10, 0x30, 0x0,  // bg palette 2
-    0x00, 0x10, 0x30, 0x0,  // bg palette 3
-    0x0F, 0x1A, 0x2A, 0x0,  // spr palette 0 (green: snake)
-    0x0F, 0x16, 0x26, 0x0,  // spr palette 1 (red: food)
-    0x0F, 0x30, 0x30, 0x0,  // spr palette 2 (white)
-    0x0F, 0x30, 0x30, 0x0   // spr palette 3
+    0x0F,                   // screen color (black)
+    0x00, 0x10, 0x30,       // bg palette 0
+    0x0F, 0x00, 0x10, 0x30, // bg palette 1
+    0x0F, 0x00, 0x10, 0x30, // bg palette 2
+    0x0F, 0x00, 0x10, 0x30, // bg palette 3
+    0x0F, 0x1A, 0x2A, 0x3A, // spr palette 0 (green: snake)
+    0x0F, 0x16, 0x26, 0x36, // spr palette 1 (red: food)
+    0x0F, 0x30, 0x30, 0x30, // spr palette 2 (white)
+    0x0F, 0x30, 0x30, 0x30  // spr palette 3
 ];
 
 // direction constants
@@ -43,6 +45,14 @@ byte s0 = 0x30;
 byte s1 = 0x30;
 byte s2 = 0x30;
 byte[] sbuf = new byte[3];
+
+// temp globals (needed to work around transpiler array limitations)
+byte trig = 0;
+byte headX = 0;
+byte headY = 0;
+byte tmpX = 0;
+byte tmpY = 0;
+byte idx = 0;
 
 // --- SETUP ---
 pal_all(PALETTE);
@@ -73,21 +83,21 @@ while (true)
 
     if (game_over == 0)
     {
-        // read direction input (edge-triggered to prevent reversal)
-        byte trig = pad_trigger(0);
-        if ((trig & (byte)PAD.RIGHT) != 0)
+        // read direction input (use global to avoid AND cascade bug)
+        trig = pad_trigger(0);
+        if ((byte)(trig & (byte)PAD.RIGHT) != 0)
         {
             if (dir != DIR_LEFT) dir = DIR_RIGHT;
         }
-        if ((trig & (byte)PAD.LEFT) != 0)
+        if ((byte)(trig & (byte)PAD.LEFT) != 0)
         {
             if (dir != DIR_RIGHT) dir = DIR_LEFT;
         }
-        if ((trig & (byte)PAD.UP) != 0)
+        if ((byte)(trig & (byte)PAD.UP) != 0)
         {
             if (dir != DIR_DOWN) dir = DIR_UP;
         }
-        if ((trig & (byte)PAD.DOWN) != 0)
+        if ((byte)(trig & (byte)PAD.DOWN) != 0)
         {
             if (dir != DIR_UP) dir = DIR_DOWN;
         }
@@ -98,46 +108,54 @@ while (true)
         {
             frame_count = 0;
 
-            // shift body segments toward tail
-            byte i = snake_len;
-            while (i > 1)
+            // shift body segments toward tail (read source to global, write to dest)
+            idx = (byte)(snake_len - 1);
+            while (idx > 0)
             {
-                i = (byte)(i - 1);
-                byte prev = (byte)(i - 1);
-                snake_x[i] = snake_x[prev];
-                snake_y[i] = snake_y[prev];
+                tmpX = (byte)(idx - 1);
+                headX = snake_x[tmpX];
+                headY = snake_y[tmpX];
+                snake_x[idx] = headX;
+                snake_y[idx] = headY;
+                idx = tmpX;
             }
 
-            // move head
-            if (dir == DIR_UP) snake_y[0] = (byte)(snake_y[0] - 8);
-            if (dir == DIR_RIGHT) snake_x[0] = (byte)(snake_x[0] + 8);
-            if (dir == DIR_DOWN) snake_y[0] = (byte)(snake_y[0] + 8);
-            if (dir == DIR_LEFT) snake_x[0] = (byte)(snake_x[0] - 8);
+            // move head (use globals to avoid array self-modification bug)
+            headX = snake_x[0];
+            headY = snake_y[0];
+            if (dir == DIR_UP) headY = (byte)(headY + 248); // -8 via wrapping add
+            if (dir == DIR_RIGHT) headX = (byte)(headX + 8);
+            if (dir == DIR_DOWN) headY = (byte)(headY + 8);
+            if (dir == DIR_LEFT) headX = (byte)(headX + 248); // -8 via wrapping add
+            snake_x[0] = headX;
+            snake_y[0] = headY;
 
             // wall collision (play area: x 8..232, y 24..208)
-            if (snake_x[0] == 0) game_over = 1;
-            if (snake_x[0] >= 240) game_over = 1;
-            if (snake_y[0] < 24) game_over = 1;
-            if (snake_y[0] >= 216) game_over = 1;
+            if (headX == 0) game_over = 1;
+            if (headX >= 240) game_over = 1;
+            if (headY < 24) game_over = 1;
+            if (headY >= 216) game_over = 1;
 
-            // self collision
-            byte c = 1;
-            while (c < snake_len)
+            // self collision (use globals for array element comparison)
+            idx = 1;
+            while (idx < snake_len)
             {
-                if (snake_x[0] == snake_x[c])
+                tmpX = snake_x[idx];
+                tmpY = snake_y[idx];
+                if (headX == tmpX)
                 {
-                    if (snake_y[0] == snake_y[c])
+                    if (headY == tmpY)
                     {
                         game_over = 1;
                     }
                 }
-                c = (byte)(c + 1);
+                idx = (byte)(idx + 1);
             }
 
             // food collision
-            if (snake_x[0] == food_x)
+            if (headX == food_x)
             {
-                if (snake_y[0] == food_y)
+                if (headY == food_y)
                 {
                     // grow snake
                     if (snake_len < 40)
@@ -167,14 +185,16 @@ while (true)
         }
     }
 
-    // draw sprites
-    byte oam_id = 0;
-    byte d = 0;
-    while (d < snake_len)
+    // draw sprites (pre-compute array args into globals)
+    oam_off = 0;
+    idx = 0;
+    while (idx < snake_len)
     {
-        oam_id = oam_spr(snake_x[d], snake_y[d], 0x01, 0, oam_id);
-        d = (byte)(d + 1);
+        tmpX = snake_x[idx];
+        tmpY = snake_y[idx];
+        oam_off = oam_spr(tmpX, tmpY, 0x01, 0, oam_off);
+        idx = (byte)(idx + 1);
     }
-    oam_id = oam_spr(food_x, food_y, 0x01, 1, oam_id);
-    oam_hide_rest(oam_id);
+    oam_off = oam_spr(food_x, food_y, 0x01, 1, oam_off);
+    oam_hide_rest(oam_off);
 }
