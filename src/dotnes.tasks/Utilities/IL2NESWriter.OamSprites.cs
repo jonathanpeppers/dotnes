@@ -434,6 +434,7 @@ partial class IL2NESWriter
         // JSR oam_spr
         EmitWithLabel(Opcode.JSR, AddressMode.Absolute, "oam_spr");
         _immediateInA = null;
+        _runtimeValueInA = true; // oam_spr returns next OAM offset in A
     }
 
     /// <summary>

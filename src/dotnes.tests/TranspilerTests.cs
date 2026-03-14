@@ -100,6 +100,8 @@ public class TranspilerTests
     [InlineData("irq", false, false, 4, 4, 1)]
     [InlineData("climber", true)]
     [InlineData("climber", false)]
+    [InlineData("siegegame", true)]
+    [InlineData("siegegame", false)]
     [InlineData("pong", true)]
     [InlineData("pong", false)]
     [InlineData("transtable", true, false, 0, 2, 0)]

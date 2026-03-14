@@ -199,6 +199,12 @@ partial class IL2NESWriter : NESWriter
     public int MethodParamCount { get; init; }
 
     /// <summary>
+    /// Per-parameter array type flags. true = byte[] (16-bit pointer, 2 stack bytes),
+    /// false = byte (8-bit value, 1 stack byte). Used by WriteLdarg for correct offsets.
+    /// </summary>
+    public bool[] ParamIsArray { get; init; } = Array.Empty<bool>();
+
+    /// <summary>
     /// Name of the current method being transpiled (null for main).
     /// Used to scope branch labels so they don't collide across methods.
     /// </summary>
@@ -323,6 +329,12 @@ partial class IL2NESWriter : NESWriter
     /// Used to offset user method writers so their labels don't collide with the main writer's.
     /// </summary>
     internal int ByteArrayLabelStartIndex { set => _byteArrayLabelIndex = value; }
+
+    /// <summary>
+    /// Gets or sets the starting index for string labels.
+    /// Used to offset user method writers so their string labels don't collide.
+    /// </summary>
+    internal int StringLabelStartIndex { set => _stringLabelIndex = value; }
     
     /// <summary>
     /// Track the last byte array label for Stloc handling

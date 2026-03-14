@@ -302,10 +302,27 @@ partial class IL2NESWriter
             _argStackAdjust++;
         }
 
-        // cc65 stack offset: first arg (index 0) is deepest, adjusted for extra pushes
-        byte offset = checked((byte)(MethodParamCount - 1 - argIndex + _argStackAdjust));
-        Emit(Opcode.LDY, AddressMode.Immediate, offset);
-        Emit(Opcode.LDA, AddressMode.IndirectIndexed, (byte)sp);
+        // Calculate cc65 stack offset considering byte[] params take 2 bytes
+        int offset = _argStackAdjust;
+        for (int j = argIndex + 1; j < MethodParamCount; j++)
+            offset += (j < ParamIsArray.Length && ParamIsArray[j]) ? 2 : 1;
+
+        bool isArray = argIndex < ParamIsArray.Length && ParamIsArray[argIndex];
+        if (isArray)
+        {
+            // byte[] param: load 16-bit pointer into A:X (lo in A, hi in X)
+            Emit(Opcode.LDY, AddressMode.Immediate, (byte)(offset + 1));
+            Emit(Opcode.LDA, AddressMode.IndirectIndexed, (byte)sp); // high byte
+            Emit(Opcode.TAX, AddressMode.Implied);                   // X = high byte
+            Emit(Opcode.LDY, AddressMode.Immediate, (byte)offset);
+            Emit(Opcode.LDA, AddressMode.IndirectIndexed, (byte)sp); // A = low byte
+            _ushortInAX = true;
+        }
+        else
+        {
+            Emit(Opcode.LDY, AddressMode.Immediate, (byte)offset);
+            Emit(Opcode.LDA, AddressMode.IndirectIndexed, (byte)sp);
+        }
         _immediateInA = null;
         _runtimeValueInA = true;
         Stack.Push(0); // placeholder for runtime value
