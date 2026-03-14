@@ -3246,4 +3246,68 @@ public class RoslynTests
             $"No JSR pusha between loading local and constant args — first arg will be lost. " +
             $"LDA $0325 at {ldloc}, LDA #$05 at {ldc}. Hex: {hex}");
     }
+
+    [Fact]
+    public void MultiParamUserFunction_TwoLocals()
+    {
+        // Two local variable args to a user-defined function.
+        // Both x and y are used after the call to force the compiler to keep them as locals.
+        var bytes = GetProgramBytes(
+            """
+            byte x = rand8();
+            byte y = rand8();
+            my_func(x, y);
+            pal_col(0, x);
+            pal_col(1, y);
+            ppu_on_all();
+            while (true) ;
+
+            static void my_func(byte a, byte b) { pal_col(a, b); }
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"MultiParamUserFunction_TwoLocals hex: {hex}");
+
+        // x at $0325, y at $0326
+        // For my_func(x, y): ldloc.0 (AD2503), ldloc.1 (AD2603), call my_func
+        // A JSR pusha must appear between the two LDA instructions.
+        int idx0 = hex.IndexOf("AD2503");
+        int idx1 = hex.IndexOf("AD2603");
+        Assert.True(idx0 >= 0, $"LDA $0325 not found. Hex: {hex}");
+        Assert.True(idx1 >= 0, $"LDA $0326 not found. Hex: {hex}");
+        Assert.True(idx1 > idx0 + 6,
+            $"No JSR pusha between two local arg loads. " +
+            $"LDA $0325 at {idx0}, LDA $0326 at {idx1}. Hex: {hex}");
+    }
+
+    [Fact]
+    public void MultiParamUserFunction_ThreeArgs()
+    {
+        // Three-arg user function with mix of local and constant args.
+        var bytes = GetProgramBytes(
+            """
+            byte x = rand8();
+            add3(x, 2, 3);
+            pal_col(0, x);
+            ppu_on_all();
+            while (true) ;
+
+            static void add3(byte a, byte b, byte c) { pal_col(a, (byte)(b + c)); }
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"MultiParamUserFunction_ThreeArgs hex: {hex}");
+
+        // Local 0 (x) at $0325, then constants 2 and 3
+        int ldloc = hex.IndexOf("AD2503");
+        Assert.True(ldloc >= 0, $"LDA $0325 not found. Hex: {hex}");
+        // There should be a JSR pusha after loading x (before loading 2)
+        int ldc2 = hex.IndexOf("A902", ldloc);
+        Assert.True(ldc2 > ldloc + 6,
+            $"No JSR pusha after loading local x before constant arg. Hex: {hex}");
+    }
 }
