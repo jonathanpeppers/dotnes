@@ -193,6 +193,13 @@ partial class IL2NESWriter : NESWriter
     string? _lastLdftnMethod;
 
     /// <summary>
+    /// Set by HandleLdsfld with the static field's RAM address.
+    /// Used by poke/shared_set handlers to detect static field values
+    /// (similar to _lastLoadedLocalIndex for local variables).
+    /// </summary>
+    ushort? _lastStaticFieldAddress;
+
+    /// <summary>
     /// Number of parameters for the current user method being transpiled (0 for main).
     /// Used by ldarg handlers to compute cc65 stack offsets.
     /// </summary>
@@ -262,6 +269,12 @@ partial class IL2NESWriter : NESWriter
     /// Forwarded to <see cref="Variables"/>.
     /// </summary>
     public int LocalCount { get => Variables.LocalCount; set => Variables.LocalCount = value; }
+
+    /// <summary>
+    /// Pre-allocated static field addresses from the main writer.
+    /// Forwarded to <see cref="Variables"/>.
+    /// </summary>
+    public Dictionary<string, ushort> StaticFieldAddresses { get => Variables.StaticFieldAddresses; set => Variables.StaticFieldAddresses = value; }
 
     /// <summary>
     /// Set of user-defined method names (for detecting user method calls).

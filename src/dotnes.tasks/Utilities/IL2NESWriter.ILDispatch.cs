@@ -1405,6 +1405,9 @@ partial class IL2NESWriter
                                     Locals.TryGetValue(_lastLoadedLocalIndex.Value, out pokeLocal) &&
                                     pokeLocal.Address.HasValue;
 
+                                // Check if the value is from a static field
+                                bool valueIsStaticField = _lastStaticFieldAddress.HasValue;
+
                                 // Remove previously emitted instructions:
                                 // LDX #hi, LDA #lo, JSR pusha, LDA #value = 4 instructions
                                 RemoveLastInstructions(4);
@@ -1412,6 +1415,12 @@ partial class IL2NESWriter
                                 if (valueIsLocal)
                                 {
                                     Emit(Opcode.LDA, AddressMode.Absolute, (ushort)pokeLocal!.Address!.Value);
+                                    _pokeLastValue = null;
+                                    _immediateInA = null;
+                                }
+                                else if (valueIsStaticField)
+                                {
+                                    Emit(Opcode.LDA, AddressMode.Absolute, _lastStaticFieldAddress!.Value);
                                     _pokeLastValue = null;
                                     _immediateInA = null;
                                 }
@@ -1424,6 +1433,7 @@ partial class IL2NESWriter
                                 Emit(Opcode.STA, AddressMode.Absolute, (ushort)addr);
                             }
                             _lastLoadedLocalIndex = null;
+                            _lastStaticFieldAddress = null;
                             argsAlreadyPopped = true;
                         }
                         break;

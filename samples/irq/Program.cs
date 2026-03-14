@@ -7,23 +7,19 @@
  * to create a split-screen effect. Each horizontal band scrolls
  * at a different offset, creating a wavy visual.
  *
- * Shared state between main loop and IRQ callback is stored at
- * a fixed RAM address (0x0309) to avoid closure capture.
+ * Shared state between main loop and IRQ callback uses a static
+ * field on partial class Program, mapped to a fixed RAM address.
  */
 
 // IRQ handler - called when MMC3 scanline counter fires
-// Uses RAM address 0x0309 as a shared IRQ counter
 static void irq_handler()
 {
-    // Read current IRQ scroll counter from shared RAM
-    byte count = peek(0x0309);
     // Change X scroll based on current IRQ count
-    poke(PPU_SCROLL, count);
+    poke(PPU_SCROLL, irqCount);
     poke(PPU_SCROLL, 0);
     // Advance counter for next IRQ in this frame
-    // NOTE: compute into a local first — poke() can't handle inline expressions
-    byte next = (byte)(count + 1);
-    poke(0x0309, next);
+    byte next = (byte)(irqCount + 1);
+    irqCount = next;
     // Acknowledge and re-enable MMC3 IRQ
     poke(MMC3_IRQ_DISABLE, 0);
     poke(MMC3_IRQ_ENABLE, 0);
@@ -68,7 +64,12 @@ while (true)
 {
     ppu_wait_frame();
     // Reset IRQ counter for next frame
-    poke(0x0309, 0);
+    irqCount = 0;
     // Reload MMC3 scanline counter
     poke(MMC3_IRQ_RELOAD, 0);
+}
+
+partial class Program
+{
+    static byte irqCount;
 }

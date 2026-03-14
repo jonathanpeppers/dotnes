@@ -41,6 +41,8 @@ partial class IL2NESWriter
         }
         _runtimeValueInA = false;
         _immediateInA = null;
+        _lastStaticFieldAddress = null;
+        _pokeLastValue = null;
     }
 
     void HandleLdsfld(string fieldName)
@@ -49,6 +51,7 @@ partial class IL2NESWriter
         Emit(Opcode.LDA, AddressMode.Absolute, addr);
         _runtimeValueInA = true;
         _immediateInA = null;
+        _lastStaticFieldAddress = addr;
         Stack.Push(0);
     }
 
