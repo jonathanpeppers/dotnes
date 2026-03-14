@@ -310,7 +310,7 @@ partial class IL2NESWriter : NESWriter
     /// <summary>
     /// Counter for generating unique byte array labels
     /// </summary>
-    int _byteArrayLabelIndex = 0;
+    int _byteArrayLabelIndex;
 
     /// <summary>
     /// Gets or sets the starting index for byte array labels.
@@ -321,8 +321,8 @@ partial class IL2NESWriter : NESWriter
     /// <summary>
     /// Track the last byte array label for Stloc handling
     /// </summary>
-    string? _lastByteArrayLabel = null;
-    int _lastByteArraySize = 0;
+    string? _lastByteArrayLabel;
+    int _lastByteArraySize;
 
     public ILInstruction[]? Instructions { get; set; }
 

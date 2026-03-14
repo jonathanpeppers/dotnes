@@ -33,7 +33,7 @@ public class Ca65Assembler
 
     // Segment tracking
     string _currentSegment = "CODE";
-    int _zeroPageOffset = 0;
+    int _zeroPageOffset;
 
     // Labels: name → (segment, offset within segment)
     readonly Dictionary<string, int> _labels = new(StringComparer.Ordinal);
