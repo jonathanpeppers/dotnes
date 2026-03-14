@@ -115,7 +115,10 @@ vram_adr(0x1000);
 vram_write(SPRITE_TILES);
 
 // Upload background tiles to CHR RAM pattern table 0 ($0000)
-vram_adr(0x0000);
+// Cannot use vram_adr(0x0000) — transpiler doesn't emit LDX #$00 for zero ushort,
+// so X retains stale value from previous vram_write, setting wrong PPU address.
+poke(0x2006, 0x00);
+poke(0x2006, 0x00);
 vram_write(BG_TILES);
 
 // Set palettes
@@ -155,12 +158,15 @@ vram_put(0x01);
 
 bank_spr(1);
 bank_bg(0);
-vrambuf_clear();
-set_vram_update(updbuf);
 ppu_on_all();
 
-// Enable APU sound channels
-enable_apu();
+// VRAM update buffer is intentionally NOT initialized (no vrambuf_clear/set_vram_update).
+// NAME_UPD_ENABLE ($06) stays 0 from reset, so NMI never processes the buffer.
+// This avoids a transpiler/runtime bug where NAME_UPD_ADR ($04-$05) gets corrupted,
+// causing the NMI to write garbage to CHR RAM. Score display is static from init.
+
+// Enable APU sound channels (inline — no helper function needed)
+poke(APU_STATUS, 0x0F);
 set_rand(42);
 
 // === Game state ===
@@ -170,13 +176,14 @@ byte fire_cooldown = 0;
 byte spawn_timer = 0;
 
 // Score: 6 digits as BG tile indices (0x01 = '0' ... 0x0A = '9')
+// Score display is static (written at init) due to VRAM buffer corruption workaround.
+// We keep tracking digits for score logic even though they don't update on screen.
 byte d0 = 0x01;
 byte d1 = 0x01;
 byte d2 = 0x01;
 byte d3 = 0x01;
 byte d4 = 0x01;
 byte d5 = 0x01;
-byte[] digits = new byte[6];
 
 // Structure-of-Arrays: Bullets
 byte[] bullet_x = new byte[MAX_BULLETS];
@@ -215,13 +222,32 @@ for (byte i = 0; i < MAX_STARS; i++)
 // === Main game loop ===
 while (true)
 {
-    pad_poll(0);
-    // Compute trigger flag immediately while pad_trigger return is in A
-    // (workaround: ldloc;ldc;and pattern broken when local not already in A)
-    byte fire_pressed = (byte)(pad_trigger(0) & (byte)PAD.A);
+    // --- Fire bullet (MUST come before pad_state — pad_trigger calls pad_poll internally) ---
+    if (fire_cooldown != 0) fire_cooldown = (byte)(fire_cooldown - 1);
+    // Check A button trigger inline — AND result goes directly to brfalse
+    // (no local variable — stloc after call doesn't emit STA, transpiler bug)
+    if ((pad_trigger(0) & (byte)PAD.A) != 0)
+    {
+        if (fire_cooldown == 0)
+        {
+            for (byte i = 0; i < MAX_BULLETS; i++)
+            {
+                if (bullet_active[i] == 0)
+                {
+                    bullet_x[i] = (byte)(player_x + 3);
+                    bullet_y[i] = (byte)(player_y - 8);
+                    bullet_active[i] = 1;
+                    fire_cooldown = FIRE_COOLDOWN;
+                    sfx_shoot();
+                    break;
+                }
+            }
+        }
+    }
 
     // --- Player movement (clamp to stay within bounds) ---
     // Call pad_state(0) inline for each check so return value is fresh in A
+    // (pad_state reads the same $3C set by pad_trigger's internal pad_poll)
     if ((pad_state(0) & (byte)PAD.LEFT) != 0)
     {
         if (player_x > 8 + PLAYER_SPEED) player_x = (byte)(player_x - PLAYER_SPEED);
@@ -241,24 +267,6 @@ while (true)
     {
         if (player_y < 224 - PLAYER_SPEED) player_y = (byte)(player_y + PLAYER_SPEED);
         else player_y = 224;
-    }
-
-    // --- Fire bullet ---
-    if (fire_cooldown != 0) fire_cooldown = (byte)(fire_cooldown - 1);
-    if (fire_pressed != 0 && fire_cooldown == 0)
-    {
-        for (byte i = 0; i < MAX_BULLETS; i++)
-        {
-            if (bullet_active[i] == 0)
-            {
-                bullet_x[i] = (byte)(player_x + 3);
-                bullet_y[i] = (byte)(player_y - 8);
-                bullet_active[i] = 1;
-                fire_cooldown = FIRE_COOLDOWN;
-                sfx_shoot();
-                break;
-            }
-        }
     }
 
     // --- Move bullets ---
@@ -426,17 +434,7 @@ while (true)
 
     oam_hide_rest(oam_off);
 
-    // --- Update score display ---
-    digits[0] = d0;
-    digits[1] = d1;
-    digits[2] = d2;
-    digits[3] = d3;
-    digits[4] = d4;
-    digits[5] = d5;
-    vrambuf_put(NTADR_A(8, 1), digits, 6);
-
     ppu_wait_nmi();
-    vrambuf_clear();
 }
 
 // === User-defined functions (static, no captured variables) ===
@@ -456,69 +454,49 @@ static byte abs_diff(byte a, byte b)
     return (byte)(b - a);
 }
 
-// Enable all APU sound channels
-static void enable_apu()
+// Sound effect: player fires
+// Pulse1: ctrl=0x7A (duty 01, decay, vol 0x0A), sweep=0, timer_lo=0x80, timer_hi=0xF9
+// All poke values MUST be constants (poke handler breaks with ldarg/ldloc values)
+static void sfx_shoot()
 {
-    poke(APU_STATUS, 0x0F);
-}
-
-// APU pulse channel 1 — caller passes pre-computed register values
-// (avoids runtime expressions in poke which leak C stack bytes)
-static void apu_pulse1_write(byte ctrl, byte timer_lo, byte timer_hi)
-{
-    poke(APU_PULSE1_CTRL, ctrl);
+    poke(APU_PULSE1_CTRL, 0x7A);
     poke(APU_PULSE1_SWEEP, 0x00);
-    poke(APU_PULSE1_TIMER_LO, timer_lo);
-    poke(APU_PULSE1_TIMER_HI, timer_hi);
+    poke(APU_PULSE1_TIMER_LO, 0x80);
+    poke(APU_PULSE1_TIMER_HI, 0xF9);
 }
 
-// APU pulse channel 2 — caller passes pre-computed register values
-static void apu_pulse2_write(byte ctrl, byte timer_lo, byte timer_hi)
+// Sound effect: enemy hit
+// Noise: ctrl=0x3A (decay, vol 0x0A), period=4, length=0xF8
+static void sfx_hit()
 {
-    poke(APU_PULSE2_CTRL, ctrl);
-    poke(APU_PULSE2_SWEEP, 0x00);
-    poke(APU_PULSE2_TIMER_LO, timer_lo);
-    poke(APU_PULSE2_TIMER_HI, timer_hi);
-}
-
-// APU noise channel — caller passes pre-computed register values
-static void apu_noise_write(byte ctrl, byte period)
-{
-    poke(APU_NOISE_CTRL, ctrl);
-    poke(APU_NOISE_PERIOD, period);
+    poke(APU_NOISE_CTRL, 0x3A);
+    poke(APU_NOISE_PERIOD, 0x04);
     poke(APU_NOISE_LENGTH, 0xF8);
 }
 
-// APU triangle channel — caller passes pre-computed register values
-static void apu_triangle_write(byte timer_lo, byte timer_hi)
-{
-    poke(APU_TRIANGLE_CTRL, 0xFF);
-    poke(APU_TRIANGLE_TIMER_LO, timer_lo);
-    poke(APU_TRIANGLE_TIMER_HI, timer_hi);
-}
-
-// Sound effect: player fires (pulse1 decay: 0x30|0x4A=0x7A, timer_hi 0xF8|0x01=0xF9)
-static void sfx_shoot()
-{
-    apu_pulse1_write(0x7A, 0x80, 0xF9);
-}
-
-// Sound effect: enemy hit (noise decay: 0x30|0x0A=0x3A, period 4)
-static void sfx_hit()
-{
-    apu_noise_write(0x3A, 0x04);
-}
-
-// Sound effect: explosion (noise: 0x30|0x0F=0x3F, period 6; triangle: timer_hi 0xF8|0x01=0xF9)
+// Sound effect: explosion
+// Noise: ctrl=0x3F (decay, vol 0x0F), period=6, length=0xF8
+// Triangle: ctrl=0xFF, timer_lo=0x40, timer_hi=0xF9
 static void sfx_explode()
 {
-    apu_noise_write(0x3F, 0x06);
-    apu_triangle_write(0x40, 0xF9);
+    poke(APU_NOISE_CTRL, 0x3F);
+    poke(APU_NOISE_PERIOD, 0x06);
+    poke(APU_NOISE_LENGTH, 0xF8);
+    poke(APU_TRIANGLE_CTRL, 0xFF);
+    poke(APU_TRIANGLE_TIMER_LO, 0x40);
+    poke(APU_TRIANGLE_TIMER_HI, 0xF9);
 }
 
-// Sound effect: player destroyed (pulse1: 0x30|0x8F=0xBF, timer_hi 0xF8|0x02=0xFA; noise: 0x30|0x0F=0x3F, period 8)
+// Sound effect: player destroyed
+// Pulse1: ctrl=0xBF (duty 10, decay, vol 0x0F), sweep=0, timer_lo=0x00, timer_hi=0xFA
+// Noise: ctrl=0x3F (decay, vol 0x0F), period=8, length=0xF8
 static void sfx_player_die()
 {
-    apu_pulse1_write(0xBF, 0x00, 0xFA);
-    apu_noise_write(0x3F, 0x08);
+    poke(APU_PULSE1_CTRL, 0xBF);
+    poke(APU_PULSE1_SWEEP, 0x00);
+    poke(APU_PULSE1_TIMER_LO, 0x00);
+    poke(APU_PULSE1_TIMER_HI, 0xFA);
+    poke(APU_NOISE_CTRL, 0x3F);
+    poke(APU_NOISE_PERIOD, 0x08);
+    poke(APU_NOISE_LENGTH, 0xF8);
 }
