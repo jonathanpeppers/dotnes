@@ -207,6 +207,18 @@ public static class NESLib
     public static byte peek(ushort addr) => throw null!;
 
     /// <summary>
+    /// write a byte value to a shared memory slot (index 0-15),
+    /// accessible from both the main loop and IRQ/NMI callbacks
+    /// </summary>
+    public static void shared_set(byte index, byte value) => throw null!;
+
+    /// <summary>
+    /// read a byte value from a shared memory slot (index 0-15),
+    /// accessible from both the main loop and IRQ/NMI callbacks
+    /// </summary>
+    public static byte shared_get(byte index) => throw null!;
+
+    /// <summary>
     /// wait for vertical sync (vblank), busy-loops on PPU status bit 7
     /// </summary>
     public static void waitvsync() => throw null!;

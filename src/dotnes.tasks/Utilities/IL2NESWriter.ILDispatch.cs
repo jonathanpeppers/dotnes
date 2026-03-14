@@ -1465,6 +1465,82 @@ partial class IL2NESWriter
                             argsAlreadyPopped = true;
                         }
                         break;
+                    case nameof(NESLib.shared_get):
+                        {
+                            // shared_get(byte index) -> LDA abs (SharedBase + index)
+                            if (Stack.Count >= 1)
+                            {
+                                int index = Stack.Pop();
+                                ushort addr = (ushort)(SharedBase + index);
+                                // WriteLdc(byte) emits 1 instruction (LDA #index).
+                                // If a previous value was in A (LastLDA), an extra JSR pusha
+                                // was emitted before LDA — detect and remove it too.
+                                int removeCount = 1;
+                                var block = CurrentBlock!;
+                                if (block.Count >= 2)
+                                {
+                                    var prev = block[block.Count - 2];
+                                    if (prev.Opcode == Opcode.JSR &&
+                                        prev.Operand is LabelOperand lbl && lbl.Label == "pusha")
+                                        removeCount = 2;
+                                }
+                                RemoveLastInstructions(removeCount);
+                                Emit(Opcode.LDA, AddressMode.Absolute, addr);
+                                _runtimeValueInA = true;
+                                _immediateInA = null;
+                                _pokeLastValue = null;
+                            }
+                            argsAlreadyPopped = true;
+                        }
+                        break;
+                    case nameof(NESLib.shared_set):
+                        {
+                            // shared_set(byte index, byte value) -> LDA #value, STA abs (SharedBase + index)
+                            if (Stack.Count >= 2)
+                            {
+                                int value = Stack.Pop();
+                                int index = Stack.Pop();
+                                ushort addr = (ushort)(SharedBase + index);
+
+                                // Check if the value is from a runtime local variable
+                                Local? setLocal = null;
+                                bool valueIsLocal = _lastLoadedLocalIndex.HasValue &&
+                                    Locals.TryGetValue(_lastLoadedLocalIndex.Value, out setLocal) &&
+                                    setLocal.Address.HasValue;
+
+                                // WriteLdc(byte) for index emits 1 instruction (LDA #index).
+                                // WriteLdc(byte) for value emits 2 instructions (JSR pusha + LDA #value)
+                                // because LastLDA is true after the index load.
+                                // Total: 3 instructions normally.
+                                // If LastLDA was true before index arg, an extra JSR pusha was emitted.
+                                int removeCount = 3;
+                                var block = CurrentBlock!;
+                                if (block.Count >= 4)
+                                {
+                                    var extra = block[block.Count - 4];
+                                    if (extra.Opcode == Opcode.JSR &&
+                                        extra.Operand is LabelOperand lbl && lbl.Label == "pusha")
+                                        removeCount = 4;
+                                }
+                                RemoveLastInstructions(removeCount);
+
+                                if (valueIsLocal)
+                                {
+                                    Emit(Opcode.LDA, AddressMode.Absolute, (ushort)setLocal!.Address!.Value);
+                                    _pokeLastValue = null;
+                                }
+                                else if (_pokeLastValue != (byte)value)
+                                {
+                                    Emit(Opcode.LDA, AddressMode.Immediate, (byte)value);
+                                    _pokeLastValue = (byte)value;
+                                }
+                                Emit(Opcode.STA, AddressMode.Absolute, addr);
+                                _immediateInA = null;
+                            }
+                            _lastLoadedLocalIndex = null;
+                            argsAlreadyPopped = true;
+                        }
+                        break;
                     case "split":
                     case "scroll":
                         // scroll()/split() takes unsigned int params, which use popax (2-byte pop).
