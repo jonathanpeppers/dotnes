@@ -3213,14 +3213,13 @@ public class RoslynTests
     [Fact]
     public void MultiParamUserFunction_LocalVarArgs()
     {
-        // Troubleshoot: calling a user-defined function with 2 runtime local variable args.
-        // Use rand8() to prevent the compiler from constant-folding.
-        // The transpiler should push the first arg via pusha before loading the second.
+        // Troubleshoot: calling a user-defined function with a runtime local + constant.
+        // Use rand8() for runtime value and reference x after the call to force ldloc.
         var bytes = GetProgramBytes(
             """
             byte x = rand8();
-            byte y = rand8();
-            my_func(x, y);
+            my_func(x, 5);
+            pal_col(0, x);
             ppu_on_all();
             while (true) ;
 
@@ -3232,19 +3231,19 @@ public class RoslynTests
         var hex = Convert.ToHexString(bytes);
         _logger.WriteLine($"MultiParamUserFunction_LocalVarArgs hex: {hex}");
 
-        // Local 0 (x) is at $0325, local 1 (y) at $0326
-        // Loading local 0: AD2503 (LDA $0325)
-        // Loading local 1: AD2603 (LDA $0326)
-        int idx0 = hex.IndexOf("AD2503");
-        int idx1 = hex.IndexOf("AD2603");
-        Assert.True(idx0 >= 0, $"LDA $0325 (load local 0) not found. Hex: {hex}");
-        Assert.True(idx1 >= 0, $"LDA $0326 (load local 1) not found. Hex: {hex}");
-        Assert.True(idx1 > idx0, "LDA $0326 should come after LDA $0325");
+        // Local 0 (x) is at $0325. After ldloc.0 (AD2503) loads x,
+        // the next ldc.i4.5 (A905) loads the constant.
+        // With the fix, a JSR pusha should appear between them.
+        int ldloc = hex.IndexOf("AD2503");
+        int ldc = hex.IndexOf("A905");
+        Assert.True(ldloc >= 0, $"LDA $0325 (load local 0) not found. Hex: {hex}");
+        Assert.True(ldc >= 0, $"LDA #$05 (load constant 5) not found. Hex: {hex}");
+        Assert.True(ldc > ldloc, $"LDA #$05 should come after LDA $0325. Hex: {hex}");
 
         // The two LDA instructions should NOT be adjacent — there must be a JSR pusha between them.
-        // AD2503 is 6 hex chars, so if idx1 == idx0 + 6, they're adjacent (no pusha).
-        Assert.True(idx1 > idx0 + 6,
-            $"No JSR pusha between loading local args — first arg will be lost. " +
-            $"LDA $0325 at {idx0}, LDA $0326 at {idx1}. Hex: {hex}");
+        // AD2503 is 6 hex chars; if ldc == ldloc + 6, they're adjacent (no pusha).
+        Assert.True(ldc > ldloc + 6,
+            $"No JSR pusha between loading local and constant args — first arg will be lost. " +
+            $"LDA $0325 at {ldloc}, LDA #$05 at {ldc}. Hex: {hex}");
     }
 }
