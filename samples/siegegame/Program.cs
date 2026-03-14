@@ -24,7 +24,6 @@ const byte BOARD_Y = 4;
 const byte BOARD_W = 26;
 const byte BOARD_H = 20;
 const byte MAX_ENEMIES = 8;
-const byte MAX_WALLS = 24;
 const byte STATE_TITLE = 0;
 const byte STATE_PLAY = 1;
 const byte STATE_OVER = 2;
@@ -55,13 +54,7 @@ byte lastTrigger = 0;
 byte castleHits = 0;
 byte activeCount = 0;
 
-// Flags to defer VRAM updates outside array-heavy code
-byte doPlaceWall = 0;
-byte doRemoveWall = 0;
-
 // Temp globals for collision checks (avoids local variable slot collisions)
-byte hitWall = 0;
-byte freeSlot = 0;
 byte tempNX = 0;
 byte tempNY = 0;
 
@@ -71,11 +64,8 @@ byte[] enemyY = new byte[MAX_ENEMIES];
 byte[] enemyActive = new byte[MAX_ENEMIES];
 byte[] enemyTimer = new byte[MAX_ENEMIES];
 
-// Wall arrays (Structure of Arrays) — tracked in memory since vram_read
-// is not implemented in the transpiler
-byte[] wallX = new byte[MAX_WALLS];
-byte[] wallY = new byte[MAX_WALLS];
-byte[] wallActive = new byte[MAX_WALLS];
+// Buffer for vram_read tile checks
+byte[] readBuf = new byte[1];
 
 // --- Setup ---
 
@@ -206,11 +196,6 @@ while (true)
                     enemyActive[ce] = 0;
                     enemyTimer[ce] = 0;
                 }
-                // Clear walls
-                for (byte cw = 0; cw < MAX_WALLS; cw++)
-                {
-                    wallActive[cw] = 0;
-                }
                 clear_screen();
                 // Draw board with constant NTADR_A (avoids runtime args)
                 ppu_off();
@@ -265,78 +250,34 @@ while (true)
                     cursorY = (byte)(cursorY + 1);
             }
 
-            // Place wall with A — check wall arrays for collision
-            doPlaceWall = 0;
+            // Place wall with A — read tile from VRAM to check
             if ((byte)(lastTrigger & (byte)PAD.A) != 0)
             {
                 if (cursorX > BOARD_X)
                 {
-                    // Check no wall already at cursor and find free slot
-                    hitWall = 0;
-                    freeSlot = 255;
-                    for (byte w = 0; w < MAX_WALLS; w++)
+                    ppu_off();
+                    vram_adr(NTADR_A(cursorX, cursorY));
+                    vram_read(readBuf, 1);
+                    if (readBuf[0] == CH_FLOOR)
                     {
-                        if (wallActive[w] != 0)
-                        {
-                            if (wallX[w] == cursorX)
-                            {
-                                if (wallY[w] == cursorY)
-                                    hitWall = 1;
-                            }
-                        }
-                        else
-                        {
-                            if (freeSlot == 255)
-                                freeSlot = w;
-                        }
+                        vram_adr(NTADR_A(cursorX, cursorY));
+                        vram_put(CH_WALL);
                     }
-                    if (hitWall == 0)
-                    {
-                        if (freeSlot != 255)
-                        {
-                            wallX[freeSlot] = cursorX;
-                            wallY[freeSlot] = cursorY;
-                            wallActive[freeSlot] = 1;
-                            doPlaceWall = 1;
-                        }
-                    }
+                    ppu_on_all();
                 }
             }
 
-            // Remove wall with B — scan wall arrays
-            doRemoveWall = 0;
+            // Remove wall with B — read tile from VRAM to check
             if ((byte)(lastTrigger & (byte)PAD.B) != 0)
             {
-                for (byte w = 0; w < MAX_WALLS; w++)
+                ppu_off();
+                vram_adr(NTADR_A(cursorX, cursorY));
+                vram_read(readBuf, 1);
+                if (readBuf[0] == CH_WALL)
                 {
-                    if (wallActive[w] != 0)
-                    {
-                        if (wallX[w] == cursorX)
-                        {
-                            if (wallY[w] == cursorY)
-                            {
-                                wallActive[w] = 0;
-                                doRemoveWall = 1;
-                            }
-                        }
-                    }
+                    vram_adr(NTADR_A(cursorX, cursorY));
+                    vram_put(CH_FLOOR);
                 }
-            }
-
-            // VRAM updates — separated from array operations to keep
-            // clean block state for NTADR_A with runtime args
-            if (doPlaceWall != 0)
-            {
-                ppu_off();
-                vram_adr(NTADR_A(cursorX, cursorY));
-                vram_put(CH_WALL);
-                ppu_on_all();
-            }
-            if (doRemoveWall != 0)
-            {
-                ppu_off();
-                vram_adr(NTADR_A(cursorX, cursorY));
-                vram_put(CH_FLOOR);
                 ppu_on_all();
             }
 
@@ -359,8 +300,9 @@ while (true)
                 }
             }
 
-            // Move enemies — check wall arrays for collisions
+            // Move enemies — read tiles from VRAM for wall collision
             castleHits = 0;
+            ppu_off();
             for (byte i = 0; i < MAX_ENEMIES; i++)
             {
                 if (enemyActive[i] != 0)
@@ -380,20 +322,10 @@ while (true)
                         }
                         else
                         {
-                            // Check wall at (tempNX, tempNY)
-                            hitWall = 0;
-                            for (byte w = 0; w < MAX_WALLS; w++)
-                            {
-                                if (wallActive[w] != 0)
-                                {
-                                    if (wallX[w] == tempNX)
-                                    {
-                                        if (wallY[w] == tempNY)
-                                            hitWall = 1;
-                                    }
-                                }
-                            }
-                            if (hitWall == 0)
+                            // Check tile ahead using vram_read
+                            vram_adr(NTADR_A(tempNX, tempNY));
+                            vram_read(readBuf, 1);
+                            if (readBuf[0] != CH_WALL)
                             {
                                 // Move forward
                                 enemyX[i] = tempNX;
@@ -403,6 +335,7 @@ while (true)
                     }
                 }
             }
+            ppu_on_all();
 
             // Draw sprites: cursor + enemies
             oam_clear();
