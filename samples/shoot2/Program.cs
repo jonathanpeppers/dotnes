@@ -216,26 +216,28 @@ for (byte i = 0; i < MAX_STARS; i++)
 while (true)
 {
     pad_poll(0);
-    byte trig = pad_trigger(0);
-    byte state = pad_state(0);
+    // Compute trigger flag immediately while pad_trigger return is in A
+    // (workaround: ldloc;ldc;and pattern broken when local not already in A)
+    byte fire_pressed = (byte)(pad_trigger(0) & (byte)PAD.A);
 
     // --- Player movement (clamp to stay within bounds) ---
-    if ((state & (byte)PAD.LEFT) != 0)
+    // Call pad_state(0) inline for each check so return value is fresh in A
+    if ((pad_state(0) & (byte)PAD.LEFT) != 0)
     {
         if (player_x > 8 + PLAYER_SPEED) player_x = (byte)(player_x - PLAYER_SPEED);
         else player_x = 8;
     }
-    if ((state & (byte)PAD.RIGHT) != 0)
+    if ((pad_state(0) & (byte)PAD.RIGHT) != 0)
     {
         if (player_x < 240 - PLAYER_SPEED) player_x = (byte)(player_x + PLAYER_SPEED);
         else player_x = 240;
     }
-    if ((state & (byte)PAD.UP) != 0)
+    if ((pad_state(0) & (byte)PAD.UP) != 0)
     {
         if (player_y > 32 + PLAYER_SPEED) player_y = (byte)(player_y - PLAYER_SPEED);
         else player_y = 32;
     }
-    if ((state & (byte)PAD.DOWN) != 0)
+    if ((pad_state(0) & (byte)PAD.DOWN) != 0)
     {
         if (player_y < 224 - PLAYER_SPEED) player_y = (byte)(player_y + PLAYER_SPEED);
         else player_y = 224;
@@ -243,7 +245,7 @@ while (true)
 
     // --- Fire bullet ---
     if (fire_cooldown != 0) fire_cooldown = (byte)(fire_cooldown - 1);
-    if ((trig & (byte)PAD.A) != 0 && fire_cooldown == 0)
+    if (fire_pressed != 0 && fire_cooldown == 0)
     {
         for (byte i = 0; i < MAX_BULLETS; i++)
         {
@@ -495,7 +497,7 @@ static void apu_triangle_write(byte timer_lo, byte timer_hi)
     poke(APU_TRIANGLE_TIMER_HI, timer_hi);
 }
 
-// Sound effect: player fires (pulse1 decay: 0x30|0x4A=0x7A, timer $0180, length 0xF8|0x01=0xF9)
+// Sound effect: player fires (pulse1 decay: 0x30|0x4A=0x7A, timer_hi 0xF8|0x01=0xF9)
 static void sfx_shoot()
 {
     apu_pulse1_write(0x7A, 0x80, 0xF9);
@@ -507,14 +509,14 @@ static void sfx_hit()
     apu_noise_write(0x3A, 0x04);
 }
 
-// Sound effect: explosion (noise: 0x30|0x0F=0x3F, period 6; triangle: timer $0140, 0xF8|0x01=0xF9)
+// Sound effect: explosion (noise: 0x30|0x0F=0x3F, period 6; triangle: timer_hi 0xF8|0x01=0xF9)
 static void sfx_explode()
 {
     apu_noise_write(0x3F, 0x06);
     apu_triangle_write(0x40, 0xF9);
 }
 
-// Sound effect: player destroyed (pulse1: 0x30|0x8F=0xBF, timer $0200, 0xF8|0x02=0xFA; noise: 0x30|0x0F=0x3F, period 8)
+// Sound effect: player destroyed (pulse1: 0x30|0x8F=0xBF, timer_hi 0xF8|0x02=0xFA; noise: 0x30|0x0F=0x3F, period 8)
 static void sfx_player_die()
 {
     apu_pulse1_write(0xBF, 0x00, 0xFA);
