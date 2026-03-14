@@ -4,8 +4,7 @@ Based on: https://8bitworkshop.com/ (siegegame.c)
 A tower-defense siege game for NES.
 Enemies march from the right side toward the castle on the left.
 The player places walls to block enemy paths.
-Uses vram_read for collision detection, 20+ user functions,
-and string.Length for HUD display.
+Uses vram_read for collision detection and 20+ user functions.
 */
 
 #pragma warning disable CS0649, CS0219
@@ -27,12 +26,6 @@ const byte MAX_ENEMIES = 8;
 const byte STATE_TITLE = 0;
 const byte STATE_PLAY = 1;
 const byte STATE_OVER = 2;
-const byte PAD_A = 0x01;
-const byte PAD_B = 0x02;
-const byte PAD_UP = 0x08;
-const byte PAD_DOWN = 0x04;
-const byte PAD_LEFT = 0x40;
-const byte PAD_RIGHT = 0x80;
 
 // Palette
 byte[] palette = new byte[] {
@@ -87,7 +80,7 @@ static void draw_title_text()
     vram_adr(NTADR_A(10, 10));
     vram_write("SIEGE GAME");
     vram_adr(NTADR_A(7, 14));
-    vram_write("PRESS START TO PLAY");
+    vram_write("PRESS A TO PLAY");
     vram_adr(NTADR_A(8, 18));
     vram_write("DEFEND THE CASTLE!");
     ppu_on_all();
@@ -171,10 +164,8 @@ static void draw_gameover_text()
 
 static void read_tile_at(byte x, byte y, byte[] buf)
 {
-    ppu_off();
     vram_adr(NTADR_A(x, y));
     vram_read(buf, 1);
-    ppu_on_all();
 }
 
 static byte is_wall_tile(byte tile)
@@ -200,10 +191,8 @@ static byte is_floor_tile(byte tile)
 
 static void write_tile(byte x, byte y, byte tile)
 {
-    ppu_off();
     vram_adr(NTADR_A(x, y));
     vram_put(tile);
-    ppu_on_all();
 }
 
 // --- Enemy initialization (write-only to arrays) ---
@@ -245,12 +234,12 @@ static void draw_cursor(byte x, byte y)
 
 static byte move_cursor_x(byte pad, byte cx)
 {
-    if ((byte)(pad & PAD_LEFT) != 0)
+    if ((byte)(pad & (byte)PAD.LEFT) != 0)
     {
         if (cx > (byte)(BOARD_X + 1))
             return (byte)(cx - 1);
     }
-    if ((byte)(pad & PAD_RIGHT) != 0)
+    if ((byte)(pad & (byte)PAD.RIGHT) != 0)
     {
         if (cx < (byte)(BOARD_X + BOARD_W - 1))
             return (byte)(cx + 1);
@@ -260,12 +249,12 @@ static byte move_cursor_x(byte pad, byte cx)
 
 static byte move_cursor_y(byte pad, byte cy)
 {
-    if ((byte)(pad & PAD_UP) != 0)
+    if ((byte)(pad & (byte)PAD.UP) != 0)
     {
         if (cy > BOARD_Y)
             return (byte)(cy - 1);
     }
-    if ((byte)(pad & PAD_DOWN) != 0)
+    if ((byte)(pad & (byte)PAD.DOWN) != 0)
     {
         if (cy < (byte)(BOARD_Y + BOARD_H - 1))
             return (byte)(cy + 1);
@@ -315,7 +304,7 @@ while (true)
             ppu_wait_nmi();
             pad_poll(0);
             byte trigger = pad_trigger(0);
-            if ((byte)(trigger & PAD_A) != 0)
+            if ((byte)(trigger & (byte)PAD.A) != 0)
             {
                 score = 0;
                 wave = 1;
@@ -347,8 +336,11 @@ while (true)
             cursorY = move_cursor_y(trigger, cursorY);
             draw_cursor(cursorX, cursorY);
 
+            // --- VRAM section: single ppu_off/ppu_on_all for all reads/writes ---
+            ppu_off();
+
             // Place wall with A — uses vram_read for collision check
-            if ((byte)(trigger & PAD_A) != 0)
+            if ((byte)(trigger & (byte)PAD.A) != 0)
             {
                 if (cursorX > BOARD_X)
                 {
@@ -362,7 +354,7 @@ while (true)
             }
 
             // Remove wall with B
-            if ((byte)(trigger & PAD_B) != 0)
+            if ((byte)(trigger & (byte)PAD.B) != 0)
             {
                 read_tile_at(cursorX, cursorY, tileBuf);
                 byte removeTile = tileBuf[0];
@@ -456,6 +448,8 @@ while (true)
                 }
             }
 
+            ppu_on_all();
+
             // Apply castle damage
             if (castleHits > 0)
             {
@@ -498,7 +492,7 @@ while (true)
             ppu_wait_nmi();
             pad_poll(0);
             byte trigger = pad_trigger(0);
-            if ((byte)(trigger & PAD_A) != 0)
+            if ((byte)(trigger & (byte)PAD.A) != 0)
             {
                 clear_screen();
                 gameState = STATE_TITLE;
