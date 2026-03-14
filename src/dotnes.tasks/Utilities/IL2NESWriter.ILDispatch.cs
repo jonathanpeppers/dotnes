@@ -610,8 +610,11 @@ partial class IL2NESWriter
                             RemoveLastInstructions(1);
                         }
 
-                        // If not first AND after pad_poll, need to reload pad value
-                        if (_padPollResultAvailable && !_firstAndAfterPadPoll)
+                        // If not first AND after pad_poll, need to reload pad value.
+                        // Skip reload when A already holds the intended operand for
+                        // this AND (e.g., from ldelem or arithmetic), so we don't
+                        // overwrite it with a stale pad_poll result.
+                        if (_padPollResultAvailable && !_firstAndAfterPadPoll && !_runtimeValueInA)
                         {
                             Emit(Opcode.LDA, AddressMode.Absolute, _padReloadAddress);
                         }

@@ -2922,6 +2922,78 @@ public class RoslynTests
     }
 
     [Fact]
+    public void PadPollAndArrayElement_NoStaleReload()
+    {
+        // Regression for the !_runtimeValueInA guard in the AND handler:
+        // After pad_poll(), _padPollResultAvailable stays true until the next Call.
+        // If the program accesses an array element (ldelem.u1 — sets _runtimeValueInA)
+        // and immediately ANDs the result, the AND handler must NOT reload the
+        // pad_poll address. Without the guard, it would clobber A with a stale pad value.
+        var bytes = GetProgramBytes(
+            """
+            byte[] data = new byte[] { 0x41, 0x42, 0x43, 0x44 };
+            byte y = 100;
+            byte x = 50;
+            byte i = 0;
+            ppu_on_all();
+            while (true)
+            {
+                ppu_wait_nmi();
+                PAD joy = pad_poll(0);
+                if ((joy & PAD.LEFT) != 0) x--;
+                if ((joy & PAD.RIGHT) != 0) x++;
+                if ((data[i] & 3) != 0) y++;
+                i++;
+                oam_spr(x, y, 0, 0, 0);
+            }
+            """);
+        Assert.NotNull(bytes);
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"PadPollAndArrayElement hex: {hex}");
+
+        // Find pad_poll reload address: LDA #$00; JSR xxxx; STA xxxx
+        ushort padReloadAddr = 0;
+        for (int j = 0; j < bytes.Length - 8; j++)
+        {
+            if (bytes[j] == 0xA9 && bytes[j + 1] == 0x00 && bytes[j + 2] == 0x20
+                && bytes[j + 5] == 0x8D)
+            {
+                padReloadAddr = (ushort)(bytes[j + 6] | (bytes[j + 7] << 8));
+                break;
+            }
+        }
+        Assert.NotEqual((ushort)0, padReloadAddr);
+        _logger.WriteLine($"Pad reload address: ${padReloadAddr:X4}");
+
+        // Find AND #$03 instruction (the array element mask)
+        int andPos = -1;
+        for (int j = 0; j < bytes.Length - 1; j++)
+        {
+            if (bytes[j] == 0x29 && bytes[j + 1] == 0x03) // AND #$03
+            {
+                andPos = j;
+                break;
+            }
+        }
+        Assert.True(andPos >= 0, "Could not find AND #$03 in output");
+
+        // The AND #$03 should NOT be preceded by LDA $padReloadAddr.
+        // Without the !_runtimeValueInA guard, the AND handler emits:
+        //   LDA padReloadAddr; AND #$03  (clobbering the array element in A)
+        // With the guard, A keeps the array element value loaded by ldelem.u1.
+        if (andPos >= 3 && bytes[andPos - 3] == 0xAD) // LDA Absolute
+        {
+            ushort loadAddr = (ushort)(bytes[andPos - 2] | (bytes[andPos - 1] << 8));
+            Assert.NotEqual(padReloadAddr, loadAddr);
+            _logger.WriteLine($"AND #$03 preceded by LDA ${loadAddr:X4} (not stale pad address ${padReloadAddr:X4})");
+        }
+        else
+        {
+            _logger.WriteLine($"AND #$03 at offset {andPos}: no stale pad reload (correct)");
+        }
+    }
+
+    [Fact]
     public void DupCascade_InterveningStloc_ReloadsFromTemp()
     {
         // Regression: In the climber sample, the pattern:
