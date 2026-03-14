@@ -1038,6 +1038,7 @@ partial class IL2NESWriter
                 EmitWithLabel(Opcode.LDA, AddressMode.Immediate_LowByte, stringLabel);
                 EmitWithLabel(Opcode.LDX, AddressMode.Immediate_HighByte, stringLabel);
                 EmitJSR("pushax");
+                UsedMethods?.Add("pushax");
                 Emit(Opcode.LDX, AddressMode.Immediate, 0x00);
                 if (operand.Length > byte.MaxValue)
                 {
@@ -1197,6 +1198,8 @@ partial class IL2NESWriter
                         break;
                     case "oam_spr":
                         EmitOamSprDecsp4();
+                        _lastByteArrayLabel = null;
+                        _needsByteArrayLoadInCall = false;
                         break;
                     case nameof(NESLib.oam_meta_spr):
                         EmitOamMetaSpr();
@@ -1578,6 +1581,7 @@ partial class IL2NESWriter
                                     Emit(Opcode.LDA, AddressMode.Immediate, (byte)(_lastByteArraySize & 0xFF));
                                 }
                                 _needsByteArrayLoadInCall = false;
+                                _lastByteArrayLabel = null;
                             }
                         }
                         // Emit JSR — extern methods use cc65 _prefix convention

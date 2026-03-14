@@ -173,6 +173,7 @@ partial class IL2NESWriter
             }
             // A:X holds a 16-bit value — push both bytes via pushax
             EmitJSR("pushax");
+            UsedMethods?.Add("pushax");
             _ushortInAX = false;
             _immediateInA = null;
         }
@@ -213,6 +214,7 @@ partial class IL2NESWriter
             EmitWithLabel(Opcode.LDA, AddressMode.Immediate_LowByte, local.LabelName);
             EmitWithLabel(Opcode.LDX, AddressMode.Immediate_HighByte, local.LabelName);
             EmitJSR("pushax");
+            UsedMethods?.Add("pushax");
             Emit(Opcode.LDX, AddressMode.Immediate, (byte)(local.Value >> 8));
             Emit(Opcode.LDA, AddressMode.Immediate, (byte)(local.Value & 0xFF)); // Size of array (16-bit)
             _immediateInA = (byte)(local.Value & 0xFF);
@@ -266,6 +268,7 @@ partial class IL2NESWriter
             Emit(Opcode.LDA, AddressMode.Immediate, (byte)(local.Value & 0xff));
             Emit(Opcode.LDX, AddressMode.Immediate, (byte)(local.Value >> 8));
             EmitJSR("pushax");
+            UsedMethods?.Add("pushax");
             Emit(Opcode.LDX, AddressMode.Immediate, 0x00);
             Emit(Opcode.LDA, AddressMode.Immediate, 0x40);
             _immediateInA = 0x40;
