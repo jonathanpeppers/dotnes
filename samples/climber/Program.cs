@@ -8,6 +8,7 @@
 static extern void music_play(byte song);
 static extern void music_stop();
 static extern void sfx_play(byte sound, byte channel);
+static extern void famitone_update();
 
 // Constants
 const byte COLS = 30;
@@ -37,11 +38,6 @@ const byte CLIMBING = 3;
 const byte JUMPING = 4;
 const byte FALLING = 5;
 const byte PACING = 6;
-const byte PAD_A = 0x01;
-const byte PAD_LEFT = 0x40;
-const byte PAD_RIGHT = 0x80;
-const byte PAD_UP = 0x08;
-const byte PAD_DOWN = 0x04;
 
 // Pure utility function (no captured state)
 static byte rndint(byte a, byte b)
@@ -56,7 +52,7 @@ static void setup_sounds()
 {
     famitone_init("danger_streets_music_data");
     sfx_init("demo_sounds");
-    nmi_set_callback("famitone_update");
+    unsafe { nmi_set_callback(&famitone_update); }
 }
 
 // Setup graphics
@@ -77,6 +73,11 @@ static void setup_graphics()
     });
     vram_adr(NAMETABLE_A);
     vram_fill(CH_BLANK, 0x1000);
+    // Set attribute tables to palette 1 for blue platform colors
+    vram_adr(0x23C0);
+    vram_fill(0x55, 64);
+    vram_adr(0x2BC0);
+    vram_fill(0x55, 64);
     bank_spr(0);
     bank_bg(0);
     vrambuf_clear();
@@ -286,14 +287,83 @@ while (true)
         else
             addr = NTADR_C(1, (byte)(rowy - 30));
 
-        // TODO: Attribute table writes disabled for now (transpiler doesn't handle
-        // runtime ushort address in vrambuf_put yet)
-        // byte tile_y_attr = (byte)(rowy < 30 ? rowy : (byte)(rowy - 30));
-        // ... attribute writes ...
-
         vrambuf_put(addr, buf, COLS);
         vrambuf_flush();
     }
+
+    // --- Set nametable attributes based on floor positions ---
+    // Floor surface rows (dy <= 1) use palette 1 (teal blocks);
+    // all other rows use palette 0 (yellow for ladders/items).
+    // Turn PPU off briefly for direct VRAM writes.
+    ppu_off();
+
+    // Nametable A attributes (rows map to rh = 59 - nt_row)
+    vram_adr(0x23C0);
+    for (byte ar = 0; ar < 8; ar++)
+    {
+        byte top_pal = 0;
+        byte bot_pal = 0;
+        for (byte f = 0; f < MAX_FLOORS; f++)
+        {
+            for (byte qr = 0; qr < 4; qr++)
+            {
+                byte nt_row = (byte)(ar * 4 + qr);
+                if (nt_row < 30)
+                {
+                    byte rh_val = (byte)(59 - nt_row);
+                    byte dy = (byte)(rh_val - floor_ypos[f]);
+                    if (dy <= 1)
+                    {
+                        if (qr < 2)
+                            top_pal = 1;
+                        else
+                            bot_pal = 1;
+                    }
+                }
+            }
+        }
+        byte attr_val;
+        if (top_pal != 0 && bot_pal != 0) attr_val = 0x55;
+        else if (top_pal != 0) attr_val = 0x05;
+        else if (bot_pal != 0) attr_val = 0x50;
+        else attr_val = 0x00;
+        for (byte c = 0; c < 8; c++) vram_put(attr_val);
+    }
+
+    // Nametable C attributes (rows map to rh = 29 - nt_row)
+    vram_adr(0x2BC0);
+    for (byte ar = 0; ar < 8; ar++)
+    {
+        byte top_pal = 0;
+        byte bot_pal = 0;
+        for (byte f = 0; f < MAX_FLOORS; f++)
+        {
+            for (byte qr = 0; qr < 4; qr++)
+            {
+                byte nt_row = (byte)(ar * 4 + qr);
+                if (nt_row < 30)
+                {
+                    byte rh_val = (byte)(29 - nt_row);
+                    byte dy = (byte)(rh_val - floor_ypos[f]);
+                    if (dy <= 1)
+                    {
+                        if (qr < 2)
+                            top_pal = 1;
+                        else
+                            bot_pal = 1;
+                    }
+                }
+            }
+        }
+        byte attr_val;
+        if (top_pal != 0 && bot_pal != 0) attr_val = 0x55;
+        else if (top_pal != 0) attr_val = 0x05;
+        else if (bot_pal != 0) attr_val = 0x50;
+        else attr_val = 0x00;
+        for (byte c = 0; c < 8; c++) vram_put(attr_val);
+    }
+
+    ppu_on_all();
 
     // --- Main game loop ---
     while (actor_floor[0] != MAX_FLOORS - 1)
@@ -321,23 +391,42 @@ while (true)
             byte st = actor_state[ai];
             if (st == STANDING)
             {
-                if (dir != 0) oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerLStand);
-                else oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerRStand);
-            }
-            if (st == WALKING)
-            {
-                byte frame = (byte)((actor_x[ai] >> 1) & 7);
-                if (dir != 0)
+                // Check actor type inline to avoid IL stack interleaving with st cascade
+                if (actor_name[ai] != 0)
                 {
-                    if (frame < 3) oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerLRun1);
-                    else if (frame < 6) oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerLRun2);
-                    else oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerLRun3);
+                    // Enemies use jump sprites for standing/walking
+                    if (dir != 0) oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerLJump);
+                    else oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerRJump);
                 }
                 else
                 {
-                    if (frame < 3) oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerRRun1);
-                    else if (frame < 6) oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerRRun2);
-                    else oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerRRun3);
+                    if (dir != 0) oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerLStand);
+                    else oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerRStand);
+                }
+            }
+            if (st == WALKING)
+            {
+                if (actor_name[ai] != 0)
+                {
+                    // Enemies use jump sprites for standing/walking
+                    if (dir != 0) oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerLJump);
+                    else oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerRJump);
+                }
+                else
+                {
+                    byte frame = (byte)((actor_x[ai] >> 1) & 7);
+                    if (dir != 0)
+                    {
+                        if (frame < 3) oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerLRun1);
+                        else if (frame < 6) oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerLRun2);
+                        else oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerLRun3);
+                    }
+                    else
+                    {
+                        if (frame < 3) oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerRRun1);
+                        else if (frame < 6) oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerRRun2);
+                        else oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerRRun3);
+                    }
                 }
             }
             if (st == JUMPING)
@@ -366,7 +455,7 @@ while (true)
         oam_hide_rest(oam_off);
 
         // --- Player movement ---
-        byte joy = (byte)pad_poll(0);
+        PAD joy = pad_poll(0);
         {
             byte pi = 0;
             byte pf = actor_floor[pi];
@@ -381,28 +470,28 @@ while (true)
 
             if (ps == STANDING || ps == WALKING)
             {
-                if ((joy & PAD_A) != 0)
+                if ((joy & PAD.A) != 0)
                 {
                     actor_state[pi] = JUMPING;
                     actor_xvel[pi] = 0;
                     actor_yvel[pi] = JUMP_VELOCITY;
-                    if ((joy & PAD_LEFT) != 0) actor_xvel[pi] = 0xff;
-                    if ((joy & PAD_RIGHT) != 0) actor_xvel[pi] = 1;
+                    if ((joy & PAD.LEFT) != 0) actor_xvel[pi] = 0xff;
+                    if ((joy & PAD.RIGHT) != 0) actor_xvel[pi] = 1;
                     sfx_play(SND_JUMP, 0);
                 }
-                else if ((joy & PAD_LEFT) != 0)
+                else if ((joy & PAD.LEFT) != 0)
                 {
                     actor_x[pi] = (byte)(actor_x[pi] - 1);
                     actor_dir[pi] = 1;
                     actor_state[pi] = WALKING;
                 }
-                else if ((joy & PAD_RIGHT) != 0)
+                else if ((joy & PAD.RIGHT) != 0)
                 {
                     actor_x[pi] = (byte)(actor_x[pi] + 1);
                     actor_dir[pi] = 0;
                     actor_state[pi] = WALKING;
                 }
-                else if ((joy & PAD_UP) != 0)
+                else if ((joy & PAD.UP) != 0)
                 {
                     byte lx = 0;
                     if (floor_ladder1[pf] != 0)
@@ -421,7 +510,7 @@ while (true)
                         actor_state[pi] = CLIMBING;
                     }
                 }
-                else if ((joy & PAD_DOWN) != 0)
+                else if ((joy & PAD.DOWN) != 0)
                 {
                     if (pf > 0)
                     {
@@ -453,7 +542,7 @@ while (true)
 
             if (ps == CLIMBING)
             {
-                if ((joy & PAD_UP) != 0)
+                if ((joy & PAD.UP) != 0)
                 {
                     if (actor_yy_hi[pi] > cyy_hi || (actor_yy_hi[pi] == cyy_hi && actor_yy_lo[pi] >= cyy_lo))
                     {
@@ -466,7 +555,7 @@ while (true)
                         if (actor_yy_lo[pi] == 0) actor_yy_hi[pi] = (byte)(actor_yy_hi[pi] + 1);
                     }
                 }
-                else if ((joy & PAD_DOWN) != 0)
+                else if ((joy & PAD.DOWN) != 0)
                 {
                     if (actor_yy_hi[pi] < fyy_hi || (actor_yy_hi[pi] == fyy_hi && actor_yy_lo[pi] <= fyy_lo))
                     {
@@ -585,13 +674,13 @@ while (true)
 
             if (es == STANDING || es == WALKING)
             {
-                if ((ej & PAD_LEFT) != 0)
+                if ((ej & (byte)PAD.LEFT) != 0)
                 {
                     actor_x[ei] = (byte)(actor_x[ei] - 1);
                     actor_dir[ei] = 1;
                     actor_state[ei] = WALKING;
                 }
-                else if ((ej & PAD_RIGHT) != 0)
+                else if ((ej & (byte)PAD.RIGHT) != 0)
                 {
                     actor_x[ei] = (byte)(actor_x[ei] + 1);
                     actor_dir[ei] = 0;

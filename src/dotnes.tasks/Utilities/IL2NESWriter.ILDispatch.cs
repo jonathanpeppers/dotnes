@@ -56,20 +56,52 @@ partial class IL2NESWriter
                     Stack.Push(Stack.Peek());
                 if (_dupCascadeActive)
                 {
-                    // Subsequent dup in cascading if-else: reload saved value from TEMP_HI
-                    // (the DUP_TEMP scratch location). After an if-block runs (with JSR calls
-                    // that modify A), A no longer holds the original comparison value. Reload
-                    // it from TEMP_HI where the branch handler saved it.
-                    Emit(Opcode.LDA, AddressMode.ZeroPage, TEMP_HI);
-                    _dupPendingSave = true;
+                    if (IsDupCascadeStart())
+                    {
+                        // Subsequent dup in cascading if-else: reload saved value from TEMP_HI
+                        // (the DUP_TEMP scratch location). After an if-block runs (with JSR calls
+                        // that modify A), A no longer holds the original comparison value. Reload
+                        // it from TEMP_HI where the branch handler saved it.
+                        Emit(Opcode.LDA, AddressMode.ZeroPage, TEMP_HI);
+                        _dupPendingSave = true;
+                    }
+                    else
+                    {
+                        // Not a cascade continuation (e.g., dup for lo/hi byte extraction).
+                        // Clear the stale cascade flag so it doesn't corrupt non-cascade dups.
+                        _dupCascadeActive = false;
+                        if (_ushortInAX) _dupPreservedUshortHi = true;
+                    }
                 }
-                else if (_runtimeValueInA && IsDupCascadeStart())
+                else if (IsDupCascadeStart())
                 {
-                    // First dup in cascade: mark for saving in the branch handler.
-                    // Don't emit anything yet — A still holds the correct value.
-                    _dupCascadeActive = true;
-                    _dupPendingSave = true;
+                    if (!_runtimeValueInA)
+                    {
+                        // The cascade value was pushed before intervening operations
+                        // (e.g., stloc between ldelem and dup) that clobbered A.
+                        // Check if HandleLdelemU1 saved it to TEMP ($17).
+                        var block = CurrentBlock!;
+                        for (int i = block.Count - 1; i >= 0; i--)
+                        {
+                            var instr = block[i];
+                            if (instr.Opcode == Opcode.STA && instr.Mode == AddressMode.ZeroPage
+                                && instr.Operand is ImmediateOperand op && op.Value == TEMP)
+                            {
+                                Emit(Opcode.LDA, AddressMode.ZeroPage, TEMP);
+                                _runtimeValueInA = true;
+                                break;
+                            }
+                        }
+                    }
+                    if (_runtimeValueInA)
+                    {
+                        // First dup in cascade: mark for saving in the branch handler.
+                        // A holds the correct value (either natively or reloaded from TEMP).
+                        _dupCascadeActive = true;
+                        _dupPendingSave = true;
+                    }
                 }
+                if (_ushortInAX && !_dupCascadeActive) _dupPreservedUshortHi = true;
                 break;
             case ILOpCode.Pop:
                 if (Stack.Count > 0)
@@ -480,7 +512,7 @@ partial class IL2NESWriter
                     bool shrLocalInA = _lastLoadedLocalIndex.HasValue &&
                         Locals.TryGetValue(_lastLoadedLocalIndex.Value, out var shrLocal) && shrLocal.Address != null;
 
-                    if (_runtimeValueInA || shrLocalInA || _ushortInAX)
+                    if (_runtimeValueInA || shrLocalInA || _ushortInAX || _dupPreservedUshortHi)
                     {
                         if (!_runtimeValueInA && !_ushortInAX
                             && previous is ILOpCode.Ldc_i4_s or ILOpCode.Ldc_i4
@@ -490,13 +522,14 @@ partial class IL2NESWriter
                         {
                             RemoveLastInstructions(1);
                         }
-                        if (_ushortInAX && shiftCount >= 8)
+                        if ((_ushortInAX || _dupPreservedUshortHi) && shiftCount >= 8)
                         {
                             // ushort >> 8+: high byte to A, then shift remaining
                             Emit(Opcode.TXA, AddressMode.Implied);
                             for (int i = 0; i < shiftCount - 8; i++)
                                 Emit(Opcode.LSR, AddressMode.Accumulator);
                             _ushortInAX = false;
+                            _dupPreservedUshortHi = false;
                         }
                         else if (_ushortInAX)
                         {
@@ -577,8 +610,11 @@ partial class IL2NESWriter
                             RemoveLastInstructions(1);
                         }
 
-                        // If not first AND after pad_poll, need to reload pad value
-                        if (_padPollResultAvailable && !_firstAndAfterPadPoll)
+                        // If not first AND after pad_poll, need to reload pad value.
+                        // Skip reload when A already holds the intended operand for
+                        // this AND (e.g., from ldelem or arithmetic), so we don't
+                        // overwrite it with a stale pad_poll result.
+                        if (_padPollResultAvailable && !_firstAndAfterPadPoll && !_runtimeValueInA)
                         {
                             Emit(Opcode.LDA, AddressMode.Absolute, _padReloadAddress);
                         }
@@ -1022,6 +1058,10 @@ partial class IL2NESWriter
         {
             case ILOpCode.Nop:
                 break;
+            case ILOpCode.Ldftn:
+                // Function pointer: store the method name for the callback handler
+                _lastLdftnMethod = operand;
+                break;
             case ILOpCode.Ldstr:
                 // Deduplicate: reuse label if same string was already seen
                 if (!_stringLabelMap.TryGetValue(operand, out string? stringLabel))
@@ -1038,6 +1078,7 @@ partial class IL2NESWriter
                 EmitWithLabel(Opcode.LDA, AddressMode.Immediate_LowByte, stringLabel);
                 EmitWithLabel(Opcode.LDX, AddressMode.Immediate_HighByte, stringLabel);
                 EmitJSR("pushax");
+                UsedMethods?.Add("pushax");
                 Emit(Opcode.LDX, AddressMode.Immediate, 0x00);
                 if (operand.Length > byte.MaxValue)
                 {
@@ -1234,7 +1275,7 @@ partial class IL2NESWriter
                             argsAlreadyPopped = true;
                         }
                         break;
-                    case "pad_poll":
+                    case nameof(NESLib.pad_poll):
                         // pad_poll returns result in A — store to dynamically allocated temp
                         EmitWithLabel(Opcode.JSR, AddressMode.Absolute, operand);
                         if (_padReloadAddress == 0)
@@ -1249,6 +1290,8 @@ partial class IL2NESWriter
                         break;
                     case "oam_spr":
                         EmitOamSprDecsp4();
+                        _lastByteArrayLabel = null;
+                        _needsByteArrayLoadInCall = false;
                         break;
                     case nameof(NESLib.oam_meta_spr):
                         EmitOamMetaSpr();
@@ -1281,14 +1324,35 @@ partial class IL2NESWriter
                         _immediateInA = null;
                         break;
                     case nameof(NESLib.nmi_set_callback):
+                    case nameof(NESLib.irq_set_callback):
+                        {
+                            // Function pointer path: ldftn already gave us the method name
+                            string? labelName = _lastLdftnMethod;
+                            _lastLdftnMethod = null;
+
+                            if (labelName != null)
+                            {
+                                // User-defined methods use their name as-is; extern methods use _ prefix (cc65 convention)
+                                bool isUserMethod = UserMethodNames != null && UserMethodNames.Contains(labelName);
+                                string label = isUserMethod ? labelName : $"_{labelName}";
+                                EmitWithLabel(Opcode.LDA, AddressMode.Immediate_LowByte, label);
+                                EmitWithLabel(Opcode.LDX, AddressMode.Immediate_HighByte, label);
+                            }
+                            EmitWithLabel(Opcode.JSR, AddressMode.Absolute, operand);
+                            if (operand == nameof(NESLib.nmi_set_callback))
+                                UsedMethods?.Add("nmi_set_callback");
+                            if (operand == nameof(NESLib.irq_set_callback))
+                                UsedMethods?.Add("irq_set_callback");
+                            _immediateInA = null;
+                            argsAlreadyPopped = true;
+                        }
+                        break;
                     case nameof(NESLib.famitone_init):
                     case nameof(NESLib.sfx_init):
                         {
-                            // These functions take a string label name as argument.
-                            // The Ldstr emitted: LDA #<string_N, LDX #>string_N, JSR pushax, LDX #0, LDA #len
-                            // Replace with: LDA #<_label, LDX #>_label, JSR target
-                            var block = CurrentBlock!;
+                            // String literal path: Ldstr emitted LDA #<string_N, LDX #>string_N, JSR pushax, LDX #0, LDA #len
                             string? labelName = null;
+                            var block = CurrentBlock!;
                             if (block.Count >= 5)
                             {
                                 var ldaStringInstr = block[block.Count - 5];
@@ -1305,22 +1369,27 @@ partial class IL2NESWriter
                                 }
                             }
                             RemoveLastInstructions(5);
+
                             if (labelName != null)
                             {
                                 string label = $"_{labelName}";
                                 EmitWithLabel(Opcode.LDA, AddressMode.Immediate_LowByte, label);
                                 EmitWithLabel(Opcode.LDX, AddressMode.Immediate_HighByte, label);
                             }
-                            // nmi_set_callback is a built-in; famitone_init/sfx_init are extern (always _ prefix)
-                            string jsrTarget = operand == nameof(NESLib.nmi_set_callback)
-                                ? "nmi_set_callback"
-                                : $"_{operand}";
-                            EmitWithLabel(Opcode.JSR, AddressMode.Absolute, jsrTarget);
-                            if (operand == nameof(NESLib.nmi_set_callback))
-                                UsedMethods?.Add("nmi_set_callback");
+                            EmitWithLabel(Opcode.JSR, AddressMode.Absolute, $"_{operand}");
                             _immediateInA = null;
                             argsAlreadyPopped = true;
                         }
+                        break;
+                    case nameof(NESLib.cli):
+                        // Emit 6502 CLI instruction (enable CPU interrupts)
+                        Emit(Opcode.CLI, AddressMode.Implied);
+                        argsAlreadyPopped = true;
+                        break;
+                    case nameof(NESLib.sei):
+                        // Emit 6502 SEI instruction (disable CPU interrupts)
+                        Emit(Opcode.SEI, AddressMode.Implied);
+                        argsAlreadyPopped = true;
                         break;
                     case nameof(NESLib.poke):
                         {
@@ -1678,6 +1747,13 @@ partial class IL2NESWriter
                         _runtimeValueInA = true;
                         // 16-bit return (e.g. bcd_add returns ushort): result in A/X
                         _ushortInAX = _reflectionCache.Returns16Bit(operand);
+                        // A now has a new return value; any previous pad_poll result is gone.
+                        // pad_poll sets its own flag after this block, so this only clears
+                        // the flag for non-pad_poll calls (e.g. rand8).
+                        if (operand != nameof(NESLib.pad_poll))
+                        {
+                            _padPollResultAvailable = false;
+                        }
                     }
                     // Push return value placeholder (except for NTADR which already pushed)
                     if (operand is not (nameof(NTADR_A) or nameof(NTADR_B) or nameof(NTADR_C) or nameof(NTADR_D)))

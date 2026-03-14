@@ -17,6 +17,8 @@
     <DebugSymbols>false</DebugSymbols>
     <!-- Allow 'static extern' without [DllImport] -->
     <NoWarn>$(NoWarn);CS0626</NoWarn>
+    <!-- Required for function pointer callback APIs -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <ItemGroup>
     <NESAssembly Include="*.s" />

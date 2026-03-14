@@ -103,16 +103,25 @@ partial class IL2NESWriter
             }
             else
             {
-                // Store scalar local: remove previous LDA, re-emit with STA
-                RemoveLastInstructions(1);
-                Emit(Opcode.LDA, AddressMode.Immediate, (byte)local.Value);
-                Emit(Opcode.STA, AddressMode.Absolute, (ushort)local.Address);
-                if (_lastByteArrayLabel != null)
+                if (LastLDA)
                 {
-                    // Byte array address needs to be in A:X for upcoming call — use label resolution
-                    EmitWithLabel(Opcode.LDA, AddressMode.Immediate_LowByte, _lastByteArrayLabel);
-                    EmitWithLabel(Opcode.LDX, AddressMode.Immediate_HighByte, _lastByteArrayLabel);
-                    _byteArrayAddressEmitted = true;
+                    // Store scalar local: remove previous LDA #constant, re-emit with STA
+                    RemoveLastInstructions(1);
+                    Emit(Opcode.LDA, AddressMode.Immediate, (byte)local.Value);
+                    Emit(Opcode.STA, AddressMode.Absolute, (ushort)local.Address);
+                    if (_lastByteArrayLabel != null)
+                    {
+                        // Byte array address needs to be in A:X for upcoming call — use label resolution
+                        EmitWithLabel(Opcode.LDA, AddressMode.Immediate_LowByte, _lastByteArrayLabel);
+                        EmitWithLabel(Opcode.LDX, AddressMode.Immediate_HighByte, _lastByteArrayLabel);
+                        _byteArrayAddressEmitted = true;
+                    }
+                }
+                else
+                {
+                    // Previous instruction loaded a value into A (e.g., ldloc from another local)
+                    // Don't remove it — just emit STA to store it
+                    Emit(Opcode.STA, AddressMode.Absolute, (ushort)local.Address);
                 }
                 _immediateInA = null;
             }
@@ -173,6 +182,7 @@ partial class IL2NESWriter
             }
             // A:X holds a 16-bit value — push both bytes via pushax
             EmitJSR("pushax");
+            UsedMethods?.Add("pushax");
             _ushortInAX = false;
             _immediateInA = null;
         }
@@ -213,6 +223,7 @@ partial class IL2NESWriter
             EmitWithLabel(Opcode.LDA, AddressMode.Immediate_LowByte, local.LabelName);
             EmitWithLabel(Opcode.LDX, AddressMode.Immediate_HighByte, local.LabelName);
             EmitJSR("pushax");
+            UsedMethods?.Add("pushax");
             Emit(Opcode.LDX, AddressMode.Immediate, (byte)(local.Value >> 8));
             Emit(Opcode.LDA, AddressMode.Immediate, (byte)(local.Value & 0xFF)); // Size of array (16-bit)
             _immediateInA = (byte)(local.Value & 0xFF);
@@ -266,6 +277,7 @@ partial class IL2NESWriter
             Emit(Opcode.LDA, AddressMode.Immediate, (byte)(local.Value & 0xff));
             Emit(Opcode.LDX, AddressMode.Immediate, (byte)(local.Value >> 8));
             EmitJSR("pushax");
+            UsedMethods?.Add("pushax");
             Emit(Opcode.LDX, AddressMode.Immediate, 0x00);
             Emit(Opcode.LDA, AddressMode.Immediate, 0x40);
             _immediateInA = 0x40;

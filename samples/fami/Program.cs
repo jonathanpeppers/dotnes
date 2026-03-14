@@ -4,6 +4,7 @@
 // Link FamiTone2 functions (from famitone2.s / sounds.s)
 static extern void music_play(byte song);
 static extern void sfx_play(byte sound, byte channel);
+static extern void famitone_update();
 
 pal_col(1, 0x04);
 pal_col(2, 0x20);
@@ -16,7 +17,7 @@ famitone_init("danger_streets_music_data");
 sfx_init("demo_sounds");
 
 // Set music callback function for NMI
-nmi_set_callback("famitone_update");
+unsafe { nmi_set_callback(&famitone_update); }
 
 // Play music
 music_play(0);

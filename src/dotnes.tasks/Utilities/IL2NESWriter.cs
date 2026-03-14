@@ -180,6 +180,19 @@ partial class IL2NESWriter : NESWriter
     bool _dupPendingSave;
 
     /// <summary>
+    /// Set by dup when _ushortInAX was true, indicating X still holds the high byte
+    /// of a duplicated ushort value. Used by shr to emit TXA for the high byte extraction
+    /// after a dup+conv_u1+stloc pattern extracts the low byte.
+    /// </summary>
+    bool _dupPreservedUshortHi;
+
+    /// <summary>
+    /// Set by ldftn handler with the method name. Consumed by nmi_set_callback/irq_set_callback
+    /// to resolve the callback label from a function pointer instead of a string literal.
+    /// </summary>
+    string? _lastLdftnMethod;
+
+    /// <summary>
     /// Number of parameters for the current user method being transpiled (0 for main).
     /// Used by ldarg handlers to compute cc65 stack offsets.
     /// </summary>
@@ -309,7 +322,7 @@ partial class IL2NESWriter : NESWriter
     /// <summary>
     /// Counter for generating unique byte array labels
     /// </summary>
-    int _byteArrayLabelIndex = 0;
+    int _byteArrayLabelIndex;
 
     /// <summary>
     /// Gets or sets the starting index for byte array labels.
@@ -326,8 +339,8 @@ partial class IL2NESWriter : NESWriter
     /// <summary>
     /// Track the last byte array label for Stloc handling
     /// </summary>
-    string? _lastByteArrayLabel = null;
-    int _lastByteArraySize = 0;
+    string? _lastByteArrayLabel;
+    int _lastByteArraySize;
 
     public ILInstruction[]? Instructions { get; set; }
 

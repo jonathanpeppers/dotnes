@@ -11,18 +11,18 @@ public class AssemblyReader : IDisposable
 {
     const string SegmentInstruction = ".segment ";
     const string ByteInstruction = ".byte ";
-    readonly TextReader reader;
+    readonly TextReader _reader;
 
     public AssemblyReader(TextReader reader)
     {
         Path = reader.GetType().ToString();
-        this.reader = reader;
+        _reader = reader;
     }
 
     public AssemblyReader(string path)
     {
         Path = path;
-        reader = new StreamReader(File.OpenRead(path));
+        _reader = new StreamReader(File.OpenRead(path));
     }
 
     /// <summary>
@@ -37,7 +37,7 @@ public class AssemblyReader : IDisposable
         string line;
         do
         {
-            line = reader.ReadLine()!;
+            line = _reader.ReadLine()!;
 
             // Blank or comments
             if (string.IsNullOrEmpty(line) || line[0] == ';')
@@ -143,7 +143,7 @@ public class AssemblyReader : IDisposable
         return (byte)(hex - (hex < 58 ? 48 : (hex < 97 ? 55 : 87)));
     }
 
-    public void Dispose() => reader.Dispose();
+    public void Dispose() => _reader.Dispose();
 }
 
 /// <summary>

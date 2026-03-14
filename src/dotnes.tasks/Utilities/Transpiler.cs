@@ -114,9 +114,13 @@ class Transpiler : IDisposable
             writer.Write((byte)0);
 
         // Write vectors: NMI, RESET, IRQ (little-endian) at end of last PRG bank
-        ushort nmi_data = 0x80BC;
+        // Resolve vector addresses from program labels for correct layout
+        var labels = program.GetLabels();
+        ushort nmi_data = labels.TryGetValue(NESConstants._nmi, out var nmiAddr) ? nmiAddr : (ushort)0x80BC;
         ushort reset_data = NESConstants.PrgRomStart;
-        ushort irq_data = 0x8202;
+        // Use irq_with_callback handler when irq_set_callback is used, otherwise default _irq handler
+        ushort irq_data = labels.TryGetValue(NESConstants.irq_with_callback, out var irqCbAddr) ? irqCbAddr
+            : labels.TryGetValue(NESConstants._irq, out var irqAddr) ? irqAddr : (ushort)0x8202;
         writer.Write((byte)(nmi_data & 0xFF));
         writer.Write((byte)(nmi_data >> 8));
         writer.Write((byte)(reset_data & 0xFF));

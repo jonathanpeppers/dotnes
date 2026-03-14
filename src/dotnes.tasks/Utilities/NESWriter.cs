@@ -103,6 +103,18 @@ class NESWriter : IDisposable
         
         // Second pass: emit bytes
         addr = currentAddress;
+
+        // Helper to resolve label from local labels or global Labels dictionary
+        ushort ResolveLabel(string name, string? context = null)
+        {
+            if (localLabels.TryGetValue(name, out ushort resolved))
+                return resolved;
+            if (Labels.TryGetValue(name, out resolved))
+                return resolved;
+            var ctx = context != null ? $" for {context}" : "";
+            throw new InvalidOperationException($"Unresolved label{ctx}: {name}");
+        }
+
         foreach (var (instruction, _) in block.InstructionsWithLabels)
         {
             byte opcode = OpcodeTable.Encode(instruction.Opcode, instruction.Mode);
@@ -121,75 +133,23 @@ class NESWriter : IDisposable
                         break;
                         
                     case LabelOperand labelOp:
-                        // Try local labels first, then global Labels dictionary
-                        if (localLabels.TryGetValue(labelOp.Label, out ushort labelAddr))
-                        {
-                            _writer.Write(labelAddr);
-                        }
-                        else if (Labels.TryGetValue(labelOp.Label, out labelAddr))
-                        {
-                            _writer.Write(labelAddr);
-                        }
-                        else
-                        {
-                            throw new InvalidOperationException($"Unresolved label: {labelOp.Label}");
-                        }
+                        _writer.Write(ResolveLabel(labelOp.Label));
                         break;
                     
                     case LowByteOperand lowOp:
-                        // Resolve to low byte of label address
-                        if (localLabels.TryGetValue(lowOp.Label, out ushort lowAddr))
-                        {
-                            _writer.Write((byte)(lowAddr & 0xFF));
-                        }
-                        else if (Labels.TryGetValue(lowOp.Label, out lowAddr))
-                        {
-                            _writer.Write((byte)(lowAddr & 0xFF));
-                        }
-                        else
-                        {
-                            throw new InvalidOperationException($"Unresolved label for low byte: {lowOp.Label}");
-                        }
+                        _writer.Write((byte)(ResolveLabel(lowOp.Label, "low byte") & 0xFF));
                         break;
                     
                     case HighByteOperand highOp:
-                        // Resolve to high byte of label address
-                        if (localLabels.TryGetValue(highOp.Label, out ushort highAddr))
-                        {
-                            _writer.Write((byte)(highAddr >> 8));
-                        }
-                        else if (Labels.TryGetValue(highOp.Label, out highAddr))
-                        {
-                            _writer.Write((byte)(highAddr >> 8));
-                        }
-                        else
-                        {
-                            throw new InvalidOperationException($"Unresolved label for high byte: {highOp.Label}");
-                        }
+                        _writer.Write((byte)(ResolveLabel(highOp.Label, "high byte") >> 8));
                         break;
                         
                     case RelativeOperand relOp:
-                        // Resolve relative branch to label
-                        ushort targetAddr;
-                        if (localLabels.TryGetValue(relOp.Label, out targetAddr))
-                        {
-                            // Calculate relative offset from instruction following this one
-                            int offset = targetAddr - (addr + 2); // +2 for opcode + operand
-                            if (offset < -128 || offset > 127)
-                                throw new InvalidOperationException($"Branch to {relOp.Label} out of range: {offset}");
-                            _writer.Write((byte)(sbyte)offset);
-                        }
-                        else if (Labels.TryGetValue(relOp.Label, out targetAddr))
-                        {
-                            int offset = targetAddr - (addr + 2);
-                            if (offset < -128 || offset > 127)
-                                throw new InvalidOperationException($"Branch to {relOp.Label} out of range: {offset}");
-                            _writer.Write((byte)(sbyte)offset);
-                        }
-                        else
-                        {
-                            throw new InvalidOperationException($"Unresolved label: {relOp.Label}");
-                        }
+                        ushort targetAddr = ResolveLabel(relOp.Label);
+                        int offset = targetAddr - (addr + 2); // +2 for opcode + operand
+                        if (offset < -128 || offset > 127)
+                            throw new InvalidOperationException($"Branch to {relOp.Label} out of range: {offset}");
+                        _writer.Write((byte)(sbyte)offset);
                         break;
                         
                     case RelativeByteOperand relByte:
@@ -202,9 +162,9 @@ class NESWriter : IDisposable
         }
         
         // Track LastLDA for optimization patterns
-        if (block.Count > 0)
+        var lastInstr = block.LastOrDefault();
+        if (lastInstr != null)
         {
-            var lastInstr = block[block.Count - 1];
             LastLDA = lastInstr.Opcode == Opcode.LDA && lastInstr.Mode == AddressMode.Immediate;
         }
     }
