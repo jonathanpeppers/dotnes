@@ -210,6 +210,7 @@ for (byte i = 0; i < MAX_STARS; i++)
 // === Main game loop ===
 while (true)
 {
+    pad_poll(0);
     byte trig = pad_trigger(0);
     byte state = pad_state(0);
 
