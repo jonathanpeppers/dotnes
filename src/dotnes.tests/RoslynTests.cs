@@ -3213,7 +3213,7 @@ public class RoslynTests
     [Fact]
     public void MultiParamUserFunction_LocalVarArgs()
     {
-        // Troubleshoot: calling a user-defined function with a runtime local + constant.
+        // Test: calling a user-defined function with a runtime local + constant.
         // Use rand8() for runtime value and reference x after the call to force ldloc.
         var bytes = GetProgramBytes(
             """
@@ -3306,8 +3306,8 @@ public class RoslynTests
         int ldloc = hex.IndexOf("AD2503");
         Assert.True(ldloc >= 0, $"LDA $0325 not found. Hex: {hex}");
         // There should be a JSR pusha after loading x (before loading 2)
-        int ldc2 = hex.IndexOf("A902", ldloc);
-        Assert.True(ldc2 > ldloc + 6,
+        int ldc2Index = hex.IndexOf("A902", ldloc);
+        Assert.True(ldc2Index > ldloc + 6,
             $"No JSR pusha after loading local x before constant arg. Hex: {hex}");
     }
 }

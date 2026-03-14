@@ -262,7 +262,7 @@ partial class IL2NESWriter
                 // value to the cc65 stack so it survives the next load.
                 // Only applies to user-defined functions — NESLib built-ins have
                 // dedicated Call handlers that manage their own arguments.
-                if (Instructions is not null && Index + 2 < Instructions.Length
+                if (Instructions is not null && Index + 1 < Instructions.Length
                     && UserMethodNames is { Count: > 0 })
                 {
                     var nextOp = Instructions[Index + 1].OpCode;
