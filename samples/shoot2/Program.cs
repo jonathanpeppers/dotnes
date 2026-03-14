@@ -199,6 +199,11 @@ byte[] exp_x = new byte[MAX_EXPLOSIONS];
 byte[] exp_y = new byte[MAX_EXPLOSIONS];
 byte[] exp_timer = new byte[MAX_EXPLOSIONS];
 
+// Zero-initialize guard arrays (new byte[N] doesn't zero memory on NES)
+for (byte i = 0; i < MAX_BULLETS; i++) bullet_active[i] = 0;
+for (byte i = 0; i < MAX_ENEMIES; i++) enemy_active[i] = 0;
+for (byte i = 0; i < MAX_EXPLOSIONS; i++) exp_timer[i] = 0;
+
 // Initialize stars
 for (byte i = 0; i < MAX_STARS; i++)
 {
@@ -458,25 +463,30 @@ static void enable_apu()
 // APU pulse channel 1 with decay envelope
 static void apu_pulse1_decay(byte duty_vol, byte period_lo, byte period_hi)
 {
-    poke(APU_PULSE1_CTRL, (byte)(0x30 | duty_vol));
+    byte val = (byte)(0x30 | duty_vol);
+    poke(APU_PULSE1_CTRL, val);
     poke(APU_PULSE1_SWEEP, 0x00);
     poke(APU_PULSE1_TIMER_LO, period_lo);
-    poke(APU_PULSE1_TIMER_HI, (byte)(0xF8 | period_hi));
+    val = (byte)(0xF8 | period_hi);
+    poke(APU_PULSE1_TIMER_HI, val);
 }
 
 // APU pulse channel 2 with sustain
 static void apu_pulse2_sustain(byte duty_vol, byte period_lo, byte period_hi)
 {
-    poke(APU_PULSE2_CTRL, (byte)(0xB0 | duty_vol));
+    byte val = (byte)(0xB0 | duty_vol);
+    poke(APU_PULSE2_CTRL, val);
     poke(APU_PULSE2_SWEEP, 0x00);
     poke(APU_PULSE2_TIMER_LO, period_lo);
-    poke(APU_PULSE2_TIMER_HI, (byte)(0xF8 | period_hi));
+    val = (byte)(0xF8 | period_hi);
+    poke(APU_PULSE2_TIMER_HI, val);
 }
 
 // APU noise channel with decay envelope
 static void apu_noise_decay(byte period, byte vol)
 {
-    poke(APU_NOISE_CTRL, (byte)(0x30 | vol));
+    byte val = (byte)(0x30 | vol);
+    poke(APU_NOISE_CTRL, val);
     poke(APU_NOISE_PERIOD, period);
     poke(APU_NOISE_LENGTH, 0xF8);
 }
@@ -486,7 +496,8 @@ static void apu_triangle_sustain(byte period_lo, byte period_hi)
 {
     poke(APU_TRIANGLE_CTRL, 0xFF);
     poke(APU_TRIANGLE_TIMER_LO, period_lo);
-    poke(APU_TRIANGLE_TIMER_HI, (byte)(0xF8 | period_hi));
+    byte val = (byte)(0xF8 | period_hi);
+    poke(APU_TRIANGLE_TIMER_HI, val);
 }
 
 // Sound effect: player fires
