@@ -1471,6 +1471,8 @@ partial class IL2NESWriter
                             if (Stack.Count >= 1)
                             {
                                 int index = Stack.Pop();
+                                if (index < 0 || index > 15)
+                                    throw new TranspileException($"shared_get index must be 0-15, got {index}.", MethodName);
                                 ushort addr = (ushort)(SharedBase + index);
                                 // WriteLdc(byte) emits 1 instruction (LDA #index).
                                 // If a previous value was in A (LastLDA), an extra JSR pusha
@@ -1500,6 +1502,8 @@ partial class IL2NESWriter
                             {
                                 int value = Stack.Pop();
                                 int index = Stack.Pop();
+                                if (index < 0 || index > 15)
+                                    throw new TranspileException($"shared_set index must be 0-15, got {index}.", MethodName);
                                 ushort addr = (ushort)(SharedBase + index);
 
                                 // Check if the value is from a runtime local variable
