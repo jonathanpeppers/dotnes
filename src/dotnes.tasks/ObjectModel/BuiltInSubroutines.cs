@@ -1455,6 +1455,44 @@ internal static class BuiltInSubroutines
         return block;
     }
 
+    /// <summary>
+    /// _irq_set_callback - Set IRQ callback address and initialize JMP opcode
+    /// </summary>
+    public static Block IrqSetCallback()
+    {
+        var block = new Block(nameof(irq_set_callback));
+        block.Emit(PHA())                       // Save low byte of callback
+             .Emit(LDA(0x4C))                   // JMP opcode
+             .Emit(STA_zpg(IRQ_CALLBACK))       // $1E = JMP opcode
+             .Emit(PLA())                       // Restore low byte
+             .Emit(STA_zpg(IRQ_CALLBACK + 1))   // $1F = callback address low
+             .Emit(STX_zpg(IRQ_CALLBACK + 2))   // $20 = callback address high
+             .Emit(RTS());
+        return block;
+    }
+
+    /// <summary>
+    /// irq_with_callback - IRQ handler that calls through IRQ_CALLBACK at $1E
+    /// Pushes all registers, calls the callback, then restores and returns from interrupt.
+    /// </summary>
+    public static Block IrqWithCallback()
+    {
+        var block = new Block(nameof(irq_with_callback));
+        block.Emit(PHA())
+             .Emit(TXA())
+             .Emit(PHA())
+             .Emit(TYA())
+             .Emit(PHA())
+             .Emit(JSR(IRQ_CALLBACK))   // Call through IRQ callback JMP at $1E
+             .Emit(PLA())
+             .Emit(TAY())
+             .Emit(PLA())
+             .Emit(TAX())
+             .Emit(PLA())
+             .Emit(RTI());
+        return block;
+    }
+
     #endregion
 
     #region Stack Operations

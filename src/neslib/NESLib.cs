@@ -122,11 +122,27 @@ public static class NESLib
     public static void sample_play(byte sample) => throw null!;
 
     /// <summary>
-    /// set NMI callback function by label name
-    /// The named function will be called every NMI frame.
-    /// Usage: nmi_set_callback("famitone_update")
+    /// Set NMI callback to a function (called every NMI frame).
+    /// Usage: nmi_set_callback(&amp;my_nmi_handler)
     /// </summary>
-    public static void nmi_set_callback(string callbackName) => throw null!;
+    public static unsafe void nmi_set_callback(delegate*<void> callback) => throw null!;
+
+    /// <summary>
+    /// Set IRQ callback to a function (called when a hardware IRQ fires).
+    /// Usage: irq_set_callback(&amp;my_irq_handler)
+    /// </summary>
+    public static unsafe void irq_set_callback(delegate*<void> callback) => throw null!;
+
+    /// <summary>
+    /// enable CPU interrupts (6502 CLI instruction)
+    /// Must be called after setting up the IRQ source (e.g., MMC3 scanline counter).
+    /// </summary>
+    public static void cli() => throw null!;
+
+    /// <summary>
+    /// disable CPU interrupts (6502 SEI instruction)
+    /// </summary>
+    public static void sei() => throw null!;
 
     /// <summary>
     /// get pad trigger
@@ -495,6 +511,13 @@ public static class NESLib
     public const ushort MMC3_BANK_SELECT = 0x8000;
     public const ushort MMC3_BANK_DATA = 0x8001;
     public const ushort MMC3_MIRRORING = 0xA000;
+    public const ushort MMC3_WRAM_ENABLE = 0xA001;
+
+    // MMC3 IRQ register addresses for scanline counting via poke()
+    public const ushort MMC3_IRQ_LATCH = 0xC000;
+    public const ushort MMC3_IRQ_RELOAD = 0xC001;
+    public const ushort MMC3_IRQ_DISABLE = 0xE000;
+    public const ushort MMC3_IRQ_ENABLE = 0xE001;
 
     // TODO: Macros below should be computed at compile-time and methods removed
 

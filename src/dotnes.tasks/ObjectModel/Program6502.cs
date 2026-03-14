@@ -724,6 +724,11 @@ public class Program6502
             action(BuiltInSubroutines.BcdAdd());
         if (usedMethods.Contains("waitvsync"))
             action(BuiltInSubroutines.Waitvsync());
+        if (usedMethods.Contains("irq_set_callback"))
+        {
+            action(BuiltInSubroutines.IrqSetCallback());
+            action(BuiltInSubroutines.IrqWithCallback());
+        }
     }
 
     /// <summary>

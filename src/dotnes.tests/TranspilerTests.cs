@@ -96,6 +96,8 @@ public class TranspilerTests
     [InlineData("aputest", false)]
     [InlineData("bankswitch", true, false, 4, 4, 8)]
     [InlineData("bankswitch", false, false, 4, 4, 8)]
+    [InlineData("irq", true, false, 4, 4, 1)]
+    [InlineData("irq", false, false, 4, 4, 1)]
     [InlineData("climber", true)]
     [InlineData("climber", false)]
     [InlineData("pong", true)]

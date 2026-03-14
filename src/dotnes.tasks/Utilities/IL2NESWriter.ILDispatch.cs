@@ -1058,6 +1058,10 @@ partial class IL2NESWriter
         {
             case ILOpCode.Nop:
                 break;
+            case ILOpCode.Ldftn:
+                // Function pointer: store the method name for the callback handler
+                _lastLdftnMethod = operand;
+                break;
             case ILOpCode.Ldstr:
                 // Deduplicate: reuse label if same string was already seen
                 if (!_stringLabelMap.TryGetValue(operand, out string? stringLabel))
@@ -1268,14 +1272,35 @@ partial class IL2NESWriter
                         _immediateInA = null;
                         break;
                     case nameof(NESLib.nmi_set_callback):
+                    case nameof(NESLib.irq_set_callback):
+                        {
+                            // Function pointer path: ldftn already gave us the method name
+                            string? labelName = _lastLdftnMethod;
+                            _lastLdftnMethod = null;
+
+                            if (labelName != null)
+                            {
+                                // User-defined methods use their name as-is; extern methods use _ prefix (cc65 convention)
+                                bool isUserMethod = UserMethodNames != null && UserMethodNames.Contains(labelName);
+                                string label = isUserMethod ? labelName : $"_{labelName}";
+                                EmitWithLabel(Opcode.LDA, AddressMode.Immediate_LowByte, label);
+                                EmitWithLabel(Opcode.LDX, AddressMode.Immediate_HighByte, label);
+                            }
+                            EmitWithLabel(Opcode.JSR, AddressMode.Absolute, operand);
+                            if (operand == nameof(NESLib.nmi_set_callback))
+                                UsedMethods?.Add("nmi_set_callback");
+                            if (operand == nameof(NESLib.irq_set_callback))
+                                UsedMethods?.Add("irq_set_callback");
+                            _immediateInA = null;
+                            argsAlreadyPopped = true;
+                        }
+                        break;
                     case nameof(NESLib.famitone_init):
                     case nameof(NESLib.sfx_init):
                         {
-                            // These functions take a string label name as argument.
-                            // The Ldstr emitted: LDA #<string_N, LDX #>string_N, JSR pushax, LDX #0, LDA #len
-                            // Replace with: LDA #<_label, LDX #>_label, JSR target
-                            var block = CurrentBlock!;
+                            // String literal path: Ldstr emitted LDA #<string_N, LDX #>string_N, JSR pushax, LDX #0, LDA #len
                             string? labelName = null;
+                            var block = CurrentBlock!;
                             if (block.Count >= 5)
                             {
                                 var ldaStringInstr = block[block.Count - 5];
@@ -1292,22 +1317,27 @@ partial class IL2NESWriter
                                 }
                             }
                             RemoveLastInstructions(5);
+
                             if (labelName != null)
                             {
                                 string label = $"_{labelName}";
                                 EmitWithLabel(Opcode.LDA, AddressMode.Immediate_LowByte, label);
                                 EmitWithLabel(Opcode.LDX, AddressMode.Immediate_HighByte, label);
                             }
-                            // nmi_set_callback is a built-in; famitone_init/sfx_init are extern (always _ prefix)
-                            string jsrTarget = operand == nameof(NESLib.nmi_set_callback)
-                                ? "nmi_set_callback"
-                                : $"_{operand}";
-                            EmitWithLabel(Opcode.JSR, AddressMode.Absolute, jsrTarget);
-                            if (operand == nameof(NESLib.nmi_set_callback))
-                                UsedMethods?.Add("nmi_set_callback");
+                            EmitWithLabel(Opcode.JSR, AddressMode.Absolute, $"_{operand}");
                             _immediateInA = null;
                             argsAlreadyPopped = true;
                         }
+                        break;
+                    case nameof(NESLib.cli):
+                        // Emit 6502 CLI instruction (enable CPU interrupts)
+                        Emit(Opcode.CLI, AddressMode.Implied);
+                        argsAlreadyPopped = true;
+                        break;
+                    case nameof(NESLib.sei):
+                        // Emit 6502 SEI instruction (disable CPU interrupts)
+                        Emit(Opcode.SEI, AddressMode.Implied);
+                        argsAlreadyPopped = true;
                         break;
                     case nameof(NESLib.poke):
                         {
