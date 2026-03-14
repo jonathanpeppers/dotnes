@@ -23,7 +23,9 @@ void irq_handler()
     poke(PPU_SCROLL, count);
     poke(PPU_SCROLL, 0);
     // Advance counter for next IRQ in this frame
-    poke(0x0309, (byte)(count + 1));
+    // NOTE: compute into a local first — poke() can't handle inline expressions
+    byte next = (byte)(count + 1);
+    poke(0x0309, next);
     // Acknowledge and re-enable MMC3 IRQ
     poke(MMC3_IRQ_DISABLE, 0);
     poke(MMC3_IRQ_ENABLE, 0);
