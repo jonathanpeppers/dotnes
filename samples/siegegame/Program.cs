@@ -4,16 +4,6 @@ Based on: https://8bitworkshop.com/ (siegegame.c)
 A tower-defense siege game for NES.
 Enemies march from the right side toward the castle on the left.
 The player places walls to block enemy paths.
-
-NOTE: The dotnes transpiler currently has these limitations:
-  1. Multi-param user function calls don't push intermediate args
-  2. Local variable slot 0 maps to TEMP ($17), which NESLib routines overwrite
-  3. Nested function calls with loops share the same local variable addresses
-  4. _lastByteArrayLabel leaks across calls after byte[] array access
-  5. vram_read is not implemented in the transpiler
-Workarounds: all user functions take 0-1 params; use globals for state
-that must survive across function calls; enemies drawn as sprites;
-wall state tracked in arrays instead of reading VRAM.
 */
 
 #pragma warning disable CS0649, CS0219
