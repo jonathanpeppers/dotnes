@@ -365,7 +365,7 @@ public static class OpcodeTable
     {
         if (_decodings != null) return;
 
-        _decodings = new Dictionary<byte, (Opcode, AddressMode)>();
+        _decodings = new();
         foreach (var kvp in _encodings)
         {
             _decodings[kvp.Value] = kvp.Key;

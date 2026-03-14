@@ -86,7 +86,7 @@ class ReflectionCache
         {
             return Returns16Bit(name);
         }
-        catch
+        catch (InvalidOperationException)
         {
             return false;
         }

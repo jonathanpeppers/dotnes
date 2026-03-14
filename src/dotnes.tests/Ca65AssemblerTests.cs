@@ -550,7 +550,7 @@ _famitone_init=FamiToneInit
         Assert.NotEmpty(codeBlocks);
 
         // Total code size should be substantial (FamiTone2 is ~500+ bytes of code)
-        int totalCodeSize = codeBlocks.Sum(b => b.ByteSize);
+        int totalCodeSize = codeBlocks.Sum(b => b.Size);
         Assert.True(totalCodeSize > 200, $"Expected > 200 bytes of code, got {totalCodeSize}");
 
         // Should have data blocks (note tables, dummy envelope)

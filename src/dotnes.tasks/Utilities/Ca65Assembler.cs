@@ -33,7 +33,7 @@ public class Ca65Assembler
 
     // Segment tracking
     string _currentSegment = "CODE";
-    int _zeroPageOffset = 0;
+    int _zeroPageOffset;
 
     // Labels: name → (segment, offset within segment)
     readonly Dictionary<string, int> _labels = new(StringComparer.Ordinal);
@@ -545,7 +545,7 @@ public class Ca65Assembler
 
                 if (currentBlock == null)
                 {
-                    currentBlock = new Block("_anonymous_code_" + _codeBlocks.Count);
+                    currentBlock = new Block($"_anonymous_code_{_codeBlocks.Count}");
                 }
 
                 var instr = ParseInstruction(asmLine.Text, asmLine.ScopeLabel);
@@ -600,7 +600,7 @@ public class Ca65Assembler
                         if (block.AdditionalLabels == null)
                             block.AdditionalLabels = new List<string>();
                         // Store as "aliasName=targetName" so Program6502 knows it's an instruction alias
-                        block.AdditionalLabels.Add(aliasName + "=" + targetName);
+                        block.AdditionalLabels.Add($"{aliasName}={targetName}");
                         foundInBlock = true;
                         break;
                     }
