@@ -1653,7 +1653,7 @@ class IL2NESWriter : NESWriter
                             argsAlreadyPopped = true;
                         }
                         break;
-                    case "pad_poll":
+                    case nameof(NESLib.pad_poll):
                         // pad_poll returns result in A — store to dynamically allocated temp
                         EmitWithLabel(Opcode.JSR, AddressMode.Absolute, operand);
                         if (_padReloadAddress == 0)
@@ -2083,7 +2083,7 @@ class IL2NESWriter : NESWriter
                         // A now has a new return value; any previous pad_poll result is gone.
                         // pad_poll sets its own flag after this block, so this only clears
                         // the flag for non-pad_poll calls (e.g. rand8).
-                        if (operand != "pad_poll")
+                        if (operand != nameof(NESLib.pad_poll))
                         {
                             _padPollResultAvailable = false;
                         }
