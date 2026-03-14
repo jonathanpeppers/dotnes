@@ -195,15 +195,10 @@
 
 ### monobitmap.c
 - **Description:** Creates a monochrome framebuffer using CHR RAM with UxROM mapper, pixel-level drawing, and split-screen bank switching.
-- **Status:** 🔴 Complex
-- **Note:** `split()`, `oam_size()`, `pad_trigger()`, `bank_bg()`/`bank_spr()`, and `for` loops are now available.
-- **Missing Features:**
-  - UxROM mapper (`NES_MAPPER 2`) with CHR RAM (`NES_CHR_BANKS 0`)
-  - Inline assembly (`__asm__`) for cycle-accurate delay loops
-  - Direct PPU register manipulation (`PPU.control`)
-  - `abs()` standard library function
-  - Multiple user-defined functions with complex logic
-  - `bool` type, `static` local variables
+- **Status:** ✅ Implemented (simplified)
+- **Implementation:** Uses UxROM mapper (`NES_MAPPER 2`) with CHR RAM (`NES_CHR_BANKS 0`), custom tile patterns uploaded to pattern RAM at runtime via `vram_write()`, monochrome display with `poke()` for direct PPU register manipulation.
+- **Sample:** `samples/monobitmap/`
+- **Note:** Simplified port — demonstrates UxROM + CHR RAM + PPU poke() without the original's inline assembly delay loops, `vram_read()` with pointers, or `abs()` function.
 
 ### conio.c
 - **Description:** Uses CC65's conio (console I/O) library to draw borders and text — completely CC65-specific.
@@ -293,8 +288,8 @@
 
 | Status | Count | Samples |
 |--------|-------|---------|
-| ✅ Already Implemented | 18 | hello, attributes, flicker, metasprites, music, tint, scroll, rletitle, tileset1, sprites, metacursor, metatrigger, statusbar, vrambuffer, horizscroll, horizmask, bcd, fami |
-| 🔴 Complex | 11 | aputest, ppuhello, bankswitch, monobitmap, conio, crypto, climber, transtable, irq, shoot2, siegegame |
+| ✅ Already Implemented | 19 | hello, attributes, flicker, metasprites, music, tint, scroll, rletitle, tileset1, sprites, metacursor, metatrigger, statusbar, vrambuffer, horizscroll, horizmask, bcd, fami, monobitmap |
+| 🔴 Complex | 10 | aputest, ppuhello, bankswitch, conio, crypto, climber, transtable, irq, shoot2, siegegame |
 
 > **Note:** `apu.c` and `vrambuf.c` are library files (not demos). `apu.c` is covered by dotnes's built-in `apu_init()` subroutine. `vrambuf.c` is covered by built-in `vrambuf_clear()`, `vrambuf_put()`, `vrambuf_end()`, `vrambuf_flush()`, and `set_vram_update()` subroutines. Neither is counted separately.
 
