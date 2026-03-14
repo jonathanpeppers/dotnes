@@ -25,7 +25,12 @@ const NES.NESLib.APU_TRIANGLE_TIMER_HI = 16395 -> ushort
 const NES.NESLib.APU_TRIANGLE_TIMER_LO = 16394 -> ushort
 const NES.NESLib.MMC3_BANK_DATA = 32769 -> ushort
 const NES.NESLib.MMC3_BANK_SELECT = 32768 -> ushort
+const NES.NESLib.MMC3_IRQ_DISABLE = 57344 -> ushort
+const NES.NESLib.MMC3_IRQ_ENABLE = 57345 -> ushort
+const NES.NESLib.MMC3_IRQ_LATCH = 49152 -> ushort
+const NES.NESLib.MMC3_IRQ_RELOAD = 49153 -> ushort
 const NES.NESLib.MMC3_MIRRORING = 40960 -> ushort
+const NES.NESLib.MMC3_WRAM_ENABLE = 40961 -> ushort
 const NES.NESLib.NT_UPD_EOF = 255 -> byte
 const NES.NESLib.NT_UPD_HORZ = 64 -> byte
 const NES.NESLib.NT_UPD_VERT = 128 -> byte
@@ -47,6 +52,9 @@ static NES.NESLib.music_pause(byte pause) -> void
 static NES.NESLib.music_play(byte song) -> void
 static NES.NESLib.music_stop() -> void
 static NES.NESLib.nmi_set_callback(string! callbackName) -> void
+static NES.NESLib.irq_set_callback(string! callbackName) -> void
+static NES.NESLib.cli() -> void
+static NES.NESLib.sei() -> void
 static NES.NESLib.oam_clear_fast() -> void
 static NES.NESLib.oam_meta_spr_clip(int x, byte y, byte[]! metasprite) -> void
 static NES.NESLib.oam_meta_spr_pal(byte x, byte y, byte pal, byte[]! data) -> void

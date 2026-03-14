@@ -1265,6 +1265,7 @@ partial class IL2NESWriter
                         _immediateInA = null;
                         break;
                     case nameof(NESLib.nmi_set_callback):
+                    case nameof(NESLib.irq_set_callback):
                     case nameof(NESLib.famitone_init):
                     case nameof(NESLib.sfx_init):
                         {
@@ -1291,20 +1292,34 @@ partial class IL2NESWriter
                             RemoveLastInstructions(5);
                             if (labelName != null)
                             {
-                                string label = $"_{labelName}";
+                                // User-defined methods use their name as-is; extern methods use _ prefix (cc65 convention)
+                                bool isUserMethod = UserMethodNames != null && UserMethodNames.Contains(labelName);
+                                string label = isUserMethod ? labelName : $"_{labelName}";
                                 EmitWithLabel(Opcode.LDA, AddressMode.Immediate_LowByte, label);
                                 EmitWithLabel(Opcode.LDX, AddressMode.Immediate_HighByte, label);
                             }
-                            // nmi_set_callback is a built-in; famitone_init/sfx_init are extern (always _ prefix)
-                            string jsrTarget = operand == nameof(NESLib.nmi_set_callback)
-                                ? "nmi_set_callback"
+                            // nmi_set_callback/irq_set_callback are built-ins; famitone_init/sfx_init are extern
+                            string jsrTarget = operand is nameof(NESLib.nmi_set_callback) or nameof(NESLib.irq_set_callback)
+                                ? operand
                                 : $"_{operand}";
                             EmitWithLabel(Opcode.JSR, AddressMode.Absolute, jsrTarget);
                             if (operand == nameof(NESLib.nmi_set_callback))
                                 UsedMethods?.Add("nmi_set_callback");
+                            if (operand == nameof(NESLib.irq_set_callback))
+                                UsedMethods?.Add("irq_set_callback");
                             _immediateInA = null;
                             argsAlreadyPopped = true;
                         }
+                        break;
+                    case nameof(NESLib.cli):
+                        // Emit 6502 CLI instruction (enable CPU interrupts)
+                        Emit(Opcode.CLI, AddressMode.Implied);
+                        argsAlreadyPopped = true;
+                        break;
+                    case nameof(NESLib.sei):
+                        // Emit 6502 SEI instruction (disable CPU interrupts)
+                        Emit(Opcode.SEI, AddressMode.Implied);
+                        argsAlreadyPopped = true;
                         break;
                     case nameof(NESLib.poke):
                         {

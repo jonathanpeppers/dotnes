@@ -682,6 +682,11 @@ public class Program6502
                 size += BuiltInSubroutines.BcdAdd().ByteSize;
             if (usedMethods.Contains("waitvsync"))
                 size += BuiltInSubroutines.Waitvsync().ByteSize;
+            if (usedMethods.Contains("irq_set_callback"))
+            {
+                size += BuiltInSubroutines.IrqSetCallback().ByteSize;
+                size += BuiltInSubroutines.IrqWithCallback().ByteSize;
+            }
         }
         return size;
     }
@@ -776,6 +781,11 @@ public class Program6502
                 AddBlock(BuiltInSubroutines.BcdAdd());
             if (usedMethods.Contains("waitvsync"))
                 AddBlock(BuiltInSubroutines.Waitvsync());
+            if (usedMethods.Contains("irq_set_callback"))
+            {
+                AddBlock(BuiltInSubroutines.IrqSetCallback());
+                AddBlock(BuiltInSubroutines.IrqWithCallback());
+            }
         }
     }
 
