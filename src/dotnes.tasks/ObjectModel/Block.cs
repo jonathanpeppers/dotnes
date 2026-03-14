@@ -73,7 +73,17 @@ public class Block
     /// <summary>
     /// Total size in bytes
     /// </summary>
-    public int Size => RawData?.Length ?? _instructions.Sum(i => i.Instruction.Size);
+    public int Size
+    {
+        get
+        {
+            if (RawData != null) return RawData.Length;
+            int size = 0;
+            for (int i = 0; i < _instructions.Count; i++)
+                size += _instructions[i].Instruction.Size;
+            return size;
+        }
+    }
 
     /// <summary>
     /// Gets instruction at the specified index
@@ -332,18 +342,4 @@ public class Block
         return offset;
     }
 
-    /// <summary>
-    /// Gets the total byte size of this block (all instructions or raw data).
-    /// </summary>
-    public int ByteSize
-    {
-        get
-        {
-            if (RawData != null) return RawData.Length;
-            int size = 0;
-            for (int i = 0; i < _instructions.Count; i++)
-                size += _instructions[i].Instruction.Size;
-            return size;
-        }
-    }
 }

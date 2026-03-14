@@ -1,3 +1,5 @@
+using System.Text;
+
 namespace dotnes.ObjectModel;
 
 /// <summary>
@@ -9,7 +11,7 @@ public class Program6502
     private readonly List<Block> _blocks = new();
     private readonly LabelTable _labels = new();
     private readonly Dictionary<string, ushort> _externalLabels = new();
-    private bool _addressesValid = false;
+    private bool _addressesValid;
 
     /// <summary>
     /// Base address where the program is loaded (typically $8000 for NES)
@@ -463,7 +465,7 @@ public class Program6502
         if (!_addressesValid)
             ResolveAddresses();
 
-        var sb = new System.Text.StringBuilder();
+        var sb = new StringBuilder();
         ushort address = BaseAddress;
 
         foreach (var block in _blocks)
@@ -605,89 +607,24 @@ public class Program6502
     public static int CalculateFinalBuiltInsSize(ushort locals, HashSet<string>? usedMethods = null)
     {
         int size = 0;
-        bool needsDecsp4 = usedMethods != null && usedMethods.Contains("decsp4");
+        bool needsDecsp4 = usedMethods?.Contains("decsp4") == true;
 
-        size += BuiltInSubroutines.Donelib(0).ByteSize;
-        size += BuiltInSubroutines.Copydata(0).ByteSize;
-        if (needsDecsp4) size += BuiltInSubroutines.Decsp4().ByteSize;
-        size += BuiltInSubroutines.Popax().ByteSize;
-        size += BuiltInSubroutines.Incsp2().ByteSize;
-        size += BuiltInSubroutines.Popa().ByteSize;
+        size += BuiltInSubroutines.Donelib(0).Size;
+        size += BuiltInSubroutines.Copydata(0).Size;
+        if (needsDecsp4) size += BuiltInSubroutines.Decsp4().Size;
+        size += BuiltInSubroutines.Popax().Size;
+        size += BuiltInSubroutines.Incsp2().Size;
+        size += BuiltInSubroutines.Popa().Size;
         bool needsPushaPushax = !needsDecsp4
-            || (usedMethods != null && (usedMethods.Contains("scroll") || usedMethods.Contains("split") || usedMethods.Contains("pushax")));
+            || usedMethods?.Contains("scroll") == true || usedMethods?.Contains("split") == true || usedMethods?.Contains("pushax") == true;
         if (needsPushaPushax)
         {
-            size += BuiltInSubroutines.Pusha().ByteSize;
-            size += BuiltInSubroutines.Pushax().ByteSize;
+            size += BuiltInSubroutines.Pusha().Size;
+            size += BuiltInSubroutines.Pushax().Size;
         }
-        size += BuiltInSubroutines.Zerobss(locals).ByteSize;
+        size += BuiltInSubroutines.Zerobss(locals).Size;
         if (usedMethods != null)
-        {
-            // vrambuf_flush depends on vrambuf_end + vrambuf_clear
-            if (usedMethods.Contains("vrambuf_flush"))
-            {
-                usedMethods.Add("vrambuf_end");
-                usedMethods.Add("vrambuf_clear");
-            }
-
-            // pad_poll is needed directly or as a dependency of pad_trigger/pad_state
-            if (usedMethods.Contains("pad_poll") || usedMethods.Contains("pad_trigger") || usedMethods.Contains("pad_state"))
-                size += BuiltInSubroutines.PadPoll().ByteSize;
-            // pad_trigger/pad_state: included when directly called OR via oam_spr+pad_poll pattern
-            bool includePadTrigger = usedMethods.Contains("pad_trigger") || (needsDecsp4 && usedMethods.Contains("pad_poll"));
-            bool includePadState = usedMethods.Contains("pad_state") || (needsDecsp4 && usedMethods.Contains("pad_poll"));
-            if (includePadTrigger)
-                size += BuiltInSubroutines.PadTrigger().ByteSize;
-            if (includePadState)
-                size += BuiltInSubroutines.PadState().ByteSize;
-            if (usedMethods.Contains("oam_spr"))
-                size += BuiltInSubroutines.OamSpr().ByteSize;
-            if (usedMethods.Contains("rand8"))
-                size += BuiltInSubroutines.Rand8().ByteSize;
-            if (usedMethods.Contains("rand8") || usedMethods.Contains("set_rand"))
-                size += BuiltInSubroutines.SetRand().ByteSize;
-            if (usedMethods.Contains("oam_meta_spr"))
-                size += BuiltInSubroutines.OamMetaSpr().ByteSize;
-            if (usedMethods.Contains("oam_meta_spr_pal"))
-                size += BuiltInSubroutines.OamMetaSprPal().ByteSize;
-            if (usedMethods.Contains("apu_init"))
-                size += BuiltInSubroutines.ApuInit().ByteSize;
-            if (usedMethods.Contains("vram_unrle"))
-                size += BuiltInSubroutines.VramUnrle().ByteSize;
-            if (usedMethods.Contains("vram_read"))
-                size += BuiltInSubroutines.VramRead().ByteSize;
-            if (usedMethods.Contains("split"))
-                size += BuiltInSubroutines.Split().ByteSize;
-            if (usedMethods.Contains("vrambuf_clear"))
-                size += BuiltInSubroutines.VrambufClear().ByteSize;
-            if (usedMethods.Contains("vrambuf_put"))
-                size += BuiltInSubroutines.VrambufPut().ByteSize;
-            if (usedMethods.Contains("vrambuf_end"))
-                size += BuiltInSubroutines.VrambufEnd().ByteSize;
-            if (usedMethods.Contains("vrambuf_flush"))
-                size += BuiltInSubroutines.VrambufFlush().ByteSize;
-            if (usedMethods.Contains("nametable_a"))
-                size += BuiltInSubroutines.NametableA().ByteSize;
-            if (usedMethods.Contains("nametable_b"))
-                size += BuiltInSubroutines.NametableB().ByteSize;
-            if (usedMethods.Contains("nametable_c"))
-                size += BuiltInSubroutines.NametableC().ByteSize;
-            if (usedMethods.Contains("nametable_d"))
-                size += BuiltInSubroutines.NametableD().ByteSize;
-            if (usedMethods.Contains("incsp1"))
-                size += BuiltInSubroutines.Incsp1().ByteSize;
-            if (usedMethods.Contains("addysp"))
-                size += BuiltInSubroutines.Addysp().ByteSize;
-            if (usedMethods.Contains("bcd_add"))
-                size += BuiltInSubroutines.BcdAdd().ByteSize;
-            if (usedMethods.Contains("waitvsync"))
-                size += BuiltInSubroutines.Waitvsync().ByteSize;
-            if (usedMethods.Contains("irq_set_callback"))
-            {
-                size += BuiltInSubroutines.IrqSetCallback().ByteSize;
-                size += BuiltInSubroutines.IrqWithCallback().ByteSize;
-            }
-        }
+            ForEachOptionalBuiltIn(needsDecsp4, usedMethods, block => size += block.Size);
         return size;
     }
 
@@ -699,7 +636,7 @@ public class Program6502
         AddBlock(BuiltInSubroutines.Donelib(totalSize));
         AddBlock(BuiltInSubroutines.Copydata(totalSize));
 
-        bool needsDecsp4 = usedMethods != null && usedMethods.Contains("decsp4");
+        bool needsDecsp4 = usedMethods?.Contains("decsp4") == true;
 
         if (needsDecsp4)
             AddBlock(BuiltInSubroutines.Decsp4());
@@ -711,7 +648,7 @@ public class Program6502
         // Pusha/Pushax needed for standard calling convention (not decsp4),
         // but also needed when scroll/split handlers or ldstr/ldloc/vram_write(byte[]) emit JSR pushax
         bool needsPushaPushax = !needsDecsp4
-            || (usedMethods != null && (usedMethods.Contains("scroll") || usedMethods.Contains("split") || usedMethods.Contains("pushax")));
+            || usedMethods?.Contains("scroll") == true || usedMethods?.Contains("split") == true || usedMethods?.Contains("pushax") == true;
         if (needsPushaPushax)
         {
             AddBlock(BuiltInSubroutines.Pusha());
@@ -721,71 +658,76 @@ public class Program6502
 
         // Optional methods
         if (usedMethods != null)
-        {
-            // vrambuf_flush depends on vrambuf_end + vrambuf_clear
-            if (usedMethods.Contains("vrambuf_flush"))
-            {
-                usedMethods.Add("vrambuf_end");
-                usedMethods.Add("vrambuf_clear");
-            }
+            ForEachOptionalBuiltIn(needsDecsp4, usedMethods, AddBlock);
+    }
 
-            // pad_poll is needed directly or as a dependency of pad_trigger/pad_state
-            if (usedMethods.Contains("pad_poll") || usedMethods.Contains("pad_trigger") || usedMethods.Contains("pad_state"))
-                AddBlock(BuiltInSubroutines.PadPoll());
-            // pad_trigger/pad_state: included when directly called OR via oam_spr+pad_poll pattern
-            bool includePadTrigger = usedMethods.Contains("pad_trigger") || (needsDecsp4 && usedMethods.Contains("pad_poll"));
-            bool includePadState = usedMethods.Contains("pad_state") || (needsDecsp4 && usedMethods.Contains("pad_poll"));
-            if (includePadTrigger)
-                AddBlock(BuiltInSubroutines.PadTrigger());
-            if (includePadState)
-                AddBlock(BuiltInSubroutines.PadState());
-            if (usedMethods.Contains("oam_spr"))
-                AddBlock(BuiltInSubroutines.OamSpr());
-            if (usedMethods.Contains("rand8"))
-                AddBlock(BuiltInSubroutines.Rand8());
-            if (usedMethods.Contains("rand8") || usedMethods.Contains("set_rand"))
-                AddBlock(BuiltInSubroutines.SetRand());
-            if (usedMethods.Contains("oam_meta_spr"))
-                AddBlock(BuiltInSubroutines.OamMetaSpr());
-            if (usedMethods.Contains("oam_meta_spr_pal"))
-                AddBlock(BuiltInSubroutines.OamMetaSprPal());
-            if (usedMethods.Contains("apu_init"))
-                AddBlock(BuiltInSubroutines.ApuInit());
-            if (usedMethods.Contains("vram_unrle"))
-                AddBlock(BuiltInSubroutines.VramUnrle());
-            if (usedMethods.Contains("vram_read"))
-                AddBlock(BuiltInSubroutines.VramRead());
-            if (usedMethods.Contains("split"))
-                AddBlock(BuiltInSubroutines.Split());
-            if (usedMethods.Contains("vrambuf_clear"))
-                AddBlock(BuiltInSubroutines.VrambufClear());
-            if (usedMethods.Contains("vrambuf_put"))
-                AddBlock(BuiltInSubroutines.VrambufPut());
-            if (usedMethods.Contains("vrambuf_end"))
-                AddBlock(BuiltInSubroutines.VrambufEnd());
-            if (usedMethods.Contains("vrambuf_flush"))
-                AddBlock(BuiltInSubroutines.VrambufFlush());
-            if (usedMethods.Contains("nametable_a"))
-                AddBlock(BuiltInSubroutines.NametableA());
-            if (usedMethods.Contains("nametable_b"))
-                AddBlock(BuiltInSubroutines.NametableB());
-            if (usedMethods.Contains("nametable_c"))
-                AddBlock(BuiltInSubroutines.NametableC());
-            if (usedMethods.Contains("nametable_d"))
-                AddBlock(BuiltInSubroutines.NametableD());
-            if (usedMethods.Contains("incsp1"))
-                AddBlock(BuiltInSubroutines.Incsp1());
-            if (usedMethods.Contains("addysp"))
-                AddBlock(BuiltInSubroutines.Addysp());
-            if (usedMethods.Contains("bcd_add"))
-                AddBlock(BuiltInSubroutines.BcdAdd());
-            if (usedMethods.Contains("waitvsync"))
-                AddBlock(BuiltInSubroutines.Waitvsync());
-            if (usedMethods.Contains("irq_set_callback"))
-            {
-                AddBlock(BuiltInSubroutines.IrqSetCallback());
-                AddBlock(BuiltInSubroutines.IrqWithCallback());
-            }
+    /// <summary>
+    /// Enumerates optional built-in subroutine blocks based on which methods are used.
+    /// Shared by CalculateFinalBuiltInsSize (for size calculation) and AddFinalBuiltIns (for emission).
+    /// </summary>
+    static void ForEachOptionalBuiltIn(bool needsDecsp4, HashSet<string> usedMethods, Action<Block> action)
+    {
+        // vrambuf_flush depends on vrambuf_end + vrambuf_clear
+        if (usedMethods.Contains("vrambuf_flush"))
+        {
+            usedMethods.Add("vrambuf_end");
+            usedMethods.Add("vrambuf_clear");
+        }
+
+        // pad_poll is needed directly or as a dependency of pad_trigger/pad_state
+        if (usedMethods.Contains("pad_poll") || usedMethods.Contains("pad_trigger") || usedMethods.Contains("pad_state"))
+            action(BuiltInSubroutines.PadPoll());
+        // pad_trigger/pad_state: included when directly called OR via oam_spr+pad_poll pattern
+        if (usedMethods.Contains("pad_trigger") || (needsDecsp4 && usedMethods.Contains("pad_poll")))
+            action(BuiltInSubroutines.PadTrigger());
+        if (usedMethods.Contains("pad_state") || (needsDecsp4 && usedMethods.Contains("pad_poll")))
+            action(BuiltInSubroutines.PadState());
+        if (usedMethods.Contains("oam_spr"))
+            action(BuiltInSubroutines.OamSpr());
+        if (usedMethods.Contains("rand8"))
+            action(BuiltInSubroutines.Rand8());
+        if (usedMethods.Contains("rand8") || usedMethods.Contains("set_rand"))
+            action(BuiltInSubroutines.SetRand());
+        if (usedMethods.Contains("oam_meta_spr"))
+            action(BuiltInSubroutines.OamMetaSpr());
+        if (usedMethods.Contains("oam_meta_spr_pal"))
+            action(BuiltInSubroutines.OamMetaSprPal());
+        if (usedMethods.Contains("apu_init"))
+            action(BuiltInSubroutines.ApuInit());
+        if (usedMethods.Contains("vram_unrle"))
+            action(BuiltInSubroutines.VramUnrle());
+        if (usedMethods.Contains("vram_read"))
+            action(BuiltInSubroutines.VramRead());
+        if (usedMethods.Contains("split"))
+            action(BuiltInSubroutines.Split());
+        if (usedMethods.Contains("vrambuf_clear"))
+            action(BuiltInSubroutines.VrambufClear());
+        if (usedMethods.Contains("vrambuf_put"))
+            action(BuiltInSubroutines.VrambufPut());
+        if (usedMethods.Contains("vrambuf_end"))
+            action(BuiltInSubroutines.VrambufEnd());
+        if (usedMethods.Contains("vrambuf_flush"))
+            action(BuiltInSubroutines.VrambufFlush());
+        if (usedMethods.Contains("nametable_a"))
+            action(BuiltInSubroutines.NametableA());
+        if (usedMethods.Contains("nametable_b"))
+            action(BuiltInSubroutines.NametableB());
+        if (usedMethods.Contains("nametable_c"))
+            action(BuiltInSubroutines.NametableC());
+        if (usedMethods.Contains("nametable_d"))
+            action(BuiltInSubroutines.NametableD());
+        if (usedMethods.Contains("incsp1"))
+            action(BuiltInSubroutines.Incsp1());
+        if (usedMethods.Contains("addysp"))
+            action(BuiltInSubroutines.Addysp());
+        if (usedMethods.Contains("bcd_add"))
+            action(BuiltInSubroutines.BcdAdd());
+        if (usedMethods.Contains("waitvsync"))
+            action(BuiltInSubroutines.Waitvsync());
+        if (usedMethods.Contains("irq_set_callback"))
+        {
+            action(BuiltInSubroutines.IrqSetCallback());
+            action(BuiltInSubroutines.IrqWithCallback());
         }
     }
 
@@ -799,9 +741,9 @@ public class Program6502
         if (usedMethods != null)
         {
             if (usedMethods.Contains("play_music"))
-                size += BuiltInSubroutines.PlayMusic().ByteSize;
+                size += BuiltInSubroutines.PlayMusic().Size;
             if (usedMethods.Contains("start_music"))
-                size += BuiltInSubroutines.StartMusic().ByteSize;
+                size += BuiltInSubroutines.StartMusic().Size;
         }
         return size;
     }

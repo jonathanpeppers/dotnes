@@ -45,12 +45,6 @@ class ReflectionCache
                 _cache[name] = method = typeof(NESLib).GetMethod(name, [typeof(ushort), typeof(string)]) ??
                     throw new InvalidOperationException($"Unable to find method named '{nameof(NESLib)}.{name}'!");
             }
-            else if (name is nameof(NESLib.nmi_set_callback) or nameof(NESLib.irq_set_callback))
-            {
-                // These have overloads for string and delegate*<void>; use string for reflection
-                _cache[name] = method = typeof(NESLib).GetMethod(name, [typeof(string)]) ??
-                    throw new InvalidOperationException($"Unable to find method named '{nameof(NESLib)}.{name}'!");
-            }
             else
             {
                 _cache[name] = method = typeof(NESLib).GetMethod(name) ??
@@ -92,7 +86,7 @@ class ReflectionCache
         {
             return Returns16Bit(name);
         }
-        catch
+        catch (InvalidOperationException)
         {
             return false;
         }

@@ -40,7 +40,7 @@ static class AssertEx
                 hexDump.Append($"{actual[i]:X2}");
                 if ((i + 1) % 16 == 0) hexDump.AppendLine();
             }
-            throw new Exception($"{builder}{hexDump}");
+            Assert.Fail($"{builder}{hexDump}");
         }
     }
 }

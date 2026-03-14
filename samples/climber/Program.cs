@@ -8,6 +8,7 @@
 static extern void music_play(byte song);
 static extern void music_stop();
 static extern void sfx_play(byte sound, byte channel);
+static extern void famitone_update();
 
 // Constants
 const byte COLS = 30;
@@ -51,7 +52,7 @@ static void setup_sounds()
 {
     famitone_init("danger_streets_music_data");
     sfx_init("demo_sounds");
-    nmi_set_callback("famitone_update");
+    unsafe { nmi_set_callback(&famitone_update); }
 }
 
 // Setup graphics

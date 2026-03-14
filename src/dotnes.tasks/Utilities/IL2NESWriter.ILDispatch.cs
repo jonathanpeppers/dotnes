@@ -610,8 +610,11 @@ partial class IL2NESWriter
                             RemoveLastInstructions(1);
                         }
 
-                        // If not first AND after pad_poll, need to reload pad value
-                        if (_padPollResultAvailable && !_firstAndAfterPadPoll)
+                        // If not first AND after pad_poll, need to reload pad value.
+                        // Skip reload when A already holds the intended operand for
+                        // this AND (e.g., from ldelem or arithmetic), so we don't
+                        // overwrite it with a stale pad_poll result.
+                        if (_padPollResultAvailable && !_firstAndAfterPadPoll && !_runtimeValueInA)
                         {
                             Emit(Opcode.LDA, AddressMode.Absolute, _padReloadAddress);
                         }
@@ -1270,38 +1273,10 @@ partial class IL2NESWriter
                         break;
                     case nameof(NESLib.nmi_set_callback):
                     case nameof(NESLib.irq_set_callback):
-                    case nameof(NESLib.famitone_init):
-                    case nameof(NESLib.sfx_init):
                         {
-                            string? labelName = null;
-
-                            if (_lastLdftnMethod != null)
-                            {
-                                // Function pointer path: ldftn already gave us the method name, no instructions to remove
-                                labelName = _lastLdftnMethod;
-                                _lastLdftnMethod = null;
-                            }
-                            else
-                            {
-                                // String literal path: Ldstr emitted LDA #<string_N, LDX #>string_N, JSR pushax, LDX #0, LDA #len
-                                var block = CurrentBlock!;
-                                if (block.Count >= 5)
-                                {
-                                    var ldaStringInstr = block[block.Count - 5];
-                                    if (ldaStringInstr.Operand is LowByteOperand lbo)
-                                    {
-                                        foreach (var entry in _stringLabelMap)
-                                        {
-                                            if (entry.Value == lbo.Label)
-                                            {
-                                                labelName = entry.Key;
-                                                break;
-                                            }
-                                        }
-                                    }
-                                }
-                                RemoveLastInstructions(5);
-                            }
+                            // Function pointer path: ldftn already gave us the method name
+                            string? labelName = _lastLdftnMethod;
+                            _lastLdftnMethod = null;
 
                             if (labelName != null)
                             {
@@ -1311,15 +1286,45 @@ partial class IL2NESWriter
                                 EmitWithLabel(Opcode.LDA, AddressMode.Immediate_LowByte, label);
                                 EmitWithLabel(Opcode.LDX, AddressMode.Immediate_HighByte, label);
                             }
-                            // nmi_set_callback/irq_set_callback are built-ins; famitone_init/sfx_init are extern
-                            string jsrTarget = operand is nameof(NESLib.nmi_set_callback) or nameof(NESLib.irq_set_callback)
-                                ? operand
-                                : $"_{operand}";
-                            EmitWithLabel(Opcode.JSR, AddressMode.Absolute, jsrTarget);
+                            EmitWithLabel(Opcode.JSR, AddressMode.Absolute, operand);
                             if (operand == nameof(NESLib.nmi_set_callback))
                                 UsedMethods?.Add("nmi_set_callback");
                             if (operand == nameof(NESLib.irq_set_callback))
                                 UsedMethods?.Add("irq_set_callback");
+                            _immediateInA = null;
+                            argsAlreadyPopped = true;
+                        }
+                        break;
+                    case nameof(NESLib.famitone_init):
+                    case nameof(NESLib.sfx_init):
+                        {
+                            // String literal path: Ldstr emitted LDA #<string_N, LDX #>string_N, JSR pushax, LDX #0, LDA #len
+                            string? labelName = null;
+                            var block = CurrentBlock!;
+                            if (block.Count >= 5)
+                            {
+                                var ldaStringInstr = block[block.Count - 5];
+                                if (ldaStringInstr.Operand is LowByteOperand lbo)
+                                {
+                                    foreach (var entry in _stringLabelMap)
+                                    {
+                                        if (entry.Value == lbo.Label)
+                                        {
+                                            labelName = entry.Key;
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                            RemoveLastInstructions(5);
+
+                            if (labelName != null)
+                            {
+                                string label = $"_{labelName}";
+                                EmitWithLabel(Opcode.LDA, AddressMode.Immediate_LowByte, label);
+                                EmitWithLabel(Opcode.LDX, AddressMode.Immediate_HighByte, label);
+                            }
+                            EmitWithLabel(Opcode.JSR, AddressMode.Absolute, $"_{operand}");
                             _immediateInA = null;
                             argsAlreadyPopped = true;
                         }
