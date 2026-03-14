@@ -68,9 +68,8 @@ byte[] TILES = new byte[] {
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 };
 
-// Turn off rendering via poke (direct PPU register manipulation)
-poke(PPU_CTRL, 0);
-poke(PPU_MASK, 0);
+// Rendering is already off at startup (PPU_MASK=0) and NMI is enabled.
+// Do NOT poke(PPU_CTRL, 0) here — that disables NMI, causing ppu_wait_nmi to hang.
 
 // Upload tile patterns to CHR RAM at $0000 (pattern table 0)
 vram_adr(0x0000);
@@ -118,6 +117,8 @@ bank_bg(0);
 pal_bg(PALETTE);
 
 // Reset scroll via poke (PPU register manipulation)
+// Read PPU_STATUS to reset the address/scroll latch toggle
+peek(PPU_STATUS);
 poke(PPU_SCROLL, 0);
 poke(PPU_SCROLL, 0);
 
