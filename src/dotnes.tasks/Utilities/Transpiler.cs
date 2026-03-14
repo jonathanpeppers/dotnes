@@ -880,6 +880,8 @@ class Transpiler : IDisposable
     /// <summary>
     /// Pre-scan IL to estimate the number of local variable bytes a method will allocate.
     /// Counts distinct stloc targets, using 2 bytes for word-sized locals and 1 byte for byte-sized.
+    /// Only stloc targets are counted because the transpiler allocates locals on first store,
+    /// not on declaration — locals that are never stored to don't consume address space.
     /// </summary>
     static int EstimateMethodLocalBytes(ILInstruction[] instructions, HashSet<int> wordLocals)
     {
