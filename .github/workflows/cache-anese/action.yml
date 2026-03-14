@@ -5,25 +5,9 @@ runs:
   using: composite
   steps:
   - name: Cache ANESE downloads
-    id: cache-anese
     uses: actions/cache@v4
     with:
-      path: ~/.cache/anese
-      key: anese-0.9.1-${{ runner.os }}
-  - name: Download ANESE
-    if: steps.cache-anese.outputs.cache-hit != 'true'
-    shell: bash
-    run: |
-      mkdir -p ~/.cache/anese
-      curl -fL --retry 3 -o ~/.cache/anese/ANESE_0.9.1_win.zip "https://github.com/daniel5151/ANESE/releases/download/0.9.1/ANESE_0.9.1_win.zip"
-      curl -fL --retry 3 -o ~/.cache/anese/ANESE_0.9.1_macOS.zip "https://github.com/daniel5151/ANESE/releases/download/0.9.1/ANESE_0.9.1_macOS.zip"
-      curl -fL --retry 3 -o ~/.cache/anese/LICENSE "https://raw.githubusercontent.com/daniel5151/ANESE/cbc4160fe9c32f335feda0dd6be04024aba11447/LICENSE"
-  - name: Copy ANESE to build paths
-    shell: bash
-    run: |
-      for config in Debug Release; do
-        mkdir -p src/dotnes.anese/obj/$config
-        cp ~/.cache/anese/ANESE_0.9.1_win.zip src/dotnes.anese/obj/$config/
-        cp ~/.cache/anese/ANESE_0.9.1_macOS.zip src/dotnes.anese/obj/$config/
-        cp ~/.cache/anese/LICENSE src/dotnes.anese/obj/$config/
-      done
+      path: |
+        src/dotnes.anese/obj/Debug
+        src/dotnes.anese/obj/Release
+      key: anese-${{ runner.os }}-${{ hashFiles('src/dotnes.anese/dotnes.anese.csproj') }}
