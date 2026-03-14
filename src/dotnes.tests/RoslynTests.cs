@@ -3336,7 +3336,12 @@ public class RoslynTests
         //   ...
         //   JSR vram_read  -> 20 xx xx
 
-        // Verify pushax is used (A200 A904 should appear from the WriteLdloc path)
-        Assert.Contains("A200A904", hex);
+        // Verify JSR pushax (opcode 0x20) appears before the size load sequence.
+        // The full pattern is: JSR pushax (20 xx xx), LDX #$00 (A2 00), LDA #$04 (A9 04)
+        // We match "20" + 4 hex chars (address) + "A200A904" to ensure pushax precedes the size.
+        int jsrIdx = hex.IndexOf("A200A904");
+        Assert.True(jsrIdx >= 6, "Size-load sequence A200A904 not found or too early for preceding JSR");
+        // The 6 hex chars before A200A904 should be a JSR (20 xx xx)
+        Assert.Equal("20", hex.Substring(jsrIdx - 6, 2));
     }
 }
