@@ -101,9 +101,28 @@ partial class IL2NESWriter
                 }
                 return;
             }
+
+            // Handle LDA ZeroPage (ImmediateOperand — byte overload in Emit).
+            // This occurs when the dup cascade handler reloads a value from TEMP.
+            if (lastInstr.Opcode == Opcode.LDA
+                && lastInstr.Mode == AddressMode.ZeroPage
+                && lastInstr.Operand is ImmediateOperand)
+            {
+                // Single runtime value from zero page — keep the LDA, emit CMP #constant.
+                Emit(Opcode.CMP, AddressMode.Immediate, checked((byte)(stackValue + adjustValue)));
+                return;
+            }
         }
         // Constant comparison: remove last LDA #imm, emit CMP #imm
-        RemoveLastInstructions(1);
+        // When _runtimeValueInA is true, WriteLdc skips emitting LDA — the last
+        // instruction is the actual computation (SBC, ADC, AND, etc.) and must not
+        // be removed.
+        if (block.Count > 0)
+        {
+            var last = block[block.Count - 1];
+            if (last.Opcode == Opcode.LDA && last.Mode == AddressMode.Immediate)
+                RemoveLastInstructions(1);
+        }
         Emit(Opcode.CMP, AddressMode.Immediate, checked((byte)(stackValue + adjustValue)));
     }
 

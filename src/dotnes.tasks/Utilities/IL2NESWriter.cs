@@ -180,6 +180,13 @@ partial class IL2NESWriter : NESWriter
     bool _dupPendingSave;
 
     /// <summary>
+    /// Set by dup when _ushortInAX was true, indicating X still holds the high byte
+    /// of a duplicated ushort value. Used by shr to emit TXA for the high byte extraction
+    /// after a dup+conv_u1+stloc pattern extracts the low byte.
+    /// </summary>
+    bool _dupPreservedUshortHi;
+
+    /// <summary>
     /// Number of parameters for the current user method being transpiled (0 for main).
     /// Used by ldarg handlers to compute cc65 stack offsets.
     /// </summary>

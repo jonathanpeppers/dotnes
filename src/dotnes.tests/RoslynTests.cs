@@ -2785,4 +2785,356 @@ public class RoslynTests
         // STA $8001 = 8D0180
         Assert.Contains("8D0180", hex);
     }
+
+    [Fact]
+    public void PadPollUpDown_UsesCorrectAndImmediateOperands()
+    {
+        // Regression: climber had PAD_UP=0x08 (START) and PAD_DOWN=0x04 (SELECT).
+        // Correct values are PAD.UP=0x10 and PAD.DOWN=0x20.
+        // Verify the AND immediate operands in the emitted 6502.
+        var bytes = GetProgramBytes(
+            """
+            byte y = 100;
+            ppu_on_all();
+            while (true)
+            {
+                ppu_wait_nmi();
+                PAD pad = pad_poll(0);
+                if ((pad & PAD.UP) != 0) y--;
+                if ((pad & PAD.DOWN) != 0) y++;
+                oam_spr(40, y, 0xD8, 0, 0);
+            }
+            """);
+        Assert.NotNull(bytes);
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"PadUpDown hex: {hex}");
+
+        // AND #$10 for PAD.UP (29 10), NOT AND #$08
+        Assert.Contains("2910", hex);
+        Assert.DoesNotContain("2908", hex);
+        // AND #$20 for PAD.DOWN (29 20), NOT AND #$04
+        Assert.Contains("2920", hex);
+        // 2904 could appear as part of addresses, so just verify 2910/2920 are present
+    }
+
+    [Fact]
+    public void VramFillAttributeTable_CorrectAddresses()
+    {
+        // Regression: climber attribute table fill used $27C0 (nametable B) instead
+        // of $2BC0 (nametable C). Verify vram_adr + vram_fill emit correct addresses.
+        var bytes = GetProgramBytes(
+            """
+            vram_adr(0x2000);
+            vram_fill(0, 0x1000);
+            vram_adr(0x23C0);
+            vram_fill(0x55, 64);
+            vram_adr(0x2BC0);
+            vram_fill(0x55, 64);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"VramFillAttr hex: {hex}");
+
+        // vram_adr loads high byte into X, low byte into A
+        // vram_adr($23C0): LDX #$23 (A223), LDA #$C0 (A9C0)
+        Assert.Contains("A223", hex);
+        Assert.Contains("A9C0", hex);
+        // vram_adr($2BC0): LDX #$2B (A22B) — NOT $27 (nametable B)
+        Assert.Contains("A22B", hex);
+        Assert.DoesNotContain("A227", hex);
+        // vram_fill value 0x55: LDA #$55 (A955)
+        Assert.Contains("A955", hex);
+    }
+
+    [Fact]
+    public void PadPollAndRand8_IndependentAndOperations()
+    {
+        // Regression: the AND handler had a _padPollResultAvailable flag that was never
+        // cleared after non-pad_poll calls, so AND operations on rand8() results would
+        // reload the pad_poll address instead of using the correct local. Enemy movement
+        // read player's joy instead of its own random byte.
+        //
+        // This test verifies that after rand8() (which clears _padPollResultAvailable),
+        // subsequent AND operations don't emit a pad reload address. The intervening
+        // code between rand8() and its AND check forces Roslyn to use stloc/ldloc
+        // instead of dup optimization.
+        var bytes = GetProgramBytes(
+            """
+            byte y = 100;
+            byte x = 50;
+            byte ai = 0;
+            ppu_on_all();
+            while (true)
+            {
+                ppu_wait_nmi();
+                PAD joy = pad_poll(0);
+                if ((joy & PAD.LEFT) != 0) x--;
+                if ((joy & PAD.RIGHT) != 0) x++;
+                byte ej = rand8();
+                ai = (byte)(ej & 3);
+                oam_spr(x, y, ai, 0, 0);
+                if ((ej & (byte)PAD.LEFT) != 0) y--;
+            }
+            """);
+        Assert.NotNull(bytes);
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"PadPollAndRand8 hex: {hex}");
+
+        // The pad reload address is the first STA after pad_poll JSR.
+        // Find LDA #$00; JSR xxxx; STA xxxx pattern (pad_poll(0)).
+        int padStaIdx = -1;
+        ushort padReloadAddr = 0;
+        for (int i = 0; i < bytes.Length - 8; i++)
+        {
+            if (bytes[i] == 0xA9 && bytes[i + 1] == 0x00 && bytes[i + 2] == 0x20
+                && bytes[i + 5] == 0x8D)
+            {
+                padStaIdx = i + 5;
+                padReloadAddr = (ushort)(bytes[i + 6] | (bytes[i + 7] << 8));
+                break;
+            }
+        }
+        Assert.True(padStaIdx > 0, "Could not find pad_poll STA pattern");
+        _logger.WriteLine($"Pad reload address: ${padReloadAddr:X4}");
+
+        // Find all AND #$40 (PAD.LEFT = 0x40) instructions
+        var andPositions = new List<int>();
+        for (int i = 0; i < bytes.Length - 1; i++)
+        {
+            if (bytes[i] == 0x29 && bytes[i + 1] == 0x40)
+                andPositions.Add(i);
+        }
+        // At least 2 AND #$40: one for pad_poll, one for rand8
+        Assert.True(andPositions.Count >= 2, $"Expected at least 2 AND #$40, found {andPositions.Count}");
+
+        // The LAST AND #$40 should be for the rand8 ej variable.
+        // It should NOT have LDA $padReloadAddr immediately before it.
+        int lastAndPos = andPositions[^1];
+        if (lastAndPos >= 3 && bytes[lastAndPos - 3] == 0xAD)
+        {
+            ushort loadAddr = (ushort)(bytes[lastAndPos - 2] | (bytes[lastAndPos - 1] << 8));
+            Assert.NotEqual(padReloadAddr, loadAddr);
+            _logger.WriteLine($"Last AND #$40 loads from ${loadAddr:X4} (not pad address ${padReloadAddr:X4})");
+        }
+        // If no LDA abs before last AND, the value comes from a different source (also correct)
+    }
+
+    [Fact]
+    public void DupCascade_InterveningStloc_ReloadsFromTemp()
+    {
+        // Regression: In the climber sample, the pattern:
+        //   byte st = actor_state[ai]; byte isEnemy = actor_name[ai];
+        //   if (st == 1) { ... } if (st == 2) { ... }
+        // The C# compiler (Release) emits IL that loads isEnemy BETWEEN st and the
+        // dup cascade. HandleLdelemU1 saves st to TEMP ($17), but then stloc (for
+        // isEnemy) clears _runtimeValueInA. Without the fix, the dup handler can't
+        // start the cascade and CMP compares isEnemy instead of st.
+        var bytes = GetProgramBytes(
+            """
+            byte[] states = new byte[8];
+            byte[] names = new byte[8];
+            states[0] = 1;
+            names[0] = 5;
+            for (byte i = 0; i < 4; i++)
+            {
+                byte st = states[i];
+                byte nm = names[i];
+                if (st == 1)
+                {
+                    pal_col(0, nm);
+                }
+                if (st == 2)
+                {
+                    pal_col(1, nm);
+                }
+            }
+            ppu_on_all();
+            while (true) ;
+            """);
+
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"DupCascade hex: {hex}");
+
+        // STA $17 (85 17) — save st to TEMP before nm load clobbers A
+        Assert.Contains("8517", hex);
+
+        // LDA $17 (A5 17) — reload st from TEMP before the cascade comparison
+        Assert.Contains("A517", hex);
+
+        // The sequence LDA $17 → CMP #$01 must appear (reload st, then compare)
+        Assert.Contains("A517C901", hex);
+    }
+
+    [Fact]
+    public void SubThenCompare_RuntimeSubNotStripped()
+    {
+        // Regression: EmitBranchCompare's default path blindly removed the last
+        // instruction, assuming it was LDA #imm from WriteLdc. But when
+        // _runtimeValueInA is true, WriteLdc returns without emitting LDA, so
+        // the last instruction is the SBC from HandleAddSub. The fix checks
+        // that the instruction being removed is actually LDA Immediate.
+        //
+        // Pattern: (byte)(arr[idx] - localVar) < 16
+        // IL: ldelem.u1; ldloc localVar; sub; conv.u1; ldc.i4.s 16; bge.s
+        var bytes = GetProgramBytes(
+            """
+            byte[] arr = new byte[4];
+            byte[] lad = new byte[4];
+            for (byte i = 0; i < 4; i++)
+            {
+                arr[i] = rand8();
+                lad[i] = rand8();
+            }
+            byte idx = 0;
+            byte ladx = (byte)(lad[idx] * 16);
+            byte check = (byte)(arr[idx] - ladx);
+            if (check < 16)
+            {
+                pal_col(0, 0x30);
+            }
+            ppu_on_all();
+            while (true) ;
+            """);
+
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"SubThenCompare hex: {hex}");
+
+        // The SEC+SBC sequence (38 E5 18) must exist:
+        // SEC=38, SBC ZeroPage=E5, TEMP+1=18
+        // This ensures the subtraction wasn't stripped by EmitBranchCompare.
+        Assert.Contains("38E518", hex);
+
+        // After SBC, there should be CMP #$10 (C9 10) for the < 16 check
+        Assert.Contains("C910", hex);
+
+        // The full sequence: SEC; SBC $18; CMP #$10 (38 E5 18 C9 10)
+        Assert.Contains("38E518C910", hex);
+    }
+
+    [Fact]
+    public void LdlocStloc_LocalToLocalCopy()
+    {
+        // Regression test: `lx = ladx` (local-to-local copy) must load from ladx's
+        // runtime address, not use a stale constant 0. Previously WriteStloc's scalar
+        // branch would RemoveLastInstructions(1) even when the previous LDA was Absolute
+        // (from WriteLdloc), replacing `LDA $addr` with `LDA #$00`.
+        var bytes = GetProgramBytes("""
+            byte[] arr = new byte[8];
+            byte[] lad = new byte[8];
+            for (byte i = 0; i < 8; i++)
+            {
+                arr[i] = rand8();
+                lad[i] = rand8();
+            }
+            byte idx = 0;
+            byte lx = 0;
+            byte ladx = (byte)(lad[idx] * 16);
+            if ((byte)(arr[idx] - ladx) < 16) lx = ladx;
+            if (lx != 0)
+            {
+                pal_col(0, lx);
+            }
+            ppu_on_all();
+            while (true) ;
+            """);
+
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"LdlocStloc hex: {hex}");
+
+        // After BCS (B0), the body must load ladx from its Absolute address (AD xx xx)
+        // then store to lx (8D xx xx). It must NOT be LDA #$00 (A9 00).
+        // Find the BCS instruction after CMP #$10 (C9 10 B0)
+        int cmpIdx = hex.IndexOf("C910B0");
+        Assert.True(cmpIdx >= 0, "CMP #$10; BCS pattern not found");
+
+        // The BCS operand is 1 byte (2 hex chars) after B0
+        int bodyStart = cmpIdx + 8; // past "C910B0xx"
+        string bodyHex = hex.Substring(bodyStart, 6); // first 3 bytes of body
+
+        // Must be LDA Absolute (AD xx xx), not LDA Immediate (A9 00)
+        Assert.StartsWith("AD", bodyHex);
+        Assert.False(bodyHex.StartsWith("A9"), "Bug: local-to-local copy emitted LDA #constant instead of LDA $address");
+    }
+
+    [Fact]
+    public void DupShr_UshortLoHiByteExtraction()
+    {
+        // Regression test: dup + conv_u1 + stloc (lo byte) + ldc_i4 8 + shr + conv_u1 + stloc (hi byte)
+        // The transpiler must emit TXA (8A) for the hi byte (>> 8) instead of 8 LSR instructions
+        // or LDA #$00. The ushort result of mul*8+16 has lo in A and hi in X.
+        var bytes = GetProgramBytes("""
+            byte pf = (byte)pad_poll(0);
+            ushort floor_yy = (ushort)(pf * 8 + 16);
+            byte fyy_lo = (byte)floor_yy;
+            byte fyy_hi = (byte)(floor_yy >> 8);
+            pal_col(0, fyy_lo);
+            pal_col(1, fyy_hi);
+            while (true) ;
+            """);
+
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"DupShr hex: {hex}");
+
+        // After the 16-bit mul (ASL/ROL) + ADC #$10 + BCC/INX sequence,
+        // the lo byte is stored with STA $addr1, then TXA (8A) transfers
+        // the hi byte from X to A, followed by STA $addr2.
+        // Pattern: STA abs (8D xx xx) + TXA (8A) + STA abs (8D xx xx)
+        int txaIdx = hex.IndexOf("8A8D");
+        Assert.True(txaIdx >= 0, "TXA + STA pattern not found — hi byte extraction may be wrong");
+
+        // The 3 bytes before TXA should be STA Absolute (8D xx xx)
+        Assert.True(txaIdx >= 6, "Not enough bytes before TXA");
+        string beforeTxa = hex.Substring(txaIdx - 6, 2);
+        Assert.Equal("8D", beforeTxa); // STA Absolute before TXA
+    }
+
+    [Fact]
+    public void DupCascade_StaleFlag_DoesNotCorruptSubsequentDup()
+    {
+        // Regression test: a dup cascade (dup + ldc + beq/bne) sets _dupCascadeActive,
+        // which must be cleared before a subsequent non-cascade dup (e.g., lo/hi extraction).
+        // Without the fix, the stale flag causes the later dup to emit LDA $18 (TEMP_HI),
+        // corrupting the accumulator.
+        var bytes = GetProgramBytes("""
+            byte state = (byte)pad_poll(0);
+            // dup cascade: if-else chain
+            if (state == 1) pal_col(0, 0x10);
+            else if (state == 2) pal_col(0, 0x20);
+
+            // Non-cascade dup for lo/hi byte extraction
+            byte pf = (byte)pad_poll(0);
+            ushort val = (ushort)(pf * 8 + 16);
+            byte lo = (byte)val;
+            byte hi = (byte)(val >> 8);
+            pal_col(1, lo);
+            pal_col(2, hi);
+            while (true) ;
+            """);
+
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"DupCascadeStale hex: {hex}");
+
+        // After the cascade, the lo/hi extraction must use TXA (8A) for the hi byte,
+        // NOT LDA $18 (A5 18) from the stale cascade path.
+        // Verify TXA appears (correct hi byte extraction)
+        int txaIdx = hex.IndexOf("8A8D");
+        Assert.True(txaIdx >= 0, "TXA + STA pattern not found after cascade — stale _dupCascadeActive may corrupt dup");
+    }
 }
