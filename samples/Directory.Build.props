@@ -1,0 +1,7 @@
+<Project>
+  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))" />
+  <PropertyGroup>
+    <!-- Use TaskHostFactory so the build server doesn't lock dotnes.tasks.dll -->
+    <DotNESLocalDev>true</DotNESLocalDev>
+  </PropertyGroup>
+</Project>

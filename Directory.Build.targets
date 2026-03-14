@@ -1,0 +1,11 @@
+<Project>
+  <!-- Clean stale NuGet packages from samples/ when building the solution.
+       Sample projects have their own Directory.Build.targets, so this only
+       applies to src/* projects. The Exists condition makes it a no-op after
+       the first project deletes the folder. -->
+  <Target Name="CleanSamplePackages" BeforeTargets="Build"
+          Condition="Exists('$(MSBuildThisFileDirectory)samples\packages')">
+    <Message Text="Cleaning samples\packages to avoid stale NuGet packages..." Importance="normal" />
+    <RemoveDir Directories="$(MSBuildThisFileDirectory)samples\packages" />
+  </Target>
+</Project>
