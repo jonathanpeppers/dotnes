@@ -213,22 +213,26 @@ while (true)
     byte trig = pad_trigger(0);
     byte state = pad_state(0);
 
-    // --- Player movement ---
+    // --- Player movement (clamp to stay within bounds) ---
     if ((state & (byte)PAD.LEFT) != 0)
     {
-        if (player_x > 8) player_x = (byte)(player_x - PLAYER_SPEED);
+        if (player_x > 8 + PLAYER_SPEED) player_x = (byte)(player_x - PLAYER_SPEED);
+        else player_x = 8;
     }
     if ((state & (byte)PAD.RIGHT) != 0)
     {
-        if (player_x < 240) player_x = (byte)(player_x + PLAYER_SPEED);
+        if (player_x < 240 - PLAYER_SPEED) player_x = (byte)(player_x + PLAYER_SPEED);
+        else player_x = 240;
     }
     if ((state & (byte)PAD.UP) != 0)
     {
-        if (player_y > 32) player_y = (byte)(player_y - PLAYER_SPEED);
+        if (player_y > 32 + PLAYER_SPEED) player_y = (byte)(player_y - PLAYER_SPEED);
+        else player_y = 32;
     }
     if ((state & (byte)PAD.DOWN) != 0)
     {
-        if (player_y < 224) player_y = (byte)(player_y + PLAYER_SPEED);
+        if (player_y < 224 - PLAYER_SPEED) player_y = (byte)(player_y + PLAYER_SPEED);
+        else player_y = 224;
     }
 
     // --- Fire bullet ---
