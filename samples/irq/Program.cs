@@ -13,8 +13,6 @@
 
 #pragma warning disable CS8321
 
-using static NES.NESLib;
-
 // IRQ handler - called when MMC3 scanline counter fires
 // Uses RAM address 0x0309 as a shared IRQ counter
 void irq_handler()

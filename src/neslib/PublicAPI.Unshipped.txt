@@ -46,15 +46,14 @@ static NES.NESLib.LSB(ushort x) -> byte
 static NES.NESLib.MSB(ushort x) -> byte
 static NES.NESLib.apu_init() -> void
 static NES.NESLib.bcd_add(ushort a, ushort b) -> ushort
+static NES.NESLib.cli() -> void
 static NES.NESLib.famitone_init(string! musicDataLabel) -> void
+static NES.NESLib.irq_set_callback(string! callbackName) -> void
 static NES.NESLib.memfill(object! dst, byte value, uint len) -> void
 static NES.NESLib.music_pause(byte pause) -> void
 static NES.NESLib.music_play(byte song) -> void
 static NES.NESLib.music_stop() -> void
 static NES.NESLib.nmi_set_callback(string! callbackName) -> void
-static NES.NESLib.irq_set_callback(string! callbackName) -> void
-static NES.NESLib.cli() -> void
-static NES.NESLib.sei() -> void
 static NES.NESLib.oam_clear_fast() -> void
 static NES.NESLib.oam_meta_spr_clip(int x, byte y, byte[]! metasprite) -> void
 static NES.NESLib.oam_meta_spr_pal(byte x, byte y, byte pal, byte[]! data) -> void
@@ -65,6 +64,7 @@ static NES.NESLib.peek(ushort addr) -> byte
 static NES.NESLib.play_music() -> void
 static NES.NESLib.poke(ushort addr, byte value) -> void
 static NES.NESLib.sample_play(byte sample) -> void
+static NES.NESLib.sei() -> void
 static NES.NESLib.set_music_pulse_table(ushort[]! table) -> void
 static NES.NESLib.set_music_triangle_table(ushort[]! table) -> void
 static NES.NESLib.set_rand(byte seed) -> void
