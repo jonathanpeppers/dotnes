@@ -184,4 +184,27 @@ public class TranspilerTests
         Assert.NotEqual(0, labels["pusha"]);
         Assert.NotEqual(0, labels["pushax"]);
     }
+
+    /// <summary>
+    /// Verifies that re-assigning local variables does not inflate LocalCount.
+    /// Each unique local slot should only count once toward the total allocation,
+    /// regardless of how many times it is stored to.
+    /// </summary>
+    [Theory]
+    [InlineData("tint", false, 3)]       // 2 byte locals + 1 pad_poll temp
+    [InlineData("tint", true, 3)]
+    [InlineData("peekpoke", false, 3)]   // 3 byte locals
+    [InlineData("peekpoke", true, 3)]
+    public void LocalCountNotInflatedByReassignment(string name, bool debug, int expectedLocals)
+    {
+        var configuration = debug ? "debug" : "release";
+
+        using var dll = Utilities.GetResource($"{name}.{configuration}.dll");
+        using var transpiler = new Transpiler(dll, [], _logger);
+
+        var program = transpiler.BuildProgram6502(out ushort sizeOfMain, out ushort locals);
+
+        _logger.WriteLine($"{name} ({configuration}): LocalCount={locals}, MainSize={sizeOfMain}");
+        Assert.Equal(expectedLocals, locals);
+    }
 }
