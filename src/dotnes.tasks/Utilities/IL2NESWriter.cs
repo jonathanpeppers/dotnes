@@ -235,6 +235,7 @@ partial class IL2NESWriter : NESWriter
     public Dictionary<string, List<(string Name, int Size)>> StructLayouts { get => Variables.StructLayouts; init => Variables.StructLayouts = value; }
 
     /// <summary>
+    /// <summary>
     /// The local index targeted by the most recent ldloca.s instruction.
     /// Used by stfld/ldfld to know which struct local to access.
     /// </summary>

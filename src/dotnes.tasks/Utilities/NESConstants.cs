@@ -40,10 +40,6 @@ internal static class NESConstants
     public const int PRG_FILEOFFS = 0x10;
     public const int PPU_MASK_VAR = 0x12;
 
-    // Shared memory for state accessible from both main loop and IRQ/NMI callbacks
-    // 16 shared slots (indices 0-15, addresses 0x0400-0x040F)
-    public const ushort SharedBase = 0x0400;
-
     // Local variable storage
     public const ushort LocalStackBase = 0x0325;
 
