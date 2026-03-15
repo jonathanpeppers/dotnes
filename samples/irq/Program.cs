@@ -8,18 +8,21 @@
  * at a different offset, creating a wavy visual.
  *
  * Shared state between main loop and IRQ callback uses a static
- * field on partial class Program, mapped to a fixed RAM address.
+ * field on a user-defined class — the transpiler maps it to a
+ * fixed RAM address shared across all methods.
  */
 
 // IRQ handler - called when MMC3 scanline counter fires
 static void irq_handler()
 {
+    // Read current IRQ scroll counter from shared state
+    byte count = Shared.irqCount;
     // Change X scroll based on current IRQ count
-    poke(PPU_SCROLL, irqCount);
+    poke(PPU_SCROLL, count);
     poke(PPU_SCROLL, 0);
     // Advance counter for next IRQ in this frame
-    byte next = (byte)(irqCount + 1);
-    irqCount = next;
+    byte next = (byte)(count + 1);
+    Shared.irqCount = next;
     // Acknowledge and re-enable MMC3 IRQ
     poke(MMC3_IRQ_DISABLE, 0);
     poke(MMC3_IRQ_ENABLE, 0);
@@ -64,12 +67,13 @@ while (true)
 {
     ppu_wait_frame();
     // Reset IRQ counter for next frame
-    irqCount = 0;
+    Shared.irqCount = 0;
     // Reload MMC3 scanline counter
     poke(MMC3_IRQ_RELOAD, 0);
 }
 
-partial class Program
+// Shared state accessible from both main loop and IRQ callback
+static class Shared
 {
-    static byte irqCount;
+    public static byte irqCount;
 }

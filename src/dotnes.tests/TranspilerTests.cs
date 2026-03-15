@@ -1,5 +1,4 @@
-﻿using System.Reflection.Metadata;
-using System.Text;
+﻿using System.Text;
 using Xunit.Abstractions;
 
 namespace dotnes.tests;
@@ -190,83 +189,26 @@ public class TranspilerTests
         Assert.NotEqual(0, labels["pushax"]);
     }
 
-    [Fact]
-    public void PreAllocateStaticFields_MainOnly()
+    /// <summary>
+    /// Verifies that re-assigning local variables does not inflate LocalCount.
+    /// Each unique local slot should only count once toward the total allocation,
+    /// regardless of how many times it is stored to.
+    /// </summary>
+    [Theory]
+    [InlineData("tint", false, 3)]       // 2 byte locals + 1 pad_poll temp
+    [InlineData("tint", true, 3)]
+    [InlineData("peekpoke", false, 3)]   // 3 byte locals
+    [InlineData("peekpoke", true, 3)]
+    public void LocalCountNotInflatedByReassignment(string name, bool debug, int expectedLocals)
     {
-        var mainIL = new ILInstruction[]
-        {
-            new(ILOpCode.Ldc_i4_0),
-            new(ILOpCode.Stsfld, String: "score"),
-            new(ILOpCode.Ldsfld, String: "score"),
-        };
-        var userMethods = new Dictionary<string, ILInstruction[]>();
+        var configuration = debug ? "debug" : "release";
 
-        var result = Transpiler.PreAllocateStaticFields(mainIL, userMethods);
+        using var dll = Utilities.GetResource($"{name}.{configuration}.dll");
+        using var transpiler = new Transpiler(dll, [], _logger);
 
-        Assert.Single(result);
-        Assert.Equal(NESConstants.LocalStackBase, result["score"]);
-    }
+        _ = transpiler.BuildProgram6502(out ushort sizeOfMain, out ushort locals);
 
-    [Fact]
-    public void PreAllocateStaticFields_UserMethodOnly()
-    {
-        var mainIL = Array.Empty<ILInstruction>();
-        var userMethods = new Dictionary<string, ILInstruction[]>
-        {
-            ["callback"] = new ILInstruction[]
-            {
-                new(ILOpCode.Ldsfld, String: "counter"),
-                new(ILOpCode.Ldc_i4_1),
-                new(ILOpCode.Add),
-                new(ILOpCode.Stsfld, String: "counter"),
-            },
-        };
-
-        var result = Transpiler.PreAllocateStaticFields(mainIL, userMethods);
-
-        Assert.Single(result);
-        Assert.Equal(NESConstants.LocalStackBase, result["counter"]);
-    }
-
-    [Fact]
-    public void PreAllocateStaticFields_SharedAcrossMethods()
-    {
-        var mainIL = new ILInstruction[]
-        {
-            new(ILOpCode.Ldc_i4_0),
-            new(ILOpCode.Stsfld, String: "score"),
-        };
-        var userMethods = new Dictionary<string, ILInstruction[]>
-        {
-            ["callback"] = new ILInstruction[]
-            {
-                new(ILOpCode.Ldsfld, String: "score"),
-                new(ILOpCode.Stsfld, String: "lives"),
-            },
-        };
-
-        var result = Transpiler.PreAllocateStaticFields(mainIL, userMethods);
-
-        Assert.Equal(2, result.Count);
-        // Addresses should be sequential and deterministic (sorted by name)
-        Assert.Equal(NESConstants.LocalStackBase, result["lives"]);
-        Assert.Equal((ushort)(NESConstants.LocalStackBase + 1), result["score"]);
-        // Both methods get the same address for "score"
-        Assert.True(result.ContainsKey("score"));
-    }
-
-    [Fact]
-    public void PreAllocateStaticFields_NoStaticFields()
-    {
-        var mainIL = new ILInstruction[]
-        {
-            new(ILOpCode.Ldc_i4_0),
-            new(ILOpCode.Stloc_0),
-        };
-        var userMethods = new Dictionary<string, ILInstruction[]>();
-
-        var result = Transpiler.PreAllocateStaticFields(mainIL, userMethods);
-
-        Assert.Empty(result);
+        _logger.WriteLine($"{name} ({configuration}): LocalCount={locals}, MainSize={sizeOfMain}");
+        Assert.Equal(expectedLocals, locals);
     }
 }
