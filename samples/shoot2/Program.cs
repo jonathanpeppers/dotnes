@@ -110,6 +110,13 @@ byte[] BG_TILES = [
 ppu_off();
 oam_clear();
 
+// Move C stack from $0800 (mirrors to zero page!) to $0700 (physical RAM).
+// The transpiler doesn't emit decsp4 before oam_spr args, so every oam_spr call
+// advances sp by 4 with no matching decrement. At $0800, this drift writes to
+// mirrored zero page, corrupting NES library state ($03-$06 = VRAM ptrs).
+// At $0700, sp stays in physical RAM ($0700-$07FF) — safe.
+poke(0x0823, 0x07);
+
 // Upload sprite tiles to CHR RAM pattern table 1 ($1000)
 vram_adr(0x1000);
 vram_write(SPRITE_TILES);
@@ -160,13 +167,12 @@ bank_spr(1);
 bank_bg(0);
 ppu_on_all();
 
-// VRAM update buffer is intentionally NOT initialized (no vrambuf_clear/set_vram_update).
-// NAME_UPD_ENABLE ($06) stays 0 from reset, so NMI never processes the buffer.
-// This avoids a transpiler/runtime bug where NAME_UPD_ADR ($04-$05) gets corrupted,
-// causing the NMI to write garbage to CHR RAM. Score display is static from init.
-
-// Enable APU sound channels (inline — no helper function needed)
-poke(APU_STATUS, 0x0F);
+// Silence all APU channels, then enable them
+poke(APU_PULSE1_CTRL, 0x30);    // silence pulse 1 (halt, volume 0)
+poke(APU_PULSE2_CTRL, 0x30);    // silence pulse 2
+poke(APU_TRIANGLE_CTRL, 0x80);  // silence triangle (halt)
+poke(APU_NOISE_CTRL, 0x30);     // silence noise
+poke(APU_STATUS, 0x0F);         // enable all channels
 set_rand(42);
 
 // === Game state ===
@@ -222,11 +228,18 @@ for (byte i = 0; i < MAX_STARS; i++)
 // === Main game loop ===
 while (true)
 {
-    // --- Fire bullet (MUST come before pad_state — pad_trigger calls pad_poll internally) ---
+    // --- Fire bullet ---
     if (fire_cooldown != 0) fire_cooldown = (byte)(fire_cooldown - 1);
-    // Check A button trigger inline — AND result goes directly to brfalse
-    // (no local variable — stloc after call doesn't emit STA, transpiler bug)
-    if ((pad_trigger(0) & (byte)PAD.A) != 0)
+
+    // Reset C stack pointer high byte. Each oam_spr call advances sp by 4
+    // without a matching decsp4 (transpiler bug), causing sp to race through
+    // memory. We reset to $07 to keep writes in physical RAM ($0700-$07FF).
+    poke(0x0823, 0x07);
+    if (fire_cooldown != 0) fire_cooldown = (byte)(fire_cooldown - 1);
+    // pad_trigger(0) fails because $3E (previous frame state) is corrupted
+    // by C stack over-pop. Use pad_poll(0) which returns current state directly
+    // and also updates $3C for later pad_state() direction checks.
+    if (((byte)pad_poll(0) & (byte)PAD.A) != 0)
     {
         if (fire_cooldown == 0)
         {
@@ -433,6 +446,14 @@ while (true)
     }
 
     oam_hide_rest(oam_off);
+
+    // Repair zero-page VRAM state before NMI fires. The C stack over-pop
+    // corrupts $04-$06 during the game loop. These pokes use NES RAM mirroring
+    // ($08xx → $00xx) to restore critical NMI variables just before the wait.
+    poke(0x0100, 0xFF);  // VRAM buffer terminator (harmless if NMI reads it)
+    poke(0x0804, 0x00);  // NAME_UPD_ADR low byte
+    poke(0x0805, 0x01);  // NAME_UPD_ADR high byte (→ $0100)
+    poke(0x0806, 0x00);  // NAME_UPD_ENABLE = 0 (disable buffer processing)
 
     ppu_wait_nmi();
 }
