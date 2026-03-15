@@ -1,3 +1,5 @@
+using dotnes.ObjectModel;
+
 namespace dotnes.tests;
 
 /// <summary>
@@ -138,7 +140,7 @@ public class LocalVariableManagerTests
     {
         var manager = new LocalVariableManager();
 
-        Assert.Throws<InvalidOperationException>(() =>
+        Assert.Throws<TranspileException>(() =>
             manager.ResolveStructType(0, "Missing"));
     }
 
