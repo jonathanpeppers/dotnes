@@ -20,16 +20,18 @@
 | ![metasprites](samples/metasprites/metasprites.gif) | ![animation](samples/animation/animation.gif) |
 | **sprites** ⬇️ | **horizscroll** ⬇️ |
 | ![sprites](samples/sprites/sprites.gif) | ![horizscroll](samples/horizscroll/horizscroll.gif) |
-| **fade** ⬇️ | **monobitmap** ⬇️ |
-| ![fade](samples/fade/fade.gif) | ![monobitmap](samples/monobitmap/monobitmap.png) |
-| **music** ⬇️ | **fami** ⬇️ |
-| ![music](samples/music/music.png) | ![fami](samples/fami/fami.gif) |
-| **rletitle** ⬇️ | **attributetable** ⬇️ |
-| ![rletitle](samples/rletitle/rletitle.png) | ![attributetable](samples/attributetable/attributetable.png) |
-| **flicker** ⬇️ | **statusbar** ⬇️ |
-| ![flicker](samples/flicker/flicker.gif) | ![statusbar](samples/statusbar/statusbar.gif) |
+| **vertscroll** ⬇️ | **fade** ⬇️ |
+| ![vertscroll](samples/vertscroll/vertscroll.gif) | ![fade](samples/fade/fade.gif) |
+| **monobitmap** ⬇️ | **music** ⬇️ |
+| ![monobitmap](samples/monobitmap/monobitmap.png) | ![music](samples/music/music.png) |
+| **fami** ⬇️ | **rletitle** ⬇️ |
+| ![fami](samples/fami/fami.gif) | ![rletitle](samples/rletitle/rletitle.png) |
+| **attributetable** ⬇️ | **flicker** ⬇️ |
+| ![attributetable](samples/attributetable/attributetable.png) | ![flicker](samples/flicker/flicker.gif) |
+| **statusbar** ⬇️ | |
+| ![statusbar](samples/statusbar/statusbar.gif) | |
 
-> See the [samples/](samples/) folder for all 41 sample projects. Generate images with `dotnet run scripts/record-all-samples.cs`.
+> See the [samples/](samples/) folder for all 43 sample projects. Generate images with `dotnet run scripts/record-all-samples.cs`.
 
 ## Contributing
 
