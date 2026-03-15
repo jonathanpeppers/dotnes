@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <Import Project="../NuGet.props" />
+  <PropertyGroup>
+    <PackageId>dotnes.decompiler</PackageId>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <PackageLicenseFile>LICENSE</PackageLicenseFile>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>dotnes-decompiler</AssemblyName>
+    <RootNamespace>dotnes</RootNamespace>
+    <RollForward>Major</RollForward>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>dotnes-decompiler</ToolCommandName>
+  </PropertyGroup>
+  <ItemGroup>
+    <Using Include="NES" />
+    <None Include="../../LICENSE" Pack="true" PackagePath="" />
+    <Compile Include="../dotnes.tasks/ObjectModel/*.cs" Link="ObjectModel/%(FileName)%(Extension)" />
+    <Compile Include="../dotnes.tasks/Utilities/*.cs" Link="Utilities/%(FileName)%(Extension)" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\neslib\neslib.csproj" />
+  </ItemGroup>
+</Project>
