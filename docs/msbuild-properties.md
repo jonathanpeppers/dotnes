@@ -197,7 +197,9 @@ to avoid re-transpiling when nothing has changed. The inputs include:
 - A **properties stamp file** — tracks changes to `NESMirroring`, `NESMapper`,
   `NESPrgBanks`, `NESChrBanks`, and `NESBattery`
 
-The stamp file is written to `$(IntermediateOutputPath)dotnes.properties.stamp`
-and is only updated when a property value changes, so toggling a property like
-`NESBattery` from `false` to `true` will correctly retrigger transpilation on
-the next build.
+A `_WriteNESPropertiesStamp` target automatically runs before each transpilation
+and writes the current property values to
+`$(IntermediateOutputPath)dotnes.properties.stamp`. The file is only rewritten
+when a value actually changes (`WriteOnlyWhenDifferent`), so toggling a property
+like `NESBattery` from `false` to `true` will correctly retrigger transpilation
+on the next build without causing unnecessary rebuilds.
