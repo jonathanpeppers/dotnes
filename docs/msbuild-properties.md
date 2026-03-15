@@ -61,6 +61,7 @@ Common mapper values:
 | 0 | NROM | No bank switching (32 KB PRG, 8 KB CHR) |
 | 1 | MMC1 | 16 KB switchable PRG banks, 4 KB switchable CHR banks, software mirroring control |
 | 2 | UxROM | 16 KB switchable PRG banks, fixed CHR |
+| 3 | CNROM | Fixed PRG, switchable 8 KB CHR banks |
 | 4 | MMC3 | Switchable PRG and CHR banks with IRQ counter |
 
 The mapper number is encoded in bits 4–7 of iNES Flags6 and Flags7.

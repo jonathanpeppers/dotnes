@@ -1402,6 +1402,13 @@ partial class IL2NESWriter
                         Emit(Opcode.SEI, AddressMode.Implied);
                         argsAlreadyPopped = true;
                         break;
+                    case nameof(NESLib.cnrom_set_chr_bank):
+                        // CNROM (mapper 3) bank switch: write bank number to $8000
+                        // The bank number is already in A from the argument load
+                        Emit(Opcode.STA, AddressMode.Absolute, (ushort)0x8000);
+                        _immediateInA = null;
+                        _pokeLastValue = null;
+                        break;
                     case nameof(NESLib.poke):
                         {
                             // poke(ushort addr, byte value) -> LDA #value, STA abs addr

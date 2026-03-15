@@ -3523,6 +3523,29 @@ public class RoslynTests
     }
 
     [Fact]
+    public void CnromSetChrBank_EmitsStaToMapper()
+    {
+        // cnrom_set_chr_bank(byte) should emit STA $8000 to switch CHR bank
+        var bytes = GetProgramBytes(
+            """
+            cnrom_set_chr_bank(0);
+            cnrom_set_chr_bank(1);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"CNROM hex: {hex}");
+
+        // LDA #$00 = A900, STA $8000 = 8D0080
+        Assert.Contains("A9008D0080", hex);
+        // LDA #$01 = A901, STA $8000 = 8D0080
+        Assert.Contains("A9018D0080", hex);
+    }
+
+    [Fact]
     public void Mmc1Write_EmitsShiftRegisterProtocol()
     {
         // mmc1_write(0x8000, 0x0C) should emit:
