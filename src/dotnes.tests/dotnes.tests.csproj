@@ -29,4 +29,10 @@
     <ProjectReference Include="..\neslib\neslib.csproj" />
   </ItemGroup>
 
+  <!-- Include decompiler source files for testing (same pattern as compiler linking shared code) -->
+  <ItemGroup>
+    <Compile Include="..\dotnes.decompiler\NESRomReader.cs" Link="Decompiler\NESRomReader.cs" />
+    <Compile Include="..\dotnes.decompiler\Decompiler.cs" Link="Decompiler\Decompiler.cs" />
+  </ItemGroup>
+
 </Project>
