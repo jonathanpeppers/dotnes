@@ -8,9 +8,6 @@
   <PropertyGroup>
     <NESTargetPath>$(OutputPath)$(TargetName).nes</NESTargetPath>
     <IncrementalCleanDependsOn>$(IncrementalCleanDependsOn);Transpile</IncrementalCleanDependsOn>
-    <!-- NESMirroring property: "Vertical" or "Horizontal" (default). Maps to NESVerticalMirroring bool. -->
-    <NESVerticalMirroring Condition="'$(NESMirroring)' == 'Vertical'">true</NESVerticalMirroring>
-    <NESVerticalMirroring Condition="'$(NESMirroring)' == 'Horizontal'">false</NESVerticalMirroring>
   </PropertyGroup>
   <Target Name="Transpile" AfterTargets="Build"
       Inputs="$(TargetPath);@(NESAssembly)" Outputs="$(NESTargetPath)">
@@ -19,7 +16,7 @@
         AssemblyFiles="@(NESAssembly)"
         OutputPath="$(NESTargetPath)"
         DiagnosticLogging="$(NESDiagnosticLogging)"
-        NESVerticalMirroring="$(NESVerticalMirroring)"
+        NESMirroring="$(NESMirroring)"
         NESMapper="$(NESMapper)"
         NESPrgBanks="$(NESPrgBanks)"
         NESChrBanks="$(NESChrBanks)"

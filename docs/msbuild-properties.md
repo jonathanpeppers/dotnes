@@ -25,21 +25,21 @@ issues.
 </PropertyGroup>
 ```
 
-### `NESVerticalMirroring`
+### `NESMirroring`
 
 Controls the nametable mirroring mode stored in the iNES header (Flags6, bit 0).
 
 | | |
 |---|---|
-| **Type** | `bool` |
-| **Default** | `false` (horizontal mirroring) |
+| **Type** | `string` |
+| **Default** | `Horizontal` |
 
-- `false` — horizontal mirroring, used for vertical scrolling games (the default).
-- `true` — vertical mirroring, used for horizontal scrolling games.
+- `Horizontal` — horizontal mirroring, used for vertical scrolling games (the default).
+- `Vertical` — vertical mirroring, used for horizontal scrolling games.
 
 ```xml
 <PropertyGroup>
-  <NESVerticalMirroring>true</NESVerticalMirroring>
+  <NESMirroring>Vertical</NESMirroring>
 </PropertyGroup>
 ```
 
@@ -145,7 +145,7 @@ logging:
     <NESMapper>4</NESMapper>
     <NESPrgBanks>4</NESPrgBanks>
     <NESChrBanks>8</NESChrBanks>
-    <NESVerticalMirroring>true</NESVerticalMirroring>
+    <NESMirroring>Vertical</NESMirroring>
     <NESDiagnosticLogging>true</NESDiagnosticLogging>
   </PropertyGroup>
 

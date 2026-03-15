@@ -70,14 +70,14 @@ public class TranspilerTests
     [InlineData("metacursor", false)]
     [InlineData("metatrigger", true)]
     [InlineData("metatrigger", false)]
-    [InlineData("statusbar", true, true)]
-    [InlineData("statusbar", false, true)]
+    [InlineData("statusbar", true, "Vertical")]
+    [InlineData("statusbar", false, "Vertical")]
     [InlineData("vrambuffer", true)]
     [InlineData("vrambuffer", false)]
-    [InlineData("horizscroll", true, true)]
-    [InlineData("horizscroll", false, true)]
-    [InlineData("horizmask", true, true)]
-    [InlineData("horizmask", false, true)]
+    [InlineData("horizscroll", true, "Vertical")]
+    [InlineData("horizscroll", false, "Vertical")]
+    [InlineData("horizmask", true, "Vertical")]
+    [InlineData("horizmask", false, "Vertical")]
     [InlineData("animation", true)]
     [InlineData("animation", false)]
     [InlineData("multifile", true)]
@@ -94,31 +94,31 @@ public class TranspilerTests
     [InlineData("bigsprites", false)]
     [InlineData("aputest", true)]
     [InlineData("aputest", false)]
-    [InlineData("bankswitch", true, false, 4, 4, 8)]
-    [InlineData("bankswitch", false, false, 4, 4, 8)]
-    [InlineData("irq", true, false, 4, 4, 1)]
-    [InlineData("irq", false, false, 4, 4, 1)]
+    [InlineData("bankswitch", true, "Horizontal", 4, 4, 8)]
+    [InlineData("bankswitch", false, "Horizontal", 4, 4, 8)]
+    [InlineData("irq", true, "Horizontal", 4, 4, 1)]
+    [InlineData("irq", false, "Horizontal", 4, 4, 1)]
     [InlineData("climber", true)]
     [InlineData("climber", false)]
     [InlineData("siegegame", true)]
     [InlineData("siegegame", false)]
     [InlineData("pong", true)]
     [InlineData("pong", false)]
-    [InlineData("transtable", true, false, 0, 2, 0)]
-    [InlineData("transtable", false, false, 0, 2, 0)]
+    [InlineData("transtable", true, "Horizontal", 0, 2, 0)]
+    [InlineData("transtable", false, "Horizontal", 0, 2, 0)]
     [InlineData("snake", true)]
     [InlineData("snake", false)]
-    [InlineData("monobitmap", true, false, 2, 2, 0)]
-    [InlineData("monobitmap", false, false, 2, 2, 0)]
-    [InlineData("shoot2", true, false, 2, 2, 0)]
-    [InlineData("shoot2", false, false, 2, 2, 0)]
+    [InlineData("monobitmap", true, "Horizontal", 2, 2, 0)]
+    [InlineData("monobitmap", false, "Horizontal", 2, 2, 0)]
+    [InlineData("shoot2", true, "Horizontal", 2, 2, 0)]
+    [InlineData("shoot2", false, "Horizontal", 2, 2, 0)]
     [InlineData("conio", true)]
     [InlineData("conio", false)]
     [InlineData("procgen", true)]
     [InlineData("procgen", false)]
     [InlineData("vertscroll", true)]
     [InlineData("vertscroll", false)]
-    public Task Write(string name, bool debug, bool verticalMirroring = false, int mapper = 0, int prgBanks = 2, int chrBanks = 1)
+    public Task Write(string name, bool debug, string mirroring = "Horizontal", int mapper = 0, int prgBanks = 2, int chrBanks = 1)
     {
         var configuration = debug ? "debug" : "release";
 
@@ -145,7 +145,7 @@ public class TranspilerTests
         }
 
         using var dll = Utilities.GetResource($"{name}.{configuration}.dll");
-        using var il = new Transpiler(dll, assemblyReaders, _logger, verticalMirroring, mapper, prgBanks, chrBanks);
+        using var il = new Transpiler(dll, assemblyReaders, _logger, mirroring, mapper, prgBanks, chrBanks);
         using var ms = new MemoryStream();
         il.Write(ms);
 
