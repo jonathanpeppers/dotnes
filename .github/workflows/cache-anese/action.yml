@@ -11,3 +11,10 @@ runs:
         src/dotnes.anese/obj/Debug
         src/dotnes.anese/obj/Release
       key: anese-${{ runner.os }}-${{ hashFiles('src/dotnes.anese/dotnes.anese.csproj') }}
+  - name: Touch cached files
+    shell: bash
+    run: |
+      # Touch cached zip/stamp files so MSBuild sees them as newer than the csproj.
+      # Without this, git checkout gives the csproj a fresh timestamp that defeats
+      # MSBuild's Inputs/Outputs incremental check, causing re-downloads every build.
+      find src/dotnes.anese/obj -name '*.zip' -o -name 'LICENSE' -o -name '*.stamp' 2>/dev/null | xargs -r touch
