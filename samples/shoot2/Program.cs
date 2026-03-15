@@ -110,10 +110,8 @@ byte[] BG_TILES = [
 ppu_off();
 oam_clear();
 
-// Move C stack from $0800 (mirrors to zero page!) to $0700 (physical RAM).
-// The default sp=$0800 means stack operations write to $0800+ which mirrors
-// to zero page, corrupting NES library state ($03-$06 = VRAM ptrs).
-// At $0700, sp stays in physical RAM ($0700-$07FF) — safe.
+// Move C stack to $0700. The default sp=$0800 aliases zero page via NES RAM
+// mirroring ($0800-$0FFF → $0000-$07FF), so pushes corrupt neslib state.
 poke(0x0823, 0x07);
 
 // Upload sprite tiles to CHR RAM pattern table 1 ($1000)
@@ -162,16 +160,16 @@ vram_put(0x01);
 vram_put(0x01);
 vram_put(0x01);
 
-bank_spr(1);
-bank_bg(0);
-ppu_on_all();
-
-// Silence all APU channels, then enable them
+// Silence all APU channels, then enable them (before ppu_on to avoid startup noise)
 poke(APU_PULSE1_CTRL, 0x30);    // silence pulse 1 (halt, volume 0)
 poke(APU_PULSE2_CTRL, 0x30);    // silence pulse 2
 poke(APU_TRIANGLE_CTRL, 0x80);  // silence triangle (halt)
 poke(APU_NOISE_CTRL, 0x30);     // silence noise
 poke(APU_STATUS, 0x0F);         // enable all channels
+
+bank_spr(1);
+bank_bg(0);
+ppu_on_all();
 set_rand(42);
 
 // === Game state ===
@@ -228,14 +226,13 @@ while (true)
     // --- Fire bullet ---
     if (fire_cooldown != 0) fire_cooldown = (byte)(fire_cooldown - 1);
 
-    // Save PRNG seed before pad_poll overwrites $3C (RAND_SEED and PAD_STATE
-    // share the same address in cc65 neslib — controller input provides entropy).
+    // Save PRNG seed before pad_poll — RAND_SEED ($3C) and PAD_STATE share the
+    // same address in cc65 neslib, so pad_poll overwrites the seed every frame.
     byte rand_save = peek(0x083C);
     byte pad = (byte)pad_poll(0);
-    // Restore PRNG seed after reading controller
     poke(0x083C, rand_save);
 
-    if (((byte)(pad & (byte)PAD.A)) != 0)
+    if ((pad & (byte)PAD.A) != 0)
     {
         if (fire_cooldown == 0)
         {
@@ -255,22 +252,22 @@ while (true)
     }
 
     // --- Player movement (clamp to stay within bounds) ---
-    if (((byte)(pad & (byte)PAD.LEFT)) != 0)
+    if ((pad & (byte)PAD.LEFT) != 0)
     {
         if (player_x > 8 + PLAYER_SPEED) player_x = (byte)(player_x - PLAYER_SPEED);
         else player_x = 8;
     }
-    if (((byte)(pad & (byte)PAD.RIGHT)) != 0)
+    if ((pad & (byte)PAD.RIGHT) != 0)
     {
         if (player_x < 240 - PLAYER_SPEED) player_x = (byte)(player_x + PLAYER_SPEED);
         else player_x = 240;
     }
-    if (((byte)(pad & (byte)PAD.UP)) != 0)
+    if ((pad & (byte)PAD.UP) != 0)
     {
         if (player_y > 32 + PLAYER_SPEED) player_y = (byte)(player_y - PLAYER_SPEED);
         else player_y = 32;
     }
-    if (((byte)(pad & (byte)PAD.DOWN)) != 0)
+    if ((pad & (byte)PAD.DOWN) != 0)
     {
         if (player_y < 224 - PLAYER_SPEED) player_y = (byte)(player_y + PLAYER_SPEED);
         else player_y = 224;
@@ -474,48 +471,48 @@ static byte rnd_range(byte lo, byte hi)
 }
 
 // Sound effect: player fires
-// Pulse1: ctrl=0x7A (duty 01, decay, vol 0x0A), sweep=0, timer_lo=0x80, timer_hi=0xF9
-// All poke values MUST be constants (poke handler breaks with ldarg/ldloc values)
+// Pulse1: ctrl=0x4A (duty 01, envelope decay, period 0x0A), sweep=0, timer_lo=0x80, timer_hi=0xF9
+// poke values can be constants or local variables, but not function parameters (ldarg)
 static void sfx_shoot()
 {
-    poke(APU_PULSE1_CTRL, 0x7A);
+    poke(APU_PULSE1_CTRL, 0x4A);
     poke(APU_PULSE1_SWEEP, 0x00);
     poke(APU_PULSE1_TIMER_LO, 0x80);
     poke(APU_PULSE1_TIMER_HI, 0xF9);
 }
 
 // Sound effect: enemy hit
-// Noise: ctrl=0x3A (decay, vol 0x0A), period=4, length=0xF8
+// Noise: ctrl=0x0A (envelope decay, period 0x0A), period=4, length=0xF8
 static void sfx_hit()
 {
-    poke(APU_NOISE_CTRL, 0x3A);
+    poke(APU_NOISE_CTRL, 0x0A);
     poke(APU_NOISE_PERIOD, 0x04);
     poke(APU_NOISE_LENGTH, 0xF8);
 }
 
 // Sound effect: explosion
-// Noise: ctrl=0x3F (decay, vol 0x0F), period=6, length=0xF8
-// Triangle: ctrl=0xFF, timer_lo=0x40, timer_hi=0xF9
+// Noise: ctrl=0x0F (envelope decay, period 0x0F), period=6, length=0xF8
+// Triangle: ctrl=0x1F (linear counter=31, ~0.13s thump), timer_lo=0x40, timer_hi=0xF9
 static void sfx_explode()
 {
-    poke(APU_NOISE_CTRL, 0x3F);
+    poke(APU_NOISE_CTRL, 0x0F);
     poke(APU_NOISE_PERIOD, 0x06);
     poke(APU_NOISE_LENGTH, 0xF8);
-    poke(APU_TRIANGLE_CTRL, 0xFF);
+    poke(APU_TRIANGLE_CTRL, 0x1F);
     poke(APU_TRIANGLE_TIMER_LO, 0x40);
     poke(APU_TRIANGLE_TIMER_HI, 0xF9);
 }
 
 // Sound effect: player destroyed
-// Pulse1: ctrl=0xBF (duty 10, decay, vol 0x0F), sweep=0, timer_lo=0x00, timer_hi=0xFA
-// Noise: ctrl=0x3F (decay, vol 0x0F), period=8, length=0xF8
+// Pulse1: ctrl=0x8F (duty 10, envelope decay, period 0x0F), sweep=0, timer_lo=0x00, timer_hi=0xFA
+// Noise: ctrl=0x0F (envelope decay, period 0x0F), period=8, length=0xF8
 static void sfx_player_die()
 {
-    poke(APU_PULSE1_CTRL, 0xBF);
+    poke(APU_PULSE1_CTRL, 0x8F);
     poke(APU_PULSE1_SWEEP, 0x00);
     poke(APU_PULSE1_TIMER_LO, 0x00);
     poke(APU_PULSE1_TIMER_HI, 0xFA);
-    poke(APU_NOISE_CTRL, 0x3F);
+    poke(APU_NOISE_CTRL, 0x0F);
     poke(APU_NOISE_PERIOD, 0x08);
     poke(APU_NOISE_LENGTH, 0xF8);
 }
