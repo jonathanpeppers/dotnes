@@ -48,6 +48,25 @@ partial class IL2NESWriter
     void HandleLdsfld(string fieldName)
     {
         var addr = GetOrAllocateStaticField(fieldName);
+
+        // Preserve any pending value in A before clobbering it,
+        // mirroring WriteLdloc behavior.
+        if (_ushortInAX)
+        {
+            EmitJSR("pushax");
+            UsedMethods?.Add("pushax");
+            _ushortInAX = false;
+        }
+        else if (_runtimeValueInA && !LastLDA)
+        {
+            Emit(Opcode.STA, AddressMode.ZeroPage, (byte)NESConstants.TEMP);
+            _savedRuntimeToTemp = true;
+        }
+        else if (LastLDA)
+        {
+            EmitJSR("pusha");
+        }
+
         Emit(Opcode.LDA, AddressMode.Absolute, addr);
         _runtimeValueInA = true;
         _immediateInA = null;

@@ -132,6 +132,15 @@ class LocalVariableManager
         {
             foreach (var kvp in value)
                 _staticFieldAddresses[kvp.Key] = kvp.Value;
+
+            // Advance LocalCount so subsequent allocations don't overlap
+            // any pre-allocated static field addresses.
+            foreach (var addr in value.Values)
+            {
+                int slotsPastBase = addr - _baseAddress + 1;
+                if (slotsPastBase > LocalCount)
+                    LocalCount = slotsPastBase;
+            }
         }
     }
 

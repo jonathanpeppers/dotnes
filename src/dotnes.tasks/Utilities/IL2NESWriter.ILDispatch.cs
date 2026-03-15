@@ -264,6 +264,8 @@ partial class IL2NESWriter
                 // When truncating from ushort to byte, discard high byte
                 if (_ushortInAX)
                     _ushortInAX = false;
+                // A now holds a transformed value, no longer directly from a static field
+                _lastStaticFieldAddress = null;
                 break;
             case ILOpCode.Conv_u2:
             case ILOpCode.Conv_u4:
@@ -272,6 +274,7 @@ partial class IL2NESWriter
             case ILOpCode.Conv_i2:
             case ILOpCode.Conv_i4:
                 // No-op: sign/zero extension is irrelevant on 8-bit 6502
+                _lastStaticFieldAddress = null;
                 break;
             case ILOpCode.Stelem_i1:
             case ILOpCode.Stelem_i2:
@@ -288,6 +291,7 @@ partial class IL2NESWriter
                 break;
             case ILOpCode.Mul:
                 {
+                    _lastStaticFieldAddress = null;
                     int val2 = Stack.Pop();
                     int val1 = Stack.Count > 0 ? Stack.Pop() : 0;
 
@@ -369,6 +373,7 @@ partial class IL2NESWriter
                 break;
             case ILOpCode.Div:
                 {
+                    _lastStaticFieldAddress = null;
                     int divisor = Stack.Pop();
                     int dividend = Stack.Count > 0 ? Stack.Pop() : 0;
 
@@ -440,6 +445,7 @@ partial class IL2NESWriter
                 break;
             case ILOpCode.Rem:
                 {
+                    _lastStaticFieldAddress = null;
                     int divisor = Stack.Pop();
                     int dividend = Stack.Count > 0 ? Stack.Pop() : 0;
 
@@ -506,6 +512,7 @@ partial class IL2NESWriter
             case ILOpCode.Shr:
             case ILOpCode.Shr_un:
                 {
+                    _lastStaticFieldAddress = null;
                     int shiftCount = Stack.Pop();
                     int value = Stack.Count > 0 ? Stack.Pop() : 0;
 
@@ -559,6 +566,7 @@ partial class IL2NESWriter
                 break;
             case ILOpCode.Shl:
                 {
+                    _lastStaticFieldAddress = null;
                     int shiftCount = Stack.Pop();
                     int value = Stack.Count > 0 ? Stack.Pop() : 0;
 
@@ -588,6 +596,7 @@ partial class IL2NESWriter
                 break;
             case ILOpCode.And:
                 {
+                    _lastStaticFieldAddress = null;
                     int mask = Stack.Pop();
                     int value = Stack.Count > 0 ? Stack.Pop() : 0;
 
@@ -632,6 +641,7 @@ partial class IL2NESWriter
                 break;
             case ILOpCode.Or:
                 {
+                    _lastStaticFieldAddress = null;
                     int orMask = Stack.Pop();
                     int orValue = Stack.Count > 0 ? Stack.Pop() : 0;
 
