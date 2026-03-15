@@ -174,7 +174,8 @@ class Decompiler
         }
 
         // Known byte-pattern signatures for final built-in subroutines.
-        // Each entry maps a byte sequence at the start of the subroutine to its name.
+        // These patterns match the first few bytes of the 6502 code emitted by
+        // BuiltInSubroutines.cs. If that file changes, these patterns must be updated.
         var patterns = new (string Name, byte[] Signature)[]
         {
             // pusha: LDY $22; BEQ ...  (A4 22 F0)
@@ -203,8 +204,7 @@ class Decompiler
             if (targetOffset < 0 || targetOffset >= _rom.PrgRom.Length - 6)
                 continue;
 
-            // Some subroutines have a 2-byte prefix (LDY #$00 / LDA ($22),Y) before the entry
-            // Try matching at the target address and also 4 bytes in if the prefix is present
+            // Try matching at the target address
             foreach (var (name, sig) in patterns)
             {
                 if (_symbolTable.ContainsValue(name))
