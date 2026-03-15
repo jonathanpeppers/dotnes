@@ -114,6 +114,8 @@ public class TranspilerTests
     [InlineData("shoot2", false, false, 2, 2, 0)]
     [InlineData("conio", true)]
     [InlineData("conio", false)]
+    [InlineData("procgen", true)]
+    [InlineData("procgen", false)]
     public Task Write(string name, bool debug, bool verticalMirroring = false, int mapper = 0, int prgBanks = 2, int chrBanks = 1)
     {
         var configuration = debug ? "debug" : "release";

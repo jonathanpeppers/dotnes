@@ -57,6 +57,8 @@ cd samples/hello && dotnet run  # Build + run in emulator
 
 The Transpile target automatically creates `.nes` from `.dll` + `*.s` files.
 
+**⚠️ When adding new public MSBuild properties**, always update [docs/msbuild-properties.md](docs/msbuild-properties.md) with the property name, type, default value, description, and an XML example.
+
 ## Testing Patterns
 Tests in [src/dotnes.tests/](src/dotnes.tests/) use **Verify snapshots**:
 - Test data DLLs live in `Data/` folder (pre-compiled debug/release)
