@@ -29,7 +29,7 @@
 | **flicker** ⬇️ | **statusbar** ⬇️ |
 | ![flicker](samples/flicker/flicker.gif) | ![statusbar](samples/statusbar/statusbar.gif) |
 
-> See the [samples/](samples/) folder for all 41 sample projects. Generate images with `dotnet run scripts/record-all-samples.cs`.
+> See the [samples/](samples/) folder for all 42 sample projects. Generate images with `dotnet run scripts/record-all-samples.cs`.
 
 ## Contributing
 
@@ -292,7 +292,7 @@ block.Emit(STA_zpg(TEMP))
 
 ## Limitations
 
-This is a hobby project, so there are around 41 C# sample programs that are known to work. But to
+This is a hobby project, so there are around 42 C# sample programs that are known to work. But to
 get an idea of what is not available:
 
 * No runtime

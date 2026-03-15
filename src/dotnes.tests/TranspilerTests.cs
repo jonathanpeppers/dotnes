@@ -127,7 +127,8 @@ public class TranspilerTests
         // CHR RAM samples (chrBanks=0) don't need a CHR assembly file
         if (chrBanks > 0)
         {
-            // Check for numbered CHR bank files (e.g., chr_slideshow_0.s, chr_slideshow_1.s)
+            // Check for numbered CHR bank files (e.g., chr_slideshow_0.s, chr_slideshow_1.s).
+            // Files must be numbered sequentially starting from 0 with no gaps.
             bool foundNumbered = false;
             for (int b = 0; b < chrBanks; b++)
             {
@@ -138,9 +139,9 @@ public class TranspilerTests
                     assemblyReaders.Add(new AssemblyReader(new StreamReader(numberedStream)));
                     foundNumbered = true;
                 }
-                else if (foundNumbered)
+                else
                 {
-                    break; // Stop looking if we found some but hit a gap
+                    break; // Sequential numbering required — stop at first missing file
                 }
             }
 

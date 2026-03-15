@@ -84,8 +84,7 @@ class Transpiler : IDisposable
                         if (remainder > 0)
                         {
                             int bankPadding = NESWriter.CHR_ROM_BLOCK_SIZE - remainder;
-                            for (int i = 0; i < bankPadding; i++)
-                                chrBytes.Add(0);
+                            chrBytes.AddRange(new byte[bankPadding]);
                         }
                     }
                 }
