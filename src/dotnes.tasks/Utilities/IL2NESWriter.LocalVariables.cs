@@ -145,6 +145,7 @@ partial class IL2NESWriter
 
     void WriteLdc(ushort operand)
     {
+        _lastStaticFieldAddress = null;
         // Check if next instruction can handle the constant directly with A's current value
         bool nextIsAddSub = Instructions is not null && Index + 1 < Instructions.Length &&
             Instructions[Index + 1].OpCode is ILOpCode.Add or ILOpCode.Sub;
@@ -217,6 +218,7 @@ partial class IL2NESWriter
     {
         _ushortInAX = false;
         _savedConstantViaPusha = false;
+        _lastStaticFieldAddress = null;
         if (local.LabelName is not null)
         {
             // This local holds a byte array label reference

@@ -106,8 +106,12 @@ public class TranspilerTests
     [InlineData("pong", false)]
     [InlineData("transtable", true, false, 0, 2, 0)]
     [InlineData("transtable", false, false, 0, 2, 0)]
+    [InlineData("snake", true)]
+    [InlineData("snake", false)]
     [InlineData("monobitmap", true, false, 2, 2, 0)]
     [InlineData("monobitmap", false, false, 2, 2, 0)]
+    [InlineData("shoot2", true, false, 2, 2, 0)]
+    [InlineData("shoot2", false, false, 2, 2, 0)]
     public Task Write(string name, bool debug, bool verticalMirroring = false, int mapper = 0, int prgBanks = 2, int chrBanks = 1)
     {
         var configuration = debug ? "debug" : "release";

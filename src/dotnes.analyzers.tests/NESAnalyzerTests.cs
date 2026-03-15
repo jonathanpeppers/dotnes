@@ -188,6 +188,24 @@ public class NESAnalyzerTests
     }
 
     [Fact]
+    public async Task NES002_PartialClassProgram_NoDiagnostic()
+    {
+        // partial class Program is allowed for declaring static fields
+        // shared between top-level statements and callback methods
+        var test = """
+            byte x = 0;
+            while (true) ;
+
+            partial class Program
+            {
+                static byte irqCount;
+            }
+            """;
+
+        await VerifyAsync(test);
+    }
+
+    [Fact]
     public async Task NES002_NoClassDeclaration_NoDiagnostic()
     {
         var test = """

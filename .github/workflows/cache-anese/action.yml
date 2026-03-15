@@ -1,0 +1,13 @@
+name: Cache ANESE Downloads
+description: Caches ANESE emulator downloads to speed up builds and avoid download failures
+
+runs:
+  using: composite
+  steps:
+  - name: Cache ANESE downloads
+    uses: actions/cache@v4
+    with:
+      path: |
+        src/dotnes.anese/obj/Debug
+        src/dotnes.anese/obj/Release
+      key: anese-${{ runner.os }}-${{ hashFiles('src/dotnes.anese/dotnes.anese.csproj') }}
