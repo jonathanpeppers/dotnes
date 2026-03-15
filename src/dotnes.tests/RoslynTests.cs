@@ -3310,4 +3310,29 @@ public class RoslynTests
         Assert.True(ldc2Index > ldloc + 6,
             $"No JSR pusha after loading local x before constant arg. Hex: {hex}");
     }
+
+    [Fact]
+    public void ByteMaxValue()
+    {
+        // Regression test: byte value 255 must use 1-byte store path.
+        // Without the <= byte.MaxValue fix, 255 falls to the ushort branch
+        // which calls RemoveLastInstructions(2) when only 1 instruction was
+        // emitted by WriteLdc(byte), corrupting the preceding JSR.
+        var bytes = GetProgramBytes("""
+            pal_col(0, 0x30);
+            byte x = 255;
+            pal_col(1, x);
+            while (true) ;
+            """);
+
+        var hex = Convert.ToHexString(bytes);
+
+        // Verify correct 1-byte store: LDA #$FF (A9FF), STA $0325 (8D2503)
+        Assert.Contains("A9FF", hex);
+        Assert.Contains("8D2503", hex);
+
+        // Verify no 2-byte ushort high-byte store: STX $0326 (8E2603)
+        // If the ushort branch ran, it would emit STX for the high byte
+        Assert.DoesNotContain("8E2603", hex);
+    }
 }
