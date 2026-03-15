@@ -16,7 +16,7 @@ class Transpiler : IDisposable
     readonly MetadataReader _reader;
     readonly IList<AssemblyReader> _assemblyFiles;
     readonly ILogger _logger;
-    readonly bool _verticalMirroring;
+    readonly string _mirroring;
     readonly int _mapper;
     readonly int _prgBanks;
     readonly int _chrBanks;
@@ -44,13 +44,13 @@ class Transpiler : IDisposable
     /// </summary>
     public Dictionary<string, (int argCount, bool hasReturnValue)> ExternMethods { get; } = new(StringComparer.Ordinal);
 
-    public Transpiler(Stream stream, IList<AssemblyReader> assemblyFiles, ILogger? logger = null, bool verticalMirroring = false, int mapper = 0, int prgBanks = 2, int chrBanks = 1)
+    public Transpiler(Stream stream, IList<AssemblyReader> assemblyFiles, ILogger? logger = null, string mirroring = "Horizontal", int mapper = 0, int prgBanks = 2, int chrBanks = 1)
     {
         _pe = new PEReader(stream);
         _reader = _pe.GetMetadataReader();
         _assemblyFiles = assemblyFiles;
         _logger = logger ?? new NullLogger();
-        _verticalMirroring = verticalMirroring;
+        _mirroring = mirroring;
         _mapper = mapper;
         _prgBanks = prgBanks;
         _chrBanks = chrBanks;
@@ -116,7 +116,7 @@ class Transpiler : IDisposable
         writer.Write((byte)_prgBanks); // PRG_ROM_SIZE (in 16KB units)
         writer.Write((byte)_chrBanks); // CHR_ROM_SIZE (in 8KB units, 0 = CHR RAM)
         // Flags6: bit 0 = mirroring, bits 4-7 = mapper lower nibble
-        byte flags6 = (byte)((_verticalMirroring ? 1 : 0) | ((_mapper & 0x0F) << 4));
+        byte flags6 = (byte)((string.Equals(_mirroring, "Vertical", StringComparison.OrdinalIgnoreCase) ? 1 : 0) | ((_mapper & 0x0F) << 4));
         writer.Write(flags6);
         // Flags7: bits 4-7 = mapper upper nibble
         byte flags7 = (byte)((_mapper & 0xF0));

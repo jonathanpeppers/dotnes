@@ -16,7 +16,7 @@
         AssemblyFiles="@(NESAssembly)"
         OutputPath="$(NESTargetPath)"
         DiagnosticLogging="$(NESDiagnosticLogging)"
-        NESVerticalMirroring="$(NESVerticalMirroring)"
+        NESMirroring="$(NESMirroring)"
         NESMapper="$(NESMapper)"
         NESPrgBanks="$(NESPrgBanks)"
         NESChrBanks="$(NESChrBanks)"
