@@ -532,24 +532,24 @@ public static class NESLib
     public const byte MMC1_MIRROR_HORIZONTAL = 3;
 
     /// <summary>
-    /// write a 5-bit value to an MMC1 register using the serial shift register protocol.
+    /// Write a 5-bit value to an MMC1 register using the serial shift register protocol.
     /// MMC1 requires writing one bit at a time (5 writes total) to latch a value.
     /// The addr must be one of the MMC1_* register constants.
     /// </summary>
     public static void mmc1_write(ushort addr, byte value) => throw null!;
 
     /// <summary>
-    /// switch the MMC1 PRG bank by writing to the PRG bank register ($E000).
+    /// Switch the MMC1 PRG bank by writing to the PRG bank register ($E000).
     /// </summary>
     public static void mmc1_set_prg_bank(byte bank) => throw null!;
 
     /// <summary>
-    /// switch both MMC1 CHR banks by writing to CHR bank 0 ($A000) and CHR bank 1 ($C000).
+    /// Switch both MMC1 CHR banks by writing to CHR bank 0 ($A000) and CHR bank 1 ($C000).
     /// </summary>
     public static void mmc1_set_chr_bank(byte bank0, byte bank1) => throw null!;
 
     /// <summary>
-    /// set the MMC1 mirroring mode by writing to the Control register ($8000).
+    /// Set the MMC1 mirroring mode by writing to the Control register ($8000).
     /// Use MMC1_MIRROR_* constants for the mode value.
     /// </summary>
     public static void mmc1_set_mirroring(byte mode) => throw null!;

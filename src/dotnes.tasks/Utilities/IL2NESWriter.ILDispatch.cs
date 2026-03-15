@@ -1469,7 +1469,7 @@ partial class IL2NESWriter
                         {
                             // mmc1_write(ushort addr, byte value) -> serial shift register write
                             // MMC1 requires writing 5 bits one at a time via STA to the register address.
-                            // Protocol: reset with bit 7 set, then write bit 0 five times using LSR A.
+                            // Protocol: reset with bit 7 set, then write 5 bits using LSR A between each STA.
                             if (Stack.Count >= 2)
                             {
                                 int value = Stack.Pop();
@@ -1507,15 +1507,15 @@ partial class IL2NESWriter
                                 }
 
                                 // Write 5 bits via STA + LSR sequence
-                                Emit(Opcode.STA, AddressMode.Absolute, (ushort)addr); // bit 0
+                                Emit(Opcode.STA, AddressMode.Absolute, (ushort)addr); // write 1 (bit 0)
                                 Emit(Opcode.LSR, AddressMode.Accumulator);
-                                Emit(Opcode.STA, AddressMode.Absolute, (ushort)addr); // bit 1
+                                Emit(Opcode.STA, AddressMode.Absolute, (ushort)addr); // write 2 (bit 1)
                                 Emit(Opcode.LSR, AddressMode.Accumulator);
-                                Emit(Opcode.STA, AddressMode.Absolute, (ushort)addr); // bit 2
+                                Emit(Opcode.STA, AddressMode.Absolute, (ushort)addr); // write 3 (bit 2)
                                 Emit(Opcode.LSR, AddressMode.Accumulator);
-                                Emit(Opcode.STA, AddressMode.Absolute, (ushort)addr); // bit 3
+                                Emit(Opcode.STA, AddressMode.Absolute, (ushort)addr); // write 4 (bit 3)
                                 Emit(Opcode.LSR, AddressMode.Accumulator);
-                                Emit(Opcode.STA, AddressMode.Absolute, (ushort)addr); // bit 4 (latches)
+                                Emit(Opcode.STA, AddressMode.Absolute, (ushort)addr); // write 5 (bit 4, latches)
                             }
                             _lastLoadedLocalIndex = null;
                             _lastStaticFieldAddress = null;
