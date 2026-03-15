@@ -12,7 +12,7 @@ class LocalVariableManager
 {
     readonly ushort _baseAddress;
     readonly Dictionary<int, string> _structLocalTypes = new();
-    Dictionary<string, ushort> _staticFieldAddresses = new(StringComparer.Ordinal);
+    readonly Dictionary<string, ushort> _staticFieldAddresses = new(StringComparer.Ordinal);
 
     public LocalVariableManager(ushort baseAddress = LocalStackBase)
     {
