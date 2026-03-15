@@ -157,11 +157,14 @@ class Transpiler : IDisposable
         // Write CHR ROM (skip when chrBanks=0, which means CHR RAM mode)
         if (_chrBanks > 0 && chrData != null)
         {
+            int totalChrSize = _chrBanks * NESWriter.CHR_ROM_BLOCK_SIZE;
+            if (chrData.Length > totalChrSize)
+                throw new InvalidOperationException($"CHR data ({chrData.Length} bytes) exceeds declared CHR ROM size ({totalChrSize} bytes for {_chrBanks} bank(s)). Check NESChrBanks or CHR assembly files.");
+
             _logger.WriteLine($"Writing CHR ROM ({chrData.Length} bytes)...");
             writer.Write(chrData);
             
             // Pad CHR ROM to total CHR size (_chrBanks * 8KB)
-            int totalChrSize = _chrBanks * NESWriter.CHR_ROM_BLOCK_SIZE;
             int chrPadding = totalChrSize - chrData.Length;
             for (int i = 0; i < chrPadding; i++)
                 writer.Write((byte)0);
