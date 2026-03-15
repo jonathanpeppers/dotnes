@@ -3447,6 +3447,7 @@ public class RoslynTests
         // x at $0325, y at $0326.
         // For my_func(x, (byte)(y + 1)):
         //   ldloc.0 → LDA $0325 (load x)
+        //   JSR pusha           (preserve x on cc65 stack)
         //   ldloc.1 → LDA $0326 (load y)
         //   ldc.i4.1 → ...
         //   add → ...
@@ -3457,9 +3458,34 @@ public class RoslynTests
         Assert.True(ldlocX >= 0, $"LDA $0325 (load local x) not found. Hex: {hex}");
         int ldlocY = hex.IndexOf("AD2603", ldlocX + 6);
         Assert.True(ldlocY >= 0, $"LDA $0326 (load local y) not found after x. Hex: {hex}");
-        Assert.True(ldlocY > ldlocX + 6,
-            $"No JSR pusha between loading x and computed arg y+1 — first arg will be lost. " +
-            $"LDA $0325 at {ldlocX}, LDA $0326 at {ldlocY}. Hex: {hex}");
+        // The 6 hex chars before LDA $0326 should be a JSR (20 xx xx) for pusha
+        Assert.True(ldlocY >= 6, $"LDA $0326 too early for preceding JSR. Hex: {hex}");
+        Assert.Equal("20", hex.Substring(ldlocY - 6, 2));
+    }
+
+    [Fact]
+    public void ByteMaxValue()
+    {
+        // Regression test: byte value 255 must use 1-byte store path.
+        // Without the <= byte.MaxValue fix, 255 falls to the ushort branch
+        // which calls RemoveLastInstructions(2) when only 1 instruction was
+        // emitted by WriteLdc(byte), corrupting the preceding JSR.
+        var bytes = GetProgramBytes("""
+            pal_col(0, 0x30);
+            byte x = 255;
+            pal_col(1, x);
+            while (true) ;
+            """);
+
+        var hex = Convert.ToHexString(bytes);
+
+        // Verify correct 1-byte store: LDA #$FF (A9FF), STA $0325 (8D2503)
+        Assert.Contains("A9FF", hex);
+        Assert.Contains("8D2503", hex);
+
+        // Verify no 2-byte ushort high-byte store: STX $0326 (8E2603)
+        // If the ushort branch ran, it would emit STX for the high byte
+        Assert.DoesNotContain("8E2603", hex);
     }
 
     [Fact]
