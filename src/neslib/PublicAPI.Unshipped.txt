@@ -47,6 +47,7 @@ static NES.NESLib.MSB(ushort x) -> byte
 static NES.NESLib.apu_init() -> void
 static NES.NESLib.bcd_add(ushort a, ushort b) -> ushort
 static NES.NESLib.cli() -> void
+static NES.NESLib.cnrom_set_chr_bank(byte bank) -> void
 static NES.NESLib.famitone_init(string! musicDataLabel) -> void
 static NES.NESLib.irq_set_callback(delegate*<void> callback) -> void
 static NES.NESLib.memfill(object! dst, byte value, uint len) -> void

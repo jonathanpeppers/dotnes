@@ -58,16 +58,42 @@ class Transpiler : IDisposable
 
     public void Write(Stream stream)
     {
-        Segment? chr_rom = null;
+        byte[]? chrData = null;
 
         if (_chrBanks > 0)
         {
             if (_assemblyFiles.Count == 0)
-                throw new InvalidOperationException("At least one 'chr_generic.s' file must be present!");
+                throw new InvalidOperationException("At least one assembly file with a 'CHARS' segment must be present!");
 
-            var assemblyReader = _assemblyFiles.FirstOrDefault(a => Path.GetFileName(a.Path) == "chr_generic.s") ?? _assemblyFiles[0];
-            chr_rom = assemblyReader.GetSegments().FirstOrDefault(s => s.Name == "CHARS") ??
-                throw new InvalidOperationException($"At least one 'CHARS' segment must be present in: {assemblyReader.Path}");
+            // Collect CHARS segments from all assembly files and concatenate them.
+            // This supports both single-file CHR (e.g., chr_generic.s with one bank)
+            // and multi-file CHR (e.g., chr_slideshow_0.s + chr_slideshow_1.s for CNROM).
+            // Each CHARS segment is padded to the 8 KB bank boundary so that multiple
+            // banks align correctly (important for mappers like CNROM that switch CHR banks).
+            var chrBytes = new List<byte>();
+            foreach (var assemblyFile in _assemblyFiles)
+            {
+                foreach (var segment in assemblyFile.GetSegments())
+                {
+                    if (segment.Name == "CHARS")
+                    {
+                        chrBytes.AddRange(segment.Bytes);
+
+                        // Pad this segment to the next 8 KB boundary
+                        int remainder = segment.Bytes.Length % NESWriter.CHR_ROM_BLOCK_SIZE;
+                        if (remainder > 0)
+                        {
+                            int bankPadding = NESWriter.CHR_ROM_BLOCK_SIZE - remainder;
+                            chrBytes.AddRange(new byte[bankPadding]);
+                        }
+                    }
+                }
+            }
+
+            if (chrBytes.Count == 0)
+                throw new InvalidOperationException("At least one 'CHARS' segment must be present in the assembly files!");
+
+            chrData = chrBytes.ToArray();
         }
 
         _logger.WriteLine($"Building program...");
@@ -129,14 +155,17 @@ class Transpiler : IDisposable
         writer.Write((byte)(irq_data >> 8));
 
         // Write CHR ROM (skip when chrBanks=0, which means CHR RAM mode)
-        if (_chrBanks > 0 && chr_rom != null)
+        if (_chrBanks > 0 && chrData != null)
         {
-            _logger.WriteLine($"Writing CHR ROM...");
-            writer.Write(chr_rom.Bytes);
+            int totalChrSize = _chrBanks * NESWriter.CHR_ROM_BLOCK_SIZE;
+            if (chrData.Length > totalChrSize)
+                throw new InvalidOperationException($"CHR data ({chrData.Length} bytes) exceeds declared CHR ROM size ({totalChrSize} bytes for {_chrBanks} bank(s)). Check NESChrBanks or CHR assembly files.");
+
+            _logger.WriteLine($"Writing CHR ROM ({chrData.Length} bytes)...");
+            writer.Write(chrData);
             
             // Pad CHR ROM to total CHR size (_chrBanks * 8KB)
-            int totalChrSize = _chrBanks * NESWriter.CHR_ROM_BLOCK_SIZE;
-            int chrPadding = totalChrSize - chr_rom.Bytes.Length;
+            int chrPadding = totalChrSize - chrData.Length;
             for (int i = 0; i < chrPadding; i++)
                 writer.Write((byte)0);
         }
