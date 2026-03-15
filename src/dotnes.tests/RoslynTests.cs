@@ -1445,6 +1445,46 @@ public class RoslynTests
     }
 
     [Fact]
+    public void PeekSmallConstant()
+    {
+        // peek(0x003C) uses ldc.i4.s (short form) since 0x3C fits in a byte.
+        // The transpiler must handle 1-instruction address loads (LDA only)
+        // instead of the 2-instruction ushort pattern (LDX + LDA).
+        var bytes = GetProgramBytes(
+            """
+            byte value = peek(0x003C);
+            pal_col(0, value);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        Assert.Contains("AD3C00", hex);  // LDA $003C (absolute)
+    }
+
+    [Fact]
+    public void PokeSmallConstant()
+    {
+        // poke(0x003C, value) uses ldc.i4.s for the address since 0x3C fits in a byte.
+        // The transpiler must handle 1-instruction address loads (LDA only)
+        // instead of the 2-instruction ushort pattern (LDX + LDA).
+        var bytes = GetProgramBytes(
+            """
+            poke(0x003C, 0x07);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        Assert.Contains("A907", hex);    // LDA #$07
+        Assert.Contains("8D3C00", hex);  // STA $003C (absolute)
+    }
+
+    [Fact]
     public void WaitvsyncEmitsJsr()
     {
         // waitvsync() should emit JSR to waitvsync subroutine

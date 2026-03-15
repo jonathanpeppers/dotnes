@@ -1427,8 +1427,9 @@ partial class IL2NESWriter
                                 bool valueIsStaticField = _lastStaticFieldAddress.HasValue;
 
                                 // Remove previously emitted instructions:
-                                // LDX #hi, LDA #lo, JSR pusha, LDA #value = 4 instructions
-                                RemoveLastInstructions(4);
+                                // ushort addr: LDX #hi, LDA #lo, JSR pushax, LDA #value = 4 instructions
+                                // byte addr:   LDA #lo, JSR pusha, LDA #value = 3 instructions
+                                RemoveLastInstructions(addr > byte.MaxValue ? 4 : 3);
 
                                 if (valueIsLocal)
                                 {
@@ -1462,8 +1463,9 @@ partial class IL2NESWriter
                             {
                                 int addr = Stack.Pop();
                                 // Remove previously emitted instructions:
-                                // LDX #hi, LDA #lo = 2 instructions
-                                RemoveLastInstructions(2);
+                                // ushort addr: LDX #hi, LDA #lo = 2 instructions
+                                // byte addr:   LDA #lo = 1 instruction
+                                RemoveLastInstructions(addr > byte.MaxValue ? 2 : 1);
                                 Emit(Opcode.LDA, AddressMode.Absolute, (ushort)addr);
                                 _runtimeValueInA = true;
                                 _immediateInA = null;
