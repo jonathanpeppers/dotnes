@@ -11,22 +11,18 @@ pal_col(1, 0x30); // white text
 // read saved counter from SRAM
 byte count = peek(SRAM_START);
 
-// draw title
+// draw title and instructions
 vram_adr(NTADR_A(2, 2));
 vram_write("BATTERY SRAM DEMO");
-
-// draw instructions
 vram_adr(NTADR_A(2, 6));
 vram_write("A = ADD 1");
 vram_adr(NTADR_A(2, 8));
 vram_write("B = RESET");
-
-// draw the counter label
 vram_adr(NTADR_A(2, 12));
 vram_write("COUNT:");
 
-// show initial value
-update_display(count);
+// show initial value using vram_put (one tile per digit)
+display_count(count);
 
 ppu_on_all();
 
@@ -38,28 +34,18 @@ while (true)
     {
         count++;
         poke(SRAM_START, count);
-        update_display(count);
+        display_count(count);
     }
     if ((pad & (byte)PAD.B) != 0)
     {
         count = 0;
         poke(SRAM_START, count);
-        update_display(count);
+        display_count(count);
     }
 }
 
-static void update_display(byte value)
+static void display_count(byte value)
 {
-    // display as 3 decimal digits at row 12, col 9
-    byte hundreds = (byte)(value / 100);
-    byte tens = (byte)((value / 10) % 10);
-    byte ones = (byte)(value % 10);
-
-    byte[] buf = new byte[3];
-    buf[0] = (byte)(hundreds + 0x30);
-    buf[1] = (byte)(tens + 0x30);
-    buf[2] = (byte)(ones + 0x30);
-
-    vram_adr(NTADR_A(9, 12));
-    vram_write(buf, 3);
+    vram_adr(0x2189);
+    vram_put((byte)((value & 0x0F) + 0x30));
 }
