@@ -219,7 +219,7 @@ for (byte i = 0; i < MAX_STARS; i++)
 {
     star_x[i] = rand8();
     star_y[i] = rand8();
-    star_speed[i] = (byte)(1 + (byte)(rand8() & 0x01));
+    star_speed[i] = (byte)((byte)(rand8() & 0x01) + 1);
 }
 
 // === Main game loop ===
@@ -347,9 +347,15 @@ while (true)
             {
                 if (enemy_active[ei] != 0)
                 {
-                    byte dx = abs_diff(bullet_x[bi], enemy_x[ei]);
-                    byte dy = abs_diff(bullet_y[bi], enemy_y[ei]);
-                    if (dx < HIT_DISTANCE && dy < HIT_DISTANCE)
+                    // Branchless abs_diff check: |a-b| < N ⟺ (byte)(a-b+N-1) < 2N-1
+                    // Avoids user-method transpiler bugs (missing early return, pusha).
+                    // Uses nested ifs so each value is compared immediately (before
+                    // the next array subtraction overwrites the transpiler's TEMP).
+                    byte dxc = (byte)((byte)(bullet_x[bi] - enemy_x[ei]) + (HIT_DISTANCE - 1));
+                    if (dxc < (2 * HIT_DISTANCE - 1))
+                    {
+                    byte dyc = (byte)((byte)(bullet_y[bi] - enemy_y[ei]) + (HIT_DISTANCE - 1));
+                    if (dyc < (2 * HIT_DISTANCE - 1))
                     {
                         // Start explosion
                         for (byte xi = 0; xi < MAX_EXPLOSIONS; xi++)
@@ -375,6 +381,7 @@ while (true)
                         if (d0 > 0x0A) d0 = 0x01;
                         break;
                     }
+                    }
                 }
             }
         }
@@ -385,9 +392,12 @@ while (true)
     {
         if (enemy_active[ei] != 0)
         {
-            byte dx = abs_diff(player_x, enemy_x[ei]);
-            byte dy = abs_diff(player_y, enemy_y[ei]);
-            if (dx < HIT_DISTANCE && dy < HIT_DISTANCE)
+            // Branchless abs_diff check (see bullet-enemy collision comment)
+            byte dxc = (byte)((byte)(player_x - enemy_x[ei]) + (HIT_DISTANCE - 1));
+            if (dxc < (2 * HIT_DISTANCE - 1))
+            {
+            byte dyc = (byte)((byte)(player_y - enemy_y[ei]) + (HIT_DISTANCE - 1));
+            if (dyc < (2 * HIT_DISTANCE - 1))
             {
                 enemy_active[ei] = 0;
                 sfx_player_die();
@@ -397,6 +407,7 @@ while (true)
                 ppu_wait_nmi();
                 ppu_wait_nmi();
                 pal_spr_bright(4);
+            }
             }
         }
     }
@@ -460,13 +471,6 @@ static byte rnd_range(byte lo, byte hi)
     byte range = (byte)(hi - lo);
     byte r = rand8();
     return (byte)((byte)(r % range) + lo);
-}
-
-// Absolute difference of two bytes
-static byte abs_diff(byte a, byte b)
-{
-    if (a > b) return (byte)(a - b);
-    return (byte)(b - a);
 }
 
 // Sound effect: player fires
