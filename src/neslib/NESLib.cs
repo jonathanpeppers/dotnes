@@ -475,6 +475,14 @@ public static class NESLib
     /// </summary>
     public static void vrambuf_flush() => throw null!;
 
+    // CNROM (Mapper 3) bank switching
+
+    /// <summary>
+    /// select a CHR ROM bank (CNROM mapper 3)
+    /// writes the bank number to $8000 to switch the 8 KB CHR bank
+    /// </summary>
+    public static void cnrom_set_chr_bank(byte bank) => throw null!;
+
     // These are from: https://github.com/mhughson/attributes/blob/master/neslib.h
 
     public const ushort NAMETABLE_A = 0x2000;

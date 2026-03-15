@@ -118,6 +118,8 @@ public class TranspilerTests
     [InlineData("procgen", false)]
     [InlineData("vertscroll", true)]
     [InlineData("vertscroll", false)]
+    [InlineData("slideshow", true, "Horizontal", 3, 2, 2)]
+    [InlineData("slideshow", false, "Horizontal", 3, 2, 2)]
     [InlineData("battery", true, "Horizontal", 0, 2, 1, true)]
     [InlineData("battery", false, "Horizontal", 0, 2, 1, true)]
     public Task Write(string name, bool debug, string mirroring = "Horizontal", int mapper = 0, int prgBanks = 2, int chrBanks = 1, bool battery = false)
@@ -129,10 +131,31 @@ public class TranspilerTests
         // CHR RAM samples (chrBanks=0) don't need a CHR assembly file
         if (chrBanks > 0)
         {
-            var chrName = $"chr_{name}.s";
-            var chrStream = typeof(Utilities).Assembly.GetManifestResourceStream(chrName);
-            var chr_generic = new StreamReader(chrStream ?? Utilities.GetResource("chr_generic.s"));
-            assemblyReaders.Add(new AssemblyReader(chr_generic));
+            // Check for numbered CHR bank files (e.g., chr_slideshow_0.s, chr_slideshow_1.s).
+            // Files must be numbered sequentially starting from 0 with no gaps.
+            bool foundNumbered = false;
+            for (int b = 0; b < chrBanks; b++)
+            {
+                var numberedName = $"chr_{name}_{b}.s";
+                var numberedStream = typeof(Utilities).Assembly.GetManifestResourceStream(numberedName);
+                if (numberedStream != null)
+                {
+                    assemblyReaders.Add(new AssemblyReader(new StreamReader(numberedStream)));
+                    foundNumbered = true;
+                }
+                else
+                {
+                    break; // Sequential numbering required — stop at first missing file
+                }
+            }
+
+            if (!foundNumbered)
+            {
+                var chrName = $"chr_{name}.s";
+                var chrStream = typeof(Utilities).Assembly.GetManifestResourceStream(chrName);
+                var chr_generic = new StreamReader(chrStream ?? Utilities.GetResource("chr_generic.s"));
+                assemblyReaders.Add(new AssemblyReader(chr_generic));
+            }
         }
 
         // Include fami assembly files (famitone2.s, demosounds.s, etc.) only for samples that use extern methods

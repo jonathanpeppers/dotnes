@@ -3521,4 +3521,27 @@ public class RoslynTests
         // The 6 hex chars before A200A904 should be a JSR (20 xx xx)
         Assert.Equal("20", hex.Substring(jsrIdx - 6, 2));
     }
+
+    [Fact]
+    public void CnromSetChrBank_EmitsStaToMapper()
+    {
+        // cnrom_set_chr_bank(byte) should emit STA $8000 to switch CHR bank
+        var bytes = GetProgramBytes(
+            """
+            cnrom_set_chr_bank(0);
+            cnrom_set_chr_bank(1);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"CNROM hex: {hex}");
+
+        // LDA #$00 = A900, STA $8000 = 8D0080
+        Assert.Contains("A9008D0080", hex);
+        // LDA #$01 = A901, STA $8000 = 8D0080
+        Assert.Contains("A9018D0080", hex);
+    }
 }
