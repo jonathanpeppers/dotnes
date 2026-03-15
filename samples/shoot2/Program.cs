@@ -477,7 +477,7 @@ static byte abs_diff(byte a, byte b)
 
 // Sound effect: player fires
 // Pulse1: ctrl=0x4A (duty 01, envelope decay, period 0x0A), sweep=0, timer_lo=0x80, timer_hi=0xF9
-// All poke values MUST be constants (poke handler breaks with ldarg/ldloc values)
+// poke values can be constants or local variables, but not function parameters (ldarg)
 static void sfx_shoot()
 {
     poke(APU_PULSE1_CTRL, 0x4A);
