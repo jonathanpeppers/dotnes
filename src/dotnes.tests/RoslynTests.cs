@@ -3325,7 +3325,7 @@ public class RoslynTests
         // When a non-static local function captures an outer byte[] variable,
         // the compiler generates a closure struct. The transpiler should detect
         // this and throw a helpful error message with guidance.
-        var ex = Assert.ThrowsAny<Exception>(() => BuildProgram(
+        var ex = Assert.Throws<TranspileException>(() => BuildProgram(
             """
             byte[] palette = [0x0F, 0x10, 0x20, 0x30];
             apply_palette();
