@@ -259,6 +259,59 @@ partial class IL2NESWriter
                 }
                 Emit(Opcode.LDA, AddressMode.Absolute, (ushort)local.Address);
                 _immediateInA = null;
+                // Look ahead: if the next instruction loads another value and the
+                // upcoming Call is to a user-defined function, push the current A
+                // value to the cc65 stack so it survives the next load.
+                // Only applies to user-defined functions — NESLib built-ins have
+                // dedicated Call handlers that manage their own arguments.
+                if (Instructions is not null && Index + 1 < Instructions.Length
+                    && UserMethodNames is { Count: > 0 })
+                {
+                    var nextOp = Instructions[Index + 1].OpCode;
+                    bool nextIsLoad = nextOp is ILOpCode.Ldloc_0 or ILOpCode.Ldloc_1
+                        or ILOpCode.Ldloc_2 or ILOpCode.Ldloc_3 or ILOpCode.Ldloc_s
+                        or ILOpCode.Ldc_i4_0 or ILOpCode.Ldc_i4_1 or ILOpCode.Ldc_i4_2
+                        or ILOpCode.Ldc_i4_3 or ILOpCode.Ldc_i4_4 or ILOpCode.Ldc_i4_5
+                        or ILOpCode.Ldc_i4_6 or ILOpCode.Ldc_i4_7 or ILOpCode.Ldc_i4_8
+                        or ILOpCode.Ldc_i4 or ILOpCode.Ldc_i4_s or ILOpCode.Ldc_i4_m1;
+                    if (nextIsLoad)
+                    {
+                        // Scan ahead to find the Call instruction that consumes these args
+                        for (int scan = Index + 2; scan < Instructions.Length; scan++)
+                        {
+                            var scanOp = Instructions[scan].OpCode;
+                            if (scanOp == ILOpCode.Call)
+                            {
+                                string? callTarget = Instructions[scan].String;
+                                if (callTarget != null && UserMethodNames.Contains(callTarget))
+                                {
+                                    EmitJSR("pusha");
+                                }
+                                break;
+                            }
+                            // Stop scanning at arithmetic — args are for an expression, not a call
+                            if (scanOp is ILOpCode.Add or ILOpCode.Sub
+                                or ILOpCode.Mul or ILOpCode.Div or ILOpCode.Rem or ILOpCode.Rem_un
+                                or ILOpCode.And or ILOpCode.Or
+                                or ILOpCode.Shl or ILOpCode.Shr or ILOpCode.Shr_un)
+                                break;
+                            // Stop at branches/stores — not in argument loading
+                            if (scanOp is ILOpCode.Stloc_0 or ILOpCode.Stloc_1
+                                or ILOpCode.Stloc_2 or ILOpCode.Stloc_3 or ILOpCode.Stloc_s
+                                or ILOpCode.Br or ILOpCode.Br_s
+                                or ILOpCode.Brfalse or ILOpCode.Brfalse_s
+                                or ILOpCode.Brtrue or ILOpCode.Brtrue_s
+                                or ILOpCode.Bne_un or ILOpCode.Bne_un_s
+                                or ILOpCode.Beq or ILOpCode.Beq_s
+                                or ILOpCode.Bge or ILOpCode.Bge_s or ILOpCode.Bge_un or ILOpCode.Bge_un_s
+                                or ILOpCode.Bgt or ILOpCode.Bgt_s or ILOpCode.Bgt_un or ILOpCode.Bgt_un_s
+                                or ILOpCode.Ble or ILOpCode.Ble_s or ILOpCode.Ble_un or ILOpCode.Ble_un_s
+                                or ILOpCode.Blt or ILOpCode.Blt_s or ILOpCode.Blt_un or ILOpCode.Blt_un_s
+                                or ILOpCode.Ret)
+                                break;
+                        }
+                    }
+                }
             }
             else if (local.Value < ushort.MaxValue)
             {
