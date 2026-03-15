@@ -1,4 +1,5 @@
-﻿using System.Text;
+﻿using System.Reflection.Metadata;
+using System.Text;
 using Xunit.Abstractions;
 
 namespace dotnes.tests;
@@ -187,5 +188,85 @@ public class TranspilerTests
         Assert.NotEqual(0, labels["popax"]);
         Assert.NotEqual(0, labels["pusha"]);
         Assert.NotEqual(0, labels["pushax"]);
+    }
+
+    [Fact]
+    public void PreAllocateStaticFields_MainOnly()
+    {
+        var mainIL = new ILInstruction[]
+        {
+            new(ILOpCode.Ldc_i4_0),
+            new(ILOpCode.Stsfld, String: "score"),
+            new(ILOpCode.Ldsfld, String: "score"),
+        };
+        var userMethods = new Dictionary<string, ILInstruction[]>();
+
+        var result = Transpiler.PreAllocateStaticFields(mainIL, userMethods);
+
+        Assert.Single(result);
+        Assert.Equal(NESConstants.LocalStackBase, result["score"]);
+    }
+
+    [Fact]
+    public void PreAllocateStaticFields_UserMethodOnly()
+    {
+        var mainIL = Array.Empty<ILInstruction>();
+        var userMethods = new Dictionary<string, ILInstruction[]>
+        {
+            ["callback"] = new ILInstruction[]
+            {
+                new(ILOpCode.Ldsfld, String: "counter"),
+                new(ILOpCode.Ldc_i4_1),
+                new(ILOpCode.Add),
+                new(ILOpCode.Stsfld, String: "counter"),
+            },
+        };
+
+        var result = Transpiler.PreAllocateStaticFields(mainIL, userMethods);
+
+        Assert.Single(result);
+        Assert.Equal(NESConstants.LocalStackBase, result["counter"]);
+    }
+
+    [Fact]
+    public void PreAllocateStaticFields_SharedAcrossMethods()
+    {
+        var mainIL = new ILInstruction[]
+        {
+            new(ILOpCode.Ldc_i4_0),
+            new(ILOpCode.Stsfld, String: "score"),
+        };
+        var userMethods = new Dictionary<string, ILInstruction[]>
+        {
+            ["callback"] = new ILInstruction[]
+            {
+                new(ILOpCode.Ldsfld, String: "score"),
+                new(ILOpCode.Stsfld, String: "lives"),
+            },
+        };
+
+        var result = Transpiler.PreAllocateStaticFields(mainIL, userMethods);
+
+        Assert.Equal(2, result.Count);
+        // Addresses should be sequential and deterministic (sorted by name)
+        Assert.Equal(NESConstants.LocalStackBase, result["lives"]);
+        Assert.Equal((ushort)(NESConstants.LocalStackBase + 1), result["score"]);
+        // Both methods get the same address for "score"
+        Assert.True(result.ContainsKey("score"));
+    }
+
+    [Fact]
+    public void PreAllocateStaticFields_NoStaticFields()
+    {
+        var mainIL = new ILInstruction[]
+        {
+            new(ILOpCode.Ldc_i4_0),
+            new(ILOpCode.Stloc_0),
+        };
+        var userMethods = new Dictionary<string, ILInstruction[]>();
+
+        var result = Transpiler.PreAllocateStaticFields(mainIL, userMethods);
+
+        Assert.Empty(result);
     }
 }

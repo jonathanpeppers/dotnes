@@ -181,6 +181,7 @@ class Transpiler : IDisposable
         // Build main program block using label references (addresses resolved later)
         var externNames = new HashSet<string>(ExternMethods.Keys, StringComparer.Ordinal);
         var structLayouts = DetectStructLayouts();
+        var staticFields = PreAllocateStaticFields(instructions, UserMethods);
         using var writer = new IL2NESWriter(new MemoryStream(), logger: _logger, reflectionCache: reflectionCache)
         {
             Instructions = instructions,
@@ -189,6 +190,7 @@ class Transpiler : IDisposable
             ExternMethodNames = externNames,
             WordLocals = DetectWordLocals(instructions, reflectionCache),
             StructLayouts = structLayouts,
+            StaticFieldAddresses = staticFields,
         };
 
         writer.StartBlockBuffering();
@@ -248,7 +250,6 @@ class Transpiler : IDisposable
         // Transpile user-defined methods into separate blocks
         // User function locals must start AFTER main's locals to avoid memory overlap
         int mainLocalCount = writer.LocalCount;
-        var mainStaticFields = writer.StaticFieldAddresses;
         int userMethodsTotalSize = 0;
         foreach (var kvp in UserMethods.OrderBy(x => x.Key, StringComparer.Ordinal))
         {
@@ -269,7 +270,7 @@ class Transpiler : IDisposable
                 ByteArrayLabelStartIndex = writer.ByteArrays.Count,
                 StringLabelStartIndex = writer.StringTable.Count,
                 LocalCount = mainLocalCount,
-                StaticFieldAddresses = mainStaticFields,
+                StaticFieldAddresses = staticFields,
             };
             methodWriter.StartBlockBuffering();
 
@@ -874,6 +875,49 @@ class Transpiler : IDisposable
             };
             if (idx.HasValue)
                 result.Add(idx.Value);
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// Pre-scan all IL (main + user methods) for ldsfld/stsfld operands and
+    /// pre-allocate a shared address for each unique static field before any
+    /// method transpilation begins.  This prevents address conflicts when a
+    /// field is used only in a callback or in multiple user methods.
+    /// </summary>
+    internal static Dictionary<string, ushort> PreAllocateStaticFields(ILInstruction[] mainInstructions, Dictionary<string, ILInstruction[]> userMethods)
+    {
+        var fieldNames = new HashSet<string>(StringComparer.Ordinal);
+
+        // Scan main IL
+        foreach (var instruction in mainInstructions)
+        {
+            if ((instruction.OpCode == ILOpCode.Stsfld || instruction.OpCode == ILOpCode.Ldsfld)
+                && instruction.String is not null)
+            {
+                fieldNames.Add(instruction.String);
+            }
+        }
+
+        // Scan all user method IL
+        foreach (var methodIL in userMethods.Values)
+        {
+            foreach (var instruction in methodIL)
+            {
+                if ((instruction.OpCode == ILOpCode.Stsfld || instruction.OpCode == ILOpCode.Ldsfld)
+                    && instruction.String is not null)
+                {
+                    fieldNames.Add(instruction.String);
+                }
+            }
+        }
+
+        // Allocate addresses sequentially from LocalStackBase
+        var result = new Dictionary<string, ushort>(StringComparer.Ordinal);
+        ushort nextAddr = NESConstants.LocalStackBase;
+        foreach (var name in fieldNames.OrderBy(n => n, StringComparer.Ordinal))
+        {
+            result[name] = nextAddr++;
         }
         return result;
     }
