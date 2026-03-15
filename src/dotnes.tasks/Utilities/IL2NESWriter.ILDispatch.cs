@@ -1633,6 +1633,15 @@ partial class IL2NESWriter
                             {
                                 int mode = Stack.Pop();
 
+                                // Check if the value is from a runtime local variable
+                                Local? modeLocal = null;
+                                bool valueIsLocal = _lastLoadedLocalIndex.HasValue &&
+                                    Locals.TryGetValue(_lastLoadedLocalIndex.Value, out modeLocal) &&
+                                    modeLocal.Address.HasValue;
+
+                                // Check if the value is from a static field
+                                bool valueIsStaticField = _lastStaticFieldAddress.HasValue;
+
                                 // Remove previously emitted LDA #value instruction
                                 RemoveLastInstructions(1);
 
@@ -1641,7 +1650,18 @@ partial class IL2NESWriter
                                 Emit(Opcode.STA, AddressMode.Absolute, NESLib.MMC1_CONTROL);
 
                                 // Load the mirroring mode value
-                                Emit(Opcode.LDA, AddressMode.Immediate, (byte)mode);
+                                if (valueIsLocal)
+                                {
+                                    Emit(Opcode.LDA, AddressMode.Absolute, (ushort)modeLocal!.Address!.Value);
+                                }
+                                else if (valueIsStaticField)
+                                {
+                                    Emit(Opcode.LDA, AddressMode.Absolute, _lastStaticFieldAddress!.Value);
+                                }
+                                else
+                                {
+                                    Emit(Opcode.LDA, AddressMode.Immediate, (byte)mode);
+                                }
 
                                 // Write 5 bits to Control register
                                 Emit(Opcode.STA, AddressMode.Absolute, NESLib.MMC1_CONTROL);
