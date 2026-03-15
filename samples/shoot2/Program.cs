@@ -111,9 +111,8 @@ ppu_off();
 oam_clear();
 
 // Move C stack from $0800 (mirrors to zero page!) to $0700 (physical RAM).
-// The transpiler doesn't emit decsp4 before oam_spr args, so every oam_spr call
-// advances sp by 4 with no matching decrement. At $0800, this drift writes to
-// mirrored zero page, corrupting NES library state ($03-$06 = VRAM ptrs).
+// The default sp=$0800 means stack operations write to $0800+ which mirrors
+// to zero page, corrupting NES library state ($03-$06 = VRAM ptrs).
 // At $0700, sp stays in physical RAM ($0700-$07FF) — safe.
 poke(0x0823, 0x07);
 
@@ -182,8 +181,6 @@ byte fire_cooldown = 0;
 byte spawn_timer = 0;
 
 // Score: 6 digits as BG tile indices (0x01 = '0' ... 0x0A = '9')
-// Score display is static (written at init) due to VRAM buffer corruption workaround.
-// We keep tracking digits for score logic even though they don't update on screen.
 byte d0 = 0x01;
 byte d1 = 0x01;
 byte d2 = 0x01;
@@ -231,15 +228,14 @@ while (true)
     // --- Fire bullet ---
     if (fire_cooldown != 0) fire_cooldown = (byte)(fire_cooldown - 1);
 
-    // Reset C stack pointer high byte. Each oam_spr call advances sp by 4
-    // without a matching decsp4 (transpiler bug), causing sp to race through
-    // memory. We reset to $07 to keep writes in physical RAM ($0700-$07FF).
-    poke(0x0823, 0x07);
-    if (fire_cooldown != 0) fire_cooldown = (byte)(fire_cooldown - 1);
-    // pad_trigger(0) fails because $3E (previous frame state) is corrupted
-    // by C stack over-pop. Use pad_poll(0) which returns current state directly
-    // and also updates $3C for later pad_state() direction checks.
-    if (((byte)pad_poll(0) & (byte)PAD.A) != 0)
+    // Save PRNG seed before pad_poll overwrites $3C (RAND_SEED and PAD_STATE
+    // share the same address in cc65 neslib — controller input provides entropy).
+    byte rand_save = peek(0x083C);
+    byte pad = (byte)pad_poll(0);
+    // Restore PRNG seed after reading controller
+    poke(0x083C, rand_save);
+
+    if (((byte)(pad & (byte)PAD.A)) != 0)
     {
         if (fire_cooldown == 0)
         {
@@ -259,24 +255,22 @@ while (true)
     }
 
     // --- Player movement (clamp to stay within bounds) ---
-    // Call pad_state(0) inline for each check so return value is fresh in A
-    // (pad_state reads the same $3C set by pad_trigger's internal pad_poll)
-    if ((pad_state(0) & (byte)PAD.LEFT) != 0)
+    if (((byte)(pad & (byte)PAD.LEFT)) != 0)
     {
         if (player_x > 8 + PLAYER_SPEED) player_x = (byte)(player_x - PLAYER_SPEED);
         else player_x = 8;
     }
-    if ((pad_state(0) & (byte)PAD.RIGHT) != 0)
+    if (((byte)(pad & (byte)PAD.RIGHT)) != 0)
     {
         if (player_x < 240 - PLAYER_SPEED) player_x = (byte)(player_x + PLAYER_SPEED);
         else player_x = 240;
     }
-    if ((pad_state(0) & (byte)PAD.UP) != 0)
+    if (((byte)(pad & (byte)PAD.UP)) != 0)
     {
         if (player_y > 32 + PLAYER_SPEED) player_y = (byte)(player_y - PLAYER_SPEED);
         else player_y = 32;
     }
-    if ((pad_state(0) & (byte)PAD.DOWN) != 0)
+    if (((byte)(pad & (byte)PAD.DOWN)) != 0)
     {
         if (player_y < 224 - PLAYER_SPEED) player_y = (byte)(player_y + PLAYER_SPEED);
         else player_y = 224;
@@ -447,13 +441,13 @@ while (true)
 
     oam_hide_rest(oam_off);
 
-    // Repair zero-page VRAM state before NMI fires. The C stack over-pop
-    // corrupts $04-$06 during the game loop. These pokes use NES RAM mirroring
-    // ($08xx → $00xx) to restore critical NMI variables just before the wait.
-    poke(0x0100, 0xFF);  // VRAM buffer terminator (harmless if NMI reads it)
-    poke(0x0804, 0x00);  // NAME_UPD_ADR low byte
-    poke(0x0805, 0x01);  // NAME_UPD_ADR high byte (→ $0100)
-    poke(0x0806, 0x00);  // NAME_UPD_ENABLE = 0 (disable buffer processing)
+    // Safety: ensure VRAM update state is clean before NMI fires.
+    // Without this, stale NAME_UPD_ENABLE could cause the NMI handler
+    // to process garbage VRAM update commands, leading to a gray screen.
+    poke(0x0100, 0xFF);
+    poke(0x0804, 0x00);
+    poke(0x0805, 0x01);
+    poke(0x0806, 0x00);
 
     ppu_wait_nmi();
 }
