@@ -3312,6 +3312,48 @@ public class RoslynTests
     }
 
     [Fact]
+    public void MultiParamUserFunction_ComputedArg()
+    {
+        // Test: calling a user-defined function where the second arg is a computed
+        // expression: my_func(x, (byte)(y + 1)). The look-ahead must track IL stack
+        // depth through the Add/Conv opcodes to find the Call.
+        var bytes = GetProgramBytes(
+            """
+            byte x = rand8();
+            byte y = rand8();
+            my_func(x, (byte)(y + 1));
+            pal_col(0, x);
+            pal_col(1, y);
+            ppu_on_all();
+            while (true) ;
+
+            static void my_func(byte a, byte b) { pal_col(a, b); }
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"MultiParamUserFunction_ComputedArg hex: {hex}");
+
+        // x at $0325, y at $0326.
+        // For my_func(x, (byte)(y + 1)):
+        //   ldloc.0 → LDA $0325 (load x)
+        //   ldloc.1 → LDA $0326 (load y)
+        //   ldc.i4.1 → ...
+        //   add → ...
+        //   conv.u1 → ...
+        //   call my_func
+        // A JSR pusha must appear after loading x so it survives the y+1 computation.
+        int ldlocX = hex.IndexOf("AD2503");
+        Assert.True(ldlocX >= 0, $"LDA $0325 (load local x) not found. Hex: {hex}");
+        int ldlocY = hex.IndexOf("AD2603", ldlocX + 6);
+        Assert.True(ldlocY >= 0, $"LDA $0326 (load local y) not found after x. Hex: {hex}");
+        Assert.True(ldlocY > ldlocX + 6,
+            $"No JSR pusha between loading x and computed arg y+1 — first arg will be lost. " +
+            $"LDA $0325 at {ldlocX}, LDA $0326 at {ldlocY}. Hex: {hex}");
+    }
+
+    [Fact]
     public void VramReadEmitsPushaxAndSize()
     {
         // vram_read(byte[], uint) must emit the same pushax + size calling convention
