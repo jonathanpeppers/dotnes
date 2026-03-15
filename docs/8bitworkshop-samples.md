@@ -202,13 +202,10 @@
 
 ### conio.c
 - **Description:** Uses CC65's conio (console I/O) library to draw borders and text — completely CC65-specific.
-- **Status:** 🔴 Complex
-- **Missing Features:**
-  - Entire CC65 conio library (`conio.h`): `bgcolor`, `clrscr`, `screensize`, `cputc`, `chline`, `cvlinexy`, `gotoxy`, `cprintf`
-  - CC65 joystick library (`joystick.h`): `joy_install`, `joy_read`, `joy_uninstall`
-  - `<stdlib.h>` and `<string.h>` functions
-  - `EXIT_SUCCESS` return from `main()`
-  - No neslib functions used — entirely CC65-framework driven
+- **Status:** ✅ Implemented (simplified)
+- **Implementation:** Replaces CC65 conio functions with NES VRAM equivalents: `pal_col` for bgcolor, `vram_fill` for clrscr/chline, `vram_adr`+`vram_inc` for cvlinexy, `vram_write` for cprintf, `pad_poll` for joy_read.
+- **Sample:** `samples/conio/`
+- **Note:** See `docs/conio-missing-features.md` for CC65 features not available in dotnes (format strings, cursor tracking, box-drawing characters).
 
 ### crypto.c
 - **Description:** A complex cryptographic/puzzle game with extensive game logic, AI, and state management.
@@ -287,8 +284,8 @@
 
 | Status | Count | Samples |
 |--------|-------|---------|
-| ✅ Already Implemented | 22 | hello, attributes, flicker, metasprites, music, tint, scroll, rletitle, tileset1, sprites, metacursor, metatrigger, statusbar, vrambuffer, horizscroll, horizmask, bcd, fami, monobitmap, irq, siegegame, shoot2 |
-| 🔴 Complex | 7 | aputest, ppuhello, bankswitch, conio, crypto, climber, transtable |
+| ✅ Already Implemented | 23 | hello, attributes, flicker, metasprites, music, tint, scroll, rletitle, tileset1, sprites, metacursor, metatrigger, statusbar, vrambuffer, horizscroll, horizmask, bcd, fami, monobitmap, irq, siegegame, shoot2, conio |
+| 🔴 Complex | 6 | aputest, ppuhello, bankswitch, crypto, climber, transtable |
 
 > **Note:** `apu.c` and `vrambuf.c` are library files (not demos). `apu.c` is covered by dotnes's built-in `apu_init()` subroutine. `vrambuf.c` is covered by built-in `vrambuf_clear()`, `vrambuf_put()`, `vrambuf_end()`, `vrambuf_flush()`, and `set_vram_update()` subroutines. Neither is counted separately.
 
