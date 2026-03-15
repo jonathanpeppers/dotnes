@@ -50,6 +50,8 @@ const NES.NESLib.PPU_DATA = 8199 -> ushort
 const NES.NESLib.PPU_MASK = 8193 -> ushort
 const NES.NESLib.PPU_SCROLL = 8197 -> ushort
 const NES.NESLib.PPU_STATUS = 8194 -> ushort
+const NES.NESLib.SRAM_END = 32767 -> ushort
+const NES.NESLib.SRAM_START = 24576 -> ushort
 const NES.NESLib.VRAMBUF_VERT = 32768 -> ushort
 const NES.NESLib.updbuf = 256 -> ushort
 static NES.NESLib.LSB(ushort x) -> byte
