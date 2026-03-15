@@ -41,7 +41,7 @@ partial class IL2NESWriter
         }
     }
 
-    void WriteStloc(Local local)
+    void WriteStloc(Local local, bool isNewAllocation = true)
     {
         if (local.Address is null)
             throw new ArgumentNullException(nameof(local.Address));
@@ -54,7 +54,7 @@ partial class IL2NESWriter
         {
             // NTADR result is in TEMP ($17 = hi) and TEMP2 ($19 = lo)
             // Store both bytes to the ushort local
-            LocalCount += 2;
+            if (isNewAllocation) LocalCount += 2;
             Emit(Opcode.LDA, AddressMode.ZeroPage, TEMP2);
             Emit(Opcode.STA, AddressMode.Absolute, (ushort)local.Address);
             Emit(Opcode.LDA, AddressMode.ZeroPage, TEMP);
@@ -68,14 +68,14 @@ partial class IL2NESWriter
             if (local.IsWord)
             {
                 // A=lo, X=hi from a ushort-returning function — store both bytes
-                LocalCount += 2;
+                if (isNewAllocation) LocalCount += 2;
                 Emit(Opcode.STA, AddressMode.Absolute, (ushort)local.Address);
                 Emit(Opcode.STX, AddressMode.Absolute, (ushort)(local.Address + 1));
             }
             else
             {
                 // A has the runtime value — just store it
-                LocalCount += 1;
+                if (isNewAllocation) LocalCount += 1;
                 Emit(Opcode.STA, AddressMode.Absolute, (ushort)local.Address);
             }
             _runtimeValueInA = false;
@@ -84,7 +84,7 @@ partial class IL2NESWriter
         }
         else if (local.IsWord)
         {
-            LocalCount += 2;
+            if (isNewAllocation) LocalCount += 2;
             // Word local (e.g. ushort x = 0): store low byte in A, high byte = 0
             Emit(Opcode.STA, AddressMode.Absolute, (ushort)local.Address);
             Emit(Opcode.LDA, AddressMode.Immediate, 0x00);
@@ -93,7 +93,7 @@ partial class IL2NESWriter
         }
         else if (local.Value < byte.MaxValue)
         {
-            LocalCount += 1;
+            if (isNewAllocation) LocalCount += 1;
             if (DeferredByteArrayMode)
             {
                 // New pattern: just emit STA (keep the LDA from WriteLdc)
@@ -128,7 +128,7 @@ partial class IL2NESWriter
         }
         else if (local.Value < ushort.MaxValue)
         {
-            LocalCount += 2;
+            if (isNewAllocation) LocalCount += 2;
             // Remove the previous LDX + LDA instructions (2 instructions = 4 bytes)
             RemoveLastInstructions(2);
             Emit(Opcode.LDX, AddressMode.Immediate, (byte)(local.Value >> 8));
