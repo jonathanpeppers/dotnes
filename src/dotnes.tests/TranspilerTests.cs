@@ -106,8 +106,14 @@ public class TranspilerTests
     [InlineData("pong", false)]
     [InlineData("transtable", true, false, 0, 2, 0)]
     [InlineData("transtable", false, false, 0, 2, 0)]
+    [InlineData("snake", true)]
+    [InlineData("snake", false)]
     [InlineData("monobitmap", true, false, 2, 2, 0)]
     [InlineData("monobitmap", false, false, 2, 2, 0)]
+    [InlineData("shoot2", true, false, 2, 2, 0)]
+    [InlineData("shoot2", false, false, 2, 2, 0)]
+    [InlineData("conio", true)]
+    [InlineData("conio", false)]
     public Task Write(string name, bool debug, bool verticalMirroring = false, int mapper = 0, int prgBanks = 2, int chrBanks = 1)
     {
         var configuration = debug ? "debug" : "release";
@@ -183,5 +189,28 @@ public class TranspilerTests
         Assert.NotEqual(0, labels["popax"]);
         Assert.NotEqual(0, labels["pusha"]);
         Assert.NotEqual(0, labels["pushax"]);
+    }
+
+    /// <summary>
+    /// Verifies that re-assigning local variables does not inflate LocalCount.
+    /// Each unique local slot should only count once toward the total allocation,
+    /// regardless of how many times it is stored to.
+    /// </summary>
+    [Theory]
+    [InlineData("tint", false, 3)]       // 2 byte locals + 1 pad_poll temp
+    [InlineData("tint", true, 3)]
+    [InlineData("peekpoke", false, 3)]   // 3 byte locals
+    [InlineData("peekpoke", true, 3)]
+    public void LocalCountNotInflatedByReassignment(string name, bool debug, int expectedLocals)
+    {
+        var configuration = debug ? "debug" : "release";
+
+        using var dll = Utilities.GetResource($"{name}.{configuration}.dll");
+        using var transpiler = new Transpiler(dll, [], _logger);
+
+        _ = transpiler.BuildProgram6502(out ushort sizeOfMain, out ushort locals);
+
+        _logger.WriteLine($"{name} ({configuration}): LocalCount={locals}, MainSize={sizeOfMain}");
+        Assert.Equal(expectedLocals, locals);
     }
 }

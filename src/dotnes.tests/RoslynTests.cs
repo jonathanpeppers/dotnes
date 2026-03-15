@@ -3318,4 +3318,139 @@ public class RoslynTests
 
         Assert.Contains("ecursive", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
+
+    [Fact]
+    public void MultiParamUserFunction_LocalVarArgs()
+    {
+        // Test: calling a user-defined function with a runtime local + constant.
+        // Use rand8() for runtime value and reference x after the call to force ldloc.
+        var bytes = GetProgramBytes(
+            """
+            byte x = rand8();
+            my_func(x, 5);
+            pal_col(0, x);
+            ppu_on_all();
+            while (true) ;
+
+            static void my_func(byte a, byte b) { pal_col(a, b); }
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"MultiParamUserFunction_LocalVarArgs hex: {hex}");
+
+        // Local 0 (x) is at $0325. After ldloc.0 (AD2503) loads x,
+        // the next ldc.i4.5 (A905) loads the constant.
+        // With the fix, a JSR pusha should appear between them.
+        int ldloc = hex.IndexOf("AD2503");
+        Assert.True(ldloc >= 0, $"LDA $0325 (load local 0) not found. Hex: {hex}");
+        int ldc = hex.IndexOf("A905", ldloc);
+        Assert.True(ldc >= 0, $"LDA #$05 (load constant 5) not found after ldloc. Hex: {hex}");
+        Assert.True(ldc > ldloc, $"LDA #$05 should come after LDA $0325. Hex: {hex}");
+
+        // The two LDA instructions should NOT be adjacent — there must be a JSR pusha between them.
+        // AD2503 is 6 hex chars; if ldc == ldloc + 6, they're adjacent (no pusha).
+        Assert.True(ldc > ldloc + 6,
+            $"No JSR pusha between loading local and constant args — first arg will be lost. " +
+            $"LDA $0325 at {ldloc}, LDA #$05 at {ldc}. Hex: {hex}");
+    }
+
+    [Fact]
+    public void MultiParamUserFunction_TwoLocals()
+    {
+        // Two local variable args to a user-defined function.
+        // Both x and y are used after the call to force the compiler to keep them as locals.
+        var bytes = GetProgramBytes(
+            """
+            byte x = rand8();
+            byte y = rand8();
+            my_func(x, y);
+            pal_col(0, x);
+            pal_col(1, y);
+            ppu_on_all();
+            while (true) ;
+
+            static void my_func(byte a, byte b) { pal_col(a, b); }
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"MultiParamUserFunction_TwoLocals hex: {hex}");
+
+        // x at $0325, y at $0326
+        // For my_func(x, y): ldloc.0 (AD2503), ldloc.1 (AD2603), call my_func
+        // A JSR pusha must appear between the two LDA instructions.
+        int idx0 = hex.IndexOf("AD2503");
+        Assert.True(idx0 >= 0, $"LDA $0325 not found. Hex: {hex}");
+        int idx1 = hex.IndexOf("AD2603", idx0 + 6);
+        Assert.True(idx1 >= 0, $"LDA $0326 not found after LDA $0325. Hex: {hex}");
+        Assert.True(idx1 > idx0 + 6,
+            $"No JSR pusha between two local arg loads. " +
+            $"LDA $0325 at {idx0}, LDA $0326 at {idx1}. Hex: {hex}");
+    }
+
+    [Fact]
+    public void MultiParamUserFunction_ThreeArgs()
+    {
+        // Three-arg user function with mix of local and constant args.
+        var bytes = GetProgramBytes(
+            """
+            byte x = rand8();
+            add3(x, 2, 3);
+            pal_col(0, x);
+            ppu_on_all();
+            while (true) ;
+
+            static void add3(byte a, byte b, byte c) { pal_col(a, (byte)(b + c)); }
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"MultiParamUserFunction_ThreeArgs hex: {hex}");
+
+        // Local 0 (x) at $0325, then constants 2 and 3
+        int ldloc = hex.IndexOf("AD2503");
+        Assert.True(ldloc >= 0, $"LDA $0325 not found. Hex: {hex}");
+        // There should be a JSR pusha after loading x (before loading 2)
+        int ldc2Index = hex.IndexOf("A902", ldloc);
+        Assert.True(ldc2Index > ldloc + 6,
+            $"No JSR pusha after loading local x before constant arg. Hex: {hex}");
+    }
+
+    [Fact]
+    public void VramReadEmitsPushaxAndSize()
+    {
+        // vram_read(byte[], uint) must emit the same pushax + size calling convention
+        // as vram_write: pointer pushed via pushax, size in A:X, then JSR vram_read.
+        var bytes = GetProgramBytes(
+            """
+            byte[] buf = new byte[4] { 0x01, 0x02, 0x03, 0x04 };
+            vram_adr(NTADR_A(2, 2));
+            vram_read(buf, 4);
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"VramRead hex: {hex}");
+
+        // The sequence for vram_read(buf, 4) via WriteLdloc should be:
+        //   LDA #lo(buf)   -> A9 xx      (byte array label low byte)
+        //   LDX #hi(buf)   -> A2 xx      (byte array label high byte)
+        //   JSR pushax     -> 20 xx xx   (push pointer onto cc65 stack)
+        //   LDX #$00       -> A2 00      (size high byte from local.Value)
+        //   LDA #$04       -> A9 04      (size low byte = 4)
+        //   ...
+        //   JSR vram_read  -> 20 xx xx
+
+        // Verify JSR pushax (opcode 0x20) appears before the size load sequence.
+        // The full pattern is: JSR pushax (20 xx xx), LDX #$00 (A2 00), LDA #$04 (A9 04)
+        // We match "20" + 4 hex chars (address) + "A200A904" to ensure pushax precedes the size.
+        int jsrIdx = hex.IndexOf("A200A904");
+        Assert.True(jsrIdx >= 6, "Size-load sequence A200A904 not found or too early for preceding JSR");
+        // The 6 hex chars before A200A904 should be a JSR (20 xx xx)
+        Assert.Equal("20", hex.Substring(jsrIdx - 6, 2));
+    }
 }

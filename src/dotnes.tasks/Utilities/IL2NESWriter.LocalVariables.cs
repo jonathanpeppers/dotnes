@@ -41,7 +41,7 @@ partial class IL2NESWriter
         }
     }
 
-    void WriteStloc(Local local)
+    void WriteStloc(Local local, bool isNewAllocation = true)
     {
         if (local.Address is null)
             throw new ArgumentNullException(nameof(local.Address));
@@ -54,7 +54,7 @@ partial class IL2NESWriter
         {
             // NTADR result is in TEMP ($17 = hi) and TEMP2 ($19 = lo)
             // Store both bytes to the ushort local
-            LocalCount += 2;
+            if (isNewAllocation) LocalCount += 2;
             Emit(Opcode.LDA, AddressMode.ZeroPage, TEMP2);
             Emit(Opcode.STA, AddressMode.Absolute, (ushort)local.Address);
             Emit(Opcode.LDA, AddressMode.ZeroPage, TEMP);
@@ -68,14 +68,14 @@ partial class IL2NESWriter
             if (local.IsWord)
             {
                 // A=lo, X=hi from a ushort-returning function — store both bytes
-                LocalCount += 2;
+                if (isNewAllocation) LocalCount += 2;
                 Emit(Opcode.STA, AddressMode.Absolute, (ushort)local.Address);
                 Emit(Opcode.STX, AddressMode.Absolute, (ushort)(local.Address + 1));
             }
             else
             {
                 // A has the runtime value — just store it
-                LocalCount += 1;
+                if (isNewAllocation) LocalCount += 1;
                 Emit(Opcode.STA, AddressMode.Absolute, (ushort)local.Address);
             }
             _runtimeValueInA = false;
@@ -84,7 +84,7 @@ partial class IL2NESWriter
         }
         else if (local.IsWord)
         {
-            LocalCount += 2;
+            if (isNewAllocation) LocalCount += 2;
             // Word local (e.g. ushort x = 0): store low byte in A, high byte = 0
             Emit(Opcode.STA, AddressMode.Absolute, (ushort)local.Address);
             Emit(Opcode.LDA, AddressMode.Immediate, 0x00);
@@ -93,7 +93,7 @@ partial class IL2NESWriter
         }
         else if (local.Value < byte.MaxValue)
         {
-            LocalCount += 1;
+            if (isNewAllocation) LocalCount += 1;
             if (DeferredByteArrayMode)
             {
                 // New pattern: just emit STA (keep the LDA from WriteLdc)
@@ -128,7 +128,7 @@ partial class IL2NESWriter
         }
         else if (local.Value < ushort.MaxValue)
         {
-            LocalCount += 2;
+            if (isNewAllocation) LocalCount += 2;
             // Remove the previous LDX + LDA instructions (2 instructions = 4 bytes)
             RemoveLastInstructions(2);
             Emit(Opcode.LDX, AddressMode.Immediate, (byte)(local.Value >> 8));
@@ -145,6 +145,7 @@ partial class IL2NESWriter
 
     void WriteLdc(ushort operand)
     {
+        _lastStaticFieldAddress = null;
         // Check if next instruction can handle the constant directly with A's current value
         bool nextIsAddSub = Instructions is not null && Index + 1 < Instructions.Length &&
             Instructions[Index + 1].OpCode is ILOpCode.Add or ILOpCode.Sub;
@@ -217,6 +218,7 @@ partial class IL2NESWriter
     {
         _ushortInAX = false;
         _savedConstantViaPusha = false;
+        _lastStaticFieldAddress = null;
         if (local.LabelName is not null)
         {
             // This local holds a byte array label reference
@@ -257,6 +259,59 @@ partial class IL2NESWriter
                 }
                 Emit(Opcode.LDA, AddressMode.Absolute, (ushort)local.Address);
                 _immediateInA = null;
+                // Look ahead: if the next instruction loads another value and the
+                // upcoming Call is to a user-defined function, push the current A
+                // value to the cc65 stack so it survives the next load.
+                // Only applies to user-defined functions — NESLib built-ins have
+                // dedicated Call handlers that manage their own arguments.
+                if (Instructions is not null && Index + 1 < Instructions.Length
+                    && UserMethodNames is { Count: > 0 })
+                {
+                    var nextOp = Instructions[Index + 1].OpCode;
+                    bool nextIsLoad = nextOp is ILOpCode.Ldloc_0 or ILOpCode.Ldloc_1
+                        or ILOpCode.Ldloc_2 or ILOpCode.Ldloc_3 or ILOpCode.Ldloc_s
+                        or ILOpCode.Ldc_i4_0 or ILOpCode.Ldc_i4_1 or ILOpCode.Ldc_i4_2
+                        or ILOpCode.Ldc_i4_3 or ILOpCode.Ldc_i4_4 or ILOpCode.Ldc_i4_5
+                        or ILOpCode.Ldc_i4_6 or ILOpCode.Ldc_i4_7 or ILOpCode.Ldc_i4_8
+                        or ILOpCode.Ldc_i4 or ILOpCode.Ldc_i4_s or ILOpCode.Ldc_i4_m1;
+                    if (nextIsLoad)
+                    {
+                        // Scan ahead to find the Call instruction that consumes these args
+                        for (int scan = Index + 2; scan < Instructions.Length; scan++)
+                        {
+                            var scanOp = Instructions[scan].OpCode;
+                            if (scanOp == ILOpCode.Call)
+                            {
+                                string? callTarget = Instructions[scan].String;
+                                if (callTarget != null && UserMethodNames.Contains(callTarget))
+                                {
+                                    EmitJSR("pusha");
+                                }
+                                break;
+                            }
+                            // Stop scanning at arithmetic — args are for an expression, not a call
+                            if (scanOp is ILOpCode.Add or ILOpCode.Sub
+                                or ILOpCode.Mul or ILOpCode.Div or ILOpCode.Rem or ILOpCode.Rem_un
+                                or ILOpCode.And or ILOpCode.Or
+                                or ILOpCode.Shl or ILOpCode.Shr or ILOpCode.Shr_un)
+                                break;
+                            // Stop at branches/stores — not in argument loading
+                            if (scanOp is ILOpCode.Stloc_0 or ILOpCode.Stloc_1
+                                or ILOpCode.Stloc_2 or ILOpCode.Stloc_3 or ILOpCode.Stloc_s
+                                or ILOpCode.Br or ILOpCode.Br_s
+                                or ILOpCode.Brfalse or ILOpCode.Brfalse_s
+                                or ILOpCode.Brtrue or ILOpCode.Brtrue_s
+                                or ILOpCode.Bne_un or ILOpCode.Bne_un_s
+                                or ILOpCode.Beq or ILOpCode.Beq_s
+                                or ILOpCode.Bge or ILOpCode.Bge_s or ILOpCode.Bge_un or ILOpCode.Bge_un_s
+                                or ILOpCode.Bgt or ILOpCode.Bgt_s or ILOpCode.Bgt_un or ILOpCode.Bgt_un_s
+                                or ILOpCode.Ble or ILOpCode.Ble_s or ILOpCode.Ble_un or ILOpCode.Ble_un_s
+                                or ILOpCode.Blt or ILOpCode.Blt_s or ILOpCode.Blt_un or ILOpCode.Blt_un_s
+                                or ILOpCode.Ret)
+                                break;
+                        }
+                    }
+                }
             }
             else if (local.Value < ushort.MaxValue)
             {

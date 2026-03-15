@@ -181,6 +181,10 @@ class Transpiler : IDisposable
         // Build main program block using label references (addresses resolved later)
         var externNames = new HashSet<string>(ExternMethods.Keys, StringComparer.Ordinal);
         var structLayouts = DetectStructLayouts();
+
+        // Pre-allocate user-defined static fields so all methods share the same addresses
+        var staticFields = PreAllocateStaticFields(instructions);
+
         using var writer = new IL2NESWriter(new MemoryStream(), logger: _logger, reflectionCache: reflectionCache)
         {
             Instructions = instructions,
@@ -189,6 +193,8 @@ class Transpiler : IDisposable
             ExternMethodNames = externNames,
             WordLocals = DetectWordLocals(instructions, reflectionCache),
             StructLayouts = structLayouts,
+            StaticFieldAddresses = staticFields,
+            LocalCount = staticFields.Count,
         };
 
         writer.StartBlockBuffering();
@@ -269,6 +275,7 @@ class Transpiler : IDisposable
                 ByteArrayLabelStartIndex = writer.ByteArrays.Count,
                 StringLabelStartIndex = writer.StringTable.Count,
                 LocalCount = methodFrameOffsets[methodName],
+                StaticFieldAddresses = staticFields,
             };
             methodWriter.StartBlockBuffering();
 
@@ -1182,5 +1189,46 @@ class Transpiler : IDisposable
             0x09 => 4, // ELEMENT_TYPE_U4 (uint)
             _ => 1     // Default to 1 byte for unknown types
         };
+    }
+
+    /// <summary>
+    /// Pre-scans main and all user method IL for user-defined static field references
+    /// (Stsfld/Ldsfld) and allocates a shared address for each unique field.
+    /// This ensures all methods resolve the same field name to the same RAM address.
+    /// </summary>
+    Dictionary<string, ushort> PreAllocateStaticFields(ILInstruction[] mainInstructions)
+    {
+        var fieldNames = new HashSet<string>(StringComparer.Ordinal);
+
+        // Scan main IL
+        foreach (var instr in mainInstructions)
+        {
+            if (instr.OpCode is ILOpCode.Stsfld or ILOpCode.Ldsfld && instr.String is not null)
+                fieldNames.Add(instr.String);
+        }
+
+        // Scan user method IL
+        foreach (var kvp in UserMethods)
+        {
+            foreach (var instr in kvp.Value)
+            {
+                if (instr.OpCode is ILOpCode.Stsfld or ILOpCode.Ldsfld && instr.String is not null)
+                    fieldNames.Add(instr.String);
+            }
+        }
+
+        // Remove NESLib fields that are handled specially
+        fieldNames.Remove("oam_off");
+
+        // Allocate addresses sequentially starting at LocalStackBase
+        var result = new Dictionary<string, ushort>(StringComparer.Ordinal);
+        ushort offset = 0;
+        foreach (var name in fieldNames.OrderBy(n => n, StringComparer.Ordinal))
+        {
+            result[name] = (ushort)(NESConstants.LocalStackBase + offset);
+            offset++;
+            _logger.WriteLine($"Static field '{name}' allocated at ${result[name]:X4}");
+        }
+        return result;
     }
 }

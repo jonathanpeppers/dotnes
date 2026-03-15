@@ -55,15 +55,14 @@ byte lastTrigger = 0;
 byte castleHits = 0;
 byte activeCount = 0;
 
-// Flags to defer VRAM updates outside array-heavy code
-byte doPlaceWall = 0;
-byte doRemoveWall = 0;
-
 // Temp globals for collision checks (avoids local variable slot collisions)
 byte hitWall = 0;
-byte freeSlot = 0;
 byte tempNX = 0;
 byte tempNY = 0;
+
+// Flags to defer array updates outside VRAM-access code
+byte doPlaceWall = 0;
+byte doRemoveWall = 0;
 
 // Enemy arrays (Structure of Arrays)
 byte[] enemyX = new byte[MAX_ENEMIES];
@@ -71,11 +70,12 @@ byte[] enemyY = new byte[MAX_ENEMIES];
 byte[] enemyActive = new byte[MAX_ENEMIES];
 byte[] enemyTimer = new byte[MAX_ENEMIES];
 
-// Wall arrays (Structure of Arrays) — tracked in memory since vram_read
-// is not implemented in the transpiler
+// Wall arrays — used for placement, removal, and enemy collision checks.
+// VRAM updates are deferred to separate blocks because NTADR_A with
+// runtime args can't be mixed with array operations in the same block.
+byte wallCount = 0;
 byte[] wallX = new byte[MAX_WALLS];
 byte[] wallY = new byte[MAX_WALLS];
-byte[] wallActive = new byte[MAX_WALLS];
 
 // --- Setup ---
 
@@ -206,11 +206,7 @@ while (true)
                     enemyActive[ce] = 0;
                     enemyTimer[ce] = 0;
                 }
-                // Clear walls
-                for (byte cw = 0; cw < MAX_WALLS; cw++)
-                {
-                    wallActive[cw] = 0;
-                }
+                wallCount = 0;
                 clear_screen();
                 // Draw board with constant NTADR_A (avoids runtime args)
                 ppu_off();
@@ -265,18 +261,16 @@ while (true)
                     cursorY = (byte)(cursorY + 1);
             }
 
-            // Place wall with A — check wall arrays for collision
+            // Place wall with A — check arrays, defer VRAM update
             doPlaceWall = 0;
             if ((byte)(lastTrigger & (byte)PAD.A) != 0)
             {
                 if (cursorX > BOARD_X)
                 {
-                    // Check no wall already at cursor and find free slot
-                    hitWall = 0;
-                    freeSlot = 255;
-                    for (byte w = 0; w < MAX_WALLS; w++)
+                    if (wallCount < MAX_WALLS)
                     {
-                        if (wallActive[w] != 0)
+                        hitWall = 0;
+                        for (byte w = 0; w < wallCount; w++)
                         {
                             if (wallX[w] == cursorX)
                             {
@@ -284,47 +278,18 @@ while (true)
                                     hitWall = 1;
                             }
                         }
-                        else
+                        if (hitWall == 0)
                         {
-                            if (freeSlot == 255)
-                                freeSlot = w;
-                        }
-                    }
-                    if (hitWall == 0)
-                    {
-                        if (freeSlot != 255)
-                        {
-                            wallX[freeSlot] = cursorX;
-                            wallY[freeSlot] = cursorY;
-                            wallActive[freeSlot] = 1;
+                            wallX[wallCount] = cursorX;
+                            wallY[wallCount] = cursorY;
+                            wallCount = (byte)(wallCount + 1);
                             doPlaceWall = 1;
                         }
                     }
                 }
             }
-
-            // Remove wall with B — scan wall arrays
-            doRemoveWall = 0;
-            if ((byte)(lastTrigger & (byte)PAD.B) != 0)
-            {
-                for (byte w = 0; w < MAX_WALLS; w++)
-                {
-                    if (wallActive[w] != 0)
-                    {
-                        if (wallX[w] == cursorX)
-                        {
-                            if (wallY[w] == cursorY)
-                            {
-                                wallActive[w] = 0;
-                                doRemoveWall = 1;
-                            }
-                        }
-                    }
-                }
-            }
-
-            // VRAM updates — separated from array operations to keep
-            // clean block state for NTADR_A with runtime args
+            // VRAM update — separated from array operations to keep clean
+            // block state for NTADR_A with runtime args
             if (doPlaceWall != 0)
             {
                 ppu_off();
@@ -332,6 +297,27 @@ while (true)
                 vram_put(CH_WALL);
                 ppu_on_all();
             }
+
+            // Remove wall with B — check arrays, defer VRAM update
+            doRemoveWall = 0;
+            if ((byte)(lastTrigger & (byte)PAD.B) != 0)
+            {
+                for (byte w = 0; w < wallCount; w++)
+                {
+                    if (wallX[w] == cursorX)
+                    {
+                        if (wallY[w] == cursorY)
+                        {
+                            doRemoveWall = 1;
+                            wallCount = (byte)(wallCount - 1);
+                            wallX[w] = wallX[wallCount];
+                            wallY[w] = wallY[wallCount];
+                            w = wallCount; // exit loop
+                        }
+                    }
+                }
+            }
+            // VRAM update — separated from array operations
             if (doRemoveWall != 0)
             {
                 ppu_off();
@@ -380,17 +366,15 @@ while (true)
                         }
                         else
                         {
-                            // Check wall at (tempNX, tempNY)
+                            // Check wall arrays (no VRAM here — can't mix
+                            // arrays with NTADR_A runtime args in same block)
                             hitWall = 0;
-                            for (byte w = 0; w < MAX_WALLS; w++)
+                            for (byte w = 0; w < wallCount; w++)
                             {
-                                if (wallActive[w] != 0)
+                                if (wallX[w] == tempNX)
                                 {
-                                    if (wallX[w] == tempNX)
-                                    {
-                                        if (wallY[w] == tempNY)
-                                            hitWall = 1;
-                                    }
+                                    if (wallY[w] == tempNY)
+                                        hitWall = 1;
                                 }
                             }
                             if (hitWall == 0)

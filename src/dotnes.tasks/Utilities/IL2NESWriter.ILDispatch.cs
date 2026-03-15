@@ -161,9 +161,9 @@ partial class IL2NESWriter
                 }
                 else
                 {
-                    var addr = Locals.TryGetValue(0, out var existing) && existing.Address is not null
-                        ? (ushort)existing.Address : (ushort)(local + LocalCount);
-                    WriteStloc(Locals[0] = new Local(Stack.Pop(), addr, IsWord: WordLocals.Contains(0) || (_runtimeValueInA && _ushortInAX) || _ntadrRuntimeResult));
+                    bool isNew = !(Locals.TryGetValue(0, out var existing) && existing.Address is not null);
+                    var addr = isNew ? (ushort)(local + LocalCount) : (ushort)existing!.Address!.Value;
+                    WriteStloc(Locals[0] = new Local(Stack.Pop(), addr, IsWord: WordLocals.Contains(0) || (_runtimeValueInA && _ushortInAX) || _ntadrRuntimeResult), isNewAllocation: isNew);
                 }
                 break;
             case ILOpCode.Stloc_1:
@@ -184,9 +184,9 @@ partial class IL2NESWriter
                 }
                 else
                 {
-                    var addr = Locals.TryGetValue(1, out var existing) && existing.Address is not null
-                        ? (ushort)existing.Address : (ushort)(local + LocalCount);
-                    WriteStloc(Locals[1] = new Local(Stack.Pop(), addr, IsWord: WordLocals.Contains(1) || (_runtimeValueInA && _ushortInAX) || _ntadrRuntimeResult));
+                    bool isNew = !(Locals.TryGetValue(1, out var existing) && existing.Address is not null);
+                    var addr = isNew ? (ushort)(local + LocalCount) : (ushort)existing!.Address!.Value;
+                    WriteStloc(Locals[1] = new Local(Stack.Pop(), addr, IsWord: WordLocals.Contains(1) || (_runtimeValueInA && _ushortInAX) || _ntadrRuntimeResult), isNewAllocation: isNew);
                 }
                 break;
             case ILOpCode.Stloc_2:
@@ -207,9 +207,9 @@ partial class IL2NESWriter
                 }
                 else
                 {
-                    var addr = Locals.TryGetValue(2, out var existing) && existing.Address is not null
-                        ? (ushort)existing.Address : (ushort)(local + LocalCount);
-                    WriteStloc(Locals[2] = new Local(Stack.Pop(), addr, IsWord: WordLocals.Contains(2) || (_runtimeValueInA && _ushortInAX) || _ntadrRuntimeResult));
+                    bool isNew = !(Locals.TryGetValue(2, out var existing) && existing.Address is not null);
+                    var addr = isNew ? (ushort)(local + LocalCount) : (ushort)existing!.Address!.Value;
+                    WriteStloc(Locals[2] = new Local(Stack.Pop(), addr, IsWord: WordLocals.Contains(2) || (_runtimeValueInA && _ushortInAX) || _ntadrRuntimeResult), isNewAllocation: isNew);
                 }
                 break;
             case ILOpCode.Stloc_3:
@@ -230,9 +230,9 @@ partial class IL2NESWriter
                 }
                 else
                 {
-                    var addr = Locals.TryGetValue(3, out var existing) && existing.Address is not null
-                        ? (ushort)existing.Address : (ushort)(local + LocalCount);
-                    WriteStloc(Locals[3] = new Local(Stack.Pop(), addr, IsWord: WordLocals.Contains(3) || (_runtimeValueInA && _ushortInAX) || _ntadrRuntimeResult));
+                    bool isNew = !(Locals.TryGetValue(3, out var existing) && existing.Address is not null);
+                    var addr = isNew ? (ushort)(local + LocalCount) : (ushort)existing!.Address!.Value;
+                    WriteStloc(Locals[3] = new Local(Stack.Pop(), addr, IsWord: WordLocals.Contains(3) || (_runtimeValueInA && _ushortInAX) || _ntadrRuntimeResult), isNewAllocation: isNew);
                 }
                 break;
             case ILOpCode.Ldloc_0:
@@ -264,6 +264,8 @@ partial class IL2NESWriter
                 // When truncating from ushort to byte, discard high byte
                 if (_ushortInAX)
                     _ushortInAX = false;
+                // A now holds a transformed value, no longer directly from a static field
+                _lastStaticFieldAddress = null;
                 break;
             case ILOpCode.Conv_u2:
             case ILOpCode.Conv_u4:
@@ -272,6 +274,7 @@ partial class IL2NESWriter
             case ILOpCode.Conv_i2:
             case ILOpCode.Conv_i4:
                 // No-op: sign/zero extension is irrelevant on 8-bit 6502
+                _lastStaticFieldAddress = null;
                 break;
             case ILOpCode.Stelem_i1:
             case ILOpCode.Stelem_i2:
@@ -288,6 +291,7 @@ partial class IL2NESWriter
                 break;
             case ILOpCode.Mul:
                 {
+                    _lastStaticFieldAddress = null;
                     int val2 = Stack.Pop();
                     int val1 = Stack.Count > 0 ? Stack.Pop() : 0;
 
@@ -369,6 +373,7 @@ partial class IL2NESWriter
                 break;
             case ILOpCode.Div:
                 {
+                    _lastStaticFieldAddress = null;
                     int divisor = Stack.Pop();
                     int dividend = Stack.Count > 0 ? Stack.Pop() : 0;
 
@@ -440,6 +445,7 @@ partial class IL2NESWriter
                 break;
             case ILOpCode.Rem:
                 {
+                    _lastStaticFieldAddress = null;
                     int divisor = Stack.Pop();
                     int dividend = Stack.Count > 0 ? Stack.Pop() : 0;
 
@@ -506,6 +512,7 @@ partial class IL2NESWriter
             case ILOpCode.Shr:
             case ILOpCode.Shr_un:
                 {
+                    _lastStaticFieldAddress = null;
                     int shiftCount = Stack.Pop();
                     int value = Stack.Count > 0 ? Stack.Pop() : 0;
 
@@ -559,6 +566,7 @@ partial class IL2NESWriter
                 break;
             case ILOpCode.Shl:
                 {
+                    _lastStaticFieldAddress = null;
                     int shiftCount = Stack.Pop();
                     int value = Stack.Count > 0 ? Stack.Pop() : 0;
 
@@ -588,6 +596,7 @@ partial class IL2NESWriter
                 break;
             case ILOpCode.And:
                 {
+                    _lastStaticFieldAddress = null;
                     int mask = Stack.Pop();
                     int value = Stack.Count > 0 ? Stack.Pop() : 0;
 
@@ -632,6 +641,7 @@ partial class IL2NESWriter
                 break;
             case ILOpCode.Or:
                 {
+                    _lastStaticFieldAddress = null;
                     int orMask = Stack.Pop();
                     int orValue = Stack.Count > 0 ? Stack.Pop() : 0;
 
@@ -774,9 +784,9 @@ partial class IL2NESWriter
                     else
                     {
                         // Regular local — allocate address and store
-                        var addr = Locals.TryGetValue(localIdx, out var existing) && existing.Address is not null
-                            ? (ushort)existing.Address : (ushort)(local + LocalCount);
-                        WriteStloc(Locals[localIdx] = new Local(Stack.Pop(), addr, IsWord: WordLocals.Contains(localIdx) || (_runtimeValueInA && _ushortInAX) || _ntadrRuntimeResult));
+                        bool isNew = !(Locals.TryGetValue(localIdx, out var existing) && existing.Address is not null);
+                        var addr = isNew ? (ushort)(local + LocalCount) : (ushort)existing!.Address!.Value;
+                        WriteStloc(Locals[localIdx] = new Local(Stack.Pop(), addr, IsWord: WordLocals.Contains(localIdx) || (_runtimeValueInA && _ushortInAX) || _ntadrRuntimeResult), isNewAllocation: isNew);
                     }
                 }
                 break;
@@ -1276,7 +1286,8 @@ partial class IL2NESWriter
                         }
                         break;
                     case nameof(NESLib.pad_poll):
-                        // pad_poll returns result in A — store to dynamically allocated temp
+                    case nameof(NESLib.pad_trigger):
+                        // pad_poll/pad_trigger returns result in A — store to dynamically allocated temp
                         EmitWithLabel(Opcode.JSR, AddressMode.Absolute, operand);
                         if (_padReloadAddress == 0)
                         {
@@ -1405,6 +1416,9 @@ partial class IL2NESWriter
                                     Locals.TryGetValue(_lastLoadedLocalIndex.Value, out pokeLocal) &&
                                     pokeLocal.Address.HasValue;
 
+                                // Check if the value is from a static field
+                                bool valueIsStaticField = _lastStaticFieldAddress.HasValue;
+
                                 // Remove previously emitted instructions:
                                 // LDX #hi, LDA #lo, JSR pusha, LDA #value = 4 instructions
                                 RemoveLastInstructions(4);
@@ -1412,6 +1426,12 @@ partial class IL2NESWriter
                                 if (valueIsLocal)
                                 {
                                     Emit(Opcode.LDA, AddressMode.Absolute, (ushort)pokeLocal!.Address!.Value);
+                                    _pokeLastValue = null;
+                                    _immediateInA = null;
+                                }
+                                else if (valueIsStaticField)
+                                {
+                                    Emit(Opcode.LDA, AddressMode.Absolute, _lastStaticFieldAddress!.Value);
                                     _pokeLastValue = null;
                                     _immediateInA = null;
                                 }
@@ -1424,6 +1444,7 @@ partial class IL2NESWriter
                                 Emit(Opcode.STA, AddressMode.Absolute, (ushort)addr);
                             }
                             _lastLoadedLocalIndex = null;
+                            _lastStaticFieldAddress = null;
                             argsAlreadyPopped = true;
                         }
                         break;
@@ -1690,8 +1711,8 @@ partial class IL2NESWriter
                             {
                                 EmitWithLabel(Opcode.LDA, AddressMode.Immediate_LowByte, _lastByteArrayLabel);
                                 EmitWithLabel(Opcode.LDX, AddressMode.Immediate_HighByte, _lastByteArrayLabel);
-                                // vram_write uses cc65 calling convention: pointer on stack, size in A:X
-                                if (operand is nameof(NESLib.vram_write))
+                                // vram_write/vram_read use cc65 calling convention: pointer on stack, size in A:X
+                                if (operand is nameof(NESLib.vram_write) or nameof(NESLib.vram_read))
                                 {
                                     EmitJSR("pushax");
                                     UsedMethods?.Add("pushax");
@@ -1750,7 +1771,7 @@ partial class IL2NESWriter
                         // A now has a new return value; any previous pad_poll result is gone.
                         // pad_poll sets its own flag after this block, so this only clears
                         // the flag for non-pad_poll calls (e.g. rand8).
-                        if (operand != nameof(NESLib.pad_poll))
+                        if (operand != nameof(NESLib.pad_poll) && operand != nameof(NESLib.pad_trigger))
                         {
                             _padPollResultAvailable = false;
                         }
