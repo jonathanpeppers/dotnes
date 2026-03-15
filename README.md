@@ -63,6 +63,12 @@ Check out the video for a full demo:
 
 [![Check out the video](https://img.youtube.com/vi/m4TU5PJ8WtY/maxresdefault.jpg)](https://youtu.be/m4TU5PJ8WtY)
 
+## MSBuild Properties
+
+.NES exposes several MSBuild properties for configuring your ROM (mapper, mirroring,
+PRG/CHR bank counts, diagnostic logging, and more). See
+[docs/msbuild-properties.md](docs/msbuild-properties.md) for the full reference.
+
 ## Anatomy of an NES application
 
 "Hello World" looks something like:
