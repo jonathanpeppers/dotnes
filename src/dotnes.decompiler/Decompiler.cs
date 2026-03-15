@@ -290,25 +290,26 @@ class Decompiler
             }
 
             // Pattern: LDA #imm / JSR pusha → push 8-bit arg for a multi-arg call
-            if (opcode == 0xA9 && i + 1 < instructions.Count)
+            if (opcode == 0xA9 && op1.HasValue && i + 1 < instructions.Count)
             {
                 var next = instructions[i + 1];
                 if (next.Opcode == 0x20 && IsSubroutine(next, "pusha"))
                 {
-                    pushedBytes.Push(op1!.Value);
+                    pushedBytes.Push(op1.Value);
                     i++; // skip the JSR pusha
                     continue;
                 }
             }
 
             // Pattern: LDA #lo / LDX #hi / JSR pushax → push 16-bit pointer
-            if (opcode == 0xA9 && i + 2 < instructions.Count)
+            if (opcode == 0xA9 && op1.HasValue && i + 2 < instructions.Count)
             {
                 var nextLdx = instructions[i + 1];
                 var nextJsr = instructions[i + 2];
-                if (nextLdx.Opcode == 0xA2 && nextJsr.Opcode == 0x20 && IsSubroutine(nextJsr, "pushax"))
+                if (nextLdx.Opcode == 0xA2 && nextLdx.Op1.HasValue
+                    && nextJsr.Opcode == 0x20 && IsSubroutine(nextJsr, "pushax"))
                 {
-                    ushort value16 = (ushort)(op1!.Value | (nextLdx.Op1!.Value << 8));
+                    ushort value16 = (ushort)(op1.Value | (nextLdx.Op1.Value << 8));
                     pushedWords.Push(value16);
                     i += 2; // skip LDX and JSR pushax
                     continue;
@@ -316,17 +317,18 @@ class Decompiler
             }
 
             // Pattern: LDX #hi / LDA #lo / JSR <subroutine> → call with 16-bit arg in X:A
-            if (opcode == 0xA2 && i + 2 < instructions.Count)
+            if (opcode == 0xA2 && op1.HasValue && i + 2 < instructions.Count)
             {
                 var nextLda = instructions[i + 1];
                 var nextJsr = instructions[i + 2];
-                if (nextLda.Opcode == 0xA9 && nextJsr.Opcode == 0x20)
+                if (nextLda.Opcode == 0xA9 && nextLda.Op1.HasValue
+                    && nextJsr.Opcode == 0x20 && nextJsr.Op1.HasValue && nextJsr.Op2.HasValue)
                 {
-                    ushort jsrTarget = (ushort)(nextJsr.Op1!.Value | (nextJsr.Op2!.Value << 8));
+                    ushort jsrTarget = (ushort)(nextJsr.Op1.Value | (nextJsr.Op2.Value << 8));
                     if (_symbolTable.TryGetValue(jsrTarget, out var name) && name != "pusha" && name != "pushax")
                     {
-                        byte xVal = op1!.Value;
-                        byte aVal = nextLda.Op1!.Value;
+                        byte xVal = op1.Value;
+                        byte aVal = nextLda.Op1.Value;
                         ushort? pushedPtr = pushedWords.Count > 0 ? pushedWords.Pop() : null;
                         var stmt = DecompileCallXA(name, xVal, aVal, pushedPtr);
                         if (stmt != null) statements.Add(stmt);
@@ -337,16 +339,16 @@ class Decompiler
             }
 
             // Pattern: LDA #imm / JSR <subroutine> → call with immediate arg in A
-            if (opcode == 0xA9 && i + 1 < instructions.Count)
+            if (opcode == 0xA9 && op1.HasValue && i + 1 < instructions.Count)
             {
                 var next = instructions[i + 1];
-                if (next.Opcode == 0x20) // JSR
+                if (next.Opcode == 0x20 && next.Op1.HasValue && next.Op2.HasValue)
                 {
-                    ushort jsrTarget = (ushort)(next.Op1!.Value | (next.Op2!.Value << 8));
+                    ushort jsrTarget = (ushort)(next.Op1.Value | (next.Op2.Value << 8));
                     if (_symbolTable.TryGetValue(jsrTarget, out var name))
                     {
                         byte? pushedArg = pushedBytes.Count > 0 ? pushedBytes.Pop() : null;
-                        var stmt = DecompileCall(name, op1!.Value, pushedArg);
+                        var stmt = DecompileCall(name, op1.Value, pushedArg);
                         if (stmt != null) statements.Add(stmt);
                         i++; // skip the JSR
                         continue;
@@ -468,8 +470,10 @@ class Decompiler
                     }
                 }
                 if (allPrintable)
-                    return $"vram_write(\"{new string(chars)}\");";
-            }
+                {
+                    string escaped = new string(chars).Replace("\\", "\\\\").Replace("\"", "\\\"");
+                    return $"vram_write(\"{escaped}\");";
+                }            }
         }
         return $"vram_write(/* {length} bytes */);";
     }
@@ -519,6 +523,8 @@ class Decompiler
         sb.AppendLine("  <PropertyGroup>");
         sb.AppendLine("    <OutputType>Exe</OutputType>");
         sb.AppendLine("    <TargetFramework>net10.0</TargetFramework>");
+        sb.AppendLine("    <ImplicitUsings>enable</ImplicitUsings>");
+        sb.AppendLine("    <Nullable>enable</Nullable>");
 
         if (_rom.Mapper != 0)
             sb.AppendLine($"    <NESMapper>{_rom.Mapper}</NESMapper>");
@@ -532,6 +538,7 @@ class Decompiler
         sb.AppendLine("  </PropertyGroup>");
         sb.AppendLine();
         sb.AppendLine("  <ItemGroup>");
+        sb.AppendLine("    <Using Include=\"NES\" />");
         sb.AppendLine("    <PackageReference Include=\"dotnes\" Version=\"*\" />");
         sb.AppendLine("  </ItemGroup>");
         sb.AppendLine();

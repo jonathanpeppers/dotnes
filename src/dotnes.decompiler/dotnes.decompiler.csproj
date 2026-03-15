@@ -15,6 +15,9 @@
     <ToolCommandName>dotnes-decompiler</ToolCommandName>
   </PropertyGroup>
   <ItemGroup>
+    <InternalsVisibleTo Include="dotnes.tests" />
+  </ItemGroup>
+  <ItemGroup>
     <Using Include="NES" />
     <None Include="../../LICENSE" Pack="true" PackagePath="" />
     <Compile Include="../dotnes.tasks/ObjectModel/*.cs" Link="ObjectModel/%(FileName)%(Extension)" />

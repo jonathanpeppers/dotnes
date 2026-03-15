@@ -109,6 +109,7 @@ public class DecompilerTests
 
         Assert.Contains("<OutputType>Exe</OutputType>", csproj);
         Assert.Contains("<TargetFramework>net10.0</TargetFramework>", csproj);
+        Assert.Contains("<Using Include=\"NES\" />", csproj);
         Assert.Contains("dotnes", csproj);
         // hello uses default settings so no mapper/prg/chr overrides
         Assert.DoesNotContain("NESMapper", csproj);

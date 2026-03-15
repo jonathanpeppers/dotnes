@@ -51,13 +51,21 @@ class NESRomReader
         // Skip remaining header bytes (flags8-15)
         reader.ReadBytes(HeaderSize - 8);
 
+        // Skip 512-byte trainer if present (flags6 bit 2)
+        if ((flags6 & 0x04) != 0)
+            reader.ReadBytes(512);
+
         // Read PRG ROM
         int prgSize = PrgBanks * PrgBankSize;
         PrgRom = reader.ReadBytes(prgSize);
+        if (PrgRom.Length != prgSize)
+            throw new InvalidOperationException($"Truncated ROM: expected {prgSize} PRG bytes, got {PrgRom.Length}.");
 
         // Read CHR ROM (if present)
         int chrSize = ChrBanks * ChrBankSize;
         ChrRom = chrSize > 0 ? reader.ReadBytes(chrSize) : Array.Empty<byte>();
+        if (chrSize > 0 && ChrRom.Length != chrSize)
+            throw new InvalidOperationException($"Truncated ROM: expected {chrSize} CHR bytes, got {ChrRom.Length}.");
 
         // Read interrupt vectors from last 6 bytes of PRG ROM
         if (PrgRom.Length >= 6)
