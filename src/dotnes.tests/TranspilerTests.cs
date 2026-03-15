@@ -154,6 +154,23 @@ public class TranspilerTests
     }
 
     [Theory]
+    [InlineData(false, 0x00)] // no battery: flags6 bit 1 = 0
+    [InlineData(true, 0x02)]  // battery: flags6 bit 1 = 1
+    public void Write_BatteryFlag(bool battery, byte expectedFlags6)
+    {
+        using var dll = Utilities.GetResource("hello.release.dll");
+        var chr_generic = new StreamReader(Utilities.GetResource("chr_generic.s"));
+        var assemblyReaders = new List<AssemblyReader> { new AssemblyReader(chr_generic) };
+        using var il = new Transpiler(dll, assemblyReaders, _logger, battery: battery);
+        using var ms = new MemoryStream();
+        il.Write(ms);
+
+        var bytes = ms.ToArray();
+        // iNES header byte 6 is flags6
+        Assert.Equal(expectedFlags6, bytes[6]);
+    }
+
+    [Theory]
     [InlineData("hello", true)]
     [InlineData("hello", false)]
     [InlineData("attributetable", true)]

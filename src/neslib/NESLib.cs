@@ -507,6 +507,10 @@ public static class NESLib
     public const ushort APU_NOISE_LENGTH = 0x400F;
     public const ushort APU_STATUS = 0x4015;
 
+    // Battery-backed SRAM address range ($6000-$7FFF) for use with peek()/poke()
+    public const ushort SRAM_START = 0x6000;
+    public const ushort SRAM_END = 0x7FFF;
+
     // MMC3 mapper register addresses for bank switching via poke()
     public const ushort MMC3_BANK_SELECT = 0x8000;
     public const ushort MMC3_BANK_DATA = 0x8001;

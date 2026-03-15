@@ -32,6 +32,11 @@ public class TranspileToNES : Task
     /// </summary>
     public int NESChrBanks { get; set; } = 1;
 
+    /// <summary>
+    /// Indicates battery-backed SRAM at $6000-$7FFF. Default is false.
+    /// </summary>
+    public bool NESBattery { get; set; }
+
     public ILogger? Logger { get; set; }
 
     public override bool Execute()
@@ -40,7 +45,7 @@ public class TranspileToNES : Task
         var assemblies = AssemblyFiles.Select(a => new AssemblyReader(a)).ToList();
         using var input = File.OpenRead(TargetPath);
         using var output = File.Create(OutputPath);
-        using var transpiler = new Transpiler(input, assemblies, Logger, NESVerticalMirroring, NESMapper, NESPrgBanks, NESChrBanks);
+        using var transpiler = new Transpiler(input, assemblies, Logger, NESVerticalMirroring, NESMapper, NESPrgBanks, NESChrBanks, NESBattery);
         transpiler.Write(output);
 
         return !Log.HasLoggedErrors;
