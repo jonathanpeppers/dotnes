@@ -25,8 +25,6 @@ const NES.NESLib.APU_TRIANGLE_TIMER_HI = 16395 -> ushort
 const NES.NESLib.APU_TRIANGLE_TIMER_LO = 16394 -> ushort
 const NES.NESLib.MMC3_BANK_DATA = 32769 -> ushort
 const NES.NESLib.MMC3_BANK_SELECT = 32768 -> ushort
-const NES.NESLib.SRAM_END = 32767 -> ushort
-const NES.NESLib.SRAM_START = 24576 -> ushort
 const NES.NESLib.MMC3_IRQ_DISABLE = 57344 -> ushort
 const NES.NESLib.MMC3_IRQ_ENABLE = 57345 -> ushort
 const NES.NESLib.MMC3_IRQ_LATCH = 49152 -> ushort
@@ -42,6 +40,8 @@ const NES.NESLib.PPU_DATA = 8199 -> ushort
 const NES.NESLib.PPU_MASK = 8193 -> ushort
 const NES.NESLib.PPU_SCROLL = 8197 -> ushort
 const NES.NESLib.PPU_STATUS = 8194 -> ushort
+const NES.NESLib.SRAM_END = 32767 -> ushort
+const NES.NESLib.SRAM_START = 24576 -> ushort
 const NES.NESLib.VRAMBUF_VERT = 32768 -> ushort
 const NES.NESLib.updbuf = 256 -> ushort
 static NES.NESLib.LSB(ushort x) -> byte
