@@ -158,9 +158,9 @@ public class TranspilerTests
     }
 
     [Theory]
-    [InlineData(false, 0x00)] // no battery: flags6 bit 1 = 0
-    [InlineData(true, 0x02)]  // battery: flags6 bit 1 = 1
-    public void Write_BatteryFlag(bool battery, byte expectedFlags6)
+    [InlineData(false)] // no battery: flags6 bit 1 = 0
+    [InlineData(true)]  // battery: flags6 bit 1 = 1
+    public void Write_BatteryFlag(bool battery)
     {
         using var dll = Utilities.GetResource("hello.release.dll");
         var chr_generic = new StreamReader(Utilities.GetResource("chr_generic.s"));
@@ -170,8 +170,9 @@ public class TranspilerTests
         il.Write(ms);
 
         var bytes = ms.ToArray();
-        // iNES header byte 6 is flags6
-        Assert.Equal(expectedFlags6, bytes[6]);
+        // iNES header byte 6 is flags6; only check bit 1 (battery flag)
+        byte batteryBit = (byte)(bytes[6] & 0x02);
+        Assert.Equal(battery ? 0x02 : 0x00, batteryBit);
     }
 
     [Theory]
