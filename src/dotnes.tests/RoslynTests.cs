@@ -3250,4 +3250,72 @@ public class RoslynTests
         // because outer_func calls inner_func and both are on the stack simultaneously
         Assert.Contains("8D2603", hex);
     }
+
+    [Fact]
+    public void NestedCallsWithMultipleLocalsGetCorrectOffsets()
+    {
+        // When a caller has multiple locals, the callee's frame must start
+        // AFTER all the caller's locals, not just 1 byte later.
+        var (program, _) = BuildProgram(
+            """
+            multi_local_func();
+            ppu_on_all();
+            while (true) ;
+
+            static void multi_local_func()
+            {
+                byte a = 10;
+                byte b = 20;
+                byte c = 30;
+                byte d = 40;
+                pal_col(0, a);
+                pal_col(1, b);
+                pal_col(2, c);
+                pal_col(3, d);
+                callee_func();
+            }
+
+            static void callee_func()
+            {
+                byte val = 77;
+                pal_col(0, val);
+            }
+            """);
+
+        var allBytes = program.ToBytes();
+        var hex = Convert.ToHexString(allBytes);
+        _logger.WriteLine($"MultiLocalNestedCalls full hex: {hex}");
+
+        // multi_local_func has 4 byte locals at $0325-$0328
+        Assert.Contains("8D2503", hex); // STA $0325 (local a)
+        Assert.Contains("8D2603", hex); // STA $0326 (local b)
+        Assert.Contains("8D2703", hex); // STA $0327 (local c)
+        Assert.Contains("8D2803", hex); // STA $0328 (local d)
+
+        // callee_func's local must be at $0329 (after all 4 caller locals)
+        Assert.Contains("A94D", hex);   // LDA #77
+        Assert.Contains("8D2903", hex); // STA $0329
+    }
+
+    [Fact]
+    public void RecursiveUserMethodThrows()
+    {
+        // Self-recursive user methods should fail fast during transpilation
+        // rather than silently producing overlapping frame offsets.
+        var ex = Assert.ThrowsAny<Exception>(() => BuildProgram(
+            """
+            recurse();
+            ppu_on_all();
+            while (true) ;
+
+            static void recurse()
+            {
+                byte x = 1;
+                pal_col(0, x);
+                recurse();
+            }
+            """));
+
+        Assert.Contains("ecursive", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
 }
