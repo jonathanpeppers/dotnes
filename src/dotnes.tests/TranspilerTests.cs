@@ -120,6 +120,8 @@ public class TranspilerTests
     [InlineData("vertscroll", false)]
     [InlineData("slideshow", true, "Horizontal", 3, 2, 2)]
     [InlineData("slideshow", false, "Horizontal", 3, 2, 2)]
+    [InlineData("mmc1", true, "Horizontal", 1)]
+    [InlineData("mmc1", false, "Horizontal", 1)]
     [InlineData("battery", true, "Horizontal", 0, 2, 1, true)]
     [InlineData("battery", false, "Horizontal", 0, 2, 1, true)]
     public Task Write(string name, bool debug, string mirroring = "Horizontal", int mapper = 0, int prgBanks = 2, int chrBanks = 1, bool battery = false)

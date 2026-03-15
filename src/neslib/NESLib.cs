@@ -532,6 +532,50 @@ public static class NESLib
     public const ushort MMC3_IRQ_DISABLE = 0xE000;
     public const ushort MMC3_IRQ_ENABLE = 0xE001;
 
+    // MMC1 mapper register addresses for serial shift register writes via mmc1_write()
+    public const ushort MMC1_CONTROL = 0x8000;
+    public const ushort MMC1_CHR_BANK0 = 0xA000;
+    public const ushort MMC1_CHR_BANK1 = 0xC000;
+    public const ushort MMC1_PRG_BANK = 0xE000;
+
+    // MMC1 mirroring modes (bits 0-1 of the Control register)
+    public const byte MMC1_MIRROR_ONE_LOWER = 0;
+    public const byte MMC1_MIRROR_ONE_UPPER = 1;
+    public const byte MMC1_MIRROR_VERTICAL = 2;
+    public const byte MMC1_MIRROR_HORIZONTAL = 3;
+
+    // MMC1 Control register PRG/CHR mode bits (OR with mirroring constants)
+    /// <summary>PRG mode: fix last bank at $C000, switch 16KB bank at $8000 (bits 2-3 = 11).</summary>
+    public const byte MMC1_PRG_FIX_LAST = 0x0C;
+    /// <summary>CHR mode: two separate 4KB banks (bit 4 = 1).</summary>
+    public const byte MMC1_CHR_4K = 0x10;
+
+    /// <summary>
+    /// Write a 5-bit value to an MMC1 register using the serial shift register protocol.
+    /// MMC1 requires writing one bit at a time (5 writes total) to latch a value.
+    /// The addr must be one of the MMC1_* register constants.
+    /// </summary>
+    public static void mmc1_write(ushort addr, byte value) => throw null!;
+
+    /// <summary>
+    /// Switch the MMC1 PRG bank by writing to the PRG bank register ($E000).
+    /// </summary>
+    public static void mmc1_set_prg_bank(byte bank) => throw null!;
+
+    /// <summary>
+    /// Switch both MMC1 CHR banks by writing to CHR bank 0 ($A000) and CHR bank 1 ($C000).
+    /// </summary>
+    public static void mmc1_set_chr_bank(byte bank0, byte bank1) => throw null!;
+
+    /// <summary>
+    /// Write the full MMC1 Control register ($8000) via the serial shift register.
+    /// The value contains: mirroring mode (bits 0-1), PRG bank mode (bits 2-3),
+    /// and CHR bank mode (bit 4). Use MMC1_MIRROR_* constants OR'd with PRG/CHR
+    /// mode bits. Writing only a mirror constant (e.g., MMC1_MIRROR_VERTICAL)
+    /// resets PRG/CHR modes to zero — combine with your desired mode bits.
+    /// </summary>
+    public static void mmc1_set_mirroring(byte mode) => throw null!;
+
     // TODO: Macros below should be computed at compile-time and methods removed
 
     /// <summary>

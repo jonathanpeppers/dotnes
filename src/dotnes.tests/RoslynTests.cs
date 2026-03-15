@@ -3544,4 +3544,88 @@ public class RoslynTests
         // LDA #$01 = A901, STA $8000 = 8D0080
         Assert.Contains("A9018D0080", hex);
     }
+
+    [Fact]
+    public void Mmc1Write_EmitsShiftRegisterProtocol()
+    {
+        // mmc1_write(0x8000, 0x0C) should emit:
+        // LDA #$80, STA $8000 (reset)
+        // LDA #$0C, STA $8000, LSR A, STA $8000, LSR A, STA $8000, LSR A, STA $8000, LSR A, STA $8000
+        var bytes = GetProgramBytes(
+            """
+            mmc1_write(0x8000, 0x0C);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        // Reset: LDA #$80 (A980), STA $8000 (8D0080)
+        Assert.Contains("A980" + "8D0080", hex);
+        // Value load + 5-bit serial write: LDA #$0C, STA $8000, LSR A, STA $8000 (×4), LSR A, STA $8000
+        // Contiguous pattern: A90C 8D0080 4A 8D0080 4A 8D0080 4A 8D0080 4A 8D0080
+        Assert.Contains("A90C" + "8D0080" + "4A" + "8D0080" + "4A" + "8D0080" + "4A" + "8D0080" + "4A" + "8D0080", hex);
+    }
+
+    [Fact]
+    public void Mmc1SetPrgBank_EmitsWriteToE000()
+    {
+        // mmc1_set_prg_bank(2) should emit serial writes to $E000
+        var bytes = GetProgramBytes(
+            """
+            mmc1_set_prg_bank(2);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        // STA $E000 = 8D00E0
+        Assert.Contains("8D00E0", hex);
+        // LDA #$02 = A902
+        Assert.Contains("A902", hex);
+    }
+
+    [Fact]
+    public void Mmc1SetMirroring_EmitsWriteTo8000()
+    {
+        // mmc1_set_mirroring writes the full Control register — use mirror + PRG/CHR mode bits
+        // MMC1_MIRROR_VERTICAL | MMC1_PRG_FIX_LAST = 0x02 | 0x0C = 0x0E
+        var bytes = GetProgramBytes(
+            """
+            mmc1_set_mirroring(MMC1_MIRROR_VERTICAL | MMC1_PRG_FIX_LAST);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        // Reset: LDA #$80, STA $8000
+        Assert.Contains("A980" + "8D0080", hex);
+        // Value: LDA #$0E (0x02 | 0x0C), followed by serial writes to $8000
+        Assert.Contains("A90E" + "8D0080" + "4A" + "8D0080" + "4A" + "8D0080" + "4A" + "8D0080" + "4A" + "8D0080", hex);
+    }
+
+    [Fact]
+    public void Mmc1SetChrBank_EmitsWritesToA000AndC000()
+    {
+        // mmc1_set_chr_bank(0, 1) should emit serial writes to $A000 and $C000
+        var bytes = GetProgramBytes(
+            """
+            mmc1_set_chr_bank(0, 1);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        // STA $A000 = 8D00A0
+        Assert.Contains("8D00A0", hex);
+        // STA $C000 = 8D00C0
+        Assert.Contains("8D00C0", hex);
+    }
 }
