@@ -3235,9 +3235,9 @@ public class RoslynTests
         // the next ldc.i4.5 (A905) loads the constant.
         // With the fix, a JSR pusha should appear between them.
         int ldloc = hex.IndexOf("AD2503");
-        int ldc = hex.IndexOf("A905");
         Assert.True(ldloc >= 0, $"LDA $0325 (load local 0) not found. Hex: {hex}");
-        Assert.True(ldc >= 0, $"LDA #$05 (load constant 5) not found. Hex: {hex}");
+        int ldc = hex.IndexOf("A905", ldloc);
+        Assert.True(ldc >= 0, $"LDA #$05 (load constant 5) not found after ldloc. Hex: {hex}");
         Assert.True(ldc > ldloc, $"LDA #$05 should come after LDA $0325. Hex: {hex}");
 
         // The two LDA instructions should NOT be adjacent — there must be a JSR pusha between them.
@@ -3274,9 +3274,9 @@ public class RoslynTests
         // For my_func(x, y): ldloc.0 (AD2503), ldloc.1 (AD2603), call my_func
         // A JSR pusha must appear between the two LDA instructions.
         int idx0 = hex.IndexOf("AD2503");
-        int idx1 = hex.IndexOf("AD2603");
         Assert.True(idx0 >= 0, $"LDA $0325 not found. Hex: {hex}");
-        Assert.True(idx1 >= 0, $"LDA $0326 not found. Hex: {hex}");
+        int idx1 = hex.IndexOf("AD2603", idx0 + 6);
+        Assert.True(idx1 >= 0, $"LDA $0326 not found after LDA $0325. Hex: {hex}");
         Assert.True(idx1 > idx0 + 6,
             $"No JSR pusha between two local arg loads. " +
             $"LDA $0325 at {idx0}, LDA $0326 at {idx1}. Hex: {hex}");
