@@ -3211,6 +3211,115 @@ public class RoslynTests
     }
 
     [Fact]
+    public void NestedFunctionCallsGetSeparateLocalAddresses()
+    {
+        // When outer_func calls inner_func, each must have its own local storage
+        // to prevent inner_func from clobbering outer_func's locals.
+        var (program, _) = BuildProgram(
+            """
+            outer_func();
+            ppu_on_all();
+            while (true) ;
+
+            static void outer_func()
+            {
+                byte local_outer = 42;
+                inner_func();
+                pal_col(0, local_outer);
+            }
+
+            static void inner_func()
+            {
+                byte local_inner = 99;
+                pal_col(1, local_inner);
+            }
+            """);
+
+        // Get full program bytes (main + user methods)
+        var allBytes = program.ToBytes();
+        var hex = Convert.ToHexString(allBytes);
+        _logger.WriteLine($"NestedFunctionCalls full hex: {hex}");
+
+        // Both literal values must appear: LDA #42 (A92A) and LDA #99 (A963)
+        Assert.Contains("A92A", hex);
+        Assert.Contains("A963", hex);
+
+        // outer_func's local is stored at $0325 (STA $0325 = 8D2503)
+        Assert.Contains("8D2503", hex);
+        // inner_func's local must be at a DIFFERENT address ($0326 = 8D2603)
+        // because outer_func calls inner_func and both are on the stack simultaneously
+        Assert.Contains("8D2603", hex);
+    }
+
+    [Fact]
+    public void NestedCallsWithMultipleLocalsGetCorrectOffsets()
+    {
+        // When a caller has multiple locals, the callee's frame must start
+        // AFTER all the caller's locals, not just 1 byte later.
+        var (program, _) = BuildProgram(
+            """
+            multi_local_func();
+            ppu_on_all();
+            while (true) ;
+
+            static void multi_local_func()
+            {
+                byte a = 10;
+                byte b = 20;
+                byte c = 30;
+                byte d = 40;
+                pal_col(0, a);
+                pal_col(1, b);
+                pal_col(2, c);
+                pal_col(3, d);
+                callee_func();
+            }
+
+            static void callee_func()
+            {
+                byte val = 77;
+                pal_col(0, val);
+            }
+            """);
+
+        var allBytes = program.ToBytes();
+        var hex = Convert.ToHexString(allBytes);
+        _logger.WriteLine($"MultiLocalNestedCalls full hex: {hex}");
+
+        // multi_local_func has 4 byte locals at $0325-$0328
+        Assert.Contains("8D2503", hex); // STA $0325 (local a)
+        Assert.Contains("8D2603", hex); // STA $0326 (local b)
+        Assert.Contains("8D2703", hex); // STA $0327 (local c)
+        Assert.Contains("8D2803", hex); // STA $0328 (local d)
+
+        // callee_func's local must be at $0329 (after all 4 caller locals)
+        Assert.Contains("A94D", hex);   // LDA #77
+        Assert.Contains("8D2903", hex); // STA $0329
+    }
+
+    [Fact]
+    public void RecursiveUserMethodThrows()
+    {
+        // Self-recursive user methods should fail fast during transpilation
+        // rather than silently producing overlapping frame offsets.
+        var ex = Assert.ThrowsAny<Exception>(() => BuildProgram(
+            """
+            recurse();
+            ppu_on_all();
+            while (true) ;
+
+            static void recurse()
+            {
+                byte x = 1;
+                pal_col(0, x);
+                recurse();
+            }
+            """));
+
+        Assert.Contains("ecursive", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void MultiParamUserFunction_LocalVarArgs()
     {
         // Test: calling a user-defined function with a runtime local + constant.
@@ -3334,5 +3443,39 @@ public class RoslynTests
         // Verify no 2-byte ushort high-byte store: STX $0326 (8E2603)
         // If the ushort branch ran, it would emit STX for the high byte
         Assert.DoesNotContain("8E2603", hex);
+    }
+
+    [Fact]
+    public void VramReadEmitsPushaxAndSize()
+    {
+        // vram_read(byte[], uint) must emit the same pushax + size calling convention
+        // as vram_write: pointer pushed via pushax, size in A:X, then JSR vram_read.
+        var bytes = GetProgramBytes(
+            """
+            byte[] buf = new byte[4] { 0x01, 0x02, 0x03, 0x04 };
+            vram_adr(NTADR_A(2, 2));
+            vram_read(buf, 4);
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"VramRead hex: {hex}");
+
+        // The sequence for vram_read(buf, 4) via WriteLdloc should be:
+        //   LDA #lo(buf)   -> A9 xx      (byte array label low byte)
+        //   LDX #hi(buf)   -> A2 xx      (byte array label high byte)
+        //   JSR pushax     -> 20 xx xx   (push pointer onto cc65 stack)
+        //   LDX #$00       -> A2 00      (size high byte from local.Value)
+        //   LDA #$04       -> A9 04      (size low byte = 4)
+        //   ...
+        //   JSR vram_read  -> 20 xx xx
+
+        // Verify JSR pushax (opcode 0x20) appears before the size load sequence.
+        // The full pattern is: JSR pushax (20 xx xx), LDX #$00 (A2 00), LDA #$04 (A9 04)
+        // We match "20" + 4 hex chars (address) + "A200A904" to ensure pushax precedes the size.
+        int jsrIdx = hex.IndexOf("A200A904");
+        Assert.True(jsrIdx >= 6, "Size-load sequence A200A904 not found or too early for preceding JSR");
+        // The 6 hex chars before A200A904 should be a JSR (20 xx xx)
+        Assert.Equal("20", hex.Substring(jsrIdx - 6, 2));
     }
 }
