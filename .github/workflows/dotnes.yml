@@ -29,8 +29,10 @@ jobs:
         dotnet new nes --output samples/foo && \
         dotnet build samples/foo/foo.csproj -bl:foo-debug.binlog && \
         dotnet build samples/foo/foo.csproj -c Release -bl:foo-release.binlog
-    - name: shutdown
+    - name: shutdown (best effort)
+      if: always()
       run: dotnet build-server shutdown
+      continue-on-error: true # best-effort cleanup; failures intentionally ignored
     - name: upload logs
       if: always()
       uses: actions/upload-artifact@v4
