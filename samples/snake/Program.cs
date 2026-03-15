@@ -160,6 +160,12 @@ while (true)
                     // grow snake
                     if (snake_len < 40)
                     {
+                        // initialize new tail segment with current tail position
+                        idx = (byte)(snake_len - 1);
+                        tmpX = snake_x[idx];
+                        tmpY = snake_y[idx];
+                        snake_x[snake_len] = tmpX;
+                        snake_y[snake_len] = tmpY;
                         snake_len = (byte)(snake_len + 1);
                     }
 
