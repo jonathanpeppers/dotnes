@@ -238,12 +238,12 @@ partial class IL2NESWriter
                 {
                     if (depth > 0)
                     {
-                        // Static field consumed by binary op — just decrement depth
+                        // Static field consumed by binary op — track field name for compound emission
                         depth--;
                         if (depth == 0)
                         {
                             argInfos.Add((false, 0, 0, false, 0, false, 0, 0,
-                                true, compLocalIdx, compBinOp, compBinOpConst, compAddConst, false, null));
+                                true, compLocalIdx, compBinOp, compBinOpConst, compAddConst, true, il.String));
                             needed--;
                             firstArgIlIdx = ilIdx;
                             compBinOp = ILOpCode.Nop; compBinOpConst = 0; compLocalIdx = -1;
@@ -293,10 +293,18 @@ partial class IL2NESWriter
             var arg = argInfos[i];
             if (arg.isCompound)
             {
-                // Compound expression: addConst + (local BINOP binOpConst)
-                // or simple: local + addConst (when compoundBinOp is Add)
-                var loc = Locals[arg.compoundLocalIdx];
-                Emit(Opcode.LDA, AddressMode.Absolute, (ushort)loc.Address!);
+                // Compound expression: addConst + (local/field BINOP binOpConst)
+                // or simple: local/field + addConst (when compoundBinOp is Add)
+                if (arg.isStaticField)
+                {
+                    var addr = GetOrAllocateStaticField(arg.staticFieldName!);
+                    Emit(Opcode.LDA, AddressMode.Absolute, addr);
+                }
+                else
+                {
+                    var loc = Locals[arg.compoundLocalIdx];
+                    Emit(Opcode.LDA, AddressMode.Absolute, (ushort)loc.Address!);
+                }
 
                 // Apply the inner binary operation
                 switch (arg.compoundBinOp)
@@ -439,14 +447,18 @@ partial class IL2NESWriter
 
     /// <summary>
     /// Emits LDA for a static field reference used as an oam_spr argument.
-    /// Maps known NES library static fields to their zero-page addresses.
+    /// Maps known NES library static fields to their zero-page addresses,
+    /// or looks up user-defined static fields by allocated address.
     /// </summary>
     void EmitLdsfldForArg(string? fieldName)
     {
         if (fieldName == nameof(NESLib.oam_off))
             Emit(Opcode.LDA, AddressMode.ZeroPage, (byte)NESConstants.OAM_OFF);
         else
-            throw new TranspileException($"Unsupported static field '{fieldName}' in oam_spr argument.", MethodName);
+        {
+            var addr = GetOrAllocateStaticField(fieldName!);
+            Emit(Opcode.LDA, AddressMode.Absolute, addr);
+        }
     }
 
     /// <summary>
