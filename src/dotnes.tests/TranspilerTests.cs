@@ -206,7 +206,7 @@ public class TranspilerTests
         using var dll = Utilities.GetResource($"{name}.{configuration}.dll");
         using var transpiler = new Transpiler(dll, [], _logger);
 
-        var program = transpiler.BuildProgram6502(out ushort sizeOfMain, out ushort locals);
+        _ = transpiler.BuildProgram6502(out ushort sizeOfMain, out ushort locals);
 
         _logger.WriteLine($"{name} ({configuration}): LocalCount={locals}, MainSize={sizeOfMain}");
         Assert.Equal(expectedLocals, locals);
