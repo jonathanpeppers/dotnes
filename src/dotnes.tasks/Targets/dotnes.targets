@@ -20,6 +20,7 @@
         NESMapper="$(NESMapper)"
         NESPrgBanks="$(NESPrgBanks)"
         NESChrBanks="$(NESChrBanks)"
+        NESBattery="$(NESBattery)"
     />
     <ItemGroup>
       <FileWrites Include="$(NESTargetPath)" />

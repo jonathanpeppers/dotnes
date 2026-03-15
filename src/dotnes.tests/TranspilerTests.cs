@@ -120,7 +120,9 @@ public class TranspilerTests
     [InlineData("vertscroll", false)]
     [InlineData("slideshow", true, "Horizontal", 3, 2, 2)]
     [InlineData("slideshow", false, "Horizontal", 3, 2, 2)]
-    public Task Write(string name, bool debug, string mirroring = "Horizontal", int mapper = 0, int prgBanks = 2, int chrBanks = 1)
+    [InlineData("battery", true, "Horizontal", 0, 2, 1, true)]
+    [InlineData("battery", false, "Horizontal", 0, 2, 1, true)]
+    public Task Write(string name, bool debug, string mirroring = "Horizontal", int mapper = 0, int prgBanks = 2, int chrBanks = 1, bool battery = false)
     {
         var configuration = debug ? "debug" : "release";
 
@@ -168,7 +170,7 @@ public class TranspilerTests
         }
 
         using var dll = Utilities.GetResource($"{name}.{configuration}.dll");
-        using var il = new Transpiler(dll, assemblyReaders, _logger, mirroring, mapper, prgBanks, chrBanks);
+        using var il = new Transpiler(dll, assemblyReaders, _logger, mirroring, mapper, prgBanks, chrBanks, battery);
         using var ms = new MemoryStream();
         il.Write(ms);
 
@@ -176,6 +178,24 @@ public class TranspilerTests
         settings.DisableRequireUniquePrefix();
         settings.UseFileName($"TranspilerTests.Write.{name}");
         return Verify(ms.ToArray(), settings);
+    }
+
+    [Theory]
+    [InlineData(false)] // no battery: flags6 bit 1 = 0
+    [InlineData(true)]  // battery: flags6 bit 1 = 1
+    public void Write_BatteryFlag(bool battery)
+    {
+        using var dll = Utilities.GetResource("hello.release.dll");
+        var chr_generic = new StreamReader(Utilities.GetResource("chr_generic.s"));
+        var assemblyReaders = new List<AssemblyReader> { new AssemblyReader(chr_generic) };
+        using var il = new Transpiler(dll, assemblyReaders, _logger, battery: battery);
+        using var ms = new MemoryStream();
+        il.Write(ms);
+
+        var bytes = ms.ToArray();
+        // iNES header byte 6 is flags6; only check bit 1 (battery flag)
+        byte batteryBit = (byte)(bytes[6] & 0x02);
+        Assert.Equal(battery ? 0x02 : 0x00, batteryBit);
     }
 
     [Theory]

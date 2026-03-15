@@ -109,6 +109,26 @@ CHR RAM (pattern data uploaded at runtime instead of stored on the cartridge).
 </PropertyGroup>
 ```
 
+### `NESBattery`
+
+Indicates that the cartridge has battery-backed SRAM at $6000-$7FFF.
+
+| | |
+|---|---|
+| **Type** | `bool` |
+| **Default** | `false` |
+
+When set to `true`, bit 1 of iNES Flags6 is set, telling emulators to persist
+the 8 KB SRAM region across power cycles. Use `peek()` and `poke()` with
+addresses in the $6000-$7FFF range (constants `SRAM_START` and `SRAM_END`) to
+read and write save data.
+
+```xml
+<PropertyGroup>
+  <NESBattery>true</NESBattery>
+</PropertyGroup>
+```
+
 ## Item Groups
 
 ### `NESAssembly`
