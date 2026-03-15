@@ -118,6 +118,8 @@ public class TranspilerTests
     [InlineData("procgen", false)]
     [InlineData("vertscroll", true)]
     [InlineData("vertscroll", false)]
+    [InlineData("mmc1", true, "Horizontal", 1)]
+    [InlineData("mmc1", false, "Horizontal", 1)]
     public Task Write(string name, bool debug, string mirroring = "Horizontal", int mapper = 0, int prgBanks = 2, int chrBanks = 1)
     {
         var configuration = debug ? "debug" : "release";

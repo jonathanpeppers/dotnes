@@ -531,6 +531,12 @@ public static class NESLib
     public const byte MMC1_MIRROR_VERTICAL = 2;
     public const byte MMC1_MIRROR_HORIZONTAL = 3;
 
+    // MMC1 Control register PRG/CHR mode bits (OR with mirroring constants)
+    /// <summary>PRG mode: fix last bank at $C000, switch 16KB bank at $8000 (bits 2-3 = 11).</summary>
+    public const byte MMC1_PRG_FIX_LAST = 0x0C;
+    /// <summary>CHR mode: two separate 4KB banks (bit 4 = 1).</summary>
+    public const byte MMC1_CHR_4K = 0x10;
+
     /// <summary>
     /// Write a 5-bit value to an MMC1 register using the serial shift register protocol.
     /// MMC1 requires writing one bit at a time (5 writes total) to latch a value.
@@ -549,8 +555,11 @@ public static class NESLib
     public static void mmc1_set_chr_bank(byte bank0, byte bank1) => throw null!;
 
     /// <summary>
-    /// Set the MMC1 mirroring mode by writing to the Control register ($8000).
-    /// Use MMC1_MIRROR_* constants for the mode value.
+    /// Write the full MMC1 Control register ($8000) via the serial shift register.
+    /// The value contains: mirroring mode (bits 0-1), PRG bank mode (bits 2-3),
+    /// and CHR bank mode (bit 4). Use MMC1_MIRROR_* constants OR'd with PRG/CHR
+    /// mode bits. Writing only a mirror constant (e.g., MMC1_MIRROR_VERTICAL)
+    /// resets PRG/CHR modes to zero — combine with your desired mode bits.
     /// </summary>
     public static void mmc1_set_mirroring(byte mode) => throw null!;
 

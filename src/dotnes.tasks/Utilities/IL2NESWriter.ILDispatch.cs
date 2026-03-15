@@ -1484,8 +1484,8 @@ partial class IL2NESWriter
                                 // Check if the value is from a static field
                                 bool valueIsStaticField = _lastStaticFieldAddress.HasValue;
 
-                                // Remove previously emitted instructions:
-                                // LDX #hi, LDA #lo, JSR pusha, LDA #value = 4 instructions
+                                // Remove previously emitted arg setup instructions:
+                                // LDX #hi, LDA #lo, JSR pusha/pushax, LDA #value = 4 instructions
                                 RemoveLastInstructions(4);
 
                                 // Reset the shift register by writing with bit 7 set
@@ -1587,11 +1587,20 @@ partial class IL2NESWriter
                                 int bank1 = Stack.Pop();
                                 int bank0 = Stack.Pop();
 
+                                // Check if bank1 (last loaded arg) is from a local or static field
+                                Local? bank1Local = null;
+                                bool bank1IsLocal = _lastLoadedLocalIndex.HasValue &&
+                                    Locals.TryGetValue(_lastLoadedLocalIndex.Value, out bank1Local) &&
+                                    bank1Local.Address.HasValue;
+                                bool bank1IsStaticField = _lastStaticFieldAddress.HasValue;
+                                ushort? bank1StaticAddr = _lastStaticFieldAddress;
+
                                 // Remove previously emitted instructions:
                                 // LDA #bank0, JSR pusha, LDA #bank1 = 3 instructions
                                 RemoveLastInstructions(3);
 
                                 // Write bank0 to CHR bank 0 register ($A000)
+                                // Note: bank0 local/static tracking is lost after pusha — only constants supported
                                 Emit(Opcode.LDA, AddressMode.Immediate, 0x80);
                                 Emit(Opcode.STA, AddressMode.Absolute, NESLib.MMC1_CHR_BANK0);
                                 Emit(Opcode.LDA, AddressMode.Immediate, (byte)bank0);
@@ -1608,7 +1617,18 @@ partial class IL2NESWriter
                                 // Write bank1 to CHR bank 1 register ($C000)
                                 Emit(Opcode.LDA, AddressMode.Immediate, 0x80);
                                 Emit(Opcode.STA, AddressMode.Absolute, NESLib.MMC1_CHR_BANK1);
-                                Emit(Opcode.LDA, AddressMode.Immediate, (byte)bank1);
+                                if (bank1IsLocal)
+                                {
+                                    Emit(Opcode.LDA, AddressMode.Absolute, (ushort)bank1Local!.Address!.Value);
+                                }
+                                else if (bank1IsStaticField)
+                                {
+                                    Emit(Opcode.LDA, AddressMode.Absolute, bank1StaticAddr!.Value);
+                                }
+                                else
+                                {
+                                    Emit(Opcode.LDA, AddressMode.Immediate, (byte)bank1);
+                                }
                                 Emit(Opcode.STA, AddressMode.Absolute, NESLib.MMC1_CHR_BANK1);
                                 Emit(Opcode.LSR, AddressMode.Accumulator);
                                 Emit(Opcode.STA, AddressMode.Absolute, NESLib.MMC1_CHR_BANK1);

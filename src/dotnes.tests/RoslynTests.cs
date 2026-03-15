@@ -3538,17 +3538,11 @@ public class RoslynTests
         Assert.NotEmpty(bytes);
 
         var hex = Convert.ToHexString(bytes);
-        // LDA #$80 = A980
-        Assert.Contains("A980", hex);
-        // STA $8000 = 8D0080
-        Assert.Contains("8D0080", hex);
-        // LDA #$0C = A90C
-        Assert.Contains("A90C", hex);
-        // LSR A = 4A (should appear 4 times for the shift protocol)
-        int lsrCount = 0;
-        int idx = 0;
-        while ((idx = hex.IndexOf("4A", idx)) >= 0) { lsrCount++; idx += 2; }
-        Assert.True(lsrCount >= 4, $"Expected at least 4 LSR A instructions, found {lsrCount}");
+        // Reset: LDA #$80 (A980), STA $8000 (8D0080)
+        Assert.Contains("A980" + "8D0080", hex);
+        // Value load + 5-bit serial write: LDA #$0C, STA $8000, LSR A, STA $8000 (×4), LSR A, STA $8000
+        // Contiguous pattern: A90C 8D0080 4A 8D0080 4A 8D0080 4A 8D0080 4A 8D0080
+        Assert.Contains("A90C" + "8D0080" + "4A" + "8D0080" + "4A" + "8D0080" + "4A" + "8D0080" + "4A" + "8D0080", hex);
     }
 
     [Fact]
@@ -3574,10 +3568,11 @@ public class RoslynTests
     [Fact]
     public void Mmc1SetMirroring_EmitsWriteTo8000()
     {
-        // mmc1_set_mirroring(MMC1_MIRROR_VERTICAL) should emit serial writes to $8000
+        // mmc1_set_mirroring writes the full Control register — use mirror + PRG/CHR mode bits
+        // MMC1_MIRROR_VERTICAL | MMC1_PRG_FIX_LAST = 0x02 | 0x0C = 0x0E
         var bytes = GetProgramBytes(
             """
-            mmc1_set_mirroring(MMC1_MIRROR_VERTICAL);
+            mmc1_set_mirroring(MMC1_MIRROR_VERTICAL | MMC1_PRG_FIX_LAST);
             ppu_on_all();
             while (true) ;
             """);
@@ -3585,10 +3580,10 @@ public class RoslynTests
         Assert.NotEmpty(bytes);
 
         var hex = Convert.ToHexString(bytes);
-        // STA $8000 = 8D0080
-        Assert.Contains("8D0080", hex);
-        // LDA #$02 = A902 (MMC1_MIRROR_VERTICAL = 2)
-        Assert.Contains("A902", hex);
+        // Reset: LDA #$80, STA $8000
+        Assert.Contains("A980" + "8D0080", hex);
+        // Value: LDA #$0E (0x02 | 0x0C), followed by serial writes to $8000
+        Assert.Contains("A90E" + "8D0080" + "4A" + "8D0080" + "4A" + "8D0080" + "4A" + "8D0080" + "4A" + "8D0080", hex);
     }
 
     [Fact]
