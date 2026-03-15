@@ -91,7 +91,7 @@ partial class IL2NESWriter
             Emit(Opcode.STA, AddressMode.Absolute, (ushort)(local.Address + 1));
             _immediateInA = 0x00;
         }
-        else if (local.Value < byte.MaxValue)
+        else if (local.Value <= byte.MaxValue)
         {
             if (isNewAllocation) LocalCount += 1;
             if (DeferredByteArrayMode)
@@ -126,7 +126,7 @@ partial class IL2NESWriter
                 _immediateInA = null;
             }
         }
-        else if (local.Value < ushort.MaxValue)
+        else if (local.Value <= ushort.MaxValue)
         {
             if (isNewAllocation) LocalCount += 2;
             // Remove the previous LDX + LDA instructions (2 instructions = 4 bytes)
@@ -245,7 +245,7 @@ partial class IL2NESWriter
                 _immediateInA = null;
                 _ushortInAX = true;
             }
-            else if (local.Value < byte.MaxValue)
+            else if (local.Value <= byte.MaxValue)
             {
                 if (_runtimeValueInA && !LastLDA)
                 {
@@ -260,7 +260,7 @@ partial class IL2NESWriter
                 Emit(Opcode.LDA, AddressMode.Absolute, (ushort)local.Address);
                 _immediateInA = null;
             }
-            else if (local.Value < ushort.MaxValue)
+            else if (local.Value <= ushort.MaxValue)
             {
                 EmitJSR("pusha");
                 Emit(Opcode.LDA, AddressMode.Absolute, (ushort)local.Address);
