@@ -1,7 +1,8 @@
 /*
 Vertical scrolling demo.
 Horizontal mirroring (NESMirroring=Horizontal) stacks nametables A and C
-vertically, enabling smooth vertical scrolling through a 480-pixel area.
+vertically. The scroll(0, y) call wraps through both nametables using
+the byte range 0-255, with the PPU handling the nametable switch.
 */
 
 // set palette colors
