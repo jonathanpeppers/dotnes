@@ -206,6 +206,7 @@ partial class IL2NESWriter
     /// </summary>
     void HandleAddSub(bool isAdd)
     {
+        _lastStaticFieldAddress = null;
         int operand = Stack.Pop(); // The value being added/subtracted (e.g., 1)
         int baseValue = Stack.Pop(); // The base value (from local variable)
 

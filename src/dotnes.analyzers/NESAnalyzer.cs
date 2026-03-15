@@ -170,6 +170,12 @@ public class NESAnalyzer : DiagnosticAnalyzer
         if (classDeclaration.Modifiers.Any(SyntaxKind.StaticKeyword))
             return;
 
+        // partial class Program is the compiler-generated top-level statements class;
+        // allow it for declaring static fields shared between methods and callbacks
+        if (classDeclaration.Modifiers.Any(SyntaxKind.PartialKeyword) &&
+            classDeclaration.Identifier.Text == "Program")
+            return;
+
         context.ReportDiagnostic(Diagnostic.Create(NES002Rule, classDeclaration.Identifier.GetLocation(), classDeclaration.Identifier.Text));
     }
 

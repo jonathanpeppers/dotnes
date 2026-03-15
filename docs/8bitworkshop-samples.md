@@ -258,16 +258,15 @@
 
 ### shoot2.c
 - **Description:** A shoot-em-up game with CHR RAM, sprite shifting, formation AI, and custom sound effects.
-- **Status:** 🔴 Complex
-- **Note:** Uses `apu.c` for APU initialization — already covered by dotnes's built-in `apu_init()` subroutine. `vrambuf` module, `oam_size()`, and `for` loops are now available.
-- **Missing Features:**
-  - UxROM mapper (`NES_MAPPER 2`) with CHR RAM
-  - Direct APU register macros (`APU_PULSE_DECAY`, `APU_PULSE_SUSTAIN`, `APU_NOISE_DECAY`, `APU_TRIANGLE_SUSTAIN`, `APU_ENABLE`)
-  - `typedef struct` (multiple: `FormationEnemy`, `AttackingEnemy`, `Missile`, `Sprite`)
-  - Inline assembly (`asm()` statements for star animation)
-  - `nesclock()` — declared but not transpiler-supported
-  - Extremely large tileset data (2048 bytes)
-  - 30+ user-defined functions
+- **Status:** ✅ Already Implemented
+- **dotnes sample:** `shoot2`
+- **Note:** Uses UxROM mapper 2 with CHR RAM. Tileset data (sprite + background tiles) uploaded to PPU at runtime via `vram_write()`. APU sound effects implemented as user-defined functions using `poke()` for direct register access. Uses structure-of-arrays for bullets, enemies, stars, and explosions.
+- **Simplifications:**
+  - Inline assembly (`asm()` for star animation) replaced with sprite-based parallax stars
+  - `typedef struct` replaced with structure-of-arrays pattern (parallel byte arrays)
+  - Formation AI simplified to random spawn with variable speed
+  - Score tracked with digit tile indices instead of `bcd_add()`
+  - Reduced entity counts for zero-page memory constraints (4 bullets, 6 enemies, 8 stars, 3 explosions)
 
 ### siegegame.c
 - **Description:** A two-player surround/Tron-style game with AI, nametable collision detection, and attract mode.
@@ -288,8 +287,8 @@
 
 | Status | Count | Samples |
 |--------|-------|---------|
-| ✅ Already Implemented | 19 | hello, attributes, flicker, metasprites, music, tint, scroll, rletitle, tileset1, sprites, metacursor, metatrigger, statusbar, vrambuffer, horizscroll, horizmask, bcd, fami, monobitmap |
-| 🔴 Complex | 10 | aputest, ppuhello, bankswitch, conio, crypto, climber, transtable, irq, shoot2, siegegame |
+| ✅ Already Implemented | 22 | hello, attributes, flicker, metasprites, music, tint, scroll, rletitle, tileset1, sprites, metacursor, metatrigger, statusbar, vrambuffer, horizscroll, horizmask, bcd, fami, monobitmap, irq, siegegame, shoot2 |
+| 🔴 Complex | 7 | aputest, ppuhello, bankswitch, conio, crypto, climber, transtable |
 
 > **Note:** `apu.c` and `vrambuf.c` are library files (not demos). `apu.c` is covered by dotnes's built-in `apu_init()` subroutine. `vrambuf.c` is covered by built-in `vrambuf_clear()`, `vrambuf_put()`, `vrambuf_end()`, `vrambuf_flush()`, and `set_vram_update()` subroutines. Neither is counted separately.
 

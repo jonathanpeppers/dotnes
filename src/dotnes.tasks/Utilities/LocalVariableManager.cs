@@ -122,6 +122,29 @@ class LocalVariableManager
     }
 
     /// <summary>
+    /// Pre-allocated static field addresses from the main writer,
+    /// so user method writers use the same RAM addresses.
+    /// </summary>
+    public Dictionary<string, ushort> StaticFieldAddresses
+    {
+        get => _staticFieldAddresses;
+        set
+        {
+            foreach (var kvp in value)
+                _staticFieldAddresses[kvp.Key] = kvp.Value;
+
+            // Advance LocalCount so subsequent allocations don't overlap
+            // any pre-allocated static field addresses.
+            foreach (var addr in value.Values)
+            {
+                int slotsPastBase = addr - _baseAddress + 1;
+                if (slotsPastBase > LocalCount)
+                    LocalCount = slotsPastBase;
+            }
+        }
+    }
+
+    /// <summary>
     /// Allocates an absolute address for a user-defined static field.
     /// Static fields share the same $0325+ address space as locals.
     /// </summary>
