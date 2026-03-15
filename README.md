@@ -23,7 +23,7 @@
 | **fade** ⬇️ | **monobitmap** ⬇️ |
 | ![fade](samples/fade/fade.gif) | ![monobitmap](samples/monobitmap/monobitmap.png) |
 | **music** ⬇️ | **fami** ⬇️ |
-| ![music](samples/music/music.gif) | ![fami](samples/fami/fami.gif) |
+| ![music](samples/music/music.png) | ![fami](samples/fami/fami.gif) |
 | **rletitle** ⬇️ | **attributetable** ⬇️ |
 | ![rletitle](samples/rletitle/rletitle.png) | ![attributetable](samples/attributetable/attributetable.png) |
 | **flicker** ⬇️ | **statusbar** ⬇️ |
