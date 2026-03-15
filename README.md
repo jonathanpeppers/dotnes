@@ -10,16 +10,26 @@
 
 | | |
 |:---:|:---:|
-| **metasprites** ⬇️ | **sprites** ⬇️ |
-| ![metasprites](samples/metasprites/metasprites.gif) | ![sprites](samples/sprites/sprites.gif) |
-| **climber** ⬇️ | **horizscroll** ⬇️ |
-| ![climber](samples/climber/climber.gif) | ![horizscroll](samples/horizscroll/horizscroll.gif) |
-| **rletitle** ⬇️ | **flicker** ⬇️ |
-| ![rletitle](samples/rletitle/rletitle.png) | ![flicker](samples/flicker/flicker.gif) |
-| **attributetable** ⬇️ | **statusbar** ⬇️ |
-| ![attributetable](samples/attributetable/attributetable.png) | ![statusbar](samples/statusbar/statusbar.gif) |
+| **shoot2** ⬇️ | **pong** ⬇️ |
+| ![shoot2](samples/shoot2/shoot2.gif) | ![pong](samples/pong/pong.gif) |
+| **climber** ⬇️ | **procgen** ⬇️ |
+| ![climber](samples/climber/climber.gif) | ![procgen](samples/procgen/procgen.png) |
+| **snake** ⬇️ | **siegegame** ⬇️ |
+| ![snake](samples/snake/snake.png) | ![siegegame](samples/siegegame/siegegame.png) |
+| **metasprites** ⬇️ | **animation** ⬇️ |
+| ![metasprites](samples/metasprites/metasprites.gif) | ![animation](samples/animation/animation.gif) |
+| **sprites** ⬇️ | **horizscroll** ⬇️ |
+| ![sprites](samples/sprites/sprites.gif) | ![horizscroll](samples/horizscroll/horizscroll.gif) |
+| **fade** ⬇️ | **monobitmap** ⬇️ |
+| ![fade](samples/fade/fade.gif) | ![monobitmap](samples/monobitmap/monobitmap.png) |
+| **music** ⬇️ | **fami** ⬇️ |
+| ![music](samples/music/music.png) | ![fami](samples/fami/fami.gif) |
+| **rletitle** ⬇️ | **attributetable** ⬇️ |
+| ![rletitle](samples/rletitle/rletitle.png) | ![attributetable](samples/attributetable/attributetable.png) |
+| **flicker** ⬇️ | **statusbar** ⬇️ |
+| ![flicker](samples/flicker/flicker.gif) | ![statusbar](samples/statusbar/statusbar.gif) |
 
-> See the [samples/](samples/) folder for all 25 sample projects. Generate images with `dotnet run scripts/record-all-samples.cs`.
+> See the [samples/](samples/) folder for all 41 sample projects. Generate images with `dotnet run scripts/record-all-samples.cs`.
 
 ## Contributing
 
@@ -282,7 +292,7 @@ block.Emit(STA_zpg(TEMP))
 
 ## Limitations
 
-This is a hobby project, so there are around 25 C# sample programs that are known to work. But to
+This is a hobby project, so there are around 41 C# sample programs that are known to work. But to
 get an idea of what is not available:
 
 * No runtime
