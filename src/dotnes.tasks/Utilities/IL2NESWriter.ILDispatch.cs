@@ -1711,8 +1711,8 @@ partial class IL2NESWriter
                             {
                                 EmitWithLabel(Opcode.LDA, AddressMode.Immediate_LowByte, _lastByteArrayLabel);
                                 EmitWithLabel(Opcode.LDX, AddressMode.Immediate_HighByte, _lastByteArrayLabel);
-                                // vram_write uses cc65 calling convention: pointer on stack, size in A:X
-                                if (operand is nameof(NESLib.vram_write))
+                                // vram_write/vram_read use cc65 calling convention: pointer on stack, size in A:X
+                                if (operand is nameof(NESLib.vram_write) or nameof(NESLib.vram_read))
                                 {
                                     EmitJSR("pushax");
                                     UsedMethods?.Add("pushax");
