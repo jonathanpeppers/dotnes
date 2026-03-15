@@ -186,3 +186,18 @@ $(OutputPath)$(TargetName).nes
 
 For example, building a project called `hello` in Debug configuration produces
 `bin/Debug/net10.0/hello.nes`.
+
+## Incremental Builds
+
+The `Transpile` target uses MSBuild incremental build support (`Inputs`/`Outputs`)
+to avoid re-transpiling when nothing has changed. The inputs include:
+
+- `$(TargetPath)` — the compiled `.dll`
+- `@(NESAssembly)` — the `.s` assembly files
+- A **properties stamp file** — tracks changes to `NESMirroring`, `NESMapper`,
+  `NESPrgBanks`, `NESChrBanks`, and `NESBattery`
+
+The stamp file is written to `$(IntermediateOutputPath)dotnes.properties.stamp`
+and is only updated when a property value changes, so toggling a property like
+`NESBattery` from `false` to `true` will correctly retrigger transpilation on
+the next build.
