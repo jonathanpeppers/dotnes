@@ -163,16 +163,16 @@ vram_put(0x01);
 vram_put(0x01);
 vram_put(0x01);
 
-bank_spr(1);
-bank_bg(0);
-ppu_on_all();
-
-// Silence all APU channels, then enable them
+// Silence all APU channels, then enable them (before ppu_on to avoid startup noise)
 poke(APU_PULSE1_CTRL, 0x30);    // silence pulse 1 (halt, volume 0)
 poke(APU_PULSE2_CTRL, 0x30);    // silence pulse 2
 poke(APU_TRIANGLE_CTRL, 0x80);  // silence triangle (halt)
 poke(APU_NOISE_CTRL, 0x30);     // silence noise
 poke(APU_STATUS, 0x0F);         // enable all channels
+
+bank_spr(1);
+bank_bg(0);
+ppu_on_all();
 set_rand(42);
 
 // === Game state ===
@@ -476,48 +476,48 @@ static byte abs_diff(byte a, byte b)
 }
 
 // Sound effect: player fires
-// Pulse1: ctrl=0x7A (duty 01, decay, vol 0x0A), sweep=0, timer_lo=0x80, timer_hi=0xF9
-// All poke values MUST be constants (poke handler breaks with ldarg/ldloc values)
+// Pulse1: ctrl=0x4A (duty 01, envelope decay, period 0x0A), sweep=0, timer_lo=0x80, timer_hi=0xF9
+// poke values can be constants or local variables, but not function parameters (ldarg)
 static void sfx_shoot()
 {
-    poke(APU_PULSE1_CTRL, 0x7A);
+    poke(APU_PULSE1_CTRL, 0x4A);
     poke(APU_PULSE1_SWEEP, 0x00);
     poke(APU_PULSE1_TIMER_LO, 0x80);
     poke(APU_PULSE1_TIMER_HI, 0xF9);
 }
 
 // Sound effect: enemy hit
-// Noise: ctrl=0x3A (decay, vol 0x0A), period=4, length=0xF8
+// Noise: ctrl=0x0A (envelope decay, period 0x0A), period=4, length=0xF8
 static void sfx_hit()
 {
-    poke(APU_NOISE_CTRL, 0x3A);
+    poke(APU_NOISE_CTRL, 0x0A);
     poke(APU_NOISE_PERIOD, 0x04);
     poke(APU_NOISE_LENGTH, 0xF8);
 }
 
 // Sound effect: explosion
-// Noise: ctrl=0x3F (decay, vol 0x0F), period=6, length=0xF8
-// Triangle: ctrl=0xFF, timer_lo=0x40, timer_hi=0xF9
+// Noise: ctrl=0x0F (envelope decay, period 0x0F), period=6, length=0xF8
+// Triangle: ctrl=0x1F (linear counter=31, ~0.13s thump), timer_lo=0x40, timer_hi=0xF9
 static void sfx_explode()
 {
-    poke(APU_NOISE_CTRL, 0x3F);
+    poke(APU_NOISE_CTRL, 0x0F);
     poke(APU_NOISE_PERIOD, 0x06);
     poke(APU_NOISE_LENGTH, 0xF8);
-    poke(APU_TRIANGLE_CTRL, 0xFF);
+    poke(APU_TRIANGLE_CTRL, 0x1F);
     poke(APU_TRIANGLE_TIMER_LO, 0x40);
     poke(APU_TRIANGLE_TIMER_HI, 0xF9);
 }
 
 // Sound effect: player destroyed
-// Pulse1: ctrl=0xBF (duty 10, decay, vol 0x0F), sweep=0, timer_lo=0x00, timer_hi=0xFA
-// Noise: ctrl=0x3F (decay, vol 0x0F), period=8, length=0xF8
+// Pulse1: ctrl=0x8F (duty 10, envelope decay, period 0x0F), sweep=0, timer_lo=0x00, timer_hi=0xFA
+// Noise: ctrl=0x0F (envelope decay, period 0x0F), period=8, length=0xF8
 static void sfx_player_die()
 {
-    poke(APU_PULSE1_CTRL, 0xBF);
+    poke(APU_PULSE1_CTRL, 0x8F);
     poke(APU_PULSE1_SWEEP, 0x00);
     poke(APU_PULSE1_TIMER_LO, 0x00);
     poke(APU_PULSE1_TIMER_HI, 0xFA);
-    poke(APU_NOISE_CTRL, 0x3F);
+    poke(APU_NOISE_CTRL, 0x0F);
     poke(APU_NOISE_PERIOD, 0x08);
     poke(APU_NOISE_LENGTH, 0xF8);
 }
