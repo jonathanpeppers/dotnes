@@ -519,6 +519,41 @@ public static class NESLib
     public const ushort MMC3_IRQ_DISABLE = 0xE000;
     public const ushort MMC3_IRQ_ENABLE = 0xE001;
 
+    // MMC1 mapper register addresses for serial shift register writes via mmc1_write()
+    public const ushort MMC1_CONTROL = 0x8000;
+    public const ushort MMC1_CHR_BANK0 = 0xA000;
+    public const ushort MMC1_CHR_BANK1 = 0xC000;
+    public const ushort MMC1_PRG_BANK = 0xE000;
+
+    // MMC1 mirroring modes (bits 0-1 of the Control register)
+    public const byte MMC1_MIRROR_ONE_LOWER = 0;
+    public const byte MMC1_MIRROR_ONE_UPPER = 1;
+    public const byte MMC1_MIRROR_VERTICAL = 2;
+    public const byte MMC1_MIRROR_HORIZONTAL = 3;
+
+    /// <summary>
+    /// write a 5-bit value to an MMC1 register using the serial shift register protocol.
+    /// MMC1 requires writing one bit at a time (5 writes total) to latch a value.
+    /// The addr must be one of the MMC1_* register constants.
+    /// </summary>
+    public static void mmc1_write(ushort addr, byte value) => throw null!;
+
+    /// <summary>
+    /// switch the MMC1 PRG bank by writing to the PRG bank register ($E000).
+    /// </summary>
+    public static void mmc1_set_prg_bank(byte bank) => throw null!;
+
+    /// <summary>
+    /// switch both MMC1 CHR banks by writing to CHR bank 0 ($A000) and CHR bank 1 ($C000).
+    /// </summary>
+    public static void mmc1_set_chr_bank(byte bank0, byte bank1) => throw null!;
+
+    /// <summary>
+    /// set the MMC1 mirroring mode by writing to the Control register ($8000).
+    /// Use MMC1_MIRROR_* constants for the mode value.
+    /// </summary>
+    public static void mmc1_set_mirroring(byte mode) => throw null!;
+
     // TODO: Macros below should be computed at compile-time and methods removed
 
     /// <summary>

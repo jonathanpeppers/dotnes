@@ -59,6 +59,7 @@ Common mapper values:
 | Mapper | Name | Description |
 |--------|------|-------------|
 | 0 | NROM | No bank switching (32 KB PRG, 8 KB CHR) |
+| 1 | MMC1 | 16 KB switchable PRG banks, 4 KB switchable CHR banks, software mirroring control |
 | 2 | UxROM | 16 KB switchable PRG banks, fixed CHR |
 | 4 | MMC3 | Switchable PRG and CHR banks with IRQ counter |
 

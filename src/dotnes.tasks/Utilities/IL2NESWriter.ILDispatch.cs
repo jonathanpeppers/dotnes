@@ -1465,6 +1465,202 @@ partial class IL2NESWriter
                             argsAlreadyPopped = true;
                         }
                         break;
+                    case nameof(NESLib.mmc1_write):
+                        {
+                            // mmc1_write(ushort addr, byte value) -> serial shift register write
+                            // MMC1 requires writing 5 bits one at a time via STA to the register address.
+                            // Protocol: reset with bit 7 set, then write bit 0 five times using LSR A.
+                            if (Stack.Count >= 2)
+                            {
+                                int value = Stack.Pop();
+                                int addr = Stack.Pop();
+
+                                // Check if the value is from a runtime local variable
+                                Local? writeLocal = null;
+                                bool valueIsLocal = _lastLoadedLocalIndex.HasValue &&
+                                    Locals.TryGetValue(_lastLoadedLocalIndex.Value, out writeLocal) &&
+                                    writeLocal.Address.HasValue;
+
+                                // Check if the value is from a static field
+                                bool valueIsStaticField = _lastStaticFieldAddress.HasValue;
+
+                                // Remove previously emitted instructions:
+                                // LDX #hi, LDA #lo, JSR pusha, LDA #value = 4 instructions
+                                RemoveLastInstructions(4);
+
+                                // Reset the shift register by writing with bit 7 set
+                                Emit(Opcode.LDA, AddressMode.Immediate, 0x80);
+                                Emit(Opcode.STA, AddressMode.Absolute, (ushort)addr);
+
+                                // Load the 5-bit value
+                                if (valueIsLocal)
+                                {
+                                    Emit(Opcode.LDA, AddressMode.Absolute, (ushort)writeLocal!.Address!.Value);
+                                }
+                                else if (valueIsStaticField)
+                                {
+                                    Emit(Opcode.LDA, AddressMode.Absolute, _lastStaticFieldAddress!.Value);
+                                }
+                                else
+                                {
+                                    Emit(Opcode.LDA, AddressMode.Immediate, (byte)value);
+                                }
+
+                                // Write 5 bits via STA + LSR sequence
+                                Emit(Opcode.STA, AddressMode.Absolute, (ushort)addr); // bit 0
+                                Emit(Opcode.LSR, AddressMode.Accumulator);
+                                Emit(Opcode.STA, AddressMode.Absolute, (ushort)addr); // bit 1
+                                Emit(Opcode.LSR, AddressMode.Accumulator);
+                                Emit(Opcode.STA, AddressMode.Absolute, (ushort)addr); // bit 2
+                                Emit(Opcode.LSR, AddressMode.Accumulator);
+                                Emit(Opcode.STA, AddressMode.Absolute, (ushort)addr); // bit 3
+                                Emit(Opcode.LSR, AddressMode.Accumulator);
+                                Emit(Opcode.STA, AddressMode.Absolute, (ushort)addr); // bit 4 (latches)
+                            }
+                            _lastLoadedLocalIndex = null;
+                            _lastStaticFieldAddress = null;
+                            _pokeLastValue = null;
+                            _immediateInA = null;
+                            argsAlreadyPopped = true;
+                        }
+                        break;
+                    case nameof(NESLib.mmc1_set_prg_bank):
+                        {
+                            // mmc1_set_prg_bank(byte bank) -> mmc1_write(0xE000, bank)
+                            if (Stack.Count >= 1)
+                            {
+                                int bank = Stack.Pop();
+
+                                // Check if the value is from a runtime local variable
+                                Local? bankLocal = null;
+                                bool valueIsLocal = _lastLoadedLocalIndex.HasValue &&
+                                    Locals.TryGetValue(_lastLoadedLocalIndex.Value, out bankLocal) &&
+                                    bankLocal.Address.HasValue;
+
+                                // Check if the value is from a static field
+                                bool valueIsStaticField = _lastStaticFieldAddress.HasValue;
+
+                                // Remove previously emitted LDA #value instruction
+                                RemoveLastInstructions(1);
+
+                                // Reset the shift register
+                                Emit(Opcode.LDA, AddressMode.Immediate, 0x80);
+                                Emit(Opcode.STA, AddressMode.Absolute, NESLib.MMC1_PRG_BANK);
+
+                                // Load the bank value
+                                if (valueIsLocal)
+                                {
+                                    Emit(Opcode.LDA, AddressMode.Absolute, (ushort)bankLocal!.Address!.Value);
+                                }
+                                else if (valueIsStaticField)
+                                {
+                                    Emit(Opcode.LDA, AddressMode.Absolute, _lastStaticFieldAddress!.Value);
+                                }
+                                else
+                                {
+                                    Emit(Opcode.LDA, AddressMode.Immediate, (byte)bank);
+                                }
+
+                                // Write 5 bits to PRG bank register
+                                Emit(Opcode.STA, AddressMode.Absolute, NESLib.MMC1_PRG_BANK);
+                                Emit(Opcode.LSR, AddressMode.Accumulator);
+                                Emit(Opcode.STA, AddressMode.Absolute, NESLib.MMC1_PRG_BANK);
+                                Emit(Opcode.LSR, AddressMode.Accumulator);
+                                Emit(Opcode.STA, AddressMode.Absolute, NESLib.MMC1_PRG_BANK);
+                                Emit(Opcode.LSR, AddressMode.Accumulator);
+                                Emit(Opcode.STA, AddressMode.Absolute, NESLib.MMC1_PRG_BANK);
+                                Emit(Opcode.LSR, AddressMode.Accumulator);
+                                Emit(Opcode.STA, AddressMode.Absolute, NESLib.MMC1_PRG_BANK);
+                            }
+                            _lastLoadedLocalIndex = null;
+                            _lastStaticFieldAddress = null;
+                            _pokeLastValue = null;
+                            _immediateInA = null;
+                            argsAlreadyPopped = true;
+                        }
+                        break;
+                    case nameof(NESLib.mmc1_set_chr_bank):
+                        {
+                            // mmc1_set_chr_bank(byte bank0, byte bank1) -> write to CHR bank 0 and CHR bank 1
+                            if (Stack.Count >= 2)
+                            {
+                                int bank1 = Stack.Pop();
+                                int bank0 = Stack.Pop();
+
+                                // Remove previously emitted instructions:
+                                // LDA #bank0, JSR pusha, LDA #bank1 = 3 instructions
+                                RemoveLastInstructions(3);
+
+                                // Write bank0 to CHR bank 0 register ($A000)
+                                Emit(Opcode.LDA, AddressMode.Immediate, 0x80);
+                                Emit(Opcode.STA, AddressMode.Absolute, NESLib.MMC1_CHR_BANK0);
+                                Emit(Opcode.LDA, AddressMode.Immediate, (byte)bank0);
+                                Emit(Opcode.STA, AddressMode.Absolute, NESLib.MMC1_CHR_BANK0);
+                                Emit(Opcode.LSR, AddressMode.Accumulator);
+                                Emit(Opcode.STA, AddressMode.Absolute, NESLib.MMC1_CHR_BANK0);
+                                Emit(Opcode.LSR, AddressMode.Accumulator);
+                                Emit(Opcode.STA, AddressMode.Absolute, NESLib.MMC1_CHR_BANK0);
+                                Emit(Opcode.LSR, AddressMode.Accumulator);
+                                Emit(Opcode.STA, AddressMode.Absolute, NESLib.MMC1_CHR_BANK0);
+                                Emit(Opcode.LSR, AddressMode.Accumulator);
+                                Emit(Opcode.STA, AddressMode.Absolute, NESLib.MMC1_CHR_BANK0);
+
+                                // Write bank1 to CHR bank 1 register ($C000)
+                                Emit(Opcode.LDA, AddressMode.Immediate, 0x80);
+                                Emit(Opcode.STA, AddressMode.Absolute, NESLib.MMC1_CHR_BANK1);
+                                Emit(Opcode.LDA, AddressMode.Immediate, (byte)bank1);
+                                Emit(Opcode.STA, AddressMode.Absolute, NESLib.MMC1_CHR_BANK1);
+                                Emit(Opcode.LSR, AddressMode.Accumulator);
+                                Emit(Opcode.STA, AddressMode.Absolute, NESLib.MMC1_CHR_BANK1);
+                                Emit(Opcode.LSR, AddressMode.Accumulator);
+                                Emit(Opcode.STA, AddressMode.Absolute, NESLib.MMC1_CHR_BANK1);
+                                Emit(Opcode.LSR, AddressMode.Accumulator);
+                                Emit(Opcode.STA, AddressMode.Absolute, NESLib.MMC1_CHR_BANK1);
+                                Emit(Opcode.LSR, AddressMode.Accumulator);
+                                Emit(Opcode.STA, AddressMode.Absolute, NESLib.MMC1_CHR_BANK1);
+                            }
+                            _lastLoadedLocalIndex = null;
+                            _lastStaticFieldAddress = null;
+                            _pokeLastValue = null;
+                            _immediateInA = null;
+                            argsAlreadyPopped = true;
+                        }
+                        break;
+                    case nameof(NESLib.mmc1_set_mirroring):
+                        {
+                            // mmc1_set_mirroring(byte mode) -> mmc1_write(0x8000, mode)
+                            if (Stack.Count >= 1)
+                            {
+                                int mode = Stack.Pop();
+
+                                // Remove previously emitted LDA #value instruction
+                                RemoveLastInstructions(1);
+
+                                // Reset the shift register
+                                Emit(Opcode.LDA, AddressMode.Immediate, 0x80);
+                                Emit(Opcode.STA, AddressMode.Absolute, NESLib.MMC1_CONTROL);
+
+                                // Load the mirroring mode value
+                                Emit(Opcode.LDA, AddressMode.Immediate, (byte)mode);
+
+                                // Write 5 bits to Control register
+                                Emit(Opcode.STA, AddressMode.Absolute, NESLib.MMC1_CONTROL);
+                                Emit(Opcode.LSR, AddressMode.Accumulator);
+                                Emit(Opcode.STA, AddressMode.Absolute, NESLib.MMC1_CONTROL);
+                                Emit(Opcode.LSR, AddressMode.Accumulator);
+                                Emit(Opcode.STA, AddressMode.Absolute, NESLib.MMC1_CONTROL);
+                                Emit(Opcode.LSR, AddressMode.Accumulator);
+                                Emit(Opcode.STA, AddressMode.Absolute, NESLib.MMC1_CONTROL);
+                                Emit(Opcode.LSR, AddressMode.Accumulator);
+                                Emit(Opcode.STA, AddressMode.Absolute, NESLib.MMC1_CONTROL);
+                            }
+                            _lastLoadedLocalIndex = null;
+                            _lastStaticFieldAddress = null;
+                            _pokeLastValue = null;
+                            _immediateInA = null;
+                            argsAlreadyPopped = true;
+                        }
+                        break;
                     case "split":
                     case "scroll":
                         // scroll()/split() takes unsigned int params, which use popax (2-byte pop).
