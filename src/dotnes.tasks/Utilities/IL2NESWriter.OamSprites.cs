@@ -219,8 +219,7 @@ partial class IL2NESWriter
                 case ILOpCode.Mul: case ILOpCode.Div: case ILOpCode.Rem:
                     if (il.OpCode is ILOpCode.Shr or ILOpCode.Shr_un or ILOpCode.Shl
                         or ILOpCode.And or ILOpCode.Or or ILOpCode.Xor
-                        or ILOpCode.Mul or ILOpCode.Div or ILOpCode.Rem
-                        or ILOpCode.Sub)
+                        or ILOpCode.Mul or ILOpCode.Sub or ILOpCode.Div or ILOpCode.Rem)
                     {
                         compBinOp = il.OpCode;
                         compHasBinOp = true;
