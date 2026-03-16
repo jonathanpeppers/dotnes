@@ -1181,7 +1181,19 @@ class Transpiler : IDisposable
                 continue;
 
             var typeName = _reader.GetString(type.Name);
-            // Skip compiler-generated types
+            // Detect compiler-generated closure structs (display classes)
+            if (typeName.Contains("DisplayClass"))
+            {
+                var capturedFields = string.Join(", ",
+                    type.GetFields().Select(f => _reader.GetString(_reader.GetFieldDefinition(f).Name)));
+                throw new TranspileException(
+                    $"Closures are not supported. The compiler generated a closure struct '{typeName}' " +
+                    $"capturing variable(s): {capturedFields}. " +
+                    "This happens when local functions reference outer variables (like byte[] arrays). " +
+                    "Workaround: pass captured variables as parameters to the function instead, " +
+                    "or inline the local function code into the main body.");
+            }
+            // Skip other compiler-generated types
             if (typeName.StartsWith("<") || typeName.Contains("__"))
                 continue;
 

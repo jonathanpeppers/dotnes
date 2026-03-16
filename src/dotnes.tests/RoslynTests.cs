@@ -3320,6 +3320,30 @@ public class RoslynTests
     }
 
     [Fact]
+    public void ClosureCapturingByteArrayThrows()
+    {
+        // When a non-static local function captures an outer byte[] variable,
+        // the compiler generates a closure struct. The transpiler should detect
+        // this and throw a helpful error message with guidance.
+        var ex = Assert.Throws<TranspileException>(() => BuildProgram(
+            """
+            byte[] palette = [0x0F, 0x10, 0x20, 0x30];
+            apply_palette();
+            ppu_on_all();
+            while (true) ;
+
+            void apply_palette()
+            {
+                pal_bg(palette);
+            }
+            """));
+
+        Assert.Contains("closure", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("palette", ex.Message);
+        Assert.Contains("Workaround", ex.Message);
+    }
+
+    [Fact]
     public void MultiParamUserFunction_LocalVarArgs()
     {
         // Test: calling a user-defined function with a runtime local + constant.
