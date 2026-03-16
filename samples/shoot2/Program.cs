@@ -229,10 +229,10 @@ while (true)
     // Save PRNG seed before pad_poll — RAND_SEED ($3C) and PAD_STATE share the
     // same address in cc65 neslib, so pad_poll overwrites the seed every frame.
     byte rand_save = peek(0x083C);
-    byte pad = (byte)pad_poll(0);
+    PAD pad = pad_poll(0);
     poke(0x083C, rand_save);
 
-    if ((pad & (byte)PAD.A) != 0)
+    if ((pad & PAD.A) != 0)
     {
         if (fire_cooldown == 0)
         {
@@ -252,22 +252,22 @@ while (true)
     }
 
     // --- Player movement (clamp to stay within bounds) ---
-    if ((pad & (byte)PAD.LEFT) != 0)
+    if ((pad & PAD.LEFT) != 0)
     {
         if (player_x > 8 + PLAYER_SPEED) player_x = (byte)(player_x - PLAYER_SPEED);
         else player_x = 8;
     }
-    if ((pad & (byte)PAD.RIGHT) != 0)
+    if ((pad & PAD.RIGHT) != 0)
     {
         if (player_x < 240 - PLAYER_SPEED) player_x = (byte)(player_x + PLAYER_SPEED);
         else player_x = 240;
     }
-    if ((pad & (byte)PAD.UP) != 0)
+    if ((pad & PAD.UP) != 0)
     {
         if (player_y > 32 + PLAYER_SPEED) player_y = (byte)(player_y - PLAYER_SPEED);
         else player_y = 32;
     }
-    if ((pad & (byte)PAD.DOWN) != 0)
+    if ((pad & PAD.DOWN) != 0)
     {
         if (player_y < 224 - PLAYER_SPEED) player_y = (byte)(player_y + PLAYER_SPEED);
         else player_y = 224;
