@@ -1447,9 +1447,9 @@ public class RoslynTests
     [Fact]
     public void PeekSmallConstant()
     {
-        // peek(0x003C) uses ldc.i4.s (short form) since 0x3C (60) <= 255.
-        // The transpiler must handle 1-instruction address loads (LDA only)
-        // instead of the 2-instruction ushort pattern (LDX + LDA).
+        // peek(0x003C) — address 0x3C fits in a byte, so the transpiler emits
+        // a single LDA via WriteLdc(byte). The peek handler must remove only 1
+        // prior instruction instead of 2 for the ushort path (LDX + LDA).
         var bytes = GetProgramBytes(
             """
             byte value = peek(0x003C);
@@ -1467,9 +1467,9 @@ public class RoslynTests
     [Fact]
     public void PokeSmallConstant()
     {
-        // poke(0x003C, value) uses ldc.i4.s for the address since 0x3C (60) <= 255.
-        // The transpiler must handle 1-instruction address loads (LDA only)
-        // instead of the 2-instruction ushort pattern (LDX + LDA).
+        // poke(0x003C, 0x07) — address 0x3C fits in a byte, so the transpiler
+        // emits a single LDA via WriteLdc(byte). The poke handler must remove
+        // only 3 prior instructions instead of 4 for the ushort path.
         var bytes = GetProgramBytes(
             """
             poke(0x003C, 0x07);
