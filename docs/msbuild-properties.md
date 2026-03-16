@@ -203,3 +203,19 @@ and writes the current property values to
 when a value actually changes (`WriteOnlyWhenDifferent`), so toggling a property
 like `NESBattery` from `false` to `true` will correctly retrigger transpilation
 on the next build without causing unnecessary rebuilds.
+
+### `TranspileDependsOn`
+
+A semicolon-separated list of targets that the `Transpile` target depends on.
+By default this includes `_WriteNESPropertiesStamp` (the stamp file target
+described above). You can append your own targets to run custom logic before
+transpilation:
+
+```xml
+<PropertyGroup>
+  <TranspileDependsOn>$(TranspileDependsOn);MyCustomPreTranspileTarget</TranspileDependsOn>
+</PropertyGroup>
+<Target Name="MyCustomPreTranspileTarget">
+  <!-- Custom logic that runs before transpilation -->
+</Target>
+```

@@ -8,9 +8,10 @@
   <PropertyGroup>
     <NESTargetPath>$(OutputPath)$(TargetName).nes</NESTargetPath>
     <_NESPropertiesStampFile>$(IntermediateOutputPath)dotnes.properties.stamp</_NESPropertiesStampFile>
+    <TranspileDependsOn>$(TranspileDependsOn);_WriteNESPropertiesStamp</TranspileDependsOn>
     <IncrementalCleanDependsOn>$(IncrementalCleanDependsOn);Transpile</IncrementalCleanDependsOn>
   </PropertyGroup>
-  <Target Name="_WriteNESPropertiesStamp" BeforeTargets="Transpile">
+  <Target Name="_WriteNESPropertiesStamp">
     <WriteLinesToFile
         File="$(_NESPropertiesStampFile)"
         Lines="NESMirroring=$(NESMirroring);NESMapper=$(NESMapper);NESPrgBanks=$(NESPrgBanks);NESChrBanks=$(NESChrBanks);NESBattery=$(NESBattery)"
@@ -21,6 +22,7 @@
     </ItemGroup>
   </Target>
   <Target Name="Transpile" AfterTargets="Build"
+      DependsOnTargets="$(TranspileDependsOn)"
       Inputs="$(TargetPath);@(NESAssembly);$(_NESPropertiesStampFile)" Outputs="$(NESTargetPath)">
     <TranspileToNES
         TargetPath="$(TargetPath)"
