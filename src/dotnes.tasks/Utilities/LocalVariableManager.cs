@@ -1,3 +1,4 @@
+using dotnes.ObjectModel;
 using static dotnes.NESConstants;
 
 namespace dotnes;
@@ -118,7 +119,10 @@ class LocalVariableManager
                 }
             }
         }
-        throw new InvalidOperationException($"Cannot resolve struct type for local {localIndex} with field '{fieldName}'");
+        throw new TranspileException(
+            $"Cannot resolve struct type for local {localIndex} with field '{fieldName}'. " +
+            "This may be caused by a compiler-generated closure. If a local function captures outer variables " +
+            "(like byte[] arrays), pass them as parameters instead.");
     }
 
     /// <summary>

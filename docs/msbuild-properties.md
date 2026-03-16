@@ -187,3 +187,36 @@ $(OutputPath)$(TargetName).nes
 
 For example, building a project called `hello` in Debug configuration produces
 `bin/Debug/net10.0/hello.nes`.
+
+## Incremental Builds
+
+The `Transpile` target uses MSBuild incremental build support (`Inputs`/`Outputs`)
+to avoid re-transpiling when nothing has changed. The inputs include:
+
+- `$(TargetPath)` — the compiled `.dll`
+- `@(NESAssembly)` — the `.s` assembly files
+- A **properties stamp file** — tracks changes to `NESMirroring`, `NESMapper`,
+  `NESPrgBanks`, `NESChrBanks`, and `NESBattery`
+
+A `_WriteNESPropertiesStamp` target automatically runs before each transpilation
+and writes the current property values to
+`$(IntermediateOutputPath)dotnes.properties.stamp`. The file is only rewritten
+when a value actually changes (`WriteOnlyWhenDifferent`), so toggling a property
+like `NESBattery` from `false` to `true` will correctly retrigger transpilation
+on the next build without causing unnecessary rebuilds.
+
+### `TranspileDependsOn`
+
+A semicolon-separated list of targets that the `Transpile` target depends on.
+By default this includes `_WriteNESPropertiesStamp` (the stamp file target
+described above). You can append your own targets to run custom logic before
+transpilation:
+
+```xml
+<PropertyGroup>
+  <TranspileDependsOn>$(TranspileDependsOn);MyCustomPreTranspileTarget</TranspileDependsOn>
+</PropertyGroup>
+<Target Name="MyCustomPreTranspileTarget">
+  <!-- Custom logic that runs before transpilation -->
+</Target>
+```

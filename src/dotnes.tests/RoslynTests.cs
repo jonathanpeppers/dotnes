@@ -1445,6 +1445,46 @@ public class RoslynTests
     }
 
     [Fact]
+    public void PeekSmallConstant()
+    {
+        // peek(0x003C) — address 0x3C fits in a byte, so the transpiler emits
+        // a single LDA via WriteLdc(byte). The peek handler must remove only 1
+        // prior instruction instead of 2 for the ushort path (LDX + LDA).
+        var bytes = GetProgramBytes(
+            """
+            byte value = peek(0x003C);
+            pal_col(0, value);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        Assert.Contains("AD3C00", hex);  // LDA $003C (absolute)
+    }
+
+    [Fact]
+    public void PokeSmallConstant()
+    {
+        // poke(0x003C, 0x07) — address 0x3C fits in a byte, so the transpiler
+        // emits a single LDA via WriteLdc(byte). The poke handler must remove
+        // only 3 prior instructions instead of 4 for the ushort path.
+        var bytes = GetProgramBytes(
+            """
+            poke(0x003C, 0x07);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        Assert.Contains("A907", hex);    // LDA #$07
+        Assert.Contains("8D3C00", hex);  // STA $003C (absolute)
+    }
+
+    [Fact]
     public void WaitvsyncEmitsJsr()
     {
         // waitvsync() should emit JSR to waitvsync subroutine
@@ -3317,6 +3357,30 @@ public class RoslynTests
             """));
 
         Assert.Contains("ecursive", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ClosureCapturingByteArrayThrows()
+    {
+        // When a non-static local function captures an outer byte[] variable,
+        // the compiler generates a closure struct. The transpiler should detect
+        // this and throw a helpful error message with guidance.
+        var ex = Assert.Throws<TranspileException>(() => BuildProgram(
+            """
+            byte[] palette = [0x0F, 0x10, 0x20, 0x30];
+            apply_palette();
+            ppu_on_all();
+            while (true) ;
+
+            void apply_palette()
+            {
+                pal_bg(palette);
+            }
+            """));
+
+        Assert.Contains("closure", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("palette", ex.Message);
+        Assert.Contains("Workaround", ex.Message);
     }
 
     [Fact]
