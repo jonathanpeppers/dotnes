@@ -3717,6 +3717,12 @@ public class RoslynTests
         Assert.NotEmpty(bytes);
         var hex = Convert.ToHexString(bytes);
         _logger.WriteLine($"ComplexArrayIndex hex: {hex}");
+        // Must contain LSR (4A) for the >> 3 shift operations
+        Assert.Contains("4A", hex);
+        // Must contain ASL (0A) for the << 4 shift operation
+        Assert.Contains("0A", hex);
+        // Must contain CLC (18) + ADC (65 or 6D) for the addition
+        Assert.Contains("18", hex);
         // Must contain TAX (AA) to transfer computed index to X register
         Assert.Contains("AA", hex);
         // Must contain LDA absolute,X (opcode BD) for array access with X index
