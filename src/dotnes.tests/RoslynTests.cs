@@ -3692,4 +3692,63 @@ public class RoslynTests
         // STA $C000 = 8D00C0
         Assert.Contains("8D00C0", hex);
     }
+
+    [Fact]
+    public void ComplexArrayIndexExpression()
+    {
+        // Pattern from issue: array[(x >> 3) + ((y >> 3) << 4)]
+        // The for loop forces the array into a local variable (stloc) so that
+        // the ldelem.u1 is preceded by ldloc (array), <complex index>, ldelem.u1.
+        var bytes = GetProgramBytes(
+            """
+            byte[] arr = new byte[16];
+            for (byte i = 0; i < 16; i++)
+            {
+                arr[i] = i;
+            }
+            byte x = (byte)pad_poll(0);
+            byte y = (byte)pad_poll(0);
+            byte tile = arr[(byte)((x >> 3) + ((y >> 3) << 4))];
+            pal_col(0, tile);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"ComplexArrayIndex hex: {hex}");
+        // Must contain TAX (AA) to transfer computed index to X register
+        Assert.Contains("AA", hex);
+        // Must contain LDA absolute,X (opcode BD) for array access with X index
+        Assert.Contains("BD", hex);
+    }
+
+    [Fact]
+    public void SimpleShiftArrayIndex()
+    {
+        // Simpler complex index: array[x >> 3]
+        var bytes = GetProgramBytes(
+            """
+            byte[] arr = new byte[16];
+            for (byte i = 0; i < 16; i++)
+            {
+                arr[i] = i;
+            }
+            byte x = (byte)pad_poll(0);
+            byte tile = arr[(byte)(x >> 3)];
+            pal_col(0, tile);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"SimpleShiftIndex hex: {hex}");
+        // Must contain LSR (4A) for the shift
+        Assert.Contains("4A", hex);
+        // Must contain TAX (AA) to transfer shifted index to X register
+        Assert.Contains("AA", hex);
+        // Must contain LDA absolute,X (opcode BD) for array access
+        Assert.Contains("BD", hex);
+    }
 }
