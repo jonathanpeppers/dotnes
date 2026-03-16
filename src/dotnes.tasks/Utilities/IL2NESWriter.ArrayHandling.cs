@@ -890,7 +890,7 @@ partial class IL2NESWriter
                         if (i > valueStart)
                         {
                             var idxLocal = GetLdlocIndex(Instructions[i - 1]);
-                            if (idxLocal != null && (!Locals.TryGetValue(idxLocal.Value, out var idxLoc) || idxLoc.ArraySize == 0))
+                            if (idxLocal != null && Locals.TryGetValue(idxLocal.Value, out var idxLoc) && idxLoc.ArraySize == 0)
                                 sourceIndex1Idx = idxLocal.Value;
                         }
                         // Find the array local for this ldelem
