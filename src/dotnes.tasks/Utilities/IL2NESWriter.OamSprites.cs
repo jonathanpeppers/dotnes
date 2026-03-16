@@ -34,7 +34,8 @@ partial class IL2NESWriter
             bool hasAdd, int addValue, bool isArrayElem, int arrayLocIdx, int indexLocIdx,
             bool isCompound, int compoundLocalIdx, ILOpCode compoundBinOp,
             int compoundBinOpConst, int compoundAddConst,
-            bool isStaticField, string? staticFieldName)>();
+            bool isStaticField, string? staticFieldName,
+            string? compoundStaticFieldName)>();
 
         int ilIdx = Index - 1;
         int needed = 5;
@@ -45,6 +46,7 @@ partial class IL2NESWriter
         ILOpCode compBinOp = ILOpCode.Nop;
         int compBinOpConst = 0;
         int compLocalIdx = -1;
+        string? compStaticFieldName = null;
         int compAddConst = 0;
         bool compHasBinOp = false;
         bool compBinOpConstAssigned = false;
@@ -72,7 +74,7 @@ partial class IL2NESWriter
                         if (ilIdx >= 0) { idxLoc = GetLdlocIndex(Instructions[ilIdx]) ?? -1; ilIdx--; }
                         if (ilIdx >= 0) { arrLoc = GetLdlocIndex(Instructions[ilIdx]) ?? -1; }
                         argInfos.Add((false, 0, 0, false, 0, true, arrLoc, idxLoc,
-                            false, 0, ILOpCode.Nop, 0, 0, false, null));
+                            false, 0, ILOpCode.Nop, 0, 0, false, null, null));
                         needed--;
                         firstArgIlIdx = ilIdx;
                     }
@@ -91,18 +93,18 @@ partial class IL2NESWriter
                         {
                             // Compound expression complete
                             argInfos.Add((false, 0, 0, false, 0, false, 0, 0,
-                                true, compLocalIdx, compBinOp, compBinOpConst, compAddConst, false, null));
+                                true, compLocalIdx, compBinOp, compBinOpConst, compAddConst, false, null, compStaticFieldName));
                             needed--;
                             firstArgIlIdx = ilIdx;
                             compBinOp = ILOpCode.Nop; compBinOpConst = 0; compLocalIdx = -1;
-                            compAddConst = 0; compHasBinOp = false;
+                            compStaticFieldName = null; compAddConst = 0; compHasBinOp = false;
                             compBinOpConstAssigned = false;
                         }
                     }
                     else
                     {
                         argInfos.Add((true, locIdx, 0, false, 0, false, 0, 0,
-                            false, 0, ILOpCode.Nop, 0, 0, false, null));
+                            false, 0, ILOpCode.Nop, 0, 0, false, null, null));
                         needed--;
                         firstArgIlIdx = ilIdx;
                     }
@@ -118,18 +120,18 @@ partial class IL2NESWriter
                         if (depth == 0)
                         {
                             argInfos.Add((false, 0, 0, false, 0, false, 0, 0,
-                                true, compLocalIdx, compBinOp, compBinOpConst, compAddConst, false, null));
+                                true, compLocalIdx, compBinOp, compBinOpConst, compAddConst, false, null, compStaticFieldName));
                             needed--;
                             firstArgIlIdx = ilIdx;
                             compBinOp = ILOpCode.Nop; compBinOpConst = 0; compLocalIdx = -1;
-                            compAddConst = 0; compHasBinOp = false;
+                            compStaticFieldName = null; compAddConst = 0; compHasBinOp = false;
                             compBinOpConstAssigned = false;
                         }
                     }
                     else
                     {
                         argInfos.Add((true, locIdx, 0, false, 0, false, 0, 0,
-                            false, 0, ILOpCode.Nop, 0, 0, false, null));
+                            false, 0, ILOpCode.Nop, 0, 0, false, null, null));
                         needed--;
                         firstArgIlIdx = ilIdx;
                     }
@@ -157,18 +159,18 @@ partial class IL2NESWriter
                         if (depth == 0)
                         {
                             argInfos.Add((false, 0, 0, false, 0, false, 0, 0,
-                                true, compLocalIdx, compBinOp, compBinOpConst, compAddConst, false, null));
+                                true, compLocalIdx, compBinOp, compBinOpConst, compAddConst, false, null, compStaticFieldName));
                             needed--;
                             firstArgIlIdx = ilIdx;
                             compBinOp = ILOpCode.Nop; compBinOpConst = 0; compLocalIdx = -1;
-                            compAddConst = 0; compHasBinOp = false;
+                            compStaticFieldName = null; compAddConst = 0; compHasBinOp = false;
                             compBinOpConstAssigned = false;
                         }
                     }
                     else
                     {
                         argInfos.Add((false, 0, val, false, 0, false, 0, 0,
-                            false, 0, ILOpCode.Nop, 0, 0, false, null));
+                            false, 0, ILOpCode.Nop, 0, 0, false, null, null));
                         needed--;
                         firstArgIlIdx = ilIdx;
                     }
@@ -194,18 +196,18 @@ partial class IL2NESWriter
                         if (depth == 0)
                         {
                             argInfos.Add((false, 0, 0, false, 0, false, 0, 0,
-                                true, compLocalIdx, compBinOp, compBinOpConst, compAddConst, false, null));
+                                true, compLocalIdx, compBinOp, compBinOpConst, compAddConst, false, null, compStaticFieldName));
                             needed--;
                             firstArgIlIdx = ilIdx;
                             compBinOp = ILOpCode.Nop; compBinOpConst = 0; compLocalIdx = -1;
-                            compAddConst = 0; compHasBinOp = false;
+                            compStaticFieldName = null; compAddConst = 0; compHasBinOp = false;
                             compBinOpConstAssigned = false;
                         }
                     }
                     else
                     {
                         argInfos.Add((false, 0, val, false, 0, false, 0, 0,
-                            false, 0, ILOpCode.Nop, 0, 0, false, null));
+                            false, 0, ILOpCode.Nop, 0, 0, false, null, null));
                         needed--;
                         firstArgIlIdx = ilIdx;
                     }
@@ -217,7 +219,8 @@ partial class IL2NESWriter
                 case ILOpCode.Mul: case ILOpCode.Div: case ILOpCode.Rem:
                     if (il.OpCode is ILOpCode.Shr or ILOpCode.Shr_un or ILOpCode.Shl
                         or ILOpCode.And or ILOpCode.Or or ILOpCode.Xor
-                        or ILOpCode.Mul or ILOpCode.Div or ILOpCode.Rem)
+                        or ILOpCode.Mul or ILOpCode.Div or ILOpCode.Rem
+                        or ILOpCode.Sub)
                     {
                         compBinOp = il.OpCode;
                         compHasBinOp = true;
@@ -238,16 +241,17 @@ partial class IL2NESWriter
                 {
                     if (depth > 0)
                     {
-                        // Static field consumed by binary op — just decrement depth
+                        // Static field consumed by binary op — capture field name
+                        compStaticFieldName = il.String;
                         depth--;
                         if (depth == 0)
                         {
                             argInfos.Add((false, 0, 0, false, 0, false, 0, 0,
-                                true, compLocalIdx, compBinOp, compBinOpConst, compAddConst, false, null));
+                                true, compLocalIdx, compBinOp, compBinOpConst, compAddConst, false, null, compStaticFieldName));
                             needed--;
                             firstArgIlIdx = ilIdx;
                             compBinOp = ILOpCode.Nop; compBinOpConst = 0; compLocalIdx = -1;
-                            compAddConst = 0; compHasBinOp = false;
+                            compStaticFieldName = null; compAddConst = 0; compHasBinOp = false;
                             compBinOpConstAssigned = false;
                         }
                     }
@@ -255,7 +259,7 @@ partial class IL2NESWriter
                     {
                         // Standalone static field argument (e.g., oam_off)
                         argInfos.Add((false, 0, 0, false, 0, false, 0, 0,
-                            false, 0, ILOpCode.Nop, 0, 0, true, il.String));
+                            false, 0, ILOpCode.Nop, 0, 0, true, il.String, null));
                         needed--;
                         firstArgIlIdx = ilIdx;
                     }
@@ -293,10 +297,17 @@ partial class IL2NESWriter
             var arg = argInfos[i];
             if (arg.isCompound)
             {
-                // Compound expression: addConst + (local BINOP binOpConst)
-                // or simple: local + addConst (when compoundBinOp is Add)
-                var loc = Locals[arg.compoundLocalIdx];
-                Emit(Opcode.LDA, AddressMode.Absolute, (ushort)loc.Address!);
+                // Compound expression: addConst + (source BINOP binOpConst)
+                // Source can be a local variable or a static field
+                if (arg.compoundStaticFieldName != null)
+                {
+                    EmitLdsfldForArg(arg.compoundStaticFieldName);
+                }
+                else
+                {
+                    var loc = Locals[arg.compoundLocalIdx];
+                    Emit(Opcode.LDA, AddressMode.Absolute, (ushort)loc.Address!);
+                }
 
                 // Apply the inner binary operation
                 switch (arg.compoundBinOp)
@@ -439,14 +450,20 @@ partial class IL2NESWriter
 
     /// <summary>
     /// Emits LDA for a static field reference used as an oam_spr argument.
-    /// Maps known NES library static fields to their zero-page addresses.
+    /// Maps known NES library static fields to their zero-page addresses,
+    /// or uses the allocated absolute address for user-defined static fields.
     /// </summary>
     void EmitLdsfldForArg(string? fieldName)
     {
         if (fieldName == nameof(NESLib.oam_off))
             Emit(Opcode.LDA, AddressMode.ZeroPage, (byte)NESConstants.OAM_OFF);
+        else if (fieldName != null)
+        {
+            var addr = GetOrAllocateStaticField(fieldName);
+            Emit(Opcode.LDA, AddressMode.Absolute, addr);
+        }
         else
-            throw new TranspileException($"Unsupported static field '{fieldName}' in oam_spr argument.", MethodName);
+            throw new TranspileException("Null static field name in oam_spr argument.", MethodName);
     }
 
     /// <summary>
