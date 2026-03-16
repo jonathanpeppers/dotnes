@@ -3339,6 +3339,8 @@ public class RoslynTests
             """));
 
         Assert.Contains("closure", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("palette", ex.Message);
+        Assert.Contains("Workaround", ex.Message);
     }
 
     [Fact]
