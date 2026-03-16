@@ -854,6 +854,7 @@ partial class IL2NESWriter
         int shrValue = 0;
         bool hasTwoLdelems = false;
         int sourceArray1Idx = -1;
+        int sourceIndex1Idx = -1;
         int sourceArray2Idx = -1;
         int valueLocalIdx = -1;
 
@@ -885,6 +886,13 @@ partial class IL2NESWriter
                 case ILOpCode.Ldelem_u1:
                     if (sourceArray1Idx < 0)
                     {
+                        // Find the index local (immediately before ldelem) and the array local
+                        if (i > valueStart)
+                        {
+                            var idxLocal = GetLdlocIndex(Instructions[i - 1]);
+                            if (idxLocal != null && Locals.TryGetValue(idxLocal.Value, out var idxLoc) && idxLoc.ArraySize == 0)
+                                sourceIndex1Idx = idxLocal.Value;
+                        }
                         // Find the array local for this ldelem
                         for (int j = i - 1; j >= valueStart; j--)
                         {
@@ -1099,6 +1107,30 @@ partial class IL2NESWriter
             _runtimeValueInA = false;
             _savedRuntimeToTemp = false;
             return;
+        }
+        else if (sourceArray1Idx >= 0 && !hasTwoLdelems && sourceArray1Idx != targetArrayLocalIdx
+            && sourceIndex1Idx >= 0)
+        {
+            // Pattern: arr1[i] = arr2[j] — cross-array copy with possibly different indices
+            var srcArray = Locals[sourceArray1Idx];
+            var srcIndex = Locals[sourceIndex1Idx];
+            if (srcArray.Address.HasValue && srcIndex.Address.HasValue)
+            {
+                Emit(Opcode.LDX, AddressMode.Absolute, (ushort)srcIndex.Address!);
+                Emit(Opcode.LDA, AddressMode.AbsoluteX, (ushort)srcArray.Address!);
+            }
+            if (hasAnd)
+                Emit(Opcode.AND, AddressMode.Immediate, checked((byte)andMask));
+            if (hasAdd)
+            {
+                Emit(Opcode.CLC, AddressMode.Implied);
+                Emit(Opcode.ADC, AddressMode.Immediate, checked((byte)addValue));
+            }
+            if (hasSub)
+            {
+                Emit(Opcode.SEC, AddressMode.Implied);
+                Emit(Opcode.SBC, AddressMode.Immediate, checked((byte)subValue));
+            }
         }
         else if (valueLocalIdx >= 0)
         {
