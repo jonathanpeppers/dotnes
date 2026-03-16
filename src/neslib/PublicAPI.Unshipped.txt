@@ -75,8 +75,8 @@ static NES.NESLib.oam_clear_fast() -> void
 static NES.NESLib.oam_meta_spr_clip(int x, byte y, byte[]! metasprite) -> void
 static NES.NESLib.oam_meta_spr_pal(byte x, byte y, byte pal, byte[]! data) -> void
 static NES.NESLib.oam_off -> byte
-static NES.NESLib.pad_state(byte pad) -> byte
-static NES.NESLib.pad_trigger(byte pad) -> byte
+static NES.NESLib.pad_state(byte pad) -> NES.PAD
+static NES.NESLib.pad_trigger(byte pad) -> NES.PAD
 static NES.NESLib.peek(ushort addr) -> byte
 static NES.NESLib.play_music() -> void
 static NES.NESLib.poke(ushort addr, byte value) -> void
