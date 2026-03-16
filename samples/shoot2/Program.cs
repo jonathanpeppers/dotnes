@@ -461,10 +461,6 @@ while (true)
     digits[5] = d5;
     vrambuf_put(NTADR_A(8, 1), digits, 6);
 
-    poke(0x0804, 0x00);
-    poke(0x0805, 0x01);
-    poke(0x0806, 0x00);
-
     ppu_wait_nmi();
     vrambuf_clear();
 }
