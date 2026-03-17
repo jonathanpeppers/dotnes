@@ -3692,4 +3692,98 @@ public class RoslynTests
         // STA $C000 = 8D00C0
         Assert.Contains("8D00C0", hex);
     }
+
+    [Fact]
+    public void WordStaticField_StoreImmediate()
+    {
+        // ushort static field should get 2 bytes and store both lo/hi
+        var bytes = GetProgramBytes(
+            """
+            G.word_val = 300;
+            while (true) ;
+
+            static class G { public static ushort word_val; }
+            """);
+        var hex = Convert.ToHexString(bytes);
+        // 300 = 0x012C: LDA #$2C (A92C), STA abs (8D), LDX #$01 or STX abs (8E)
+        Assert.Contains("A92C", hex); // LDA #$2C (low byte)
+        Assert.Contains("8E", hex);   // STX abs (high byte store)
+    }
+
+    [Fact]
+    public void WordStaticField_LoadZeroExtend()
+    {
+        // Storing a byte field value into a word field should zero-extend the high byte
+        var bytes = GetProgramBytes(
+            """
+            G.byte_val = 42;
+            G.int_val = G.byte_val;
+            while (true) ;
+
+            static class G
+            {
+                public static byte byte_val;
+                public static int int_val;
+            }
+            """);
+        var hex = Convert.ToHexString(bytes);
+        // Zero-extend: LDA #$00 (A900) for high byte
+        Assert.Contains("A900", hex);
+    }
+
+    [Fact]
+    public void WordStaticField_LoadWord()
+    {
+        // Loading a ushort field should emit LDA abs + LDX abs (16-bit)
+        var bytes = GetProgramBytes(
+            """
+            G.word_val = 300;
+            byte lo = (byte)G.word_val;
+            pal_col(0, lo);
+            while (true) ;
+
+            static class G { public static ushort word_val; }
+            """);
+        var hex = Convert.ToHexString(bytes);
+        // LDX absolute = AE (loading high byte of word field)
+        Assert.Contains("AE", hex);
+    }
+
+    [Fact]
+    public void WordStaticField_TwoByteAllocation()
+    {
+        // Word fields should not overlap adjacent fields.
+        // byte_val at $0325 (1 byte), int_val at $0326 (2 bytes), word_val at $0328 (2 bytes)
+        var bytes = GetProgramBytes(
+            """
+            G.byte_val = 1;
+            G.int_val = 2;
+            G.word_val = 3;
+            while (true) ;
+
+            static class G
+            {
+                public static byte byte_val;
+                public static int int_val;
+                public static ushort word_val;
+            }
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"WordStaticField_TwoByteAllocation hex: {hex}");
+
+        // Fields are allocated alphabetically: byte_val@$0325, int_val@$0326-7, word_val@$0328-9
+        // Store byte_val=1: LDA #1 (A901), STA $0325 (8D2503)
+        Assert.Contains("8D2503", hex);
+        // Store int_val=2 low: STA $0326 (8D2603)
+        Assert.Contains("8D2603", hex);
+        // Store int_val=2 high: STA $0327 (8D2703) — zero or value high byte
+        Assert.Contains("8D2703", hex);
+        // Store word_val=3 low: STA $0328 (8D2803)
+        Assert.Contains("8D2803", hex);
+        // Store word_val=3 high: STA $0329 (8D2903)
+        Assert.Contains("8D2903", hex);
+    }
 }

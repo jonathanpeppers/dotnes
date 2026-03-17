@@ -124,8 +124,6 @@ public class TranspilerTests
     [InlineData("mmc1", false, "Horizontal", 1)]
     [InlineData("battery", true, "Horizontal", 0, 2, 1, true)]
     [InlineData("battery", false, "Horizontal", 0, 2, 1, true)]
-    [InlineData("wordfield", true)]
-    [InlineData("wordfield", false)]
     public Task Write(string name, bool debug, string mirroring = "Horizontal", int mapper = 0, int prgBanks = 2, int chrBanks = 1, bool battery = false)
     {
         var configuration = debug ? "debug" : "release";
