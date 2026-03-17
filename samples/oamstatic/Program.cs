@@ -15,13 +15,15 @@ byte[] PALETTE = [
 pal_all(PALETTE);
 oam_clear();
 
-G.spr_x = 40;
-G.spr_y = 40;
+G.spr_x = 124;
+G.spr_y = 108;
 
 // Compound expression with static fields: (byte)(static_field - constant)
-G.spr = oam_spr((byte)(G.spr_x - 4), (byte)(G.spr_y - 8), 0xC0, 0x03, 0);
+// Face: at (spr_x - 4, spr_y - 4) — tests Sub path
+G.spr = oam_spr((byte)(G.spr_x - 4), (byte)(G.spr_y - 4), 0xC0, 0x03, 0);
 // Compound expression with static field + constant (add)
-G.spr = oam_spr((byte)(G.spr_x + 8), (byte)(G.spr_y + 8), 0xC1, 0x03, G.spr);
+// Body: at (spr_x - 4, spr_y + 4) — tests Add path, 8px below face
+G.spr = oam_spr((byte)(G.spr_x - 4), (byte)(G.spr_y + 4), 0xC1, 0x03, G.spr);
 ppu_on_all();
 
 while (true) ;
