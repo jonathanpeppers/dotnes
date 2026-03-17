@@ -70,30 +70,24 @@ class Decompiler
         if (labels.TryGetValue("detectNTSC", out ushort detectAddr))
         {
             int detectOffset = detectAddr - 0x8000;
-            // Find the detectNTSC block to know its size
-            int blockSize = 0;
-            foreach (var block in program.Blocks)
-            {
-                if (block.Label == "detectNTSC")
-                {
-                    blockSize = block.Size;
-                    break;
-                }
-            }
+            int blockSize = program.Blocks.FirstOrDefault(b => b.Label == "detectNTSC")?.Size ?? 0;
 
             // Scan the detectNTSC block for JMP (0x4C) targeting an address >= builtInsEnd
-            int blockEnd = detectOffset + blockSize;
-            for (int i = detectOffset; i < blockEnd && i < _rom.PrgRom.Length - 2; i++)
+            if (blockSize > 0)
             {
-                if (_rom.PrgRom[i] == 0x4C) // JMP absolute
+                int blockEnd = detectOffset + blockSize;
+                for (int i = detectOffset; i < blockEnd && i < _rom.PrgRom.Length - 2; i++)
                 {
-                    ushort target = (ushort)(_rom.PrgRom[i + 1] | (_rom.PrgRom[i + 2] << 8));
-                    if (target >= builtInsEnd && target < 0xFFFA)
+                    if (_rom.PrgRom[i] == 0x4C) // JMP absolute
                     {
-                        _mainAddress = target;
-                        _symbolTable[target] = "main";
-                        _logger.WriteLine($"Found main at ${_mainAddress:X4}");
-                        break;
+                        ushort target = (ushort)(_rom.PrgRom[i + 1] | (_rom.PrgRom[i + 2] << 8));
+                        if (target >= builtInsEnd && target < 0xFFFA)
+                        {
+                            _mainAddress = target;
+                            _symbolTable[target] = "main";
+                            _logger.WriteLine($"Found main at ${_mainAddress:X4}");
+                            break;
+                        }
                     }
                 }
             }
