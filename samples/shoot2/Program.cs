@@ -169,6 +169,8 @@ poke(APU_STATUS, 0x0F);         // enable all channels
 
 bank_spr(1);
 bank_bg(0);
+vrambuf_clear();
+set_vram_update(updbuf);
 ppu_on_all();
 set_rand(42);
 
@@ -185,6 +187,7 @@ byte d2 = 0x01;
 byte d3 = 0x01;
 byte d4 = 0x01;
 byte d5 = 0x01;
+byte[] digits = new byte[6];
 
 // Structure-of-Arrays: Bullets
 byte[] bullet_x = new byte[MAX_BULLETS];
@@ -449,15 +452,17 @@ while (true)
 
     oam_hide_rest(oam_off);
 
-    // Safety: ensure VRAM update state is clean before NMI fires.
-    // Without this, stale NAME_UPD_ENABLE could cause the NMI handler
-    // to process garbage VRAM update commands, leading to a gray screen.
-    poke(0x0100, 0xFF);
-    poke(0x0804, 0x00);
-    poke(0x0805, 0x01);
-    poke(0x0806, 0x00);
+    // Update score display via VRAM buffer (processed by NMI during vblank)
+    digits[0] = d0;
+    digits[1] = d1;
+    digits[2] = d2;
+    digits[3] = d3;
+    digits[4] = d4;
+    digits[5] = d5;
+    vrambuf_put(NTADR_A(8, 1), digits, 6);
 
     ppu_wait_nmi();
+    vrambuf_clear();
 }
 
 // === User-defined functions (static, no captured variables) ===
