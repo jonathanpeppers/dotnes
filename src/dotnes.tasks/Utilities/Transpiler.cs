@@ -214,7 +214,7 @@ class Transpiler : IDisposable
         var structLayouts = DetectStructLayouts();
 
         // Pre-allocate user-defined static fields so all methods share the same addresses
-        var staticFields = PreAllocateStaticFields(instructions);
+        var (staticFields, wordStaticFields, staticFieldBytes) = PreAllocateStaticFields(instructions);
 
         using var writer = new IL2NESWriter(new MemoryStream(), logger: _logger, reflectionCache: reflectionCache)
         {
@@ -225,7 +225,8 @@ class Transpiler : IDisposable
             WordLocals = DetectWordLocals(instructions, reflectionCache),
             StructLayouts = structLayouts,
             StaticFieldAddresses = staticFields,
-            LocalCount = staticFields.Count,
+            WordStaticFields = wordStaticFields,
+            LocalCount = staticFieldBytes,
         };
 
         writer.StartBlockBuffering();
@@ -307,6 +308,7 @@ class Transpiler : IDisposable
                 StringLabelStartIndex = writer.StringTable.Count,
                 LocalCount = methodFrameOffsets[methodName],
                 StaticFieldAddresses = staticFields,
+                WordStaticFields = wordStaticFields,
             };
             methodWriter.StartBlockBuffering();
 
@@ -1235,11 +1237,39 @@ class Transpiler : IDisposable
     }
 
     /// <summary>
+    /// Builds a map of static field names to their byte sizes from assembly metadata.
+    /// Uses field signatures to determine type sizes. NES is 8-bit, so int/uint are
+    /// capped at 2 bytes (16-bit is sufficient for NES address math).
+    /// </summary>
+    Dictionary<string, int> BuildStaticFieldSizes()
+    {
+        var result = new Dictionary<string, int>(StringComparer.Ordinal);
+        foreach (var t in _reader.TypeDefinitions)
+        {
+            var type = _reader.GetTypeDefinition(t);
+            foreach (var f in type.GetFields())
+            {
+                var field = _reader.GetFieldDefinition(f);
+                if ((field.Attributes & FieldAttributes.Static) == 0)
+                    continue;
+                if ((field.Attributes & FieldAttributes.HasFieldRVA) != 0)
+                    continue;
+                var fieldName = _reader.GetString(field.Name);
+                int size = DecodeFieldSize(field);
+                // NES is 8-bit; cap at 2 bytes (16-bit sufficient for address math)
+                result[fieldName] = Math.Min(size, 2);
+            }
+        }
+        return result;
+    }
+
+    /// <summary>
     /// Pre-scans main and all user method IL for user-defined static field references
     /// (Stsfld/Ldsfld) and allocates a shared address for each unique field.
     /// This ensures all methods resolve the same field name to the same RAM address.
+    /// Multi-byte fields (int, ushort, short) get 2 bytes of zero page.
     /// </summary>
-    Dictionary<string, ushort> PreAllocateStaticFields(ILInstruction[] mainInstructions)
+    (Dictionary<string, ushort> addresses, HashSet<string> wordFields, int totalBytes) PreAllocateStaticFields(ILInstruction[] mainInstructions)
     {
         var fieldNames = new HashSet<string>(StringComparer.Ordinal);
 
@@ -1263,15 +1293,23 @@ class Transpiler : IDisposable
         // Remove NESLib fields that are handled specially
         fieldNames.Remove("oam_off");
 
-        // Allocate addresses sequentially starting at LocalStackBase
-        var result = new Dictionary<string, ushort>(StringComparer.Ordinal);
+        // Build field size map from metadata
+        var fieldSizes = BuildStaticFieldSizes();
+
+        // Allocate addresses sequentially starting at LocalStackBase,
+        // using the correct byte size for each field.
+        var addresses = new Dictionary<string, ushort>(StringComparer.Ordinal);
+        var wordFields = new HashSet<string>(StringComparer.Ordinal);
         ushort offset = 0;
         foreach (var name in fieldNames.OrderBy(n => n, StringComparer.Ordinal))
         {
-            result[name] = (ushort)(NESConstants.LocalStackBase + offset);
-            offset++;
-            _logger.WriteLine($"Static field '{name}' allocated at ${result[name]:X4}");
+            addresses[name] = (ushort)(NESConstants.LocalStackBase + offset);
+            int size = fieldSizes.TryGetValue(name, out var s) ? s : 1;
+            if (size > 1)
+                wordFields.Add(name);
+            offset += (ushort)size;
+            _logger.WriteLine($"Static field '{name}' allocated at ${addresses[name]:X4} ({size} byte{(size > 1 ? "s" : "")})");
         }
-        return result;
+        return (addresses, wordFields, offset);
     }
 }
