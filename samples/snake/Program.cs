@@ -47,7 +47,7 @@ byte s2 = 0x30;
 byte[] sbuf = new byte[3];
 
 // temp globals (needed to work around transpiler array limitations)
-byte trig = 0;
+PAD trig = 0;
 byte headX = 0;
 byte headY = 0;
 byte tmpX = 0;
@@ -85,19 +85,19 @@ while (true)
     {
         // read direction input (use global to avoid AND cascade bug)
         trig = pad_trigger(0);
-        if ((byte)(trig & (byte)PAD.RIGHT) != 0)
+        if ((trig & PAD.RIGHT) != 0)
         {
             if (dir != DIR_LEFT) dir = DIR_RIGHT;
         }
-        if ((byte)(trig & (byte)PAD.LEFT) != 0)
+        if ((trig & PAD.LEFT) != 0)
         {
             if (dir != DIR_RIGHT) dir = DIR_LEFT;
         }
-        if ((byte)(trig & (byte)PAD.UP) != 0)
+        if ((trig & PAD.UP) != 0)
         {
             if (dir != DIR_DOWN) dir = DIR_UP;
         }
-        if ((byte)(trig & (byte)PAD.DOWN) != 0)
+        if ((trig & PAD.DOWN) != 0)
         {
             if (dir != DIR_UP) dir = DIR_DOWN;
         }

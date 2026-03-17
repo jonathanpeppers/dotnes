@@ -148,12 +148,12 @@ public static class NESLib
     /// <summary>
     /// get pad trigger
     /// </summary>
-    public static byte pad_trigger(byte pad) => throw null!;
+    public static PAD pad_trigger(byte pad) => throw null!;
 
     /// <summary>
     /// get pad state
     /// </summary>
-    public static byte pad_state(byte pad) => throw null!;
+    public static PAD pad_state(byte pad) => throw null!;
 
     /// <summary>
     /// read from vram

@@ -51,7 +51,7 @@ byte lives = 3;
 byte frameCount = 0;
 byte spawnTimer = 0;
 byte spawnRate = 60;
-byte lastTrigger = 0;
+PAD lastTrigger = 0;
 byte castleHits = 0;
 byte activeCount = 0;
 
@@ -189,7 +189,7 @@ while (true)
         {
             ppu_wait_nmi();
             lastTrigger = pad_trigger(0);
-            if ((byte)(lastTrigger & (byte)PAD.A) != 0)
+            if ((lastTrigger & PAD.A) != 0)
             {
                 score = 0;
                 wave = 1;
@@ -240,22 +240,22 @@ while (true)
             lastTrigger = pad_trigger(0);
 
             // Cursor movement
-            if ((byte)(lastTrigger & (byte)PAD.LEFT) != 0)
+            if ((lastTrigger & PAD.LEFT) != 0)
             {
                 if (cursorX > (byte)(BOARD_X + 1))
                     cursorX = (byte)(cursorX - 1);
             }
-            if ((byte)(lastTrigger & (byte)PAD.RIGHT) != 0)
+            if ((lastTrigger & PAD.RIGHT) != 0)
             {
                 if (cursorX < (byte)(BOARD_X + BOARD_W - 1))
                     cursorX = (byte)(cursorX + 1);
             }
-            if ((byte)(lastTrigger & (byte)PAD.UP) != 0)
+            if ((lastTrigger & PAD.UP) != 0)
             {
                 if (cursorY > BOARD_Y)
                     cursorY = (byte)(cursorY - 1);
             }
-            if ((byte)(lastTrigger & (byte)PAD.DOWN) != 0)
+            if ((lastTrigger & PAD.DOWN) != 0)
             {
                 if (cursorY < (byte)(BOARD_Y + BOARD_H - 1))
                     cursorY = (byte)(cursorY + 1);
@@ -263,7 +263,7 @@ while (true)
 
             // Place wall with A — check arrays, defer VRAM update
             doPlaceWall = 0;
-            if ((byte)(lastTrigger & (byte)PAD.A) != 0)
+            if ((lastTrigger & PAD.A) != 0)
             {
                 if (cursorX > BOARD_X)
                 {
@@ -300,7 +300,7 @@ while (true)
 
             // Remove wall with B — check arrays, defer VRAM update
             doRemoveWall = 0;
-            if ((byte)(lastTrigger & (byte)PAD.B) != 0)
+            if ((lastTrigger & PAD.B) != 0)
             {
                 for (byte w = 0; w < wallCount; w++)
                 {
@@ -448,7 +448,7 @@ while (true)
         {
             ppu_wait_nmi();
             lastTrigger = pad_trigger(0);
-            if ((byte)(lastTrigger & (byte)PAD.A) != 0)
+            if ((lastTrigger & PAD.A) != 0)
             {
                 clear_screen();
                 gameState = STATE_TITLE;
