@@ -316,6 +316,28 @@ class Decompiler
                 }
             }
 
+            // Pattern: LDA #lo / LDX #hi / JSR <subroutine> → fastcall with pointer in A:X
+            if (opcode == 0xA9 && op1.HasValue && i + 2 < instructions.Count)
+            {
+                var nextLdx = instructions[i + 1];
+                var nextJsr = instructions[i + 2];
+                if (nextLdx.Opcode == 0xA2 && nextLdx.Op1.HasValue
+                    && nextJsr.Opcode == 0x20 && nextJsr.Op1.HasValue && nextJsr.Op2.HasValue)
+                {
+                    ushort jsrTarget = (ushort)(nextJsr.Op1.Value | (nextJsr.Op2.Value << 8));
+                    if (_symbolTable.TryGetValue(jsrTarget, out var name) && name != "pusha" && name != "pushax")
+                    {
+                        byte aVal = op1.Value;
+                        byte xVal = nextLdx.Op1.Value;
+                        ushort? pushedPtr = pushedWords.Count > 0 ? pushedWords.Pop() : null;
+                        var stmt = DecompileCallXA(name, xVal, aVal, pushedPtr);
+                        if (stmt != null) statements.Add(stmt);
+                        i += 2; // skip LDX and JSR
+                        continue;
+                    }
+                }
+            }
+
             // Pattern: LDX #hi / LDA #lo / JSR <subroutine> → call with 16-bit arg in X:A
             if (opcode == 0xA2 && op1.HasValue && i + 2 < instructions.Count)
             {
@@ -432,9 +454,9 @@ class Decompiler
         {
             "vram_adr" => FormatVramAdr(aValue, xValue),
             "vram_write" => FormatVramWrite(value16, pushedPtr),
-            "pal_bg" => $"pal_bg(/* data at ${value16:X4} */);",
-            "pal_spr" => $"pal_spr(/* data at ${value16:X4} */);",
-            "pal_all" => $"pal_all(/* data at ${value16:X4} */);",
+            "pal_bg" => FormatPaletteCall("pal_bg", value16, 16),
+            "pal_spr" => FormatPaletteCall("pal_spr", value16, 16),
+            "pal_all" => FormatPaletteCall("pal_all", value16, 32),
             "vram_fill" => $"vram_fill(/* data */);",
             "scroll" => $"scroll(0, 0);",
             // Internal runtime support - skip
@@ -476,6 +498,33 @@ class Decompiler
                 }            }
         }
         return $"vram_write(/* {length} bytes */);";
+    }
+
+    /// <summary>
+    /// Format a pal_bg/pal_spr/pal_all call by reading palette bytes from the ROM
+    /// at the given pointer address.
+    /// </summary>
+    string FormatPaletteCall(string name, ushort pointer, int count)
+    {
+        int offset = pointer - 0x8000;
+        if (offset >= 0 && offset + count <= _rom.PrgRom.Length)
+        {
+            var sb = new StringBuilder();
+            sb.Append($"{name}(new byte[] {{");
+            for (int i = 0; i < count; i++)
+            {
+                if (i % 4 == 0)
+                    sb.Append("\n    ");
+                else
+                    sb.Append(' ');
+                sb.Append($"0x{_rom.PrgRom[offset + i]:X2}");
+                if (i < count - 1)
+                    sb.Append(',');
+            }
+            sb.Append("\n});");
+            return sb.ToString();
+        }
+        return $"{name}(/* data at ${pointer:X4} */);";
     }
 
     /// <summary>

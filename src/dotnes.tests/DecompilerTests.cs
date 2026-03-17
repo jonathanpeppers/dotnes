@@ -116,6 +116,40 @@ public class DecompilerTests
     }
 
     [Fact]
+    public void Decompiler_Attributetable_RecoversPalBgData()
+    {
+        var romBytes = GetVerifiedRom("attributetable");
+        var rom = new NESRomReader(romBytes);
+        var decompiler = new Decompiler(rom, _logger);
+
+        var code = decompiler.Decompile();
+
+        // The attributetable sample uses pal_bg with a 16-byte palette
+        Assert.Contains("pal_bg(new byte[] {", code);
+        // Verify specific palette values from the sample's PALETTE array
+        Assert.Contains("0x03", code);
+        Assert.Contains("0x11, 0x30, 0x27", code);
+    }
+
+    [Fact]
+    public void Decompiler_Shoot2_RecoversPalBgAndPalSprData()
+    {
+        var romBytes = GetVerifiedRom("shoot2");
+        var rom = new NESRomReader(romBytes);
+        var decompiler = new Decompiler(rom, _logger);
+
+        var code = decompiler.Decompile();
+
+        // shoot2 uses both pal_bg and pal_spr with inline byte arrays
+        Assert.Contains("pal_bg(new byte[] {", code);
+        Assert.Contains("pal_spr(new byte[] {", code);
+        // Verify pal_bg palette data: 0x0F, 0x30, 0x10, 0x00 repeated
+        Assert.Contains("0x0F, 0x30, 0x10, 0x00", code);
+        // Verify pal_spr contains sprite palette data
+        Assert.Contains("0x0F, 0x30, 0x10, 0x20", code);
+    }
+
+    [Fact]
     public void Decompiler_Statusbar_CsprojHasVerticalMirroring()
     {
         var romBytes = GetVerifiedRom("statusbar");
