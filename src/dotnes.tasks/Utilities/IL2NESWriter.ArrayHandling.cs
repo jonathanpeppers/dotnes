@@ -545,6 +545,30 @@ partial class IL2NESWriter
                 int arrayLoadCount = bcIndexStart - bcArray;
                 var block = CurrentBlock!;
 
+                // Preserve operand-saving instructions that keep a prior runtime
+                // value alive across the complex index computation. WriteLdloc
+                // emits STA TEMP when _runtimeValueInA is true, or JSR pusha/pushax
+                // when LastLDA is true, before loading the array reference. Removing
+                // these would break downstream arithmetic handlers that expect the
+                // first operand to be in TEMP or on the runtime stack.
+                if (arrayLoadCount > 0 && block.Count > bcArray)
+                {
+                    var firstInstr = block[bcArray];
+                    if (firstInstr.Opcode == Opcode.STA && firstInstr.Mode == AddressMode.ZeroPage
+                        && firstInstr.Operand is ImmediateOperand imm && imm.Value == (byte)NESConstants.TEMP)
+                    {
+                        bcArray++;
+                        arrayLoadCount--;
+                    }
+                    else if (firstInstr.Opcode == Opcode.JSR
+                        && firstInstr.Operand is LabelOperand saveLabel
+                        && (saveLabel.Label == "pusha" || saveLabel.Label == "pushax"))
+                    {
+                        bcArray++;
+                        arrayLoadCount--;
+                    }
+                }
+
                 // Remove array-load instructions from the block (they are dead code
                 // since the index computation overwrites A anyway, but for ROM arrays
                 // they include JSR pushax which has stack side effects).
@@ -590,7 +614,6 @@ partial class IL2NESWriter
         _immediateInA = null;
         _lastLoadedLocalIndex = null;
         _runtimeValueInA = true;
-        _savedRuntimeToTemp = false;
     }
 
     /// <summary>

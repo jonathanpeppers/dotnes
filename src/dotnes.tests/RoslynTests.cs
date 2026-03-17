@@ -3717,16 +3717,12 @@ public class RoslynTests
         Assert.NotEmpty(bytes);
         var hex = Convert.ToHexString(bytes);
         _logger.WriteLine($"ComplexArrayIndex hex: {hex}");
-        // Must contain LSR (4A) for the >> 3 shift operations
-        Assert.Contains("4A", hex);
-        // Must contain ASL (0A) for the << 4 shift operation
-        Assert.Contains("0A", hex);
-        // Must contain CLC (18) + ADC (65 or 6D) for the addition
-        Assert.Contains("18", hex);
-        // Must contain TAX (AA) to transfer computed index to X register
-        Assert.Contains("AA", hex);
-        // Must contain LDA absolute,X (opcode BD) for array access with X index
-        Assert.Contains("BD", hex);
+        // Three consecutive LSR A (4A) for >> 3 shift
+        Assert.Contains("4A4A4A", hex);
+        // Four consecutive ASL A (0A) for << 4 shift
+        Assert.Contains("0A0A0A0A", hex);
+        // TAX (AA) immediately followed by LDA absolute,X (BD) for indexed array access
+        Assert.Contains("AABD", hex);
     }
 
     [Fact]
@@ -3750,11 +3746,39 @@ public class RoslynTests
         Assert.NotEmpty(bytes);
         var hex = Convert.ToHexString(bytes);
         _logger.WriteLine($"SimpleShiftIndex hex: {hex}");
-        // Must contain LSR (4A) for the shift
-        Assert.Contains("4A", hex);
-        // Must contain TAX (AA) to transfer shifted index to X register
-        Assert.Contains("AA", hex);
-        // Must contain LDA absolute,X (opcode BD) for array access
-        Assert.Contains("BD", hex);
+        // Three consecutive LSR A (4A) followed by TAX (AA) + LDA absolute,X (BD)
+        // This is the full expected sequence: shift index, transfer to X, load from array
+        Assert.Contains("4A4A4AAABD", hex);
+    }
+
+    [Fact]
+    public void ComplexArrayIndex_PreservesOperandInTemp()
+    {
+        // Verifies that a runtime value computed before the array access
+        // is preserved in TEMP ($17) across the complex index computation.
+        // Pattern: (x - y) + arr[(byte)(x >> 3)]
+        // The subtraction result must survive through the shift/TAX/LDA sequence.
+        var bytes = GetProgramBytes(
+            """
+            byte[] arr = new byte[32];
+            for (byte i = 0; i < 32; i++)
+            {
+                arr[i] = i;
+            }
+            byte x = (byte)pad_poll(0);
+            byte y = (byte)pad_poll(0);
+            byte result = (byte)((byte)(x - y) + arr[(byte)(x >> 3)]);
+            pal_col(0, result);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"PreservesOperandInTemp hex: {hex}");
+        // STA $17 (8517) must appear before the index computation to save (x - y) to TEMP
+        Assert.Contains("8517", hex);
+        // TAX + LDA absolute,X for the indexed array access
+        Assert.Contains("AABD", hex);
     }
 }
