@@ -65,15 +65,27 @@ class Decompiler
 
         _logger.WriteLine($"Initial built-ins end at ${builtInsEnd:X4}");
 
-        // Find main address by looking at the initlib block's JSR target in the actual ROM.
-        // Initlib contains a JSR to "main" which is the first JSR targeting an address >= builtInsEnd.
-        if (labels.TryGetValue("initlib", out ushort initlibAddr))
+        // Find main address by reading the JMP target from the detectNTSC block.
+        // The startup sequence ends with detectNTSC which has a JMP to main as its last instruction.
+        if (labels.TryGetValue("detectNTSC", out ushort detectAddr))
         {
-            int initlibOffset = initlibAddr - 0x8000;
-            for (int i = initlibOffset; i < _rom.PrgRom.Length - 2; i++)
+            int detectOffset = detectAddr - 0x8000;
+            // Find the detectNTSC block to know its size
+            int blockSize = 0;
+            foreach (var block in program.Blocks)
             {
-                if (_rom.PrgRom[i] == 0x60) break; // RTS = end of initlib
-                if (_rom.PrgRom[i] == 0x20) // JSR
+                if (block.Label == "detectNTSC")
+                {
+                    blockSize = block.Size;
+                    break;
+                }
+            }
+
+            // Scan the detectNTSC block for JMP (0x4C) targeting an address >= builtInsEnd
+            int blockEnd = detectOffset + blockSize;
+            for (int i = detectOffset; i < blockEnd && i < _rom.PrgRom.Length - 2; i++)
+            {
+                if (_rom.PrgRom[i] == 0x4C) // JMP absolute
                 {
                     ushort target = (ushort)(_rom.PrgRom[i + 1] | (_rom.PrgRom[i + 2] << 8));
                     if (target >= builtInsEnd && target < 0xFFFA)
