@@ -334,6 +334,8 @@ partial class IL2NESWriter
     /// Pattern: Ldloc_N (array), Ldloc_M (index), Ldelem_u1
     /// Emits: LDX index_addr; LDA array_base,X (for RAM arrays)
     ///    or: LDX index_addr; LDA label,X (for ROM arrays)
+    /// Also supports complex index expressions (e.g., array[(x >> 3) + ((y >> 3) << 4)])
+    /// where the index is computed by preceding arithmetic operations.
     /// </summary>
     void HandleLdelemU1()
     {
@@ -356,25 +358,16 @@ partial class IL2NESWriter
         int? constantIndex = null;
         if (indexLocalIdx == null)
         {
-            constantIndex = indexInstr.OpCode switch
-            {
-                ILOpCode.Ldc_i4_0 => 0,
-                ILOpCode.Ldc_i4_1 => 1,
-                ILOpCode.Ldc_i4_2 => 2,
-                ILOpCode.Ldc_i4_3 => 3,
-                ILOpCode.Ldc_i4_4 => 4,
-                ILOpCode.Ldc_i4_5 => 5,
-                ILOpCode.Ldc_i4_6 => 6,
-                ILOpCode.Ldc_i4_7 => 7,
-                ILOpCode.Ldc_i4_8 => 8,
-                ILOpCode.Ldc_i4_s => indexInstr.Integer,
-                ILOpCode.Ldc_i4 => indexInstr.Integer,
-                _ => null
-            };
+            constantIndex = GetLdcValue(indexInstr);
         }
 
+        // Complex index expression: the index was computed by preceding arithmetic
+        // operations (shr, shl, add, sub, and, or, etc.). The result is already in A.
         if (indexLocalIdx == null && constantIndex == null)
-            throw new TranspileException("Array element access requires the index to be a local variable or constant. Complex index expressions are not supported.", MethodName);
+        {
+            HandleLdelemU1ComplexIndex();
+            return;
+        }
         if (arrayLocalIdx == null)
             throw new TranspileException("Array element access requires the array to be stored in a local variable.", MethodName);
 
@@ -477,6 +470,147 @@ partial class IL2NESWriter
         }
 
         Stack.Push(0); // Push a placeholder value
+        _immediateInA = null;
+        _lastLoadedLocalIndex = null;
+        _runtimeValueInA = true;
+    }
+
+    /// <summary>
+    /// Handles ldelem.u1 with a complex index expression (e.g., array[(x >> 3) + ((y >> 3) << 4)]).
+    /// The index was computed by preceding arithmetic operations and the result is in A.
+    /// Walks backward through IL to find the array instruction, removes array-load code
+    /// from the block buffer, then emits TAX + LDA array,X.
+    /// </summary>
+    void HandleLdelemU1ComplexIndex()
+    {
+        // Walk backward through IL using stack depth tracking to find the array instruction.
+        // ldelem.u1 consumes 2 values (array ref + index). When depth reaches 2,
+        // the current instruction is the array load.
+        int? arrayILIndex = null;
+        int depth = 0;
+        for (int i = Index - 1; i >= 0; i--)
+        {
+            var il = Instructions![i];
+            int push = 0, pop = 0;
+            switch (il.OpCode)
+            {
+                case ILOpCode.Ldloc_0: case ILOpCode.Ldloc_1: case ILOpCode.Ldloc_2: case ILOpCode.Ldloc_3:
+                case ILOpCode.Ldloc_s:
+                case ILOpCode.Ldsfld:
+                case ILOpCode.Ldc_i4_m1:
+                case ILOpCode.Ldc_i4_0: case ILOpCode.Ldc_i4_1: case ILOpCode.Ldc_i4_2: case ILOpCode.Ldc_i4_3:
+                case ILOpCode.Ldc_i4_4: case ILOpCode.Ldc_i4_5: case ILOpCode.Ldc_i4_6: case ILOpCode.Ldc_i4_7:
+                case ILOpCode.Ldc_i4_8: case ILOpCode.Ldc_i4_s: case ILOpCode.Ldc_i4:
+                    push = 1; break;
+                case ILOpCode.Add: case ILOpCode.Sub: case ILOpCode.Mul: case ILOpCode.Div:
+                case ILOpCode.And: case ILOpCode.Or: case ILOpCode.Xor:
+                case ILOpCode.Shr: case ILOpCode.Shr_un: case ILOpCode.Shl:
+                case ILOpCode.Rem: case ILOpCode.Rem_un:
+                    pop = 2; push = 1; break;
+                case ILOpCode.Conv_u1: case ILOpCode.Conv_u2: case ILOpCode.Conv_u4:
+                case ILOpCode.Conv_i1: case ILOpCode.Conv_i2: case ILOpCode.Conv_i4:
+                    break; // no net change
+                default:
+                    break;
+            }
+            depth += push - pop;
+            if (depth >= 2)
+            {
+                arrayILIndex = i;
+                break;
+            }
+        }
+
+        if (arrayILIndex == null)
+            throw new TranspileException("Array element access with complex index: could not find array variable in IL.", MethodName);
+
+        var arrayInstr = Instructions![arrayILIndex.Value];
+        int? arrayLocalIdx = GetLdlocIndex(arrayInstr);
+        if (arrayLocalIdx == null)
+            throw new TranspileException("Array element access requires the array to be stored in a local variable.", MethodName);
+
+        var arrayLocal = Locals[arrayLocalIdx.Value];
+
+        // Remove the array-load instructions from the block buffer.
+        // The block count at the array IL offset tells us where the array-load instructions
+        // start, and the block count at the next IL instruction tells us where they end.
+        int arrayILOffset = arrayInstr.Offset;
+        int nextILIndex = arrayILIndex.Value + 1;
+        if (nextILIndex < Instructions.Length)
+        {
+            int nextILOffset = Instructions[nextILIndex].Offset;
+            if (_blockCountAtILOffset.TryGetValue(arrayILOffset, out int bcArray) &&
+                _blockCountAtILOffset.TryGetValue(nextILOffset, out int bcIndexStart))
+            {
+                int arrayLoadCount = bcIndexStart - bcArray;
+                var block = CurrentBlock!;
+
+                // Preserve operand-saving instructions that keep a prior runtime
+                // value alive across the complex index computation. WriteLdloc
+                // emits STA TEMP when _runtimeValueInA is true, or JSR pusha/pushax
+                // when LastLDA is true, before loading the array reference. Removing
+                // these would break downstream arithmetic handlers that expect the
+                // first operand to be in TEMP or on the runtime stack.
+                if (arrayLoadCount > 0 && block.Count > bcArray)
+                {
+                    var firstInstr = block[bcArray];
+                    if (firstInstr.Opcode == Opcode.STA && firstInstr.Mode == AddressMode.ZeroPage
+                        && firstInstr.Operand is ImmediateOperand imm && imm.Value == (byte)NESConstants.TEMP)
+                    {
+                        bcArray++;
+                        arrayLoadCount--;
+                    }
+                    else if (firstInstr.Opcode == Opcode.JSR
+                        && firstInstr.Operand is LabelOperand saveLabel
+                        && (saveLabel.Label == "pusha" || saveLabel.Label == "pushax"))
+                    {
+                        bcArray++;
+                        arrayLoadCount--;
+                    }
+                }
+
+                // Remove array-load instructions from the block (they are dead code
+                // since the index computation overwrites A anyway, but for ROM arrays
+                // they include JSR pushax which has stack side effects).
+                for (int i = 0; i < arrayLoadCount && block.Count > bcArray; i++)
+                    block.RemoveAt(bcArray);
+
+                // Check if the instruction now at bcArray is a JSR pusha/pushax that was
+                // emitted by the first index instruction because the array load set LastLDA.
+                // This happens for ROM arrays where WriteLdloc ends with LDA #imm.
+                if (block.Count > bcArray)
+                {
+                    var afterRemoval = block[bcArray];
+                    if (afterRemoval.Opcode == Opcode.JSR
+                        && afterRemoval.Operand is LabelOperand label
+                        && (label.Label == "pusha" || label.Label == "pushax"))
+                    {
+                        block.RemoveAt(bcArray);
+                    }
+                }
+            }
+        }
+
+        // The computed index is in A from the preceding arithmetic operations.
+        // Transfer it to X and load the array element.
+        Emit(Opcode.TAX, AddressMode.Implied);
+
+        if (arrayLocal.ArraySize > 0 && arrayLocal.Address is not null)
+        {
+            // RAM array: use absolute,X
+            Emit(Opcode.LDA, AddressMode.AbsoluteX, (ushort)arrayLocal.Address);
+        }
+        else if (arrayLocal.LabelName is not null)
+        {
+            // ROM array: use label,X
+            EmitWithLabel(Opcode.LDA, AddressMode.AbsoluteX, arrayLocal.LabelName);
+        }
+        else
+        {
+            throw new TranspileException("Array element access failed: the array variable has no allocated address. Ensure the array is initialized before use.", MethodName);
+        }
+
+        Stack.Push(0);
         _immediateInA = null;
         _lastLoadedLocalIndex = null;
         _runtimeValueInA = true;

@@ -33,8 +33,8 @@ byte[] digits = new byte[4];
 
 while (true)
 {
-    byte trig = pad_trigger(0);
-    if ((trig & (byte)PAD.A) != 0)
+    PAD trig = pad_trigger(0);
+    if ((trig & PAD.A) != 0)
     {
         d3 = (byte)(d3 + 1);
         if (d3 == 0x3A) { d3 = 0x30; d2 = (byte)(d2 + 1); }
