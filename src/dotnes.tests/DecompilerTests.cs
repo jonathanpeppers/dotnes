@@ -78,6 +78,36 @@ public class DecompilerTests
     }
 
     [Fact]
+    public void Decompiler_Shoot2_RecognizesPoke()
+    {
+        var romBytes = GetVerifiedRom("shoot2");
+        var rom = new NESRomReader(romBytes);
+        var decompiler = new Decompiler(rom, _logger);
+
+        var code = decompiler.Decompile();
+
+        // shoot2 uses poke() for APU initialization (silence channels)
+        Assert.Contains("poke(APU_PULSE1_CTRL, 0x30);", code);
+        Assert.Contains("poke(APU_PULSE2_CTRL, 0x30);", code);
+        Assert.Contains("poke(APU_TRIANGLE_CTRL, 0x80);", code);
+        Assert.Contains("poke(APU_NOISE_CTRL, 0x30);", code);
+        Assert.Contains("poke(APU_STATUS, 0x0F);", code);
+    }
+
+    [Fact]
+    public void Decompiler_Shoot2_RecognizesPeek()
+    {
+        var romBytes = GetVerifiedRom("shoot2");
+        var rom = new NESRomReader(romBytes);
+        var decompiler = new Decompiler(rom, _logger);
+
+        var code = decompiler.Decompile();
+
+        // shoot2 uses peek() for reading random seed
+        Assert.Contains("peek(", code);
+    }
+
+    [Fact]
     public void Decompiler_Hello_ProducesCorrectOutput()
     {
         var romBytes = GetVerifiedRom("hello");
@@ -113,6 +143,39 @@ public class DecompilerTests
         Assert.Contains("dotnes", csproj);
         // hello uses default settings so no mapper/prg/chr overrides
         Assert.DoesNotContain("NESMapper", csproj);
+    }
+
+    [Fact]
+    public void Decompiler_Music_FindsMainAfterMusicSubroutines()
+    {
+        var romBytes = GetVerifiedRom("music");
+        var rom = new NESRomReader(romBytes);
+        var decompiler = new Decompiler(rom, _logger);
+
+        var code = decompiler.Decompile();
+
+        // Music sample has play_music/start_music subroutines between built-ins and main.
+        // The decompiler must find main at its actual address (not builtInsEnd).
+        // Verify key NESLib calls that appear at the start of music's main():
+        Assert.Contains("pal_col(0, 0x01);", code);
+        Assert.Contains("vram_write(\"NOW PLAYING\");", code);
+        Assert.Contains("ppu_on_all();", code);
+    }
+
+    [Fact]
+    public void Decompiler_Shoot2_UxROM_FindsMain()
+    {
+        var romBytes = GetVerifiedRom("shoot2");
+        var rom = new NESRomReader(romBytes);
+
+        Assert.Equal(2, rom.Mapper); // UxROM
+
+        var decompiler = new Decompiler(rom, _logger);
+        var code = decompiler.Decompile();
+
+        // shoot2 uses UxROM mapper - decompiler must correctly identify main
+        Assert.Contains("ppu_off();", code);
+        Assert.Contains("oam_clear();", code);
     }
 
     [Fact]
@@ -166,8 +229,87 @@ public class DecompilerTests
 
         var code = decompiler.Decompile();
 
-        // hello has no byte[] arrays
+        // hello has no indexed-addressing byte[] arrays
         Assert.DoesNotContain("new byte[", code);
+    }
+
+    [Fact]
+    public void Decompiler_Attributetable_RecoversPalBgByteArray()
+    {
+        var romBytes = GetVerifiedRom("attributetable");
+        var rom = new NESRomReader(romBytes);
+        var decompiler = new Decompiler(rom, _logger);
+
+        var code = decompiler.Decompile();
+
+        // pal_bg should have a byte[] variable declaration with actual palette data
+        Assert.Contains("byte[] palette0 = new byte[] { 0x03", code);
+        Assert.Contains("pal_bg(palette0);", code);
+        // Should NOT be commented out
+        Assert.DoesNotContain("// pal_bg", code);
+    }
+
+    [Fact]
+    public void Decompiler_Attributetable_RecoversVramWriteByteArray()
+    {
+        var romBytes = GetVerifiedRom("attributetable");
+        var rom = new NESRomReader(romBytes);
+        var decompiler = new Decompiler(rom, _logger);
+
+        var code = decompiler.Decompile();
+
+        // vram_write should have a byte[] variable with the attribute table data
+        Assert.Contains("byte[] data1 = new byte[]", code);
+        Assert.Contains("vram_write(data1);", code);
+        // First bytes of the attribute table
+        Assert.Contains("0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00", code);
+        // Should NOT have placeholder comments
+        Assert.DoesNotContain("vram_write(/*", code);
+    }
+
+    [Fact]
+    public void Decompiler_Attributetable_RecoversVramFillArgs()
+    {
+        var romBytes = GetVerifiedRom("attributetable");
+        var rom = new NESRomReader(romBytes);
+        var decompiler = new Decompiler(rom, _logger);
+
+        var code = decompiler.Decompile();
+
+        // vram_fill should have actual fill value and count
+        Assert.Contains("vram_fill(0x16, 960);", code);
+        // Should NOT have placeholder
+        Assert.DoesNotContain("vram_fill(/*", code);
+    }
+
+    [Fact]
+    public void Decompiler_Attributetable_HasWhileTrue()
+    {
+        var romBytes = GetVerifiedRom("attributetable");
+        var rom = new NESRomReader(romBytes);
+        var decompiler = new Decompiler(rom, _logger);
+
+        var code = decompiler.Decompile();
+
+        Assert.Contains("while (true) ;", code);
+    }
+
+    [Fact]
+    public void Decompiler_Attributetable_FullRoundTrip()
+    {
+        var romBytes = GetVerifiedRom("attributetable");
+        var rom = new NESRomReader(romBytes);
+        var decompiler = new Decompiler(rom, _logger);
+
+        var code = decompiler.Decompile();
+
+        // Verify the complete sequence of API calls matches the original source
+        Assert.Contains("pal_bg(palette0);", code);
+        Assert.Contains("vram_adr(NTADR_A(0, 0));", code);
+        Assert.Contains("vram_fill(0x16, 960);", code);
+        Assert.Contains("vram_write(data1);", code);
+        Assert.Contains("ppu_on_all();", code);
+        Assert.Contains("while (true) ;", code);
     }
 
     static byte[] GetVerifiedRom(string name)

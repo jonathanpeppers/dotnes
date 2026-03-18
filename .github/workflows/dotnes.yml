@@ -10,9 +10,9 @@ jobs:
   build:
     runs-on: macos-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
     - name: install .NET
-      uses: actions/setup-dotnet@v4
+      uses: actions/setup-dotnet@v5
       with:
         dotnet-version: 10.x
     - name: cache ANESE downloads
@@ -35,14 +35,14 @@ jobs:
       continue-on-error: true # best-effort cleanup; failures intentionally ignored
     - name: upload logs
       if: always()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: logs
         path: '*.binlog'
         if-no-files-found: error
     - name: upload ROMs
       if: always()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: ROMs
         path: |
@@ -51,7 +51,7 @@ jobs:
         if-no-files-found: error
     - name: upload nupkgs
       if: always()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: nupkgs
         path: |
