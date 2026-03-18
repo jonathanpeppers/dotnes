@@ -13,6 +13,8 @@ class Decompiler
     readonly NESRomReader _rom;
     readonly ILogger _logger;
     readonly Dictionary<ushort, string> _symbolTable = new();
+    readonly List<(ushort Address, int Size)> _arrayDeclarations = new();
+    readonly Dictionary<ushort, string> _localVariables = new();
 
     ushort _mainAddress;
     ushort _mainEnd;
@@ -304,6 +306,12 @@ class Decompiler
             if (_mainEnd != 0 && tempAddr >= _mainEnd) break;
         }
 
+        // Detect byte[] array declarations from indexed addressing patterns
+        DetectArrayDeclarations(instructions);
+
+        // Detect local variable usage (non-indexed STA/LDA to $0325+ not claimed by arrays)
+        DetectLocalVariables(instructions);
+
         if (instructions.Count > 0)
             _logger.WriteLine($"Collected {instructions.Count} instructions (${_mainAddress:X4}-${instructions[^1].Address:X4})");
 
@@ -425,6 +433,46 @@ class Decompiler
                 }
             }
 
+            // Pattern: LDA #imm / STA $local → local variable assignment
+            if (opcode == 0xA9 && op1.HasValue && i + 1 < instructions.Count)
+            {
+                var next = instructions[i + 1];
+                if (next.Opcode == 0x8D && next.Op1.HasValue && next.Op2.HasValue)
+                {
+                    ushort addr = (ushort)(next.Op1.Value | (next.Op2.Value << 8));
+                    if (_localVariables.TryGetValue(addr, out var varName))
+                    {
+                        statements.Add($"{varName} = 0x{op1.Value:X2};");
+                        lastImmediateA = op1.Value;
+                        i++; // skip the STA
+                        continue;
+                    }
+                }
+            }
+
+            // Pattern: STA $local (consecutive — A still holds last immediate value)
+            if (opcode == 0x8D && op1.HasValue && op2.HasValue && lastImmediateA.HasValue)
+            {
+                ushort addr = (ushort)(op1.Value | (op2.Value << 8));
+                if (_localVariables.TryGetValue(addr, out var varName))
+                {
+                    statements.Add($"{varName} = 0x{lastImmediateA.Value:X2};");
+                    continue;
+                }
+            }
+
+            // Pattern: LDA $local → load local variable into A (track for use in subsequent calls)
+            if (opcode == 0xAD && op1.HasValue && op2.HasValue)
+            {
+                ushort addr = (ushort)(op1.Value | (op2.Value << 8));
+                if (_localVariables.ContainsKey(addr))
+                {
+                    // Don't emit a statement — the value in A will be consumed by the next JSR or STA
+                    lastImmediateA = null;
+                    continue;
+                }
+            }
+
             // Pattern: LDA #imm / STA $abs → poke(addr, val)
             if (opcode == 0xA9 && op1.HasValue && i + 1 < instructions.Count)
             {
@@ -495,6 +543,122 @@ class Decompiler
         ushort target = (ushort)(instr.Op1.Value | (instr.Op2.Value << 8));
         return _symbolTable.TryGetValue(target, out var n) && n == name;
     }
+
+    /// <summary>
+    /// Detect byte[] array declarations by scanning for indexed addressing modes
+    /// (Absolute,X and Absolute,Y) targeting the local variable area ($0325-$07FF).
+    /// Arrays are identified as base addresses used with indexed access, and their
+    /// sizes are inferred from the gaps between consecutive bases.
+    /// </summary>
+    void DetectArrayDeclarations(List<(ushort Address, byte Opcode, byte? Op1, byte? Op2)> instructions)
+    {
+        // NES RAM is $0000-$07FF. Local variables start at $0325.
+        // Addresses >= $0800 are PPU/APU registers or ROM, not local arrays.
+        const ushort MaxLocalAddress = 0x0800;
+
+        var indexedBases = new HashSet<ushort>();
+        var nonIndexedLocals = new HashSet<ushort>();
+
+        foreach (var (_, opcode, op1, op2) in instructions)
+        {
+            if (!op1.HasValue || !op2.HasValue) continue;
+
+            // Only 3-byte instructions can address the local variable area
+            if (GetInstructionSize(opcode) != 3) continue;
+
+            ushort operandAddr = (ushort)(op1.Value | (op2.Value << 8));
+            if (operandAddr < NESConstants.LocalStackBase || operandAddr >= MaxLocalAddress) continue;
+
+            if (IsIndexedOpcode(opcode))
+                indexedBases.Add(operandAddr);
+            else
+                nonIndexedLocals.Add(operandAddr);
+        }
+
+        if (indexedBases.Count == 0) return;
+
+        var sortedBases = indexedBases.OrderBy(a => a).ToList();
+
+        for (int i = 0; i < sortedBases.Count; i++)
+        {
+            int size;
+            if (i + 1 < sortedBases.Count)
+            {
+                // Size = gap to next array base
+                size = sortedBases[i + 1] - sortedBases[i];
+            }
+            else
+            {
+                // Last array: find the lowest non-indexed address above the last base
+                ushort upperBound = 0;
+                foreach (var addr in nonIndexedLocals)
+                {
+                    if (addr > sortedBases[i] && (upperBound == 0 || addr < upperBound))
+                        upperBound = addr;
+                }
+
+                size = upperBound > 0 ? upperBound - sortedBases[i] : 1;
+            }
+
+            _arrayDeclarations.Add((sortedBases[i], size));
+            _logger.WriteLine($"  Detected array at ${sortedBases[i]:X4}, size {size}");
+        }
+    }
+
+    /// <summary>
+    /// Detects local variables by finding non-indexed STA/LDA instructions targeting
+    /// addresses in the $0325+ range that aren't claimed by array declarations.
+    /// </summary>
+    void DetectLocalVariables(List<(ushort Address, byte Opcode, byte? Op1, byte? Op2)> instructions)
+    {
+        const ushort MaxLocalAddress = 0x0800;
+
+        // Build set of addresses claimed by arrays
+        var arrayAddresses = new HashSet<ushort>();
+        foreach (var (addr, size) in _arrayDeclarations)
+        {
+            for (int j = 0; j < size; j++)
+                arrayAddresses.Add((ushort)(addr + j));
+        }
+
+        // Find non-indexed accesses to local variable area
+        var localAddresses = new SortedSet<ushort>();
+        foreach (var (_, opcode, op1, op2) in instructions)
+        {
+            if (!op1.HasValue || !op2.HasValue) continue;
+            if (GetInstructionSize(opcode) != 3) continue;
+            if (IsIndexedOpcode(opcode)) continue;
+
+            // STA absolute (0x8D) or LDA absolute (0xAD)
+            if (opcode is not (0x8D or 0xAD)) continue;
+
+            ushort operandAddr = (ushort)(op1.Value | (op2.Value << 8));
+            if (operandAddr < NESConstants.LocalStackBase || operandAddr >= MaxLocalAddress) continue;
+            if (arrayAddresses.Contains(operandAddr)) continue;
+
+            localAddresses.Add(operandAddr);
+        }
+
+        // Assign names: var_0325, var_0326, etc.
+        foreach (var addr in localAddresses)
+        {
+            var name = $"var_{addr:X4}";
+            _localVariables[addr] = name;
+            _logger.WriteLine($"  Detected local variable '{name}' at ${addr:X4}");
+        }
+    }
+
+    /// <summary>
+    /// Returns true if the opcode uses Absolute,X or Absolute,Y addressing mode.
+    /// </summary>
+    static bool IsIndexedOpcode(byte opcode) => opcode is
+        // Absolute,X: ORA, ASL, AND, ROL, EOR, LSR, ADC, ROR, STA, LDY, LDA, CMP, DEC, SBC, INC
+        0x1D or 0x1E or 0x3D or 0x3E or 0x5D or 0x5E
+        or 0x7D or 0x7E or 0x9D or 0xBC or 0xBD
+        or 0xDD or 0xDE or 0xFD or 0xFE
+        // Absolute,Y: ORA, AND, EOR, ADC, STA, LDA, LDX, CMP, SBC
+        or 0x19 or 0x39 or 0x59 or 0x79 or 0x99
+        or 0xB9 or 0xBE or 0xD9 or 0xF9;
 
     /// <summary>
     /// Decompile a call where A contains a value (the last argument),
@@ -742,6 +906,26 @@ class Decompiler
         var sb = new StringBuilder();
         sb.AppendLine("// Decompiled from .nes ROM by dotnes decompiler");
         sb.AppendLine();
+
+        // Emit byte[] array declarations
+        if (_arrayDeclarations.Count > 0)
+        {
+            foreach (var (addr, size) in _arrayDeclarations)
+            {
+                sb.AppendLine($"byte[] array_{addr:X4} = new byte[{size}];");
+            }
+            sb.AppendLine();
+        }
+
+        // Emit local variable declarations
+        if (_localVariables.Count > 0)
+        {
+            foreach (var (addr, name) in _localVariables.OrderBy(kvp => kvp.Key))
+            {
+                sb.AppendLine($"byte {name} = 0;");
+            }
+            sb.AppendLine();
+        }
 
         foreach (var statement in statements)
         {
