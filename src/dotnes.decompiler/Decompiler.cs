@@ -13,6 +13,7 @@ class Decompiler
     readonly NESRomReader _rom;
     readonly ILogger _logger;
     readonly Dictionary<ushort, string> _symbolTable = new();
+    readonly List<(ushort Address, int Size)> _arrayDeclarations = new();
 
     ushort _mainAddress;
     ushort _mainEnd;
@@ -304,6 +305,9 @@ class Decompiler
             if (_mainEnd != 0 && tempAddr >= _mainEnd) break;
         }
 
+        // Detect byte[] array declarations from indexed addressing patterns
+        DetectArrayDeclarations(instructions);
+
         if (instructions.Count > 0)
             _logger.WriteLine($"Collected {instructions.Count} instructions (${_mainAddress:X4}-${instructions[^1].Address:X4})");
 
@@ -495,6 +499,79 @@ class Decompiler
         ushort target = (ushort)(instr.Op1.Value | (instr.Op2.Value << 8));
         return _symbolTable.TryGetValue(target, out var n) && n == name;
     }
+
+    /// <summary>
+    /// Detect byte[] array declarations by scanning for indexed addressing modes
+    /// (Absolute,X and Absolute,Y) targeting the local variable area ($0325-$07FF).
+    /// Arrays are identified as base addresses used with indexed access, and their
+    /// sizes are inferred from the gaps between consecutive bases.
+    /// </summary>
+    void DetectArrayDeclarations(List<(ushort Address, byte Opcode, byte? Op1, byte? Op2)> instructions)
+    {
+        // NES RAM is $0000-$07FF. Local variables start at $0325.
+        // Addresses >= $0800 are PPU/APU registers or ROM, not local arrays.
+        const ushort MaxLocalAddress = 0x0800;
+
+        var indexedBases = new HashSet<ushort>();
+        var nonIndexedLocals = new HashSet<ushort>();
+
+        foreach (var (_, opcode, op1, op2) in instructions)
+        {
+            if (!op1.HasValue || !op2.HasValue) continue;
+
+            // Only 3-byte instructions can address the local variable area
+            if (GetInstructionSize(opcode) != 3) continue;
+
+            ushort operandAddr = (ushort)(op1.Value | (op2.Value << 8));
+            if (operandAddr < NESConstants.LocalStackBase || operandAddr >= MaxLocalAddress) continue;
+
+            if (IsIndexedOpcode(opcode))
+                indexedBases.Add(operandAddr);
+            else
+                nonIndexedLocals.Add(operandAddr);
+        }
+
+        if (indexedBases.Count == 0) return;
+
+        var sortedBases = indexedBases.OrderBy(a => a).ToList();
+
+        for (int i = 0; i < sortedBases.Count; i++)
+        {
+            int size;
+            if (i + 1 < sortedBases.Count)
+            {
+                // Size = gap to next array base
+                size = sortedBases[i + 1] - sortedBases[i];
+            }
+            else
+            {
+                // Last array: find the lowest non-indexed address above the last base
+                ushort upperBound = 0;
+                foreach (var addr in nonIndexedLocals)
+                {
+                    if (addr > sortedBases[i] && (upperBound == 0 || addr < upperBound))
+                        upperBound = addr;
+                }
+
+                size = upperBound > 0 ? upperBound - sortedBases[i] : 1;
+            }
+
+            _arrayDeclarations.Add((sortedBases[i], size));
+            _logger.WriteLine($"  Detected array at ${sortedBases[i]:X4}, size {size}");
+        }
+    }
+
+    /// <summary>
+    /// Returns true if the opcode uses Absolute,X or Absolute,Y addressing mode.
+    /// </summary>
+    static bool IsIndexedOpcode(byte opcode) => opcode is
+        // Absolute,X: ORA, ASL, AND, ROL, EOR, LSR, ADC, ROR, STA, LDY, LDA, CMP, DEC, SBC, INC
+        0x1D or 0x1E or 0x3D or 0x3E or 0x5D or 0x5E
+        or 0x7D or 0x7E or 0x9D or 0xBC or 0xBD
+        or 0xDD or 0xDE or 0xFD or 0xFE
+        // Absolute,Y: ORA, AND, EOR, ADC, STA, LDA, LDX, CMP, SBC
+        or 0x19 or 0x39 or 0x59 or 0x79 or 0x99
+        or 0xB9 or 0xBE or 0xD9 or 0xF9;
 
     /// <summary>
     /// Decompile a call where A contains a value (the last argument),
@@ -742,6 +819,16 @@ class Decompiler
         var sb = new StringBuilder();
         sb.AppendLine("// Decompiled from .nes ROM by dotnes decompiler");
         sb.AppendLine();
+
+        // Emit byte[] array declarations
+        if (_arrayDeclarations.Count > 0)
+        {
+            foreach (var (addr, size) in _arrayDeclarations)
+            {
+                sb.AppendLine($"byte[] array_{addr:X4} = new byte[{size}];");
+            }
+            sb.AppendLine();
+        }
 
         foreach (var statement in statements)
         {

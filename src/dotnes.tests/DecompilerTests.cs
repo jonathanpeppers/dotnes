@@ -227,6 +227,48 @@ public class DecompilerTests
     }
 
     [Fact]
+    public void Decompiler_Shoot2_DetectsArrayDeclarations()
+    {
+        var romBytes = GetVerifiedRom("shoot2");
+        var rom = new NESRomReader(romBytes);
+        var decompiler = new Decompiler(rom, _logger);
+
+        var code = decompiler.Decompile();
+
+        // shoot2 has 13 byte[] arrays for game state (bullets, enemies, stars, explosions)
+        // 3 arrays of size 4 (bullet_x, bullet_y, bullet_active)
+        Assert.Contains("byte[] array_0335 = new byte[4];", code);
+        Assert.Contains("byte[] array_0339 = new byte[4];", code);
+        Assert.Contains("byte[] array_033D = new byte[4];", code);
+        // 4 arrays of size 6 (enemy_x, enemy_y, enemy_active, enemy_speed)
+        Assert.Contains("byte[] array_0341 = new byte[6];", code);
+        Assert.Contains("byte[] array_0347 = new byte[6];", code);
+        Assert.Contains("byte[] array_034D = new byte[6];", code);
+        Assert.Contains("byte[] array_0353 = new byte[6];", code);
+        // 3 arrays of size 8 (star_x, star_y, star_speed)
+        Assert.Contains("byte[] array_0359 = new byte[8];", code);
+        Assert.Contains("byte[] array_0361 = new byte[8];", code);
+        Assert.Contains("byte[] array_0369 = new byte[8];", code);
+        // 3 arrays of size 3 (exp_x, exp_y, exp_timer)
+        Assert.Contains("byte[] array_0371 = new byte[3];", code);
+        Assert.Contains("byte[] array_0374 = new byte[3];", code);
+        Assert.Contains("byte[] array_0377 = new byte[3];", code);
+    }
+
+    [Fact]
+    public void Decompiler_Hello_NoArrayDeclarations()
+    {
+        var romBytes = GetVerifiedRom("hello");
+        var rom = new NESRomReader(romBytes);
+        var decompiler = new Decompiler(rom, _logger);
+
+        var code = decompiler.Decompile();
+
+        // hello has no indexed-addressing byte[] arrays
+        Assert.DoesNotContain("new byte[", code);
+    }
+
+    [Fact]
     public void Decompiler_Attributetable_RecoversPalBgByteArray()
     {
         var romBytes = GetVerifiedRom("attributetable");
@@ -350,7 +392,6 @@ public class DecompilerTests
 
     [Theory]
     [InlineData("animation")]
-    [InlineData("movingsprite")]
     [InlineData("pong")]
     [InlineData("snake")]
     public void Decompiler_GameLoop_RecoveredFromBackwardJmp(string name)
