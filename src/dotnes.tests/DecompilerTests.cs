@@ -135,6 +135,60 @@ public class DecompilerTests
         return File.ReadAllBytes(path);
     }
 
+    [Fact]
+    public void Decompiler_Shoot2_FindsGameLoop()
+    {
+        var romBytes = GetVerifiedRom("shoot2");
+        var rom = new NESRomReader(romBytes);
+        var decompiler = new Decompiler(rom, _logger);
+
+        var code = decompiler.Decompile();
+
+        // Verify while(true) game loop is recovered (backward JMP pattern)
+        Assert.Contains("while (true) ;", code);
+
+        // Verify init code is present
+        Assert.Contains("ppu_off();", code);
+        Assert.Contains("oam_clear();", code);
+        Assert.Contains("ppu_on_all();", code);
+
+        // Verify game loop NESLib calls are present
+        Assert.Contains("ppu_wait_nmi();", code);
+        Assert.Contains("pal_spr_bright(", code);
+    }
+
+    [Fact]
+    public void Decompiler_Shoot2_CsprojHasMapper()
+    {
+        var romBytes = GetVerifiedRom("shoot2");
+        var rom = new NESRomReader(romBytes);
+        var decompiler = new Decompiler(rom, _logger);
+        decompiler.Decompile();
+
+        var csproj = decompiler.GenerateCsproj("shoot2");
+
+        Assert.Contains("<NESMapper>2</NESMapper>", csproj);
+        Assert.Contains("<NESChrBanks>0</NESChrBanks>", csproj);
+    }
+
+    [Theory]
+    [InlineData("animation")]
+    [InlineData("movingsprite")]
+    [InlineData("pong")]
+    [InlineData("snake")]
+    public void Decompiler_GameLoop_RecoveredFromBackwardJmp(string name)
+    {
+        var romBytes = GetVerifiedRom(name);
+        var rom = new NESRomReader(romBytes);
+        var decompiler = new Decompiler(rom, _logger);
+
+        var code = decompiler.Decompile();
+
+        // All these samples have while(true){body} game loops
+        // that should be recovered via backward JMP detection
+        Assert.Contains("while (true) ;", code);
+    }
+
     static string FindTestSourceDirectory()
     {
         // Navigate from the test output directory to the source directory
