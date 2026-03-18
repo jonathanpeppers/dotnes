@@ -58,16 +58,16 @@ The decompiler recognizes these NESLib API calls:
 | Category | Functions |
 |----------|-----------|
 | **Palette** | `pal_col(palette, color)` |
-| **VRAM** | `vram_adr(address)`, `vram_write("string")` with NTADR_A reconstruction |
+| **VRAM** | `vram_adr(NTADR_A(x, y))`, `vram_write("string")` |
 | **PPU control** | `ppu_on_all()`, `ppu_on_bg()`, `ppu_on_spr()`, `ppu_off()` |
 | **Sprites/OAM** | `oam_clear()`, `oam_size()`, `oam_hide_rest()` |
 | **CHR banking** | `bank_spr()`, `bank_bg()` |
-| **Input** | `pad_poll()` |
+| **Input** | `pad_poll(0)` |
 | **Timing** | `delay(frames)`, `waitvsync()` |
 | **Random** | `rand8()`, `set_rand()` |
 
 String literals in `vram_write()` are recovered from ROM data when the bytes are printable ASCII.
-VRAM addresses are decompiled back to `NTADR_A(x, y)` macro form when they match the pattern `0x2000 + y*32 + x`.
+VRAM addresses passed to `vram_adr()` are decompiled back to `NTADR_A(x, y)` macro form when they match the nametable pattern `0x2000 + y*32 + x`.
 
 ### What Is NOT Recovered
 
@@ -109,7 +109,7 @@ dotnet run --project src/dotnes.decompiler -- samples/hello/bin/Debug/net10.0/he
 cd hello-roundtrip && dotnet build && cd ..
 
 # 4. Compare the two ROMs
-python scripts/compare_rom.py samples/hello/bin/Debug/net10.0/hello.nes hello-roundtrip/bin/Debug/net10.0/hello-roundtrip.nes
+python scripts/compare_rom.py samples/hello/bin/Debug/net10.0/hello.nes hello-roundtrip/bin/Debug/net10.0/hello.nes
 ```
 
 If the round-trip produces an identical ROM, the decompiler recovered all observable behavior.
@@ -129,8 +129,8 @@ For ROMs not built with dotnes, the output will contain fewer recognized API cal
 
 Use the decompiler's console output to quickly check ROM properties:
 
-```bash
-dotnet run --project src/dotnes.decompiler -- myrom.nes 2>&1 | head -6
+```powershell
+dotnet run --project src/dotnes.decompiler -- myrom.nes 2>&1 | Select-Object -First 6
 ```
 
 This shows PRG/CHR bank counts, mapper number, mirroring mode, and interrupt vectors.
