@@ -4178,4 +4178,81 @@ public class RoslynTests
             "A9288D25038D2603A9D3A28620118220898220F082A9002056868D27032940F003CE2503AD27032980F003EE2503AD27032910F003CE2603AD27032920F003EE2603200486AD2503A0039122AD2603889122A9D8889122A90088912220A786200486AD2503186908A0039122AD2603889122A9DA889122A900889122A90420A786200486AD2503A0039122AD2603186908889122A9D9889122A900889122A90820A786200486AD2503186908A0039122AD2603186908889122A9DB889122A900889122A90C20A7864C1285",
             Convert.ToHexString(bytes));
     }
+
+    [Fact]
+    public void StaticFieldArraySimpleIndex()
+    {
+        // G.arr[G.i] where both arr and i are static fields.
+        // IL pattern: ldsfld arr; ldsfld i; ldelem.u1
+        // Fields: i at $0325 (1 byte), arr at $0326 (4 bytes) — alphabetical order
+        var bytes = GetProgramBytes(
+            """
+            G.arr = new byte[4];
+            G.i = 0;
+            pal_col(0, G.arr[G.i]);
+            ppu_on_all();
+            while (true) ;
+
+            static class G
+            {
+                public static byte[] arr;
+                public static byte i;
+            }
+            """);
+        var hex = Convert.ToHexString(bytes);
+
+        // G.arr[G.i]: LDA $0325 (AD 25 03); TAX (AA); LDA $0326,X (BD 26 03)
+        Assert.Contains("AD2503", hex);  // LDA $0325 — load G.i
+        Assert.Contains("AA", hex);      // TAX — transfer index to X
+        Assert.Contains("BD2603", hex);  // LDA $0326,X — load G.arr[X]
+    }
+
+    [Fact]
+    public void StaticFieldArrayConstantIndex()
+    {
+        // G.arr[0] where arr is a static field, index is constant.
+        // arr is the only field: allocated at $0325 (4 bytes)
+        var bytes = GetProgramBytes(
+            """
+            G.arr = new byte[4];
+            pal_col(0, G.arr[0]);
+            ppu_on_all();
+            while (true) ;
+
+            static class G
+            {
+                public static byte[] arr;
+            }
+            """);
+        var hex = Convert.ToHexString(bytes);
+
+        // G.arr[0]: LDA $0325 (AD 25 03) — constant index 0, direct absolute load
+        Assert.Contains("AD2503", hex);  // LDA $0325 (absolute, arr base)
+    }
+
+    [Fact]
+    public void StaticFieldArrayStelem()
+    {
+        // G.arr[G.i] = 42 where arr and i are static fields.
+        // Fields: i at $0325 (1 byte), arr at $0326 (4 bytes)
+        var bytes = GetProgramBytes(
+            """
+            G.arr = new byte[4];
+            G.i = 0;
+            G.arr[G.i] = 42;
+            ppu_on_all();
+            while (true) ;
+
+            static class G
+            {
+                public static byte[] arr;
+                public static byte i;
+            }
+            """);
+        var hex = Convert.ToHexString(bytes);
+
+        // G.arr[G.i] = 42: value 42 stored at arr base + index
+        Assert.Contains("A92A", hex);    // LDA #42 — load value
+        Assert.Contains("9D2603", hex);  // STA $0326,X — store to G.arr[X]
+    }
 }

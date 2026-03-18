@@ -2053,6 +2053,27 @@ partial class IL2NESWriter
                     _runtimeValueInA = false;
                     _immediateInA = null;
                 }
+                else if (previous == ILOpCode.Newarr)
+                {
+                    // newarr → stsfld in Main(): allocate RAM array at static field address
+                    int arraySize = Stack.Count > 0 ? Stack.Pop() : 0;
+                    ushort arrayAddr = (ushort)(local + LocalCount);
+                    LocalCount += arraySize;
+                    _staticFieldArrayLocals[operand] = new Local(arraySize, arrayAddr, ArraySize: arraySize);
+                    GetOrAllocateStaticField(operand);
+                    _runtimeValueInA = false;
+                    _immediateInA = null;
+                }
+                else if (previous == ILOpCode.Ldtoken && _lastByteArrayLabel != null)
+                {
+                    // ldtoken → stsfld: ROM byte array stored to static field
+                    _staticFieldArrayLocals[operand] = new Local(_lastByteArraySize, LabelName: _lastByteArrayLabel);
+                    _lastByteArrayLabel = null;
+                    if (Stack.Count > 0) Stack.Pop();
+                    GetOrAllocateStaticField(operand);
+                    _runtimeValueInA = false;
+                    _immediateInA = null;
+                }
                 else
                 {
                     HandleStsfld(operand);

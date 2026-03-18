@@ -1,5 +1,6 @@
 using System.Reflection;
 using System.Reflection.Metadata;
+using System.Reflection.Metadata.Ecma335;
 using dotnes.ObjectModel;
 
 namespace dotnes;
@@ -77,6 +78,7 @@ partial class Transpiler
 
     /// <summary>
     /// Decodes the size of a field from its signature blob.
+    /// Returns -1 for array types (ELEMENT_TYPE_SZARRAY).
     /// </summary>
     int DecodeFieldSize(FieldDefinition field)
     {
@@ -92,6 +94,7 @@ partial class Transpiler
             0x07 => 2, // ELEMENT_TYPE_U2 (ushort)
             0x08 => 4, // ELEMENT_TYPE_I4 (int)
             0x09 => 4, // ELEMENT_TYPE_U4 (uint)
+            0x1D => -1, // ELEMENT_TYPE_SZARRAY (byte[])
             _ => 1     // Default to 1 byte for unknown types
         };
     }
@@ -100,10 +103,13 @@ partial class Transpiler
     /// Builds a map of static field names to their byte sizes from assembly metadata.
     /// Uses field signatures to determine type sizes. NES is 8-bit, so int/uint are
     /// capped at 2 bytes (16-bit is sufficient for NES address math).
+    /// Array fields (SZARRAY) return negative values encoding their byte count from .cctor.
     /// </summary>
     Dictionary<string, int> BuildStaticFieldSizes()
     {
         var result = new Dictionary<string, int>(StringComparer.Ordinal);
+        var arraySizes = ScanCctorArraySizes();
+
         foreach (var t in _reader.TypeDefinitions)
         {
             var type = _reader.GetTypeDefinition(t);
@@ -116,8 +122,123 @@ partial class Transpiler
                     continue;
                 var fieldName = _reader.GetString(field.Name);
                 int size = DecodeFieldSize(field);
-                // NES is 8-bit; cap at 2 bytes (16-bit sufficient for address math)
-                result[fieldName] = Math.Min(size, 2);
+                if (size == -1) // SZARRAY
+                {
+                    size = arraySizes.TryGetValue(fieldName, out var arrSize) ? arrSize : 0;
+                    result[fieldName] = -size; // negative = array with this many bytes
+                }
+                else
+                {
+                    // NES is 8-bit; cap at 2 bytes (16-bit sufficient for address math)
+                    result[fieldName] = Math.Min(size, 2);
+                }
+            }
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// Scans static constructors (.cctor) for newarr sizes.
+    /// Returns a map of field names to their array byte counts.
+    /// </summary>
+    Dictionary<string, int> ScanCctorArraySizes()
+    {
+        var result = new Dictionary<string, int>(StringComparer.Ordinal);
+        foreach (var t in _reader.TypeDefinitions)
+        {
+            var type = _reader.GetTypeDefinition(t);
+            foreach (var m in type.GetMethods())
+            {
+                var method = _reader.GetMethodDefinition(m);
+                var methodName = _reader.GetString(method.Name);
+                if (methodName != ".cctor")
+                    continue;
+
+                var body = _pe.GetMethodBody(method.RelativeVirtualAddress);
+                var il = body.GetILReader();
+                int lastLdc = 0;
+                ILOpCode prevOp = ILOpCode.Nop;
+
+                while (il.Offset < il.Length)
+                {
+                    var opCode = DecodeOpCode(ref il);
+                    switch (opCode)
+                    {
+                        case ILOpCode.Ldc_i4_0: lastLdc = 0; break;
+                        case ILOpCode.Ldc_i4_1: lastLdc = 1; break;
+                        case ILOpCode.Ldc_i4_2: lastLdc = 2; break;
+                        case ILOpCode.Ldc_i4_3: lastLdc = 3; break;
+                        case ILOpCode.Ldc_i4_4: lastLdc = 4; break;
+                        case ILOpCode.Ldc_i4_5: lastLdc = 5; break;
+                        case ILOpCode.Ldc_i4_6: lastLdc = 6; break;
+                        case ILOpCode.Ldc_i4_7: lastLdc = 7; break;
+                        case ILOpCode.Ldc_i4_8: lastLdc = 8; break;
+                        case ILOpCode.Ldc_i4_s: lastLdc = il.ReadSByte(); break;
+                        case ILOpCode.Ldc_i4: lastLdc = il.ReadInt32(); break;
+                        case ILOpCode.Newarr:
+                            il.ReadInt32(); // skip type token
+                            break;
+                        case ILOpCode.Stsfld:
+                        {
+                            var token = il.ReadInt32();
+                            if (prevOp is ILOpCode.Newarr or ILOpCode.Dup)
+                            {
+                                var handle = MetadataTokens.EntityHandle(token);
+                                if (handle.Kind == HandleKind.FieldDefinition)
+                                {
+                                    var field = _reader.GetFieldDefinition((FieldDefinitionHandle)handle);
+                                    var name = _reader.GetString(field.Name);
+                                    result[name] = lastLdc;
+                                }
+                            }
+                            break;
+                        }
+                        case ILOpCode.Dup:
+                            break;
+                        default:
+                        {
+                            var operandType = GetOperandType(opCode);
+                            switch (operandType)
+                            {
+                                case OperandType.ShortVariable:
+                                case OperandType.ShortI:
+                                case OperandType.ShortBrTarget:
+                                    if (il.Offset < il.Length) il.ReadByte();
+                                    break;
+                                case OperandType.BrTarget:
+                                case OperandType.I:
+                                case OperandType.Field:
+                                case OperandType.Method:
+                                case OperandType.Tok:
+                                case OperandType.Type:
+                                case OperandType.String:
+                                case OperandType.Sig:
+                                case OperandType.ShortR:
+                                    if (il.Offset + 4 <= il.Length) il.ReadInt32();
+                                    break;
+                                case OperandType.I8:
+                                    if (il.Offset + 8 <= il.Length) il.ReadInt64();
+                                    break;
+                                case OperandType.R:
+                                    if (il.Offset + 8 <= il.Length) il.ReadDouble();
+                                    break;
+                                case OperandType.Switch:
+                                    if (il.Offset + 4 <= il.Length)
+                                    {
+                                        int count = il.ReadInt32();
+                                        for (int s = 0; s < count && il.Offset + 4 <= il.Length; s++)
+                                            il.ReadInt32();
+                                    }
+                                    break;
+                                case OperandType.Variable:
+                                    if (il.Offset + 2 <= il.Length) il.ReadInt16();
+                                    break;
+                            }
+                            break;
+                        }
+                    }
+                    prevOp = opCode;
+                }
             }
         }
         return result;
@@ -152,7 +273,7 @@ partial class Transpiler
     /// This ensures all methods resolve the same field name to the same RAM address.
     /// Multi-byte fields (int, ushort, short) get 2 bytes of zero page.
     /// </summary>
-    (Dictionary<string, ushort> addresses, HashSet<string> wordFields, int totalBytes) PreAllocateStaticFields(ILInstruction[] mainInstructions)
+    (Dictionary<string, ushort> addresses, HashSet<string> wordFields, int totalBytes, Dictionary<string, (ushort Address, int ArraySize)> arrayFields) PreAllocateStaticFields(ILInstruction[] mainInstructions)
     {
         var fieldNames = new HashSet<string>(StringComparer.Ordinal);
 
@@ -183,16 +304,28 @@ partial class Transpiler
         // using the correct byte size for each field.
         var addresses = new Dictionary<string, ushort>(StringComparer.Ordinal);
         var wordFields = new HashSet<string>(StringComparer.Ordinal);
+        var arrayFields = new Dictionary<string, (ushort Address, int ArraySize)>(StringComparer.Ordinal);
         ushort offset = 0;
         foreach (var name in fieldNames.OrderBy(n => n, StringComparer.Ordinal))
         {
             addresses[name] = (ushort)(NESConstants.LocalStackBase + offset);
             int size = fieldSizes.TryGetValue(name, out var s) ? s : 1;
-            if (size > 1)
-                wordFields.Add(name);
-            offset += (ushort)size;
-            _logger.WriteLine($"Static field '{name}' allocated at ${addresses[name]:X4} ({size} byte{(size > 1 ? "s" : "")})");
+            if (size < 0)
+            {
+                // Array field: negative size encodes array byte count
+                int arraySize = -size;
+                arrayFields[name] = ((ushort)(NESConstants.LocalStackBase + offset), arraySize);
+                offset += (ushort)arraySize;
+                _logger.WriteLine($"Static field '{name}' allocated at ${addresses[name]:X4} (byte[{arraySize}])");
+            }
+            else
+            {
+                if (size > 1)
+                    wordFields.Add(name);
+                offset += (ushort)size;
+                _logger.WriteLine($"Static field '{name}' allocated at ${addresses[name]:X4} ({size} byte{(size > 1 ? "s" : "")})");
+            }
         }
-        return (addresses, wordFields, offset);
+        return (addresses, wordFields, offset, arrayFields);
     }
 }

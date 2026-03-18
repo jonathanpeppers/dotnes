@@ -214,7 +214,7 @@ partial class Transpiler : IDisposable
         var structLayouts = DetectStructLayouts();
 
         // Pre-allocate user-defined static fields so all methods share the same addresses
-        var (staticFields, wordStaticFields, staticFieldBytes) = PreAllocateStaticFields(instructions);
+        var (staticFields, wordStaticFields, staticFieldBytes, staticArrayFields) = PreAllocateStaticFields(instructions);
 
         using var writer = new IL2NESWriter(new MemoryStream(), logger: _logger, reflectionCache: reflectionCache)
         {
@@ -227,6 +227,7 @@ partial class Transpiler : IDisposable
             StaticFieldAddresses = staticFields,
             WordStaticFields = wordStaticFields,
             LocalCount = staticFieldBytes,
+            StaticArrayFields = staticArrayFields,
         };
 
         writer.StartBlockBuffering();
