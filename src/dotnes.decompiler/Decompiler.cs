@@ -67,23 +67,29 @@ class Decompiler
 
         _logger.WriteLine($"Initial built-ins end at ${builtInsEnd:X4}");
 
-        // Find main address by looking at the initlib block's JSR target in the actual ROM.
-        // Initlib contains a JSR to "main" which is the first JSR targeting an address >= builtInsEnd.
-        if (labels.TryGetValue("initlib", out ushort initlibAddr))
+        // Find main address by reading the JMP target from the detectNTSC block.
+        // The startup sequence ends with detectNTSC which has a JMP to main as its last instruction.
+        if (labels.TryGetValue("detectNTSC", out ushort detectAddr))
         {
-            int initlibOffset = initlibAddr - 0x8000;
-            for (int i = initlibOffset; i < _rom.PrgRom.Length - 2; i++)
+            int detectOffset = detectAddr - 0x8000;
+            int blockSize = program.Blocks.FirstOrDefault(b => b.Label == "detectNTSC")?.Size ?? 0;
+
+            // Scan the detectNTSC block for JMP (0x4C) targeting an address >= builtInsEnd
+            if (blockSize > 0)
             {
-                if (_rom.PrgRom[i] == 0x60) break; // RTS = end of initlib
-                if (_rom.PrgRom[i] == 0x20) // JSR
+                int blockEnd = detectOffset + blockSize;
+                for (int i = detectOffset; i < blockEnd && i < _rom.PrgRom.Length - 2; i++)
                 {
-                    ushort target = (ushort)(_rom.PrgRom[i + 1] | (_rom.PrgRom[i + 2] << 8));
-                    if (target >= builtInsEnd && target < 0xFFFA)
+                    if (_rom.PrgRom[i] == 0x4C) // JMP absolute
                     {
-                        _mainAddress = target;
-                        _symbolTable[target] = "main";
-                        _logger.WriteLine($"Found main at ${_mainAddress:X4}");
-                        break;
+                        ushort target = (ushort)(_rom.PrgRom[i + 1] | (_rom.PrgRom[i + 2] << 8));
+                        if (target >= builtInsEnd && target < 0xFFFA)
+                        {
+                            _mainAddress = target;
+                            _symbolTable[target] = "main";
+                            _logger.WriteLine($"Found main at ${_mainAddress:X4}");
+                            break;
+                        }
                     }
                 }
             }

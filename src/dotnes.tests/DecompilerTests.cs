@@ -146,6 +146,39 @@ public class DecompilerTests
     }
 
     [Fact]
+    public void Decompiler_Music_FindsMainAfterMusicSubroutines()
+    {
+        var romBytes = GetVerifiedRom("music");
+        var rom = new NESRomReader(romBytes);
+        var decompiler = new Decompiler(rom, _logger);
+
+        var code = decompiler.Decompile();
+
+        // Music sample has play_music/start_music subroutines between built-ins and main.
+        // The decompiler must find main at its actual address (not builtInsEnd).
+        // Verify key NESLib calls that appear at the start of music's main():
+        Assert.Contains("pal_col(0, 0x01);", code);
+        Assert.Contains("vram_write(\"NOW PLAYING\");", code);
+        Assert.Contains("ppu_on_all();", code);
+    }
+
+    [Fact]
+    public void Decompiler_Shoot2_UxROM_FindsMain()
+    {
+        var romBytes = GetVerifiedRom("shoot2");
+        var rom = new NESRomReader(romBytes);
+
+        Assert.Equal(2, rom.Mapper); // UxROM
+
+        var decompiler = new Decompiler(rom, _logger);
+        var code = decompiler.Decompile();
+
+        // shoot2 uses UxROM mapper - decompiler must correctly identify main
+        Assert.Contains("ppu_off();", code);
+        Assert.Contains("oam_clear();", code);
+    }
+
+    [Fact]
     public void Decompiler_Attributetable_RecoversPalBgData()
     {
         var romBytes = GetVerifiedRom("attributetable");
