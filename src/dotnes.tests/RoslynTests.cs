@@ -3827,17 +3827,10 @@ public class RoslynTests
 
             while (true) ;
             """);
-        Assert.NotNull(bytes);
-        Assert.NotEmpty(bytes);
 
-        var hex = Convert.ToHexString(bytes);
-        _logger.WriteLine($"OneLocal_UshortLocalForVramFill hex: {hex}");
-
-        // JSR pal_bg (20), JSR vram_adr (20), JSR vram_fill (20), JSR vram_write (20), JSR ppu_on_all (20)
-        Assert.True(bytes.Count(b => b == 0x20) >= 5, "Expected at least 5 JSR calls");
-        // ushort 960 = 0x03C0 — stored as local and passed to vram_fill
-        // LDX #$03 (A203) for high byte of 960
-        Assert.Contains("A203", hex);
+        Assert.Equal(
+            "A203A9C08D25038E2603A928A286202B82A220A90020D483A916209985AD2503AE260320DF83A9E8A28520AF85A200A940204F832089824C3785",
+            Convert.ToHexString(bytes));
     }
 
     [Fact]
@@ -3876,16 +3869,10 @@ public class RoslynTests
 
             while (true) ;
             """);
-        Assert.NotNull(bytes);
-        Assert.NotEmpty(bytes);
 
-        var hex = Convert.ToHexString(bytes);
-        _logger.WriteLine($"OneLocalByte_ByteLocalForVramFill hex: {hex}");
-
-        // JSR calls for pal_bg, vram_adr, vram_fill, vram_write, ppu_on_all
-        Assert.True(bytes.Count(b => b == 0x20) >= 5, "Expected at least 5 JSR calls");
-        // LDA #$16 (A916) for tile byte loaded from local
-        Assert.Contains("A916", hex);
+        Assert.Equal(
+            "A9168D2503A91FA286202B82A220A90020D483AD2503A203A9C020DF83A9DFA28520A685A200A940204F832089824C2E85",
+            Convert.ToHexString(bytes));
     }
 
     [Fact]
@@ -3916,18 +3903,10 @@ public class RoslynTests
 
             while (true) ;
             """);
-        Assert.NotNull(bytes);
-        Assert.NotEmpty(bytes);
 
-        var hex = Convert.ToHexString(bytes);
-        _logger.WriteLine($"StaticSprite_OamSprCalls hex: {hex}");
-
-        // Should have JSR pal_all and 4x JSR oam_spr and JSR ppu_on_all
-        Assert.True(bytes.Count(b => b == 0x20) >= 6, "Expected at least 6 JSR calls");
-        // LDA #$D8 for first sprite tile
-        Assert.Contains("A9D8", hex);
-        // LDA #$DA for second sprite tile
-        Assert.Contains("A9DA", hex);
+        Assert.Equal(
+            "A936A28620118220B885A928A0039122A928889122A9D8889122A900889122200A8620B885A930A0039122A928889122A9DA889122A900889122A904200A8620B885A928A0039122A930889122A9D9889122A900889122A908200A8620B885A930A0039122A930889122A9DB889122A900889122A90C200A862089824C7C85",
+            Convert.ToHexString(bytes));
     }
 
     [Fact]
@@ -3973,19 +3952,10 @@ public class RoslynTests
 
             while (true) ;
             """);
-        Assert.NotNull(bytes);
-        Assert.NotEmpty(bytes);
 
-        var hex = Convert.ToHexString(bytes);
-        _logger.WriteLine($"PpuHello_PokeCalls hex: {hex}");
-
-        // poke emits STA absolute: 8D
-        // PPU_ADDR = $2006: STA $2006 = 8D0620
-        Assert.Contains("8D0620", hex);
-        // PPU_DATA = $2007: STA $2007 = 8D0720
-        Assert.Contains("8D0720", hex);
-        // PPU_CTRL = $2000: STA $2000 = 8D0020
-        Assert.Contains("8D0020", hex);
+        Assert.Equal(
+            "202C86202C86A9008D00208D0120A93F8D0620A9008D0620A9018D0720A9008D0720A9108D0720A9208D0720A9218D0620A9C98D0620A9488D0720A9458D0720A94C8D07208D0720A94F8D0720A9208D0720A9508D07208D0720A9558D0720A9218D0720A9008D05208D0520A9208D0620A9008D0620A91E8D01204C7B85",
+            Convert.ToHexString(bytes));
     }
 
     [Fact]
@@ -4022,16 +3992,10 @@ public class RoslynTests
                 scroll(0, scroll_y);
             }
             """);
-        Assert.NotNull(bytes);
-        Assert.NotEmpty(bytes);
 
-        var hex = Convert.ToHexString(bytes);
-        _logger.WriteLine($"Lols_ScrollLoop hex: {hex}");
-
-        // Should contain JSR calls for pal_col, vram_adr, vram_write, ppu_on_all, ppu_wait_frame, scroll
-        Assert.True(bytes.Count(b => b == 0x20) >= 10, "Expected at least 10 JSR calls");
-        // JMP backward for while(true) loop: 4C
-        Assert.Contains("4C", hex);
+        Assert.Equal(
+            "A9008D2503A900200E86A902203E82A901200E86A914203E82A902200E86A920203E82A903200E86A930203E82A220A94220D483A95DA286202486A200A91D204F83A221A90220D483A95DA286202486A200A91D204F83A221A9C220D483A95DA286202486A200A91D204F83A222A98220D483A95DA286202486A200A91D204F83A223A94220D483A95DA286202486A200A91D204F8320898220DB82EE2503A900A200202486AD250320FB824C9985",
+            Convert.ToHexString(bytes));
     }
 
     [Fact]
@@ -4072,20 +4036,10 @@ public class RoslynTests
                 public static byte spr;
             }
             """);
-        Assert.NotNull(bytes);
-        Assert.NotEmpty(bytes);
 
-        var hex = Convert.ToHexString(bytes);
-        _logger.WriteLine($"OamStatic_StaticFieldCompoundExpr hex: {hex}");
-
-        // Static field stores at $0325+: STA absolute (8D)
-        Assert.Contains("8D", hex);
-        // LDA #124 (A97C) for spr_x
-        Assert.Contains("A97C", hex);
-        // LDA #108 (A96C) for spr_y
-        Assert.Contains("A96C", hex);
-        // SEC (38) + SBC (E9) for subtraction in compound expression
-        Assert.Contains("38", hex);
+        Assert.Equal(
+            "A926A28620118220AE82A97CA97C8D2603A96CA96C8D270320A885AD260338E904A0039122AD270338E904889122A9C0889122A903889122A90020FA858D250320A885AD260338E904A0039122AD2703186904889122A9C1889122A903889122AD250320FA858D25032089824C6C85",
+            Convert.ToHexString(bytes));
     }
 
     [Fact]
@@ -4130,21 +4084,9 @@ public class RoslynTests
                 oam_spr((byte)(x + 8), (byte)(y + 8), 0xDB, 0, 12);
             }
             """);
-        Assert.NotNull(bytes);
-        Assert.NotEmpty(bytes);
 
-        var hex = Convert.ToHexString(bytes);
-        _logger.WriteLine($"MovingSprite_PadPollBranches hex: {hex}");
-
-        // JSR pad_poll present
-        Assert.True(bytes.Count(b => b == 0x20) >= 5, "Expected multiple JSR calls");
-        // AND immediate for pad bit testing: 29
-        Assert.Contains("29", hex);
-        // BEQ (F0) for conditional branch skip
-        Assert.Contains("F0", hex);
-        // DEC or SBC for x--/y--
-        // INC or ADC for x++/y++
-        // LDA #$D8 for first sprite tile
-        Assert.Contains("A9D8", hex);
+        Assert.Equal(
+            "A9288D25038D2603A9D3A28620118220898220F082A9002056868D27032940F003CE2503AD27032980F003EE2503AD27032910F003CE2603AD27032920F003EE2603200486AD2503A0039122AD2603889122A9D8889122A90088912220A786200486AD2503186908A0039122AD2603889122A9DA889122A900889122A90420A786200486AD2503A0039122AD2603186908889122A9D9889122A900889122A90820A786200486AD2503186908A0039122AD2603186908889122A9DB889122A900889122A90C20A7864C1285",
+            Convert.ToHexString(bytes));
     }
 }
