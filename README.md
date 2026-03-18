@@ -10,16 +10,28 @@
 
 | | |
 |:---:|:---:|
-| **metasprites** ⬇️ | **sprites** ⬇️ |
-| ![metasprites](samples/metasprites/metasprites.gif) | ![sprites](samples/sprites/sprites.gif) |
-| **climber** ⬇️ | **horizscroll** ⬇️ |
-| ![climber](samples/climber/climber.gif) | ![horizscroll](samples/horizscroll/horizscroll.gif) |
-| **rletitle** ⬇️ | **flicker** ⬇️ |
-| ![rletitle](samples/rletitle/rletitle.png) | ![flicker](samples/flicker/flicker.gif) |
-| **attributetable** ⬇️ | **statusbar** ⬇️ |
-| ![attributetable](samples/attributetable/attributetable.png) | ![statusbar](samples/statusbar/statusbar.gif) |
+| **shoot2** ⬇️ | **pong** ⬇️ |
+| ![shoot2](samples/shoot2/shoot2.gif) | ![pong](samples/pong/pong.gif) |
+| **climber** ⬇️ | **procgen** ⬇️ |
+| ![climber](samples/climber/climber.gif) | ![procgen](samples/procgen/procgen.png) |
+| **snake** ⬇️ | **siegegame** ⬇️ |
+| ![snake](samples/snake/snake.png) | ![siegegame](samples/siegegame/siegegame.png) |
+| **metasprites** ⬇️ | **animation** ⬇️ |
+| ![metasprites](samples/metasprites/metasprites.gif) | ![animation](samples/animation/animation.gif) |
+| **sprites** ⬇️ | **horizscroll** ⬇️ |
+| ![sprites](samples/sprites/sprites.gif) | ![horizscroll](samples/horizscroll/horizscroll.gif) |
+| **vertscroll** ⬇️ | **fade** ⬇️ |
+| ![vertscroll](samples/vertscroll/vertscroll.gif) | ![fade](samples/fade/fade.gif) |
+| **monobitmap** ⬇️ | **music** ⬇️ |
+| ![monobitmap](samples/monobitmap/monobitmap.png) | ![music](samples/music/music.png) |
+| **fami** ⬇️ | **rletitle** ⬇️ |
+| ![fami](samples/fami/fami.gif) | ![rletitle](samples/rletitle/rletitle.png) |
+| **attributetable** ⬇️ | **flicker** ⬇️ |
+| ![attributetable](samples/attributetable/attributetable.png) | ![flicker](samples/flicker/flicker.gif) |
+| **statusbar** ⬇️ | |
+| ![statusbar](samples/statusbar/statusbar.gif) | |
 
-> See the [samples/](samples/) folder for all 25 sample projects. Generate images with `dotnet run scripts/record-all-samples.cs`.
+> See the [samples/](samples/) folder for all 44 sample projects. Generate images with `dotnet run scripts/record-all-samples.cs`.
 
 ## Contributing
 
@@ -62,6 +74,12 @@ Of course, you can also just open the project in Visual Studio and hit F5.
 Check out the video for a full demo:
 
 [![Check out the video](https://img.youtube.com/vi/m4TU5PJ8WtY/maxresdefault.jpg)](https://youtu.be/m4TU5PJ8WtY)
+
+## MSBuild Properties
+
+.NES exposes several MSBuild properties for configuring your ROM (mapper, mirroring,
+PRG/CHR bank counts, diagnostic logging, and more). See
+[docs/msbuild-properties.md](docs/msbuild-properties.md) for the full reference.
 
 ## Anatomy of an NES application
 
@@ -276,7 +294,7 @@ block.Emit(STA_zpg(TEMP))
 
 ## Limitations
 
-This is a hobby project, so there are around 25 C# sample programs that are known to work. But to
+This is a hobby project, so there are around 42 C# sample programs that are known to work. But to
 get an idea of what is not available:
 
 * No runtime

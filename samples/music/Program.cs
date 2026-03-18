@@ -244,6 +244,26 @@ byte[] music1 = [
 apu_init();
 start_music(music1);
 
+// Set palette and display song info
+pal_col(0, 0x01);   // dark blue background
+pal_col(1, 0x30);   // white
+pal_col(2, 0x10);   // grey
+pal_col(3, 0x27);   // warm orange
+
+vram_adr(NTADR_A(10, 8));
+vram_write("NOW PLAYING");
+
+vram_adr(NTADR_A(5, 12));
+vram_write("THE EASY WINNERS");
+
+vram_adr(NTADR_A(7, 15));
+vram_write("BY SCOTT JOPLIN");
+
+vram_adr(NTADR_A(5, 20));
+vram_write("PULSE + TRIANGLE");
+
+ppu_on_all();
+
 while (true)
 {
     ppu_wait_nmi();

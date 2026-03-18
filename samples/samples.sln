@@ -51,6 +51,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "siegegame", "siegegame\sieg
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "transtable", "transtable\transtable.csproj", "{D3CEFAF2-F208-414E-ACD7-789116521E1C}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "mmc1", "mmc1\mmc1.csproj", "{6EF0A446-2E4D-4B75-908D-E0FE97206572}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -349,6 +351,18 @@ Global
 		{D3CEFAF2-F208-414E-ACD7-789116521E1C}.Release|x64.Build.0 = Release|Any CPU
 		{D3CEFAF2-F208-414E-ACD7-789116521E1C}.Release|x86.ActiveCfg = Release|Any CPU
 		{D3CEFAF2-F208-414E-ACD7-789116521E1C}.Release|x86.Build.0 = Release|Any CPU
+		{6EF0A446-2E4D-4B75-908D-E0FE97206572}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6EF0A446-2E4D-4B75-908D-E0FE97206572}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6EF0A446-2E4D-4B75-908D-E0FE97206572}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{6EF0A446-2E4D-4B75-908D-E0FE97206572}.Debug|x64.Build.0 = Debug|Any CPU
+		{6EF0A446-2E4D-4B75-908D-E0FE97206572}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{6EF0A446-2E4D-4B75-908D-E0FE97206572}.Debug|x86.Build.0 = Debug|Any CPU
+		{6EF0A446-2E4D-4B75-908D-E0FE97206572}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6EF0A446-2E4D-4B75-908D-E0FE97206572}.Release|Any CPU.Build.0 = Release|Any CPU
+		{6EF0A446-2E4D-4B75-908D-E0FE97206572}.Release|x64.ActiveCfg = Release|Any CPU
+		{6EF0A446-2E4D-4B75-908D-E0FE97206572}.Release|x64.Build.0 = Release|Any CPU
+		{6EF0A446-2E4D-4B75-908D-E0FE97206572}.Release|x86.ActiveCfg = Release|Any CPU
+		{6EF0A446-2E4D-4B75-908D-E0FE97206572}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

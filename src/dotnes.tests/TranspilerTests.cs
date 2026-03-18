@@ -70,14 +70,14 @@ public class TranspilerTests
     [InlineData("metacursor", false)]
     [InlineData("metatrigger", true)]
     [InlineData("metatrigger", false)]
-    [InlineData("statusbar", true, true)]
-    [InlineData("statusbar", false, true)]
+    [InlineData("statusbar", true, "Vertical")]
+    [InlineData("statusbar", false, "Vertical")]
     [InlineData("vrambuffer", true)]
     [InlineData("vrambuffer", false)]
-    [InlineData("horizscroll", true, true)]
-    [InlineData("horizscroll", false, true)]
-    [InlineData("horizmask", true, true)]
-    [InlineData("horizmask", false, true)]
+    [InlineData("horizscroll", true, "Vertical")]
+    [InlineData("horizscroll", false, "Vertical")]
+    [InlineData("horizmask", true, "Vertical")]
+    [InlineData("horizmask", false, "Vertical")]
     [InlineData("animation", true)]
     [InlineData("animation", false)]
     [InlineData("multifile", true)]
@@ -94,27 +94,39 @@ public class TranspilerTests
     [InlineData("bigsprites", false)]
     [InlineData("aputest", true)]
     [InlineData("aputest", false)]
-    [InlineData("bankswitch", true, false, 4, 4, 8)]
-    [InlineData("bankswitch", false, false, 4, 4, 8)]
-    [InlineData("irq", true, false, 4, 4, 1)]
-    [InlineData("irq", false, false, 4, 4, 1)]
+    [InlineData("bankswitch", true, "Horizontal", 4, 4, 8)]
+    [InlineData("bankswitch", false, "Horizontal", 4, 4, 8)]
+    [InlineData("irq", true, "Horizontal", 4, 4, 1)]
+    [InlineData("irq", false, "Horizontal", 4, 4, 1)]
     [InlineData("climber", true)]
     [InlineData("climber", false)]
     [InlineData("siegegame", true)]
     [InlineData("siegegame", false)]
     [InlineData("pong", true)]
     [InlineData("pong", false)]
-    [InlineData("transtable", true, false, 0, 2, 0)]
-    [InlineData("transtable", false, false, 0, 2, 0)]
+    [InlineData("transtable", true, "Horizontal", 0, 2, 0)]
+    [InlineData("transtable", false, "Horizontal", 0, 2, 0)]
     [InlineData("snake", true)]
     [InlineData("snake", false)]
-    [InlineData("monobitmap", true, false, 2, 2, 0)]
-    [InlineData("monobitmap", false, false, 2, 2, 0)]
-    [InlineData("shoot2", true, false, 2, 2, 0)]
-    [InlineData("shoot2", false, false, 2, 2, 0)]
+    [InlineData("monobitmap", true, "Horizontal", 2, 2, 0)]
+    [InlineData("monobitmap", false, "Horizontal", 2, 2, 0)]
+    [InlineData("shoot2", true, "Horizontal", 2, 2, 0)]
+    [InlineData("shoot2", false, "Horizontal", 2, 2, 0)]
     [InlineData("conio", true)]
     [InlineData("conio", false)]
-    public Task Write(string name, bool debug, bool verticalMirroring = false, int mapper = 0, int prgBanks = 2, int chrBanks = 1)
+    [InlineData("procgen", true)]
+    [InlineData("procgen", false)]
+    [InlineData("vertscroll", true)]
+    [InlineData("vertscroll", false)]
+    [InlineData("slideshow", true, "Horizontal", 3, 2, 2)]
+    [InlineData("slideshow", false, "Horizontal", 3, 2, 2)]
+    [InlineData("mmc1", true, "Horizontal", 1)]
+    [InlineData("mmc1", false, "Horizontal", 1)]
+    [InlineData("battery", true, "Horizontal", 0, 2, 1, true)]
+    [InlineData("battery", false, "Horizontal", 0, 2, 1, true)]
+    [InlineData("oamstatic", true)]
+    [InlineData("oamstatic", false)]
+    public Task Write(string name, bool debug, string mirroring = "Horizontal", int mapper = 0, int prgBanks = 2, int chrBanks = 1, bool battery = false)
     {
         var configuration = debug ? "debug" : "release";
 
@@ -123,10 +135,31 @@ public class TranspilerTests
         // CHR RAM samples (chrBanks=0) don't need a CHR assembly file
         if (chrBanks > 0)
         {
-            var chrName = $"chr_{name}.s";
-            var chrStream = typeof(Utilities).Assembly.GetManifestResourceStream(chrName);
-            var chr_generic = new StreamReader(chrStream ?? Utilities.GetResource("chr_generic.s"));
-            assemblyReaders.Add(new AssemblyReader(chr_generic));
+            // Check for numbered CHR bank files (e.g., chr_slideshow_0.s, chr_slideshow_1.s).
+            // Files must be numbered sequentially starting from 0 with no gaps.
+            bool foundNumbered = false;
+            for (int b = 0; b < chrBanks; b++)
+            {
+                var numberedName = $"chr_{name}_{b}.s";
+                var numberedStream = typeof(Utilities).Assembly.GetManifestResourceStream(numberedName);
+                if (numberedStream != null)
+                {
+                    assemblyReaders.Add(new AssemblyReader(new StreamReader(numberedStream)));
+                    foundNumbered = true;
+                }
+                else
+                {
+                    break; // Sequential numbering required — stop at first missing file
+                }
+            }
+
+            if (!foundNumbered)
+            {
+                var chrName = $"chr_{name}.s";
+                var chrStream = typeof(Utilities).Assembly.GetManifestResourceStream(chrName);
+                var chr_generic = new StreamReader(chrStream ?? Utilities.GetResource("chr_generic.s"));
+                assemblyReaders.Add(new AssemblyReader(chr_generic));
+            }
         }
 
         // Include fami assembly files (famitone2.s, demosounds.s, etc.) only for samples that use extern methods
@@ -141,7 +174,7 @@ public class TranspilerTests
         }
 
         using var dll = Utilities.GetResource($"{name}.{configuration}.dll");
-        using var il = new Transpiler(dll, assemblyReaders, _logger, verticalMirroring, mapper, prgBanks, chrBanks);
+        using var il = new Transpiler(dll, assemblyReaders, _logger, mirroring, mapper, prgBanks, chrBanks, battery);
         using var ms = new MemoryStream();
         il.Write(ms);
 
@@ -149,6 +182,24 @@ public class TranspilerTests
         settings.DisableRequireUniquePrefix();
         settings.UseFileName($"TranspilerTests.Write.{name}");
         return Verify(ms.ToArray(), settings);
+    }
+
+    [Theory]
+    [InlineData(false)] // no battery: flags6 bit 1 = 0
+    [InlineData(true)]  // battery: flags6 bit 1 = 1
+    public void Write_BatteryFlag(bool battery)
+    {
+        using var dll = Utilities.GetResource("hello.release.dll");
+        var chr_generic = new StreamReader(Utilities.GetResource("chr_generic.s"));
+        var assemblyReaders = new List<AssemblyReader> { new AssemblyReader(chr_generic) };
+        using var il = new Transpiler(dll, assemblyReaders, _logger, battery: battery);
+        using var ms = new MemoryStream();
+        il.Write(ms);
+
+        var bytes = ms.ToArray();
+        // iNES header byte 6 is flags6; only check bit 1 (battery flag)
+        byte batteryBit = (byte)(bytes[6] & 0x02);
+        Assert.Equal(battery ? 0x02 : 0x00, batteryBit);
     }
 
     [Theory]

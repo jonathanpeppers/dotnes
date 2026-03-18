@@ -1,3 +1,4 @@
+using dotnes.ObjectModel;
 using static dotnes.NESConstants;
 
 namespace dotnes;
@@ -35,6 +36,12 @@ class LocalVariableManager
     /// for conv.u2 + stloc patterns in the IL. Word locals get 2 bytes of zero page.
     /// </summary>
     public HashSet<int> WordLocals { get; set; } = new();
+
+    /// <summary>
+    /// Static field names that are word-sized (ushort/short/int).
+    /// Detected from metadata field signatures. Word fields get 2 bytes of zero page.
+    /// </summary>
+    public HashSet<string> WordStaticFields { get; set; } = new(StringComparer.Ordinal);
 
     /// <summary>
     /// Struct type layouts: type name → ordered list of (fieldName, fieldSizeInBytes).
@@ -118,7 +125,10 @@ class LocalVariableManager
                 }
             }
         }
-        throw new InvalidOperationException($"Cannot resolve struct type for local {localIndex} with field '{fieldName}'");
+        throw new TranspileException(
+            $"Cannot resolve struct type for local {localIndex} with field '{fieldName}'. " +
+            "This may be caused by a compiler-generated closure. If a local function captures outer variables " +
+            "(like byte[] arrays), pass them as parameters instead.");
     }
 
     /// <summary>
@@ -135,9 +145,10 @@ class LocalVariableManager
 
             // Advance LocalCount so subsequent allocations don't overlap
             // any pre-allocated static field addresses.
-            foreach (var addr in value.Values)
+            foreach (var kvp in value)
             {
-                int slotsPastBase = addr - _baseAddress + 1;
+                int size = WordStaticFields.Contains(kvp.Key) ? 2 : 1;
+                int slotsPastBase = kvp.Value - _baseAddress + size;
                 if (slotsPastBase > LocalCount)
                     LocalCount = slotsPastBase;
             }

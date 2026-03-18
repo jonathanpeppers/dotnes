@@ -100,10 +100,10 @@
   - `put_str()` inlined (user methods don't support parameters yet); `scroll_demo()` extracted as local function
   - `strlen()` replaced by `string.Length` (implicit via `vram_write(string)`)
   - Scroll range reduced from 0–479 to 0–255 (byte range, single nametable width)
-  - Vertical mirroring configured via `<NESVerticalMirroring>true</NESVerticalMirroring>` MSBuild property
+  - Vertical mirroring configured via `<NESMirroring>Vertical</NESMirroring>` MSBuild property
 - **New Features Added:**
   - `split()` transpiler support (6502 subroutine + IL handler)
-  - `<NESVerticalMirroring>` MSBuild property for vertical mirroring (iNES Flags6 bit 0)
+  - `<NESMirroring>` MSBuild property for nametable mirroring (iNES Flags6 bit 0)
 
 ### vrambuffer.c
 - **Description:** Demonstrates the VRAM update buffer system for writing to VRAM during rendering, with scrolling and `sprintf`.
@@ -315,7 +315,7 @@
 | `Brtrue`/`Brfalse` long-form branches (JMP trampoline) | horizmask |
 | Runtime division by power-of-2 (LSR A) | horizmask |
 | `updbuf` and `VRAMBUF_VERT` constants | horizmask |
-| Vertical mirroring (`<NESVerticalMirroring>`) | statusbar, horizscroll, horizmask |
+| Vertical mirroring (`<NESMirroring>`) | statusbar, horizscroll, horizmask |
 | Static local functions | statusbar (`scroll_demo`), horizscroll, horizmask |
 | `ldarg` opcodes (function parameters) | horizscroll (infrastructure for user functions with byte params) |
 | `ushort` argument passing to built-ins (`pushax`) | horizscroll (16-bit scroll values) |

@@ -110,11 +110,8 @@ byte[] BG_TILES = [
 ppu_off();
 oam_clear();
 
-// Move C stack from $0800 (mirrors to zero page!) to $0700 (physical RAM).
-// The transpiler doesn't emit decsp4 before oam_spr args, so every oam_spr call
-// advances sp by 4 with no matching decrement. At $0800, this drift writes to
-// mirrored zero page, corrupting NES library state ($03-$06 = VRAM ptrs).
-// At $0700, sp stays in physical RAM ($0700-$07FF) — safe.
+// Move C stack to $0700. The default sp=$0800 aliases zero page via NES RAM
+// mirroring ($0800-$0FFF → $0000-$07FF), so pushes corrupt neslib state.
 poke(0x0823, 0x07);
 
 // Upload sprite tiles to CHR RAM pattern table 1 ($1000)
@@ -163,16 +160,18 @@ vram_put(0x01);
 vram_put(0x01);
 vram_put(0x01);
 
-bank_spr(1);
-bank_bg(0);
-ppu_on_all();
-
-// Silence all APU channels, then enable them
+// Silence all APU channels, then enable them (before ppu_on to avoid startup noise)
 poke(APU_PULSE1_CTRL, 0x30);    // silence pulse 1 (halt, volume 0)
 poke(APU_PULSE2_CTRL, 0x30);    // silence pulse 2
 poke(APU_TRIANGLE_CTRL, 0x80);  // silence triangle (halt)
 poke(APU_NOISE_CTRL, 0x30);     // silence noise
 poke(APU_STATUS, 0x0F);         // enable all channels
+
+bank_spr(1);
+bank_bg(0);
+vrambuf_clear();
+set_vram_update(updbuf);
+ppu_on_all();
 set_rand(42);
 
 // === Game state ===
@@ -182,14 +181,13 @@ byte fire_cooldown = 0;
 byte spawn_timer = 0;
 
 // Score: 6 digits as BG tile indices (0x01 = '0' ... 0x0A = '9')
-// Score display is static (written at init) due to VRAM buffer corruption workaround.
-// We keep tracking digits for score logic even though they don't update on screen.
 byte d0 = 0x01;
 byte d1 = 0x01;
 byte d2 = 0x01;
 byte d3 = 0x01;
 byte d4 = 0x01;
 byte d5 = 0x01;
+byte[] digits = new byte[6];
 
 // Structure-of-Arrays: Bullets
 byte[] bullet_x = new byte[MAX_BULLETS];
@@ -222,7 +220,7 @@ for (byte i = 0; i < MAX_STARS; i++)
 {
     star_x[i] = rand8();
     star_y[i] = rand8();
-    star_speed[i] = (byte)(1 + (byte)(rand8() & 0x01));
+    star_speed[i] = (byte)((byte)(rand8() & 0x01) + 1);
 }
 
 // === Main game loop ===
@@ -231,15 +229,13 @@ while (true)
     // --- Fire bullet ---
     if (fire_cooldown != 0) fire_cooldown = (byte)(fire_cooldown - 1);
 
-    // Reset C stack pointer high byte. Each oam_spr call advances sp by 4
-    // without a matching decsp4 (transpiler bug), causing sp to race through
-    // memory. We reset to $07 to keep writes in physical RAM ($0700-$07FF).
-    poke(0x0823, 0x07);
-    if (fire_cooldown != 0) fire_cooldown = (byte)(fire_cooldown - 1);
-    // pad_trigger(0) fails because $3E (previous frame state) is corrupted
-    // by C stack over-pop. Use pad_poll(0) which returns current state directly
-    // and also updates $3C for later pad_state() direction checks.
-    if (((byte)pad_poll(0) & (byte)PAD.A) != 0)
+    // Save PRNG seed before pad_poll — RAND_SEED ($3C) and PAD_STATE share the
+    // same address in cc65 neslib, so pad_poll overwrites the seed every frame.
+    byte rand_save = peek(0x083C);
+    PAD pad = pad_poll(0);
+    poke(0x083C, rand_save);
+
+    if ((pad & PAD.A) != 0)
     {
         if (fire_cooldown == 0)
         {
@@ -259,24 +255,22 @@ while (true)
     }
 
     // --- Player movement (clamp to stay within bounds) ---
-    // Call pad_state(0) inline for each check so return value is fresh in A
-    // (pad_state reads the same $3C set by pad_trigger's internal pad_poll)
-    if ((pad_state(0) & (byte)PAD.LEFT) != 0)
+    if ((pad & PAD.LEFT) != 0)
     {
         if (player_x > 8 + PLAYER_SPEED) player_x = (byte)(player_x - PLAYER_SPEED);
         else player_x = 8;
     }
-    if ((pad_state(0) & (byte)PAD.RIGHT) != 0)
+    if ((pad & PAD.RIGHT) != 0)
     {
         if (player_x < 240 - PLAYER_SPEED) player_x = (byte)(player_x + PLAYER_SPEED);
         else player_x = 240;
     }
-    if ((pad_state(0) & (byte)PAD.UP) != 0)
+    if ((pad & PAD.UP) != 0)
     {
         if (player_y > 32 + PLAYER_SPEED) player_y = (byte)(player_y - PLAYER_SPEED);
         else player_y = 32;
     }
-    if ((pad_state(0) & (byte)PAD.DOWN) != 0)
+    if ((pad & PAD.DOWN) != 0)
     {
         if (player_y < 224 - PLAYER_SPEED) player_y = (byte)(player_y + PLAYER_SPEED);
         else player_y = 224;
@@ -353,9 +347,15 @@ while (true)
             {
                 if (enemy_active[ei] != 0)
                 {
-                    byte dx = abs_diff(bullet_x[bi], enemy_x[ei]);
-                    byte dy = abs_diff(bullet_y[bi], enemy_y[ei]);
-                    if (dx < HIT_DISTANCE && dy < HIT_DISTANCE)
+                    // Branchless abs_diff check: |a-b| < N ⟺ (byte)(a-b+N-1) < 2N-1
+                    // Avoids user-method transpiler bugs (missing early return, pusha).
+                    // Uses nested ifs so each value is compared immediately (before
+                    // the next array subtraction overwrites the transpiler's TEMP).
+                    byte dxc = (byte)((byte)(bullet_x[bi] - enemy_x[ei]) + (HIT_DISTANCE - 1));
+                    if (dxc < (2 * HIT_DISTANCE - 1))
+                    {
+                    byte dyc = (byte)((byte)(bullet_y[bi] - enemy_y[ei]) + (HIT_DISTANCE - 1));
+                    if (dyc < (2 * HIT_DISTANCE - 1))
                     {
                         // Start explosion
                         for (byte xi = 0; xi < MAX_EXPLOSIONS; xi++)
@@ -381,6 +381,7 @@ while (true)
                         if (d0 > 0x0A) d0 = 0x01;
                         break;
                     }
+                    }
                 }
             }
         }
@@ -391,9 +392,12 @@ while (true)
     {
         if (enemy_active[ei] != 0)
         {
-            byte dx = abs_diff(player_x, enemy_x[ei]);
-            byte dy = abs_diff(player_y, enemy_y[ei]);
-            if (dx < HIT_DISTANCE && dy < HIT_DISTANCE)
+            // Branchless abs_diff check (see bullet-enemy collision comment)
+            byte dxc = (byte)((byte)(player_x - enemy_x[ei]) + (HIT_DISTANCE - 1));
+            if (dxc < (2 * HIT_DISTANCE - 1))
+            {
+            byte dyc = (byte)((byte)(player_y - enemy_y[ei]) + (HIT_DISTANCE - 1));
+            if (dyc < (2 * HIT_DISTANCE - 1))
             {
                 enemy_active[ei] = 0;
                 sfx_player_die();
@@ -403,6 +407,7 @@ while (true)
                 ppu_wait_nmi();
                 ppu_wait_nmi();
                 pal_spr_bright(4);
+            }
             }
         }
     }
@@ -447,15 +452,17 @@ while (true)
 
     oam_hide_rest(oam_off);
 
-    // Repair zero-page VRAM state before NMI fires. The C stack over-pop
-    // corrupts $04-$06 during the game loop. These pokes use NES RAM mirroring
-    // ($08xx → $00xx) to restore critical NMI variables just before the wait.
-    poke(0x0100, 0xFF);  // VRAM buffer terminator (harmless if NMI reads it)
-    poke(0x0804, 0x00);  // NAME_UPD_ADR low byte
-    poke(0x0805, 0x01);  // NAME_UPD_ADR high byte (→ $0100)
-    poke(0x0806, 0x00);  // NAME_UPD_ENABLE = 0 (disable buffer processing)
+    // Update score display via VRAM buffer (processed by NMI during vblank)
+    digits[0] = d0;
+    digits[1] = d1;
+    digits[2] = d2;
+    digits[3] = d3;
+    digits[4] = d4;
+    digits[5] = d5;
+    vrambuf_put(NTADR_A(8, 1), digits, 6);
 
     ppu_wait_nmi();
+    vrambuf_clear();
 }
 
 // === User-defined functions (static, no captured variables) ===
@@ -468,56 +475,49 @@ static byte rnd_range(byte lo, byte hi)
     return (byte)((byte)(r % range) + lo);
 }
 
-// Absolute difference of two bytes
-static byte abs_diff(byte a, byte b)
-{
-    if (a > b) return (byte)(a - b);
-    return (byte)(b - a);
-}
-
 // Sound effect: player fires
-// Pulse1: ctrl=0x7A (duty 01, decay, vol 0x0A), sweep=0, timer_lo=0x80, timer_hi=0xF9
-// All poke values MUST be constants (poke handler breaks with ldarg/ldloc values)
+// Pulse1: ctrl=0x4A (duty 01, envelope decay, period 0x0A), sweep=0, timer_lo=0x80, timer_hi=0xF9
+// poke values can be constants or local variables, but not function parameters (ldarg)
 static void sfx_shoot()
 {
-    poke(APU_PULSE1_CTRL, 0x7A);
+    poke(APU_PULSE1_CTRL, 0x4A);
     poke(APU_PULSE1_SWEEP, 0x00);
     poke(APU_PULSE1_TIMER_LO, 0x80);
     poke(APU_PULSE1_TIMER_HI, 0xF9);
 }
 
 // Sound effect: enemy hit
-// Noise: ctrl=0x3A (decay, vol 0x0A), period=4, length=0xF8
+// Noise: ctrl=0x0A (envelope decay, period 0x0A), period=4, length=0xF8
 static void sfx_hit()
 {
-    poke(APU_NOISE_CTRL, 0x3A);
+    poke(APU_NOISE_CTRL, 0x0A);
     poke(APU_NOISE_PERIOD, 0x04);
     poke(APU_NOISE_LENGTH, 0xF8);
 }
 
 // Sound effect: explosion
-// Noise: ctrl=0x3F (decay, vol 0x0F), period=6, length=0xF8
-// Triangle: ctrl=0xFF, timer_lo=0x40, timer_hi=0xF9
+// Noise: ctrl=0x0F (envelope decay, period 0x0F), period=6, length=0xF8
+// Triangle: ctrl=0x1F (linear counter=31, ~0.13s thump), timer_lo=0x40, timer_hi=0xF9
 static void sfx_explode()
 {
-    poke(APU_NOISE_CTRL, 0x3F);
+    poke(APU_NOISE_CTRL, 0x0F);
     poke(APU_NOISE_PERIOD, 0x06);
     poke(APU_NOISE_LENGTH, 0xF8);
-    poke(APU_TRIANGLE_CTRL, 0xFF);
+    poke(APU_TRIANGLE_CTRL, 0x1F);
     poke(APU_TRIANGLE_TIMER_LO, 0x40);
     poke(APU_TRIANGLE_TIMER_HI, 0xF9);
 }
 
 // Sound effect: player destroyed
-// Pulse1: ctrl=0xBF (duty 10, decay, vol 0x0F), sweep=0, timer_lo=0x00, timer_hi=0xFA
-// Noise: ctrl=0x3F (decay, vol 0x0F), period=8, length=0xF8
+// Pulse1: ctrl=0x8F (duty 10, envelope decay, period 0x0F), sweep=0, timer_lo=0x00, timer_hi=0xFA
+// Noise: ctrl=0x0F (envelope decay, period 0x0F), period=8, length=0xF8
 static void sfx_player_die()
 {
-    poke(APU_PULSE1_CTRL, 0xBF);
+    poke(APU_PULSE1_CTRL, 0x8F);
     poke(APU_PULSE1_SWEEP, 0x00);
     poke(APU_PULSE1_TIMER_LO, 0x00);
     poke(APU_PULSE1_TIMER_HI, 0xFA);
-    poke(APU_NOISE_CTRL, 0x3F);
+    poke(APU_NOISE_CTRL, 0x0F);
     poke(APU_NOISE_PERIOD, 0x08);
     poke(APU_NOISE_LENGTH, 0xF8);
 }

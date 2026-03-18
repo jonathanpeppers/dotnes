@@ -31,6 +31,16 @@ const NES.NESLib.MMC3_IRQ_LATCH = 49152 -> ushort
 const NES.NESLib.MMC3_IRQ_RELOAD = 49153 -> ushort
 const NES.NESLib.MMC3_MIRRORING = 40960 -> ushort
 const NES.NESLib.MMC3_WRAM_ENABLE = 40961 -> ushort
+const NES.NESLib.MMC1_CHR_BANK0 = 40960 -> ushort
+const NES.NESLib.MMC1_CHR_BANK1 = 49152 -> ushort
+const NES.NESLib.MMC1_CHR_4K = 16 -> byte
+const NES.NESLib.MMC1_CONTROL = 32768 -> ushort
+const NES.NESLib.MMC1_MIRROR_HORIZONTAL = 3 -> byte
+const NES.NESLib.MMC1_MIRROR_ONE_LOWER = 0 -> byte
+const NES.NESLib.MMC1_MIRROR_ONE_UPPER = 1 -> byte
+const NES.NESLib.MMC1_MIRROR_VERTICAL = 2 -> byte
+const NES.NESLib.MMC1_PRG_BANK = 57344 -> ushort
+const NES.NESLib.MMC1_PRG_FIX_LAST = 12 -> byte
 const NES.NESLib.NT_UPD_EOF = 255 -> byte
 const NES.NESLib.NT_UPD_HORZ = 64 -> byte
 const NES.NESLib.NT_UPD_VERT = 128 -> byte
@@ -40,6 +50,8 @@ const NES.NESLib.PPU_DATA = 8199 -> ushort
 const NES.NESLib.PPU_MASK = 8193 -> ushort
 const NES.NESLib.PPU_SCROLL = 8197 -> ushort
 const NES.NESLib.PPU_STATUS = 8194 -> ushort
+const NES.NESLib.SRAM_END = 32767 -> ushort
+const NES.NESLib.SRAM_START = 24576 -> ushort
 const NES.NESLib.VRAMBUF_VERT = 32768 -> ushort
 const NES.NESLib.updbuf = 256 -> ushort
 static NES.NESLib.LSB(ushort x) -> byte
@@ -47,9 +59,14 @@ static NES.NESLib.MSB(ushort x) -> byte
 static NES.NESLib.apu_init() -> void
 static NES.NESLib.bcd_add(ushort a, ushort b) -> ushort
 static NES.NESLib.cli() -> void
+static NES.NESLib.cnrom_set_chr_bank(byte bank) -> void
 static NES.NESLib.famitone_init(string! musicDataLabel) -> void
 static NES.NESLib.irq_set_callback(delegate*<void> callback) -> void
 static NES.NESLib.memfill(object! dst, byte value, uint len) -> void
+static NES.NESLib.mmc1_set_chr_bank(byte bank0, byte bank1) -> void
+static NES.NESLib.mmc1_set_mirroring(byte mode) -> void
+static NES.NESLib.mmc1_set_prg_bank(byte bank) -> void
+static NES.NESLib.mmc1_write(ushort addr, byte value) -> void
 static NES.NESLib.music_pause(byte pause) -> void
 static NES.NESLib.music_play(byte song) -> void
 static NES.NESLib.music_stop() -> void
@@ -58,8 +75,8 @@ static NES.NESLib.oam_clear_fast() -> void
 static NES.NESLib.oam_meta_spr_clip(int x, byte y, byte[]! metasprite) -> void
 static NES.NESLib.oam_meta_spr_pal(byte x, byte y, byte pal, byte[]! data) -> void
 static NES.NESLib.oam_off -> byte
-static NES.NESLib.pad_state(byte pad) -> byte
-static NES.NESLib.pad_trigger(byte pad) -> byte
+static NES.NESLib.pad_state(byte pad) -> NES.PAD
+static NES.NESLib.pad_trigger(byte pad) -> NES.PAD
 static NES.NESLib.peek(ushort addr) -> byte
 static NES.NESLib.play_music() -> void
 static NES.NESLib.poke(ushort addr, byte value) -> void

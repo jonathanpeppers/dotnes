@@ -16,7 +16,8 @@ class Transpiler : IDisposable
     readonly MetadataReader _reader;
     readonly IList<AssemblyReader> _assemblyFiles;
     readonly ILogger _logger;
-    readonly bool _verticalMirroring;
+    readonly string _mirroring;
+    readonly bool _battery;
     readonly int _mapper;
     readonly int _prgBanks;
     readonly int _chrBanks;
@@ -44,13 +45,14 @@ class Transpiler : IDisposable
     /// </summary>
     public Dictionary<string, (int argCount, bool hasReturnValue)> ExternMethods { get; } = new(StringComparer.Ordinal);
 
-    public Transpiler(Stream stream, IList<AssemblyReader> assemblyFiles, ILogger? logger = null, bool verticalMirroring = false, int mapper = 0, int prgBanks = 2, int chrBanks = 1)
+    public Transpiler(Stream stream, IList<AssemblyReader> assemblyFiles, ILogger? logger = null, string mirroring = "Horizontal", int mapper = 0, int prgBanks = 2, int chrBanks = 1, bool battery = false)
     {
         _pe = new PEReader(stream);
         _reader = _pe.GetMetadataReader();
         _assemblyFiles = assemblyFiles;
         _logger = logger ?? new NullLogger();
-        _verticalMirroring = verticalMirroring;
+        _mirroring = mirroring;
+        _battery = battery;
         _mapper = mapper;
         _prgBanks = prgBanks;
         _chrBanks = chrBanks;
@@ -58,16 +60,42 @@ class Transpiler : IDisposable
 
     public void Write(Stream stream)
     {
-        Segment? chr_rom = null;
+        byte[]? chrData = null;
 
         if (_chrBanks > 0)
         {
             if (_assemblyFiles.Count == 0)
-                throw new InvalidOperationException("At least one 'chr_generic.s' file must be present!");
+                throw new InvalidOperationException("At least one assembly file with a 'CHARS' segment must be present!");
 
-            var assemblyReader = _assemblyFiles.FirstOrDefault(a => Path.GetFileName(a.Path) == "chr_generic.s") ?? _assemblyFiles[0];
-            chr_rom = assemblyReader.GetSegments().FirstOrDefault(s => s.Name == "CHARS") ??
-                throw new InvalidOperationException($"At least one 'CHARS' segment must be present in: {assemblyReader.Path}");
+            // Collect CHARS segments from all assembly files and concatenate them.
+            // This supports both single-file CHR (e.g., chr_generic.s with one bank)
+            // and multi-file CHR (e.g., chr_slideshow_0.s + chr_slideshow_1.s for CNROM).
+            // Each CHARS segment is padded to the 8 KB bank boundary so that multiple
+            // banks align correctly (important for mappers like CNROM that switch CHR banks).
+            var chrBytes = new List<byte>();
+            foreach (var assemblyFile in _assemblyFiles)
+            {
+                foreach (var segment in assemblyFile.GetSegments())
+                {
+                    if (segment.Name == "CHARS")
+                    {
+                        chrBytes.AddRange(segment.Bytes);
+
+                        // Pad this segment to the next 8 KB boundary
+                        int remainder = segment.Bytes.Length % NESWriter.CHR_ROM_BLOCK_SIZE;
+                        if (remainder > 0)
+                        {
+                            int bankPadding = NESWriter.CHR_ROM_BLOCK_SIZE - remainder;
+                            chrBytes.AddRange(new byte[bankPadding]);
+                        }
+                    }
+                }
+            }
+
+            if (chrBytes.Count == 0)
+                throw new InvalidOperationException("At least one 'CHARS' segment must be present in the assembly files!");
+
+            chrData = chrBytes.ToArray();
         }
 
         _logger.WriteLine($"Building program...");
@@ -89,8 +117,8 @@ class Transpiler : IDisposable
         writer.Write((byte)0x1A);
         writer.Write((byte)_prgBanks); // PRG_ROM_SIZE (in 16KB units)
         writer.Write((byte)_chrBanks); // CHR_ROM_SIZE (in 8KB units, 0 = CHR RAM)
-        // Flags6: bit 0 = mirroring, bits 4-7 = mapper lower nibble
-        byte flags6 = (byte)((_verticalMirroring ? 1 : 0) | ((_mapper & 0x0F) << 4));
+        // Flags6: bit 0 = mirroring, bit 1 = battery-backed SRAM, bits 4-7 = mapper lower nibble
+        byte flags6 = (byte)((string.Equals(_mirroring, "Vertical", StringComparison.OrdinalIgnoreCase) ? 1 : 0) | (_battery ? 0x02 : 0) | ((_mapper & 0x0F) << 4));
         writer.Write(flags6);
         // Flags7: bits 4-7 = mapper upper nibble
         byte flags7 = (byte)((_mapper & 0xF0));
@@ -129,14 +157,17 @@ class Transpiler : IDisposable
         writer.Write((byte)(irq_data >> 8));
 
         // Write CHR ROM (skip when chrBanks=0, which means CHR RAM mode)
-        if (_chrBanks > 0 && chr_rom != null)
+        if (_chrBanks > 0 && chrData != null)
         {
-            _logger.WriteLine($"Writing CHR ROM...");
-            writer.Write(chr_rom.Bytes);
+            int totalChrSize = _chrBanks * NESWriter.CHR_ROM_BLOCK_SIZE;
+            if (chrData.Length > totalChrSize)
+                throw new InvalidOperationException($"CHR data ({chrData.Length} bytes) exceeds declared CHR ROM size ({totalChrSize} bytes for {_chrBanks} bank(s)). Check NESChrBanks or CHR assembly files.");
+
+            _logger.WriteLine($"Writing CHR ROM ({chrData.Length} bytes)...");
+            writer.Write(chrData);
             
             // Pad CHR ROM to total CHR size (_chrBanks * 8KB)
-            int totalChrSize = _chrBanks * NESWriter.CHR_ROM_BLOCK_SIZE;
-            int chrPadding = totalChrSize - chr_rom.Bytes.Length;
+            int chrPadding = totalChrSize - chrData.Length;
             for (int i = 0; i < chrPadding; i++)
                 writer.Write((byte)0);
         }
@@ -183,7 +214,7 @@ class Transpiler : IDisposable
         var structLayouts = DetectStructLayouts();
 
         // Pre-allocate user-defined static fields so all methods share the same addresses
-        var staticFields = PreAllocateStaticFields(instructions);
+        var (staticFields, wordStaticFields, staticFieldBytes) = PreAllocateStaticFields(instructions);
 
         using var writer = new IL2NESWriter(new MemoryStream(), logger: _logger, reflectionCache: reflectionCache)
         {
@@ -194,7 +225,8 @@ class Transpiler : IDisposable
             WordLocals = DetectWordLocals(instructions, reflectionCache),
             StructLayouts = structLayouts,
             StaticFieldAddresses = staticFields,
-            LocalCount = staticFields.Count,
+            WordStaticFields = wordStaticFields,
+            LocalCount = staticFieldBytes,
         };
 
         writer.StartBlockBuffering();
@@ -276,6 +308,7 @@ class Transpiler : IDisposable
                 StringLabelStartIndex = writer.StringTable.Count,
                 LocalCount = methodFrameOffsets[methodName],
                 StaticFieldAddresses = staticFields,
+                WordStaticFields = wordStaticFields,
             };
             methodWriter.StartBlockBuffering();
 
@@ -1150,7 +1183,19 @@ class Transpiler : IDisposable
                 continue;
 
             var typeName = _reader.GetString(type.Name);
-            // Skip compiler-generated types
+            // Detect compiler-generated closure structs (display classes)
+            if (typeName.Contains("DisplayClass"))
+            {
+                var capturedFields = string.Join(", ",
+                    type.GetFields().Select(f => _reader.GetString(_reader.GetFieldDefinition(f).Name)));
+                throw new TranspileException(
+                    $"Closures are not supported. The compiler generated a closure struct '{typeName}' " +
+                    $"capturing variable(s): {capturedFields}. " +
+                    "This happens when local functions reference outer variables (like byte[] arrays). " +
+                    "Workaround: pass captured variables as parameters to the function instead, " +
+                    "or inline the local function code into the main body.");
+            }
+            // Skip other compiler-generated types
             if (typeName.StartsWith("<") || typeName.Contains("__"))
                 continue;
 
@@ -1192,11 +1237,39 @@ class Transpiler : IDisposable
     }
 
     /// <summary>
+    /// Builds a map of static field names to their byte sizes from assembly metadata.
+    /// Uses field signatures to determine type sizes. NES is 8-bit, so int/uint are
+    /// capped at 2 bytes (16-bit is sufficient for NES address math).
+    /// </summary>
+    Dictionary<string, int> BuildStaticFieldSizes()
+    {
+        var result = new Dictionary<string, int>(StringComparer.Ordinal);
+        foreach (var t in _reader.TypeDefinitions)
+        {
+            var type = _reader.GetTypeDefinition(t);
+            foreach (var f in type.GetFields())
+            {
+                var field = _reader.GetFieldDefinition(f);
+                if ((field.Attributes & FieldAttributes.Static) == 0)
+                    continue;
+                if ((field.Attributes & FieldAttributes.HasFieldRVA) != 0)
+                    continue;
+                var fieldName = _reader.GetString(field.Name);
+                int size = DecodeFieldSize(field);
+                // NES is 8-bit; cap at 2 bytes (16-bit sufficient for address math)
+                result[fieldName] = Math.Min(size, 2);
+            }
+        }
+        return result;
+    }
+
+    /// <summary>
     /// Pre-scans main and all user method IL for user-defined static field references
     /// (Stsfld/Ldsfld) and allocates a shared address for each unique field.
     /// This ensures all methods resolve the same field name to the same RAM address.
+    /// Multi-byte fields (int, ushort, short) get 2 bytes of zero page.
     /// </summary>
-    Dictionary<string, ushort> PreAllocateStaticFields(ILInstruction[] mainInstructions)
+    (Dictionary<string, ushort> addresses, HashSet<string> wordFields, int totalBytes) PreAllocateStaticFields(ILInstruction[] mainInstructions)
     {
         var fieldNames = new HashSet<string>(StringComparer.Ordinal);
 
@@ -1220,15 +1293,23 @@ class Transpiler : IDisposable
         // Remove NESLib fields that are handled specially
         fieldNames.Remove("oam_off");
 
-        // Allocate addresses sequentially starting at LocalStackBase
-        var result = new Dictionary<string, ushort>(StringComparer.Ordinal);
+        // Build field size map from metadata
+        var fieldSizes = BuildStaticFieldSizes();
+
+        // Allocate addresses sequentially starting at LocalStackBase,
+        // using the correct byte size for each field.
+        var addresses = new Dictionary<string, ushort>(StringComparer.Ordinal);
+        var wordFields = new HashSet<string>(StringComparer.Ordinal);
         ushort offset = 0;
         foreach (var name in fieldNames.OrderBy(n => n, StringComparer.Ordinal))
         {
-            result[name] = (ushort)(NESConstants.LocalStackBase + offset);
-            offset++;
-            _logger.WriteLine($"Static field '{name}' allocated at ${result[name]:X4}");
+            addresses[name] = (ushort)(NESConstants.LocalStackBase + offset);
+            int size = fieldSizes.TryGetValue(name, out var s) ? s : 1;
+            if (size > 1)
+                wordFields.Add(name);
+            offset += (ushort)size;
+            _logger.WriteLine($"Static field '{name}' allocated at ${addresses[name]:X4} ({size} byte{(size > 1 ? "s" : "")})");
         }
-        return result;
+        return (addresses, wordFields, offset);
     }
 }

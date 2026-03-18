@@ -1,6 +1,7 @@
 ﻿using System.Runtime.CompilerServices;
 
 [assembly: InternalsVisibleTo("dotnes")]
+[assembly: InternalsVisibleTo("dotnes-decompiler")]
 [assembly: InternalsVisibleTo("dotnes.tasks")]
 [assembly: InternalsVisibleTo("dotnes.tests")]
 
@@ -147,12 +148,12 @@ public static class NESLib
     /// <summary>
     /// get pad trigger
     /// </summary>
-    public static byte pad_trigger(byte pad) => throw null!;
+    public static PAD pad_trigger(byte pad) => throw null!;
 
     /// <summary>
     /// get pad state
     /// </summary>
-    public static byte pad_state(byte pad) => throw null!;
+    public static PAD pad_state(byte pad) => throw null!;
 
     /// <summary>
     /// read from vram
@@ -475,6 +476,14 @@ public static class NESLib
     /// </summary>
     public static void vrambuf_flush() => throw null!;
 
+    // CNROM (Mapper 3) bank switching
+
+    /// <summary>
+    /// select a CHR ROM bank (CNROM mapper 3)
+    /// writes the bank number to $8000 to switch the 8 KB CHR bank
+    /// </summary>
+    public static void cnrom_set_chr_bank(byte bank) => throw null!;
+
     // These are from: https://github.com/mhughson/attributes/blob/master/neslib.h
 
     public const ushort NAMETABLE_A = 0x2000;
@@ -507,6 +516,10 @@ public static class NESLib
     public const ushort APU_NOISE_LENGTH = 0x400F;
     public const ushort APU_STATUS = 0x4015;
 
+    // Battery-backed SRAM address range ($6000-$7FFF) for use with peek()/poke()
+    public const ushort SRAM_START = 0x6000;
+    public const ushort SRAM_END = 0x7FFF;
+
     // MMC3 mapper register addresses for bank switching via poke()
     public const ushort MMC3_BANK_SELECT = 0x8000;
     public const ushort MMC3_BANK_DATA = 0x8001;
@@ -518,6 +531,50 @@ public static class NESLib
     public const ushort MMC3_IRQ_RELOAD = 0xC001;
     public const ushort MMC3_IRQ_DISABLE = 0xE000;
     public const ushort MMC3_IRQ_ENABLE = 0xE001;
+
+    // MMC1 mapper register addresses for serial shift register writes via mmc1_write()
+    public const ushort MMC1_CONTROL = 0x8000;
+    public const ushort MMC1_CHR_BANK0 = 0xA000;
+    public const ushort MMC1_CHR_BANK1 = 0xC000;
+    public const ushort MMC1_PRG_BANK = 0xE000;
+
+    // MMC1 mirroring modes (bits 0-1 of the Control register)
+    public const byte MMC1_MIRROR_ONE_LOWER = 0;
+    public const byte MMC1_MIRROR_ONE_UPPER = 1;
+    public const byte MMC1_MIRROR_VERTICAL = 2;
+    public const byte MMC1_MIRROR_HORIZONTAL = 3;
+
+    // MMC1 Control register PRG/CHR mode bits (OR with mirroring constants)
+    /// <summary>PRG mode: fix last bank at $C000, switch 16KB bank at $8000 (bits 2-3 = 11).</summary>
+    public const byte MMC1_PRG_FIX_LAST = 0x0C;
+    /// <summary>CHR mode: two separate 4KB banks (bit 4 = 1).</summary>
+    public const byte MMC1_CHR_4K = 0x10;
+
+    /// <summary>
+    /// Write a 5-bit value to an MMC1 register using the serial shift register protocol.
+    /// MMC1 requires writing one bit at a time (5 writes total) to latch a value.
+    /// The addr must be one of the MMC1_* register constants.
+    /// </summary>
+    public static void mmc1_write(ushort addr, byte value) => throw null!;
+
+    /// <summary>
+    /// Switch the MMC1 PRG bank by writing to the PRG bank register ($E000).
+    /// </summary>
+    public static void mmc1_set_prg_bank(byte bank) => throw null!;
+
+    /// <summary>
+    /// Switch both MMC1 CHR banks by writing to CHR bank 0 ($A000) and CHR bank 1 ($C000).
+    /// </summary>
+    public static void mmc1_set_chr_bank(byte bank0, byte bank1) => throw null!;
+
+    /// <summary>
+    /// Write the full MMC1 Control register ($8000) via the serial shift register.
+    /// The value contains: mirroring mode (bits 0-1), PRG bank mode (bits 2-3),
+    /// and CHR bank mode (bit 4). Use MMC1_MIRROR_* constants OR'd with PRG/CHR
+    /// mode bits. Writing only a mirror constant (e.g., MMC1_MIRROR_VERTICAL)
+    /// resets PRG/CHR modes to zero — combine with your desired mode bits.
+    /// </summary>
+    public static void mmc1_set_mirroring(byte mode) => throw null!;
 
     // TODO: Macros below should be computed at compile-time and methods removed
 

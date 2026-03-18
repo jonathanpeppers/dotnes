@@ -98,8 +98,10 @@ partial class IL2NESWriter
             "Exception handling is not supported on the NES.",
         ILOpCode.Newobj =>
             $"The IL opcode '{opCode}' is not supported. " +
-            "This is typically caused by creating an object with 'new' (e.g., 'new List<byte>()'). " +
-            "Only 'byte[]', 'ushort[]', and struct arrays can be created. Avoid classes and reference types.",
+            "This is typically caused by creating an object with 'new' (e.g., 'new List<byte>()'), " +
+            "or by a compiler-generated closure when local functions capture outer variables. " +
+            "Only 'byte[]', 'ushort[]', and struct arrays can be created. Avoid classes and reference types. " +
+            "If using local functions, pass captured variables as parameters instead.",
         ILOpCode.Callvirt =>
             $"The IL opcode '{opCode}' is not supported. " +
             "This is typically caused by calling an instance method or virtual method on an object. " +

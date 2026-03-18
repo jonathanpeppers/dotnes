@@ -91,7 +91,7 @@ partial class IL2NESWriter
             Emit(Opcode.STA, AddressMode.Absolute, (ushort)(local.Address + 1));
             _immediateInA = 0x00;
         }
-        else if (local.Value < byte.MaxValue)
+        else if (local.Value <= byte.MaxValue)
         {
             if (isNewAllocation) LocalCount += 1;
             if (DeferredByteArrayMode)
@@ -126,7 +126,7 @@ partial class IL2NESWriter
                 _immediateInA = null;
             }
         }
-        else if (local.Value < ushort.MaxValue)
+        else if (local.Value <= ushort.MaxValue)
         {
             if (isNewAllocation) LocalCount += 2;
             // Remove the previous LDX + LDA instructions (2 instructions = 4 bytes)
@@ -245,7 +245,7 @@ partial class IL2NESWriter
                 _immediateInA = null;
                 _ushortInAX = true;
             }
-            else if (local.Value < byte.MaxValue)
+            else if (local.Value <= byte.MaxValue)
             {
                 if (_runtimeValueInA && !LastLDA)
                 {
@@ -273,9 +273,15 @@ partial class IL2NESWriter
                         or ILOpCode.Ldc_i4_0 or ILOpCode.Ldc_i4_1 or ILOpCode.Ldc_i4_2
                         or ILOpCode.Ldc_i4_3 or ILOpCode.Ldc_i4_4 or ILOpCode.Ldc_i4_5
                         or ILOpCode.Ldc_i4_6 or ILOpCode.Ldc_i4_7 or ILOpCode.Ldc_i4_8
-                        or ILOpCode.Ldc_i4 or ILOpCode.Ldc_i4_s or ILOpCode.Ldc_i4_m1;
+                        or ILOpCode.Ldc_i4 or ILOpCode.Ldc_i4_s or ILOpCode.Ldc_i4_m1
+                        or ILOpCode.Ldsfld;
                     if (nextIsLoad)
                     {
+                        // Track IL stack depth to distinguish between:
+                        // 1. Arithmetic that consumes our loaded value (depth drops to 0) → not a call arg
+                        // 2. Arithmetic that only consumes later-loaded values (depth > 0) → computed arg
+                        // depth starts at 1 for the load at Index+1
+                        int depth = 1;
                         // Scan ahead to find the Call instruction that consumes these args
                         for (int scan = Index + 2; scan < Instructions.Length; scan++)
                         {
@@ -289,12 +295,36 @@ partial class IL2NESWriter
                                 }
                                 break;
                             }
-                            // Stop scanning at arithmetic — args are for an expression, not a call
+                            // Track loads — each pushes one value onto the IL stack
+                            if (scanOp is ILOpCode.Ldloc_0 or ILOpCode.Ldloc_1
+                                or ILOpCode.Ldloc_2 or ILOpCode.Ldloc_3 or ILOpCode.Ldloc_s
+                                or ILOpCode.Ldc_i4_0 or ILOpCode.Ldc_i4_1 or ILOpCode.Ldc_i4_2
+                                or ILOpCode.Ldc_i4_3 or ILOpCode.Ldc_i4_4 or ILOpCode.Ldc_i4_5
+                                or ILOpCode.Ldc_i4_6 or ILOpCode.Ldc_i4_7 or ILOpCode.Ldc_i4_8
+                                or ILOpCode.Ldc_i4 or ILOpCode.Ldc_i4_s or ILOpCode.Ldc_i4_m1
+                                or ILOpCode.Ldsfld)
+                            {
+                                depth++;
+                                continue;
+                            }
+                            // Binary arithmetic: pops 2, pushes 1 → net -1.
+                            // If depth drops to 0, the arithmetic consumes our value → not a call arg.
                             if (scanOp is ILOpCode.Add or ILOpCode.Sub
-                                or ILOpCode.Mul or ILOpCode.Div or ILOpCode.Rem or ILOpCode.Rem_un
-                                or ILOpCode.And or ILOpCode.Or
+                                or ILOpCode.Mul or ILOpCode.Div or ILOpCode.Div_un
+                                or ILOpCode.Rem or ILOpCode.Rem_un
+                                or ILOpCode.And or ILOpCode.Or or ILOpCode.Xor
                                 or ILOpCode.Shl or ILOpCode.Shr or ILOpCode.Shr_un)
-                                break;
+                            {
+                                depth--;
+                                if (depth <= 0)
+                                    break;
+                                continue;
+                            }
+                            // Unary conversions: pop 1, push 1 → net 0. Continue scanning.
+                            if (scanOp is ILOpCode.Conv_u1 or ILOpCode.Conv_i4
+                                or ILOpCode.Conv_u2 or ILOpCode.Conv_i2
+                                or ILOpCode.Conv_i1 or ILOpCode.Conv_u4)
+                                continue;
                             // Stop at branches/stores — not in argument loading
                             if (scanOp is ILOpCode.Stloc_0 or ILOpCode.Stloc_1
                                 or ILOpCode.Stloc_2 or ILOpCode.Stloc_3 or ILOpCode.Stloc_s
@@ -313,7 +343,7 @@ partial class IL2NESWriter
                     }
                 }
             }
-            else if (local.Value < ushort.MaxValue)
+            else if (local.Value <= ushort.MaxValue)
             {
                 EmitJSR("pusha");
                 Emit(Opcode.LDA, AddressMode.Absolute, (ushort)local.Address);

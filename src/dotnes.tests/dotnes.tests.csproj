@@ -29,4 +29,11 @@
     <ProjectReference Include="..\neslib\neslib.csproj" />
   </ItemGroup>
 
+  <!-- Source-link decompiler files (can't use ProjectReference because the decompiler
+       includes the same ObjectModel/Utilities sources as dotnes.tasks, causing CS0433) -->
+  <ItemGroup>
+    <Compile Include="..\dotnes.decompiler\NESRomReader.cs" Link="Decompiler\NESRomReader.cs" />
+    <Compile Include="..\dotnes.decompiler\Decompiler.cs" Link="Decompiler\Decompiler.cs" />
+  </ItemGroup>
+
 </Project>

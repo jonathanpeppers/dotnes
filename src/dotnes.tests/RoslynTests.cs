@@ -1445,6 +1445,46 @@ public class RoslynTests
     }
 
     [Fact]
+    public void PeekSmallConstant()
+    {
+        // peek(0x003C) — address 0x3C fits in a byte, so the transpiler emits
+        // a single LDA via WriteLdc(byte). The peek handler must remove only 1
+        // prior instruction instead of 2 for the ushort path (LDX + LDA).
+        var bytes = GetProgramBytes(
+            """
+            byte value = peek(0x003C);
+            pal_col(0, value);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        Assert.Contains("AD3C00", hex);  // LDA $003C (absolute)
+    }
+
+    [Fact]
+    public void PokeSmallConstant()
+    {
+        // poke(0x003C, 0x07) — address 0x3C fits in a byte, so the transpiler
+        // emits a single LDA via WriteLdc(byte). The poke handler must remove
+        // only 3 prior instructions instead of 4 for the ushort path.
+        var bytes = GetProgramBytes(
+            """
+            poke(0x003C, 0x07);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        Assert.Contains("A907", hex);    // LDA #$07
+        Assert.Contains("8D3C00", hex);  // STA $003C (absolute)
+    }
+
+    [Fact]
     public void WaitvsyncEmitsJsr()
     {
         // waitvsync() should emit JSR to waitvsync subroutine
@@ -3320,6 +3360,30 @@ public class RoslynTests
     }
 
     [Fact]
+    public void ClosureCapturingByteArrayThrows()
+    {
+        // When a non-static local function captures an outer byte[] variable,
+        // the compiler generates a closure struct. The transpiler should detect
+        // this and throw a helpful error message with guidance.
+        var ex = Assert.Throws<TranspileException>(() => BuildProgram(
+            """
+            byte[] palette = [0x0F, 0x10, 0x20, 0x30];
+            apply_palette();
+            ppu_on_all();
+            while (true) ;
+
+            void apply_palette()
+            {
+                pal_bg(palette);
+            }
+            """));
+
+        Assert.Contains("closure", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("palette", ex.Message);
+        Assert.Contains("Workaround", ex.Message);
+    }
+
+    [Fact]
     public void MultiParamUserFunction_LocalVarArgs()
     {
         // Test: calling a user-defined function with a runtime local + constant.
@@ -3421,6 +3485,74 @@ public class RoslynTests
     }
 
     [Fact]
+    public void MultiParamUserFunction_ComputedArg()
+    {
+        // Test: calling a user-defined function where the second arg is a computed
+        // expression: my_func(x, (byte)(y + 1)). The look-ahead must track IL stack
+        // depth through the Add/Conv opcodes to find the Call.
+        var bytes = GetProgramBytes(
+            """
+            byte x = rand8();
+            byte y = rand8();
+            my_func(x, (byte)(y + 1));
+            pal_col(0, x);
+            pal_col(1, y);
+            ppu_on_all();
+            while (true) ;
+
+            static void my_func(byte a, byte b) { pal_col(a, b); }
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"MultiParamUserFunction_ComputedArg hex: {hex}");
+
+        // x at $0325, y at $0326.
+        // For my_func(x, (byte)(y + 1)):
+        //   ldloc.0 → LDA $0325 (load x)
+        //   JSR pusha           (preserve x on cc65 stack)
+        //   ldloc.1 → LDA $0326 (load y)
+        //   ldc.i4.1 → ...
+        //   add → ...
+        //   conv.u1 → ...
+        //   call my_func
+        // A JSR pusha must appear after loading x so it survives the y+1 computation.
+        int ldlocX = hex.IndexOf("AD2503");
+        Assert.True(ldlocX >= 0, $"LDA $0325 (load local x) not found. Hex: {hex}");
+        int ldlocY = hex.IndexOf("AD2603", ldlocX + 6);
+        Assert.True(ldlocY >= 0, $"LDA $0326 (load local y) not found after x. Hex: {hex}");
+        // The 6 hex chars before LDA $0326 should be a JSR (20 xx xx) for pusha
+        Assert.True(ldlocY >= 6, $"LDA $0326 too early for preceding JSR. Hex: {hex}");
+        Assert.Equal("20", hex.Substring(ldlocY - 6, 2));
+    }
+
+    [Fact]
+    public void ByteMaxValue()
+    {
+        // Regression test: byte value 255 must use 1-byte store path.
+        // Without the <= byte.MaxValue fix, 255 falls to the ushort branch
+        // which calls RemoveLastInstructions(2) when only 1 instruction was
+        // emitted by WriteLdc(byte), corrupting the preceding JSR.
+        var bytes = GetProgramBytes("""
+            pal_col(0, 0x30);
+            byte x = 255;
+            pal_col(1, x);
+            while (true) ;
+            """);
+
+        var hex = Convert.ToHexString(bytes);
+
+        // Verify correct 1-byte store: LDA #$FF (A9FF), STA $0325 (8D2503)
+        Assert.Contains("A9FF", hex);
+        Assert.Contains("8D2503", hex);
+
+        // Verify no 2-byte ushort high-byte store: STX $0326 (8E2603)
+        // If the ushort branch ran, it would emit STX for the high byte
+        Assert.DoesNotContain("8E2603", hex);
+    }
+
+    [Fact]
     public void VramReadEmitsPushaxAndSize()
     {
         // vram_read(byte[], uint) must emit the same pushax + size calling convention
@@ -3452,5 +3584,295 @@ public class RoslynTests
         Assert.True(jsrIdx >= 6, "Size-load sequence A200A904 not found or too early for preceding JSR");
         // The 6 hex chars before A200A904 should be a JSR (20 xx xx)
         Assert.Equal("20", hex.Substring(jsrIdx - 6, 2));
+    }
+
+    [Fact]
+    public void CnromSetChrBank_EmitsStaToMapper()
+    {
+        // cnrom_set_chr_bank(byte) should emit STA $8000 to switch CHR bank
+        var bytes = GetProgramBytes(
+            """
+            cnrom_set_chr_bank(0);
+            cnrom_set_chr_bank(1);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"CNROM hex: {hex}");
+
+        // LDA #$00 = A900, STA $8000 = 8D0080
+        Assert.Contains("A9008D0080", hex);
+        // LDA #$01 = A901, STA $8000 = 8D0080
+        Assert.Contains("A9018D0080", hex);
+    }
+
+    [Fact]
+    public void Mmc1Write_EmitsShiftRegisterProtocol()
+    {
+        // mmc1_write(0x8000, 0x0C) should emit:
+        // LDA #$80, STA $8000 (reset)
+        // LDA #$0C, STA $8000, LSR A, STA $8000, LSR A, STA $8000, LSR A, STA $8000, LSR A, STA $8000
+        var bytes = GetProgramBytes(
+            """
+            mmc1_write(0x8000, 0x0C);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        // Reset: LDA #$80 (A980), STA $8000 (8D0080)
+        Assert.Contains("A980" + "8D0080", hex);
+        // Value load + 5-bit serial write: LDA #$0C, STA $8000, LSR A, STA $8000 (×4), LSR A, STA $8000
+        // Contiguous pattern: A90C 8D0080 4A 8D0080 4A 8D0080 4A 8D0080 4A 8D0080
+        Assert.Contains("A90C" + "8D0080" + "4A" + "8D0080" + "4A" + "8D0080" + "4A" + "8D0080" + "4A" + "8D0080", hex);
+    }
+
+    [Fact]
+    public void Mmc1SetPrgBank_EmitsWriteToE000()
+    {
+        // mmc1_set_prg_bank(2) should emit serial writes to $E000
+        var bytes = GetProgramBytes(
+            """
+            mmc1_set_prg_bank(2);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        // STA $E000 = 8D00E0
+        Assert.Contains("8D00E0", hex);
+        // LDA #$02 = A902
+        Assert.Contains("A902", hex);
+    }
+
+    [Fact]
+    public void Mmc1SetMirroring_EmitsWriteTo8000()
+    {
+        // mmc1_set_mirroring writes the full Control register — use mirror + PRG/CHR mode bits
+        // MMC1_MIRROR_VERTICAL | MMC1_PRG_FIX_LAST = 0x02 | 0x0C = 0x0E
+        var bytes = GetProgramBytes(
+            """
+            mmc1_set_mirroring(MMC1_MIRROR_VERTICAL | MMC1_PRG_FIX_LAST);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        // Reset: LDA #$80, STA $8000
+        Assert.Contains("A980" + "8D0080", hex);
+        // Value: LDA #$0E (0x02 | 0x0C), followed by serial writes to $8000
+        Assert.Contains("A90E" + "8D0080" + "4A" + "8D0080" + "4A" + "8D0080" + "4A" + "8D0080" + "4A" + "8D0080", hex);
+    }
+
+    [Fact]
+    public void Mmc1SetChrBank_EmitsWritesToA000AndC000()
+    {
+        // mmc1_set_chr_bank(0, 1) should emit serial writes to $A000 and $C000
+        var bytes = GetProgramBytes(
+            """
+            mmc1_set_chr_bank(0, 1);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        // STA $A000 = 8D00A0
+        Assert.Contains("8D00A0", hex);
+        // STA $C000 = 8D00C0
+        Assert.Contains("8D00C0", hex);
+    }
+
+    [Fact]
+    public void ComplexArrayIndexExpression()
+    {
+        // Pattern from issue: array[(x >> 3) + ((y >> 3) << 4)]
+        // The for loop forces the array into a local variable (stloc) so that
+        // the ldelem.u1 is preceded by ldloc (array), <complex index>, ldelem.u1.
+        var bytes = GetProgramBytes(
+            """
+            byte[] arr = new byte[16];
+            for (byte i = 0; i < 16; i++)
+            {
+                arr[i] = i;
+            }
+            byte x = (byte)pad_poll(0);
+            byte y = (byte)pad_poll(0);
+            byte tile = arr[(byte)((x >> 3) + ((y >> 3) << 4))];
+            pal_col(0, tile);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"ComplexArrayIndex hex: {hex}");
+        // Three consecutive LSR A (4A) for >> 3 shift
+        Assert.Contains("4A4A4A", hex);
+        // Four consecutive ASL A (0A) for << 4 shift
+        Assert.Contains("0A0A0A0A", hex);
+        // TAX (AA) immediately followed by LDA absolute,X (BD) for indexed array access
+        Assert.Contains("AABD", hex);
+    }
+
+    [Fact]
+    public void SimpleShiftArrayIndex()
+    {
+        // Simpler complex index: array[x >> 3]
+        var bytes = GetProgramBytes(
+            """
+            byte[] arr = new byte[16];
+            for (byte i = 0; i < 16; i++)
+            {
+                arr[i] = i;
+            }
+            byte x = (byte)pad_poll(0);
+            byte tile = arr[(byte)(x >> 3)];
+            pal_col(0, tile);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"SimpleShiftIndex hex: {hex}");
+        // Three consecutive LSR A (4A) followed by TAX (AA) + LDA absolute,X (BD)
+        // This is the full expected sequence: shift index, transfer to X, load from array
+        Assert.Contains("4A4A4AAABD", hex);
+    }
+
+    [Fact]
+    public void ComplexArrayIndex_PreservesOperandInTemp()
+    {
+        // Verifies that a runtime value computed before the array access
+        // is preserved in TEMP ($17) across the complex index computation.
+        // Pattern: (x - y) + arr[(byte)(x >> 3)]
+        // The subtraction result must survive through the shift/TAX/LDA sequence.
+        var bytes = GetProgramBytes(
+            """
+            byte[] arr = new byte[32];
+            for (byte i = 0; i < 32; i++)
+            {
+                arr[i] = i;
+            }
+            byte x = (byte)pad_poll(0);
+            byte y = (byte)pad_poll(0);
+            byte result = (byte)((byte)(x - y) + arr[(byte)(x >> 3)]);
+            pal_col(0, result);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"PreservesOperandInTemp hex: {hex}");
+        // STA $17 (8517) must appear before the index computation to save (x - y) to TEMP
+        Assert.Contains("8517", hex);
+        // TAX + LDA absolute,X for the indexed array access
+        Assert.Contains("AABD", hex);
+    }
+
+    [Fact]
+    public void WordStaticField_StoreImmediate()
+    {
+        // ushort static field should get 2 bytes and store both lo/hi
+        var bytes = GetProgramBytes(
+            """
+            G.word_val = 300;
+            while (true) ;
+
+            static class G { public static ushort word_val; }
+            """);
+        var hex = Convert.ToHexString(bytes);
+        // 300 = 0x012C: LDA #$2C (A92C), STA abs (8D), LDX #$01 or STX abs (8E)
+        Assert.Contains("A92C", hex); // LDA #$2C (low byte)
+        Assert.Contains("8E", hex);   // STX abs (high byte store)
+    }
+
+    [Fact]
+    public void WordStaticField_LoadZeroExtend()
+    {
+        // Storing a byte field value into a word field should zero-extend the high byte
+        var bytes = GetProgramBytes(
+            """
+            G.byte_val = 42;
+            G.int_val = G.byte_val;
+            while (true) ;
+
+            static class G
+            {
+                public static byte byte_val;
+                public static int int_val;
+            }
+            """);
+        var hex = Convert.ToHexString(bytes);
+        // Zero-extend: LDA #$00 (A900) for high byte
+        Assert.Contains("A900", hex);
+    }
+
+    [Fact]
+    public void WordStaticField_LoadWord()
+    {
+        // Loading a ushort field should emit LDA abs + LDX abs (16-bit)
+        var bytes = GetProgramBytes(
+            """
+            G.word_val = 300;
+            byte lo = (byte)G.word_val;
+            pal_col(0, lo);
+            while (true) ;
+
+            static class G { public static ushort word_val; }
+            """);
+        var hex = Convert.ToHexString(bytes);
+        // LDX absolute = AE (loading high byte of word field)
+        Assert.Contains("AE", hex);
+    }
+
+    [Fact]
+    public void WordStaticField_TwoByteAllocation()
+    {
+        // Word fields should not overlap adjacent fields.
+        // byte_val at $0325 (1 byte), int_val at $0326 (2 bytes), word_val at $0328 (2 bytes)
+        var bytes = GetProgramBytes(
+            """
+            G.byte_val = 1;
+            G.int_val = 2;
+            G.word_val = 3;
+            while (true) ;
+
+            static class G
+            {
+                public static byte byte_val;
+                public static int int_val;
+                public static ushort word_val;
+            }
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"WordStaticField_TwoByteAllocation hex: {hex}");
+
+        // Fields are allocated alphabetically: byte_val@$0325, int_val@$0326-7, word_val@$0328-9
+        // Store byte_val=1: LDA #1 (A901), STA $0325 (8D2503)
+        Assert.Contains("8D2503", hex);
+        // Store int_val=2 low: STA $0326 (8D2603)
+        Assert.Contains("8D2603", hex);
+        // Store int_val=2 high: STA $0327 (8D2703) — zero or value high byte
+        Assert.Contains("8D2703", hex);
+        // Store word_val=3 low: STA $0328 (8D2803)
+        Assert.Contains("8D2803", hex);
+        // Store word_val=3 high: STA $0329 (8D2903)
+        Assert.Contains("8D2903", hex);
     }
 }

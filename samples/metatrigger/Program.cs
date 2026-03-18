@@ -72,25 +72,25 @@ while (true)
     byte oam_id = 0;
 
     // pad_trigger detects newly pressed buttons (edge detection)
-    byte trig = pad_trigger(0);
-    if ((trig & (byte)PAD.LEFT) != 0)
+    PAD trig = pad_trigger(0);
+    if ((trig & PAD.LEFT) != 0)
         actor_dx[0] = 254;
-    else if ((trig & (byte)PAD.RIGHT) != 0)
+    else if ((trig & PAD.RIGHT) != 0)
         actor_dx[0] = 2;
     else
         actor_dx[0] = 0;
 
     // A/B buttons change brightness (trigger = one press per tap)
-    if ((trig & (byte)PAD.A) != 0)
+    if ((trig & PAD.A) != 0)
         vbright = (byte)(vbright - 1);
-    if ((trig & (byte)PAD.B) != 0)
+    if ((trig & PAD.B) != 0)
         vbright = (byte)(vbright + 1);
 
     // pad_state reads currently held buttons (continuous)
-    byte state = pad_state(0);
-    if ((state & (byte)PAD.UP) != 0)
+    PAD state = pad_state(0);
+    if ((state & PAD.UP) != 0)
         actor_dy[0] = 254;
-    else if ((state & (byte)PAD.DOWN) != 0)
+    else if ((state & PAD.DOWN) != 0)
         actor_dy[0] = 2;
     else
         actor_dy[0] = 0;
