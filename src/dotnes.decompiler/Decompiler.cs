@@ -324,11 +324,10 @@ class Decompiler
                         if (targetName != "pusha")
                         {
                             // Fastcall: pointer in A:X (LDA=lo, LDX=hi)
+                            // Don't pop stacks — fastcall targets receive args in registers, not on cc65 stack
                             byte aVal = op1.Value;
                             byte xVal = nextLdx.Op1.Value;
-                            byte? pb = pushedBytes.Count > 0 ? pushedBytes.Pop() : null;
-                            ushort? pw = pushedWords.Count > 0 ? pushedWords.Pop() : null;
-                            var stmts = DecompileCallXA(targetName, xVal, aVal, pw, pb);
+                            var stmts = DecompileCallXA(targetName, xVal, aVal, null, null);
                             statements.AddRange(stmts);
                             i += 2;
                             continue;
@@ -459,10 +458,12 @@ class Decompiler
         {
             "vram_adr" => new List<string> { FormatVramAdr(aValue, xValue) },
             "vram_write" => FormatVramWrite(value16, pushedPtr),
-            "pal_bg" => FormatPaletteCall("pal_bg", "paletteBg", value16, 16),
-            "pal_spr" => FormatPaletteCall("pal_spr", "paletteSpr", value16, 16),
-            "pal_all" => FormatPaletteCall("pal_all", "paletteAll", value16, 32),
-            "vram_fill" => new List<string> { $"vram_fill(0x{pushedByte ?? 0:X2}, {value16});" },
+            "pal_bg" => FormatPaletteCall("pal_bg", $"palette{_dataCounter++}", value16, 16),
+            "pal_spr" => FormatPaletteCall("pal_spr", $"palette{_dataCounter++}", value16, 16),
+            "pal_all" => FormatPaletteCall("pal_all", $"palette{_dataCounter++}", value16, 32),
+            "vram_fill" => new List<string> { pushedByte.HasValue
+                ? $"vram_fill(0x{pushedByte.Value:X2}, {value16});"
+                : $"// vram_fill(?, {value16}); // fill value not recovered" },
             "scroll" => new List<string> { $"scroll({aValue}, {xValue});" },
             // Internal runtime support - skip
             "pusha" or "pushax" or "popa" or "popax"

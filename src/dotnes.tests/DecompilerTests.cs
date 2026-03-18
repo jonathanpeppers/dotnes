@@ -138,8 +138,8 @@ public class DecompilerTests
         var code = decompiler.Decompile();
 
         // pal_bg should have a byte[] variable declaration with actual palette data
-        Assert.Contains("byte[] paletteBg = new byte[] { 0x03", code);
-        Assert.Contains("pal_bg(paletteBg);", code);
+        Assert.Contains("byte[] palette0 = new byte[] { 0x03", code);
+        Assert.Contains("pal_bg(palette0);", code);
         // Should NOT be commented out
         Assert.DoesNotContain("// pal_bg", code);
     }
@@ -154,8 +154,8 @@ public class DecompilerTests
         var code = decompiler.Decompile();
 
         // vram_write should have a byte[] variable with the attribute table data
-        Assert.Contains("byte[] data0 = new byte[]", code);
-        Assert.Contains("vram_write(data0);", code);
+        Assert.Contains("byte[] data1 = new byte[]", code);
+        Assert.Contains("vram_write(data1);", code);
         // First bytes of the attribute table
         Assert.Contains("0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00", code);
         // Should NOT have placeholder comments
@@ -199,10 +199,10 @@ public class DecompilerTests
         var code = decompiler.Decompile();
 
         // Verify the complete sequence of API calls matches the original source
-        Assert.Contains("pal_bg(paletteBg);", code);
+        Assert.Contains("pal_bg(palette0);", code);
         Assert.Contains("vram_adr(NTADR_A(0, 0));", code);
         Assert.Contains("vram_fill(0x16, 960);", code);
-        Assert.Contains("vram_write(data0);", code);
+        Assert.Contains("vram_write(data1);", code);
         Assert.Contains("ppu_on_all();", code);
         Assert.Contains("while (true) ;", code);
     }
