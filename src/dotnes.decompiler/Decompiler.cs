@@ -16,6 +16,7 @@ class Decompiler
     readonly List<(ushort Address, int Size)> _arrayDeclarations = new();
 
     ushort _mainAddress;
+    ushort _mainEnd;
     int _dataCounter;
 
     public Decompiler(NESRomReader rom, ILogger? logger = null)
@@ -103,38 +104,59 @@ class Decompiler
             _logger.WriteLine($"Main address (fallback) at ${_mainAddress:X4}");
         }
 
-        // Scan for the end of main (JMP to self = infinite loop, or first RTS after main)
-        ushort mainEnd = FindMainEnd();
+        // Scan for the end of main (JMP to self, backward JMP game loop, or first RTS after main)
+        _mainEnd = FindMainEnd();
 
         // Identify final built-ins after main by scanning JSR targets from within main
         // and matching byte patterns at those addresses
-        IdentifyFinalBuiltIns(mainEnd);
+        IdentifyFinalBuiltIns(_mainEnd);
     }
 
     /// <summary>
-    /// Find the end of the main function by scanning for the infinite loop pattern (JMP to self).
+    /// Find the end of the main function by scanning for infinite loop patterns:
+    /// 1. JMP to self (while(true);) - simple infinite loop
+    /// 2. Backward JMP to an address within main (while(true){body}) - game loop
+    ///    detected as the last backward JMP before the first RTS instruction
     /// </summary>
     ushort FindMainEnd()
     {
         int offset = _mainAddress - 0x8000;
         ushort address = _mainAddress;
+        ushort lastBackwardJmpEnd = 0;
 
         while (offset < _rom.PrgRom.Length - 2)
         {
             byte opcode = _rom.PrgRom[offset];
 
-            // JMP to self = while(true);
-            if (opcode == 0x4C)
+            if (opcode == 0x4C) // JMP absolute
             {
                 ushort target = (ushort)(_rom.PrgRom[offset + 1] | (_rom.PrgRom[offset + 2] << 8));
+
+                // JMP to self = while(true);
                 if (target == address)
                     return (ushort)(address + 3);
+
+                // Backward JMP within main = potential while(true){body} game loop
+                if (target >= _mainAddress && target < address)
+                    lastBackwardJmpEnd = (ushort)(address + 3);
+            }
+
+            // RTS marks the end of a subroutine. If we've seen a backward JMP,
+            // we've passed the game loop and entered a user function.
+            if (opcode == 0x60 && lastBackwardJmpEnd != 0) // RTS
+            {
+                _logger.WriteLine($"Found game loop end at ${lastBackwardJmpEnd - 3:X4} (backward JMP before RTS at ${address:X4})");
+                return lastBackwardJmpEnd;
             }
 
             int size = GetInstructionSize(opcode);
             offset += size;
             address += (ushort)size;
         }
+
+        // If we found a backward JMP but no RTS, still use it
+        if (lastBackwardJmpEnd != 0)
+            return lastBackwardJmpEnd;
 
         return address;
     }
@@ -277,10 +299,17 @@ class Decompiler
 
             tempOffset += size;
             tempAddr += (ushort)size;
+
+            // Stop if we've reached the detected end of main
+            // (_mainEnd is always >= $8000 when set, so 0 is a safe sentinel for "not set")
+            if (_mainEnd != 0 && tempAddr >= _mainEnd) break;
         }
 
         // Detect byte[] array declarations from indexed addressing patterns
         DetectArrayDeclarations(instructions);
+
+        if (instructions.Count > 0)
+            _logger.WriteLine($"Collected {instructions.Count} instructions (${_mainAddress:X4}-${instructions[^1].Address:X4})");
 
         // Now walk through instructions with look-ahead for pattern matching
         var pushedBytes = new Stack<byte>();   // Track values pushed via pusha (8-bit)
@@ -296,6 +325,12 @@ class Decompiler
             {
                 ushort target = (ushort)(op1.Value | (op2.Value << 8));
                 if (target == instrAddr)
+                {
+                    statements.Add("while (true) ;");
+                    break;
+                }
+                // Last instruction is a backward JMP within main = while (true) { body } game loop
+                if (i == instructions.Count - 1 && target >= _mainAddress && target < instrAddr)
                 {
                     statements.Add("while (true) ;");
                     break;
@@ -669,6 +704,9 @@ class Decompiler
     List<string> FormatPaletteCall(string funcName, string varName, ushort pointer, int size)
     {
         int offset = pointer - 0x8000;
+        // NROM-128 (16KB PRG): $C000-$FFFF mirrors $8000-$BFFF
+        if (_rom.PrgRom.Length == 0x4000)
+            offset %= 0x4000;
         if (offset >= 0 && offset + size <= _rom.PrgRom.Length)
         {
             return new List<string>

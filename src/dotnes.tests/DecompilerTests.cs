@@ -179,6 +179,41 @@ public class DecompilerTests
     }
 
     [Fact]
+    public void Decompiler_Attributetable_RecoversPalBgData()
+    {
+        var romBytes = GetVerifiedRom("attributetable");
+        var rom = new NESRomReader(romBytes);
+        var decompiler = new Decompiler(rom, _logger);
+
+        var code = decompiler.Decompile();
+
+        // The attributetable sample uses pal_bg with a 16-byte palette
+        Assert.Contains("pal_bg(palette", code);
+        Assert.Contains("new byte[]", code);
+        // Verify specific palette values from the sample's PALETTE array
+        Assert.Contains("0x03", code);
+        Assert.Contains("0x11, 0x30, 0x27", code);
+    }
+
+    [Fact]
+    public void Decompiler_Shoot2_RecoversPalBgAndPalSprData()
+    {
+        var romBytes = GetVerifiedRom("shoot2");
+        var rom = new NESRomReader(romBytes);
+        var decompiler = new Decompiler(rom, _logger);
+
+        var code = decompiler.Decompile();
+
+        // shoot2 uses both pal_bg and pal_spr with palette byte arrays
+        Assert.Contains("pal_bg(palette", code);
+        Assert.Contains("pal_spr(palette", code);
+        // Verify pal_bg palette data: 0x0F, 0x30, 0x10, 0x00 repeated
+        Assert.Contains("0x0F, 0x30, 0x10, 0x00", code);
+        // Verify pal_spr contains sprite palette data
+        Assert.Contains("0x0F, 0x30, 0x10, 0x20", code);
+    }
+
+    [Fact]
     public void Decompiler_Statusbar_CsprojHasVerticalMirroring()
     {
         var romBytes = GetVerifiedRom("statusbar");
@@ -317,6 +352,59 @@ public class DecompilerTests
         // Verified ROM binaries are stored alongside the test source files
         var path = Path.Combine(FindTestSourceDirectory(), $"TranspilerTests.Write.{name}.verified.bin");
         return File.ReadAllBytes(path);
+    }
+
+    [Fact]
+    public void Decompiler_Shoot2_FindsGameLoop()
+    {
+        var romBytes = GetVerifiedRom("shoot2");
+        var rom = new NESRomReader(romBytes);
+        var decompiler = new Decompiler(rom, _logger);
+
+        var code = decompiler.Decompile();
+
+        // Verify while(true) game loop is recovered (backward JMP pattern)
+        Assert.Contains("while (true) ;", code);
+
+        // Verify init code is present
+        Assert.Contains("ppu_off();", code);
+        Assert.Contains("oam_clear();", code);
+        Assert.Contains("ppu_on_all();", code);
+
+        // Verify game loop NESLib calls are present
+        Assert.Contains("ppu_wait_nmi();", code);
+        Assert.Contains("pal_spr_bright(", code);
+    }
+
+    [Fact]
+    public void Decompiler_Shoot2_CsprojHasMapper()
+    {
+        var romBytes = GetVerifiedRom("shoot2");
+        var rom = new NESRomReader(romBytes);
+        var decompiler = new Decompiler(rom, _logger);
+        decompiler.Decompile();
+
+        var csproj = decompiler.GenerateCsproj("shoot2");
+
+        Assert.Contains("<NESMapper>2</NESMapper>", csproj);
+        Assert.Contains("<NESChrBanks>0</NESChrBanks>", csproj);
+    }
+
+    [Theory]
+    [InlineData("animation")]
+    [InlineData("pong")]
+    [InlineData("snake")]
+    public void Decompiler_GameLoop_RecoveredFromBackwardJmp(string name)
+    {
+        var romBytes = GetVerifiedRom(name);
+        var rom = new NESRomReader(romBytes);
+        var decompiler = new Decompiler(rom, _logger);
+
+        var code = decompiler.Decompile();
+
+        // All these samples have while(true){body} game loops
+        // that should be recovered via backward JMP detection
+        Assert.Contains("while (true) ;", code);
     }
 
     static string FindTestSourceDirectory()
