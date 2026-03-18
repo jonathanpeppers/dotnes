@@ -23,23 +23,59 @@ partial class IL2NESWriter
     void HandleStsfld(string fieldName)
     {
         var addr = GetOrAllocateStaticField(fieldName);
+        bool isWord = Variables.WordStaticFields.Contains(fieldName);
         if (Stack.Count > 0) Stack.Pop();
 
-        if (_runtimeValueInA)
+        if (isWord)
         {
-            Emit(Opcode.STA, AddressMode.Absolute, addr);
-        }
-        else if (_immediateInA != null)
-        {
-            Emit(Opcode.LDA, AddressMode.Immediate, (byte)_immediateInA);
-            Emit(Opcode.STA, AddressMode.Absolute, addr);
+            if (_ushortInAX)
+            {
+                // 16-bit value in A:X — store both bytes
+                Emit(Opcode.STA, AddressMode.Absolute, addr);
+                Emit(Opcode.STX, AddressMode.Absolute, (ushort)(addr + 1));
+            }
+            else if (_runtimeValueInA)
+            {
+                // 8-bit runtime value — zero-extend high byte
+                Emit(Opcode.STA, AddressMode.Absolute, addr);
+                Emit(Opcode.LDA, AddressMode.Immediate, 0);
+                Emit(Opcode.STA, AddressMode.Absolute, (ushort)(addr + 1));
+            }
+            else if (_immediateInA != null)
+            {
+                int val = (int)_immediateInA;
+                Emit(Opcode.LDA, AddressMode.Immediate, (byte)(val & 0xFF));
+                Emit(Opcode.STA, AddressMode.Absolute, addr);
+                Emit(Opcode.LDA, AddressMode.Immediate, (byte)((val >> 8) & 0xFF));
+                Emit(Opcode.STA, AddressMode.Absolute, (ushort)(addr + 1));
+            }
+            else
+            {
+                // Constant from WriteLdc — store low byte, zero high byte
+                Emit(Opcode.STA, AddressMode.Absolute, addr);
+                Emit(Opcode.LDA, AddressMode.Immediate, 0);
+                Emit(Opcode.STA, AddressMode.Absolute, (ushort)(addr + 1));
+            }
         }
         else
         {
-            // Constant from WriteLdc — remove previous LDA, re-emit with STA
-            Emit(Opcode.STA, AddressMode.Absolute, addr);
+            if (_runtimeValueInA)
+            {
+                Emit(Opcode.STA, AddressMode.Absolute, addr);
+            }
+            else if (_immediateInA != null)
+            {
+                Emit(Opcode.LDA, AddressMode.Immediate, (byte)_immediateInA);
+                Emit(Opcode.STA, AddressMode.Absolute, addr);
+            }
+            else
+            {
+                // Constant from WriteLdc — remove previous LDA, re-emit with STA
+                Emit(Opcode.STA, AddressMode.Absolute, addr);
+            }
         }
         _runtimeValueInA = false;
+        _ushortInAX = false;
         _immediateInA = null;
         _pokeLastValue = null;
     }
@@ -47,6 +83,7 @@ partial class IL2NESWriter
     void HandleLdsfld(string fieldName)
     {
         var addr = GetOrAllocateStaticField(fieldName);
+        bool isWord = Variables.WordStaticFields.Contains(fieldName);
 
         // Preserve any pending value in A before clobbering it,
         // mirroring WriteLdloc behavior.
@@ -66,7 +103,16 @@ partial class IL2NESWriter
             EmitJSR("pusha");
         }
 
-        Emit(Opcode.LDA, AddressMode.Absolute, addr);
+        if (isWord)
+        {
+            Emit(Opcode.LDA, AddressMode.Absolute, addr);
+            Emit(Opcode.LDX, AddressMode.Absolute, (ushort)(addr + 1));
+            _ushortInAX = true;
+        }
+        else
+        {
+            Emit(Opcode.LDA, AddressMode.Absolute, addr);
+        }
         _runtimeValueInA = true;
         _immediateInA = null;
         _pokeLastValue = null;

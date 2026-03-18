@@ -277,6 +277,12 @@ partial class IL2NESWriter : NESWriter
     public Dictionary<string, ushort> StaticFieldAddresses { get => Variables.StaticFieldAddresses; set => Variables.StaticFieldAddresses = value; }
 
     /// <summary>
+    /// Static field names that are word-sized (ushort/short/int).
+    /// Forwarded to <see cref="Variables"/>.
+    /// </summary>
+    public HashSet<string> WordStaticFields { get => Variables.WordStaticFields; set => Variables.WordStaticFields = value; }
+
+    /// <summary>
     /// Set of user-defined method names (for detecting user method calls).
     /// </summary>
     public HashSet<string> UserMethodNames { get; init; } = new(StringComparer.Ordinal);
