@@ -158,6 +158,85 @@ public class DecompilerTests
         Assert.Contains("<NESVerticalMirroring>true</NESVerticalMirroring>", csproj);
     }
 
+    [Fact]
+    public void Decompiler_Attributetable_RecoversPalBgByteArray()
+    {
+        var romBytes = GetVerifiedRom("attributetable");
+        var rom = new NESRomReader(romBytes);
+        var decompiler = new Decompiler(rom, _logger);
+
+        var code = decompiler.Decompile();
+
+        // pal_bg should have a byte[] variable declaration with actual palette data
+        Assert.Contains("byte[] palette0 = new byte[] { 0x03", code);
+        Assert.Contains("pal_bg(palette0);", code);
+        // Should NOT be commented out
+        Assert.DoesNotContain("// pal_bg", code);
+    }
+
+    [Fact]
+    public void Decompiler_Attributetable_RecoversVramWriteByteArray()
+    {
+        var romBytes = GetVerifiedRom("attributetable");
+        var rom = new NESRomReader(romBytes);
+        var decompiler = new Decompiler(rom, _logger);
+
+        var code = decompiler.Decompile();
+
+        // vram_write should have a byte[] variable with the attribute table data
+        Assert.Contains("byte[] data1 = new byte[]", code);
+        Assert.Contains("vram_write(data1);", code);
+        // First bytes of the attribute table
+        Assert.Contains("0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00", code);
+        // Should NOT have placeholder comments
+        Assert.DoesNotContain("vram_write(/*", code);
+    }
+
+    [Fact]
+    public void Decompiler_Attributetable_RecoversVramFillArgs()
+    {
+        var romBytes = GetVerifiedRom("attributetable");
+        var rom = new NESRomReader(romBytes);
+        var decompiler = new Decompiler(rom, _logger);
+
+        var code = decompiler.Decompile();
+
+        // vram_fill should have actual fill value and count
+        Assert.Contains("vram_fill(0x16, 960);", code);
+        // Should NOT have placeholder
+        Assert.DoesNotContain("vram_fill(/*", code);
+    }
+
+    [Fact]
+    public void Decompiler_Attributetable_HasWhileTrue()
+    {
+        var romBytes = GetVerifiedRom("attributetable");
+        var rom = new NESRomReader(romBytes);
+        var decompiler = new Decompiler(rom, _logger);
+
+        var code = decompiler.Decompile();
+
+        Assert.Contains("while (true) ;", code);
+    }
+
+    [Fact]
+    public void Decompiler_Attributetable_FullRoundTrip()
+    {
+        var romBytes = GetVerifiedRom("attributetable");
+        var rom = new NESRomReader(romBytes);
+        var decompiler = new Decompiler(rom, _logger);
+
+        var code = decompiler.Decompile();
+
+        // Verify the complete sequence of API calls matches the original source
+        Assert.Contains("pal_bg(palette0);", code);
+        Assert.Contains("vram_adr(NTADR_A(0, 0));", code);
+        Assert.Contains("vram_fill(0x16, 960);", code);
+        Assert.Contains("vram_write(data1);", code);
+        Assert.Contains("ppu_on_all();", code);
+        Assert.Contains("while (true) ;", code);
+    }
+
     static byte[] GetVerifiedRom(string name)
     {
         // Verified ROM binaries are stored alongside the test source files
