@@ -329,7 +329,7 @@ class Decompiler
                     {
                         byte aVal = op1.Value;
                         byte xVal = nextLdx.Op1.Value;
-                        ushort? pushedPtr = pushedWords.Count > 0 ? pushedWords.Pop() : null;
+                        ushort? pushedPtr = (name == "vram_write" && pushedWords.Count > 0) ? pushedWords.Pop() : null;
                         var stmt = DecompileCallXA(name, xVal, aVal, pushedPtr);
                         if (stmt != null) statements.Add(stmt);
                         i += 2; // skip LDX and JSR
@@ -351,7 +351,7 @@ class Decompiler
                     {
                         byte xVal = op1.Value;
                         byte aVal = nextLda.Op1.Value;
-                        ushort? pushedPtr = pushedWords.Count > 0 ? pushedWords.Pop() : null;
+                        ushort? pushedPtr = (name == "vram_write" && pushedWords.Count > 0) ? pushedWords.Pop() : null;
                         var stmt = DecompileCallXA(name, xVal, aVal, pushedPtr);
                         if (stmt != null) statements.Add(stmt);
                         i += 2; // skip LDA and JSR
@@ -507,6 +507,9 @@ class Decompiler
     string FormatPaletteCall(string name, ushort pointer, int count)
     {
         int offset = pointer - 0x8000;
+        // NROM-128 (16KB PRG): $C000-$FFFF mirrors $8000-$BFFF
+        if (_rom.PrgRom.Length == 0x4000)
+            offset %= 0x4000;
         if (offset >= 0 && offset + count <= _rom.PrgRom.Length)
         {
             var sb = new StringBuilder();
