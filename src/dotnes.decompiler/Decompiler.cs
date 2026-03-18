@@ -1,5 +1,6 @@
 using System.Text;
 using dotnes.ObjectModel;
+using NES;
 
 namespace dotnes;
 
@@ -14,6 +15,7 @@ class Decompiler
     readonly Dictionary<ushort, string> _symbolTable = new();
 
     ushort _mainAddress;
+    int _dataCounter;
 
     public Decompiler(NESRomReader rom, ILogger? logger = null)
     {
@@ -273,6 +275,7 @@ class Decompiler
         // Now walk through instructions with look-ahead for pattern matching
         var pushedBytes = new Stack<byte>();   // Track values pushed via pusha (8-bit)
         var pushedWords = new Stack<ushort>(); // Track values pushed via pushax (16-bit)
+        byte? lastImmediateA = null;           // Track last LDA #imm value for consecutive poke detection
 
         for (int i = 0; i < instructions.Count; i++)
         {
@@ -296,27 +299,14 @@ class Decompiler
                 if (next.Opcode == 0x20 && IsSubroutine(next, "pusha"))
                 {
                     pushedBytes.Push(op1.Value);
+                    lastImmediateA = null; // JSR modifies A
                     i++; // skip the JSR pusha
                     continue;
                 }
             }
 
             // Pattern: LDA #lo / LDX #hi / JSR pushax → push 16-bit pointer
-            if (opcode == 0xA9 && op1.HasValue && i + 2 < instructions.Count)
-            {
-                var nextLdx = instructions[i + 1];
-                var nextJsr = instructions[i + 2];
-                if (nextLdx.Opcode == 0xA2 && nextLdx.Op1.HasValue
-                    && nextJsr.Opcode == 0x20 && IsSubroutine(nextJsr, "pushax"))
-                {
-                    ushort value16 = (ushort)(op1.Value | (nextLdx.Op1.Value << 8));
-                    pushedWords.Push(value16);
-                    i += 2; // skip LDX and JSR pushax
-                    continue;
-                }
-            }
-
-            // Pattern: LDA #lo / LDX #hi / JSR <subroutine> → fastcall with pointer in A:X
+            // Pattern: LDA #lo / LDX #hi / JSR <fastcall subroutine> → call with pointer in A:X
             if (opcode == 0xA9 && op1.HasValue && i + 2 < instructions.Count)
             {
                 var nextLdx = instructions[i + 1];
@@ -325,15 +315,28 @@ class Decompiler
                     && nextJsr.Opcode == 0x20 && nextJsr.Op1.HasValue && nextJsr.Op2.HasValue)
                 {
                     ushort jsrTarget = (ushort)(nextJsr.Op1.Value | (nextJsr.Op2.Value << 8));
-                    if (_symbolTable.TryGetValue(jsrTarget, out var name) && name != "pusha" && name != "pushax")
+                    if (_symbolTable.TryGetValue(jsrTarget, out var targetName))
                     {
-                        byte aVal = op1.Value;
-                        byte xVal = nextLdx.Op1.Value;
-                        ushort? pushedPtr = (name == "vram_write" && pushedWords.Count > 0) ? pushedWords.Pop() : null;
-                        var stmt = DecompileCallXA(name, xVal, aVal, pushedPtr);
-                        if (stmt != null) statements.Add(stmt);
-                        i += 2; // skip LDX and JSR
-                        continue;
+                        if (targetName == "pushax")
+                        {
+                            ushort value16 = (ushort)(op1.Value | (nextLdx.Op1.Value << 8));
+                            pushedWords.Push(value16);
+                            lastImmediateA = null; // JSR modifies A
+                            i += 2; // skip LDX and JSR pushax
+                            continue;
+                        }
+                        if (targetName != "pusha")
+                        {
+                            // Fastcall: pointer in A:X (LDA=lo, LDX=hi)
+                            // Don't pop stacks — fastcall targets receive args in registers, not on cc65 stack
+                            byte aVal = op1.Value;
+                            byte xVal = nextLdx.Op1.Value;
+                            var stmts = DecompileCallXA(targetName, xVal, aVal, null, null);
+                            statements.AddRange(stmts);
+                            lastImmediateA = null; // JSR modifies A
+                            i += 2;
+                            continue;
+                        }
                     }
                 }
             }
@@ -351,9 +354,11 @@ class Decompiler
                     {
                         byte xVal = op1.Value;
                         byte aVal = nextLda.Op1.Value;
-                        ushort? pushedPtr = (name == "vram_write" && pushedWords.Count > 0) ? pushedWords.Pop() : null;
-                        var stmt = DecompileCallXA(name, xVal, aVal, pushedPtr);
-                        if (stmt != null) statements.Add(stmt);
+                        ushort? pw = pushedWords.Count > 0 ? pushedWords.Pop() : null;
+                        byte? pb = pushedBytes.Count > 0 ? pushedBytes.Pop() : null;
+                        var stmts = DecompileCallXA(name, xVal, aVal, pw, pb);
+                        statements.AddRange(stmts);
+                        lastImmediateA = null; // JSR modifies A
                         i += 2; // skip LDA and JSR
                         continue;
                     }
@@ -372,9 +377,50 @@ class Decompiler
                         byte? pushedArg = pushedBytes.Count > 0 ? pushedBytes.Pop() : null;
                         var stmt = DecompileCall(name, op1.Value, pushedArg);
                         if (stmt != null) statements.Add(stmt);
+                        lastImmediateA = null; // JSR modifies A
                         i++; // skip the JSR
                         continue;
                     }
+                }
+            }
+
+            // Pattern: LDA #imm / STA $abs → poke(addr, val)
+            if (opcode == 0xA9 && op1.HasValue && i + 1 < instructions.Count)
+            {
+                var next = instructions[i + 1];
+                if (next.Opcode == 0x8D && next.Op1.HasValue && next.Op2.HasValue)
+                {
+                    ushort addr = (ushort)(next.Op1.Value | (next.Op2.Value << 8));
+                    if (!_symbolTable.ContainsKey(addr))
+                    {
+                        statements.Add(FormatPoke(addr, op1.Value));
+                        lastImmediateA = op1.Value;
+                        i++; // skip the STA
+                        continue;
+                    }
+                }
+            }
+
+            // Pattern: STA $abs (consecutive poke — A still holds last immediate value)
+            if (opcode == 0x8D && op1.HasValue && op2.HasValue && lastImmediateA.HasValue)
+            {
+                ushort addr = (ushort)(op1.Value | (op2.Value << 8));
+                if (!_symbolTable.ContainsKey(addr))
+                {
+                    statements.Add(FormatPoke(addr, lastImmediateA.Value));
+                    continue;
+                }
+            }
+
+            // Pattern: LDA $abs → peek(addr) for non-symbol-table absolute addresses
+            if (opcode == 0xAD && op1.HasValue && op2.HasValue)
+            {
+                ushort addr = (ushort)(op1.Value | (op2.Value << 8));
+                if (!_symbolTable.ContainsKey(addr))
+                {
+                    statements.Add(FormatPeek(addr));
+                    lastImmediateA = null; // A now holds peek result, not an immediate
+                    continue;
                 }
             }
 
@@ -387,9 +433,17 @@ class Decompiler
                     var stmt = DecompileCall(name, null, null);
                     if (stmt != null) statements.Add(stmt);
                 }
+                lastImmediateA = null; // JSR may modify A
                 continue;
             }
+
+            // Unrecognized instruction — clear A tracking for safety
+            lastImmediateA = null;
         }
+
+        // NES programs must end with an infinite loop; ensure one is present
+        if (statements.Count == 0 || statements[^1] != "while (true) ;")
+            statements.Add("while (true) ;");
 
         return statements;
     }
@@ -444,90 +498,69 @@ class Decompiler
 
     /// <summary>
     /// Decompile a call where X:A contain a 16-bit value (hi:lo).
-    /// Used for vram_adr(NTADR_A(x,y)), vram_write(string), etc.
+    /// Used for vram_adr(NTADR_A(x,y)), vram_write(data), pal_bg/pal_spr, vram_fill, etc.
+    /// Returns a list of statements (may include byte array declarations before the call).
     /// </summary>
-    string? DecompileCallXA(string name, byte xValue, byte aValue, ushort? pushedPtr)
+    List<string> DecompileCallXA(string name, byte xValue, byte aValue, ushort? pushedPtr, byte? pushedByte = null)
     {
         ushort value16 = (ushort)((xValue << 8) | aValue);
 
         return name switch
         {
-            "vram_adr" => FormatVramAdr(aValue, xValue),
+            "vram_adr" => new List<string> { FormatVramAdr(aValue, xValue) },
             "vram_write" => FormatVramWrite(value16, pushedPtr),
-            "pal_bg" => FormatPaletteCall("pal_bg", value16, 16),
-            "pal_spr" => FormatPaletteCall("pal_spr", value16, 16),
-            "pal_all" => FormatPaletteCall("pal_all", value16, 32),
-            "vram_fill" => $"vram_fill(/* data */);",
-            "scroll" => $"scroll(0, 0);",
+            "pal_bg" => FormatPaletteCall("pal_bg", $"palette{_dataCounter++}", value16, 16),
+            "pal_spr" => FormatPaletteCall("pal_spr", $"palette{_dataCounter++}", value16, 16),
+            "pal_all" => FormatPaletteCall("pal_all", $"palette{_dataCounter++}", value16, 32),
+            "vram_fill" => new List<string> { pushedByte.HasValue
+                ? $"vram_fill(0x{pushedByte.Value:X2}, {value16});"
+                : $"// vram_fill(?, {value16}); // fill value not recovered" },
+            "scroll" => new List<string> { $"scroll({aValue}, {xValue});" },
             // Internal runtime support - skip
             "pusha" or "pushax" or "popa" or "popax"
                 or "incsp1" or "incsp2" or "addysp" or "decsp4"
-                or "zerobss" or "copydata" or "initlib" or "donelib" => null,
-            _ => $"// {name}(0x{value16:X4});",
+                or "zerobss" or "copydata" or "initlib" or "donelib" => new List<string>(),
+            _ => new List<string> { $"// {name}(0x{value16:X4});" },
         };
     }
 
     /// <summary>
-    /// Format vram_write call. If a string pointer was pushed, try to read the string
-    /// data from the ROM and reconstruct the original string literal.
+    /// Format vram_write call. If a data pointer was pushed, try to read the data
+    /// from the ROM. For printable ASCII, emit a string literal; otherwise emit a byte array.
     /// </summary>
-    string FormatVramWrite(ushort length, ushort? stringPointer)
+    List<string> FormatVramWrite(ushort length, ushort? dataPointer)
     {
-        if (stringPointer.HasValue && length > 0)
+        if (dataPointer.HasValue && length > 0)
         {
-            int strOffset = stringPointer.Value - 0x8000;
-            if (strOffset >= 0 && strOffset + length <= _rom.PrgRom.Length)
+            int offset = dataPointer.Value - 0x8000;
+            if (offset >= 0 && offset + length <= _rom.PrgRom.Length)
             {
-                var chars = new char[length];
+                // Try string first (all printable ASCII)
                 bool allPrintable = true;
                 for (int i = 0; i < length; i++)
                 {
-                    byte b = _rom.PrgRom[strOffset + i];
-                    if (b >= 0x20 && b < 0x7F)
-                        chars[i] = (char)b;
-                    else
-                    {
-                        allPrintable = false;
-                        break;
-                    }
+                    byte b = _rom.PrgRom[offset + i];
+                    if (b < 0x20 || b >= 0x7F) { allPrintable = false; break; }
                 }
                 if (allPrintable)
                 {
+                    var chars = new char[length];
+                    for (int i = 0; i < length; i++)
+                        chars[i] = (char)_rom.PrgRom[offset + i];
                     string escaped = new string(chars).Replace("\\", "\\\\").Replace("\"", "\\\"");
-                    return $"vram_write(\"{escaped}\");";
-                }            }
-        }
-        return $"vram_write(/* {length} bytes */);";
-    }
+                    return new List<string> { $"vram_write(\"{escaped}\");" };
+                }
 
-    /// <summary>
-    /// Format a pal_bg/pal_spr/pal_all call by reading palette bytes from the ROM
-    /// at the given pointer address.
-    /// </summary>
-    string FormatPaletteCall(string name, ushort pointer, int count)
-    {
-        int offset = pointer - 0x8000;
-        // NROM-128 (16KB PRG): $C000-$FFFF mirrors $8000-$BFFF
-        if (_rom.PrgRom.Length == 0x4000)
-            offset %= 0x4000;
-        if (offset >= 0 && offset + count <= _rom.PrgRom.Length)
-        {
-            var sb = new StringBuilder();
-            sb.Append($"{name}(new byte[] {{");
-            for (int i = 0; i < count; i++)
-            {
-                if (i % 4 == 0)
-                    sb.Append("\n    ");
-                else
-                    sb.Append(' ');
-                sb.Append($"0x{_rom.PrgRom[offset + i]:X2}");
-                if (i < count - 1)
-                    sb.Append(',');
+                // Non-ASCII: emit byte array variable + call
+                string varName = $"data{_dataCounter++}";
+                return new List<string>
+                {
+                    FormatByteArrayDeclaration(offset, length, varName),
+                    $"vram_write({varName});"
+                };
             }
-            sb.Append("\n});");
-            return sb.ToString();
         }
-        return $"{name}(/* data at ${pointer:X4} */);";
+        return new List<string> { $"vram_write(/* {length} bytes */);" };
     }
 
     /// <summary>
@@ -546,6 +579,119 @@ class Decompiler
         }
         return $"vram_adr(0x{addr:X4});";
     }
+
+    /// <summary>
+    /// Format a palette call (pal_bg, pal_spr, pal_all) by extracting palette data from ROM.
+    /// </summary>
+    List<string> FormatPaletteCall(string funcName, string varName, ushort pointer, int size)
+    {
+        int offset = pointer - 0x8000;
+        // NROM-128 (16KB PRG): $C000-$FFFF mirrors $8000-$BFFF
+        if (_rom.PrgRom.Length == 0x4000)
+            offset %= 0x4000;
+        if (offset >= 0 && offset + size <= _rom.PrgRom.Length)
+        {
+            return new List<string>
+            {
+                FormatByteArrayDeclaration(offset, size, varName),
+                $"{funcName}({varName});"
+            };
+        }
+        return new List<string> { $"// {funcName}(/* data at ${pointer:X4} */);" };
+    }
+
+    /// <summary>
+    /// Format a byte array declaration from ROM data.
+    /// Small arrays (≤16 bytes) are single-line; larger arrays wrap at 16 bytes per line.
+    /// </summary>
+    string FormatByteArrayDeclaration(int romOffset, int length, string varName)
+    {
+        var sb = new StringBuilder();
+        if (length <= 16)
+        {
+            sb.Append($"byte[] {varName} = new byte[] {{ ");
+            for (int i = 0; i < length; i++)
+            {
+                if (i > 0) sb.Append(", ");
+                sb.Append($"0x{_rom.PrgRom[romOffset + i]:X2}");
+            }
+            sb.Append(" };");
+        }
+        else
+        {
+            sb.AppendLine($"byte[] {varName} = new byte[]");
+            sb.Append('{');
+            for (int i = 0; i < length; i++)
+            {
+                if (i % 16 == 0)
+                {
+                    if (i > 0) sb.Append(',');
+                    sb.AppendLine();
+                    sb.Append("    ");
+                }
+                else
+                {
+                    sb.Append(", ");
+                }
+                sb.Append($"0x{_rom.PrgRom[romOffset + i]:X2}");
+            }
+            sb.AppendLine();
+            sb.Append("};");
+        }
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// Map of known NES hardware register addresses to their NESLib constant names.
+    /// </summary>
+    static readonly Dictionary<ushort, string> KnownAddresses = new()
+    {
+        // PPU registers
+        { NESLib.PPU_CTRL, nameof(NESLib.PPU_CTRL) },
+        { NESLib.PPU_MASK, nameof(NESLib.PPU_MASK) },
+        { NESLib.PPU_STATUS, nameof(NESLib.PPU_STATUS) },
+        { NESLib.PPU_SCROLL, nameof(NESLib.PPU_SCROLL) },
+        { NESLib.PPU_ADDR, nameof(NESLib.PPU_ADDR) },
+        { NESLib.PPU_DATA, nameof(NESLib.PPU_DATA) },
+        // APU registers
+        { NESLib.APU_PULSE1_CTRL, nameof(NESLib.APU_PULSE1_CTRL) },
+        { NESLib.APU_PULSE1_SWEEP, nameof(NESLib.APU_PULSE1_SWEEP) },
+        { NESLib.APU_PULSE1_TIMER_LO, nameof(NESLib.APU_PULSE1_TIMER_LO) },
+        { NESLib.APU_PULSE1_TIMER_HI, nameof(NESLib.APU_PULSE1_TIMER_HI) },
+        { NESLib.APU_PULSE2_CTRL, nameof(NESLib.APU_PULSE2_CTRL) },
+        { NESLib.APU_PULSE2_SWEEP, nameof(NESLib.APU_PULSE2_SWEEP) },
+        { NESLib.APU_PULSE2_TIMER_LO, nameof(NESLib.APU_PULSE2_TIMER_LO) },
+        { NESLib.APU_PULSE2_TIMER_HI, nameof(NESLib.APU_PULSE2_TIMER_HI) },
+        { NESLib.APU_TRIANGLE_CTRL, nameof(NESLib.APU_TRIANGLE_CTRL) },
+        { NESLib.APU_TRIANGLE_TIMER_LO, nameof(NESLib.APU_TRIANGLE_TIMER_LO) },
+        { NESLib.APU_TRIANGLE_TIMER_HI, nameof(NESLib.APU_TRIANGLE_TIMER_HI) },
+        { NESLib.APU_NOISE_CTRL, nameof(NESLib.APU_NOISE_CTRL) },
+        { NESLib.APU_NOISE_PERIOD, nameof(NESLib.APU_NOISE_PERIOD) },
+        { NESLib.APU_NOISE_LENGTH, nameof(NESLib.APU_NOISE_LENGTH) },
+        { NESLib.APU_STATUS, nameof(NESLib.APU_STATUS) },
+    };
+
+    /// <summary>
+    /// Format an absolute address as a NESLib constant name or hex literal.
+    /// </summary>
+    static string FormatAddress(ushort addr)
+    {
+        if (KnownAddresses.TryGetValue(addr, out var name))
+            return name;
+        return $"0x{addr:X4}";
+    }
+
+    /// <summary>
+    /// Format a poke() statement with a named or hex address and hex value.
+    /// </summary>
+    static string FormatPoke(ushort addr, byte value) =>
+        $"poke({FormatAddress(addr)}, 0x{value:X2});";
+
+    /// <summary>
+    /// Format a peek() statement with a named or hex address.
+    /// </summary>
+    static string FormatPeek(ushort addr) =>
+        $"peek({FormatAddress(addr)});";
 
     /// <summary>
     /// Generate the final C# source code from decompiled statements.
