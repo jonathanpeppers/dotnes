@@ -538,1100 +538,22 @@ byte[] player_1_meta_spr_attack_0_left = new byte[] { 0xF0, 0xF8, 0x34, 0x41, 0x
 byte[] player_1_meta_spr_attack_1_left = new byte[] { 0xF0, 0xF8, 0x54, 0x41, 0xF8, 0xF8, 0x52, 0x41, 0x00, 0xF8, 0x50, 0x41, 0x80 };
 
 // Main game code
-byte isBlocked(byte x, byte y)
-{
-    if (x > 122 && x < 134 && y > 114 && y < 125)
-    {
-        return 1;
-    }
-    if (x < 128)
-    {
-        if (y < 120)
-        {
-            return collision_top_left[(x >> 3) + ((y >> 3) << 4)];
-        }
-        else
-        {
-            y -= 120;
-            return collision_bottom_left[(x >> 3) + ((y >> 3) << 4)];
-        }
-    }
-    else
-    {
-        x -= 128;
-        if (y < 120)
-        {
-            return collision_top_right[(x >> 3) + ((y >> 3) << 4)];
-        }
-        else
-        {
-            y -= 120;
-            return collision_bottom_right[(x >> 3) + ((y >> 3) << 4)];
-        }
-    }
-}
 
-void took_damage()
-{
-    G.j = 0;
-    while (G.j < 8)
-    {
-        if (G.enemies_health[G.j] == 0)
-        {
-            G.j++;
-            continue;
-        }
-        G.temp2 = G.enemies_x[G.j];
-        G.temp3 = G.enemies_y[G.j];
-        if (G.temp0 > G.temp2)
-            G.temp4 = (byte)(G.temp0 - G.temp2);
-        else
-            G.temp4 = (byte)(G.temp2 - G.temp0);
-        if (G.temp1 > G.temp3)
-            G.temp5 = (byte)(G.temp1 - G.temp3);
-        else
-            G.temp5 = (byte)(G.temp3 - G.temp1);
-        if (G.temp4 < G.temp6 && G.temp5 < G.temp7)
-        {
-            G.enemies_health[G.j]--;
-            if (G.enemies_health[G.j] != 0)
-            {
-                G.enemy_push_timer[G.j] = 4;
-                G.enemy_push_dir[G.j] = G.player_dir[G.i];
-            }
-            else
-            {
-                sfx_play(1, 0);
-            }
-            break;
-        }
-        G.j++;
-    }
-}
-
-void tick_enemies()
-{
-    G.temp4 = (byte)(rand8() & 7);
-    G.i = 0;
-    while (G.i < 8)
-    {
-        if (G.enemies_health[G.i] == 0 && (G.frame & 7) == G.i)
-        {
-            G.enemies_x[G.i] = G.enemy_spawn_points_x[G.temp4];
-            G.enemies_y[G.i] = G.enemy_spawn_points_y[G.temp4];
-            G.enemy_push_timer[G.i] = 0;
-            G.enemies_health[G.i] = G.spawn_hp;
-            G.enemies_type[G.i] = (byte)(G.i & 1);
-            return;
-        }
-        G.i++;
-    }
-
-    G.temp2 = (byte)(G.frame & 7);
-    G.enemy_leg[G.temp2] = (byte)(1 - G.enemy_leg[G.temp2]);
-    G.temp1 = G.enemies_enemy[G.temp2];
-
-    G.temp6 = (byte)(rand8() & 3);
-    if (G.temp6 == 0)
-    {
-        G.temp6 = (byte)(rand8() & 3);
-        if (G.temp6 == 0) G.temp3 = (byte)PAD.LEFT;
-        else if (G.temp6 == 1) G.temp3 = (byte)PAD.RIGHT;
-        else if (G.temp6 == 2) G.temp3 = (byte)PAD.UP;
-        else G.temp3 = (byte)PAD.DOWN;
-    }
-    else if (G.temp6 == 1)
-    {
-        G.temp3 = G.enemies_dir[G.temp2];
-    }
-    else
-    {
-        G.temp0 = (byte)(rand8() & 1);
-        if (G.temp0 != 0)
-        {
-            if (G.enemies_x[G.temp2] > G.player_x[G.temp1])
-                G.temp3 = (byte)PAD.LEFT;
-            else
-                G.temp3 = (byte)PAD.RIGHT;
-        }
-        else
-        {
-            if (G.enemies_y[G.temp2] > G.player_y[G.temp1])
-                G.temp3 = (byte)PAD.UP;
-            else
-                G.temp3 = (byte)PAD.DOWN;
-        }
-    }
-
-    G.enemies_dir[G.temp2] = G.temp3;
-    G.temp6 = G.enemies_x[G.temp2];
-    G.temp7 = G.enemies_y[G.temp2];
-
-    if (G.enemy_push_timer[G.temp2] != 0)
-    {
-    }
-    else if (G.temp3 == (byte)PAD.RIGHT)
-        G.enemies_x[G.temp2] += G.enemy_speed;
-    else if (G.temp3 == (byte)PAD.LEFT)
-        G.enemies_x[G.temp2] -= G.enemy_speed;
-    else if (G.temp3 == (byte)PAD.UP)
-        G.enemies_y[G.temp2] -= G.enemy_speed;
-    else if (G.temp3 == (byte)PAD.DOWN)
-        G.enemies_y[G.temp2] += G.enemy_speed;
-
-    G.temp5 = isBlocked(G.enemies_x[G.temp2], G.enemies_y[G.temp2]);
-    if (G.temp5 != 0)
-    {
-        G.enemies_x[G.temp2] = G.temp6;
-        G.enemies_y[G.temp2] = G.temp7;
-    }
-    else
-    {
-        G.i = 0;
-        while (G.i < 8)
-        {
-            if (G.temp2 != G.i)
-            {
-                if ((byte)(G.enemies_x[G.i] - 6) < G.enemies_x[G.temp2] && (byte)(G.enemies_x[G.i] + 6) > G.enemies_x[G.temp2])
-                {
-                    if ((byte)(G.enemies_y[G.i] - 6) < G.enemies_y[G.temp2] && (byte)(G.enemies_y[G.i] + 6) > G.enemies_y[G.temp2])
-                    {
-                        G.enemies_x[G.temp2] = G.temp6;
-                        G.enemies_y[G.temp2] = G.temp7;
-                    }
-                }
-            }
-            G.i++;
-        }
-    }
-
-    G.i = 0;
-    while (G.i < 8)
-    {
-        if (G.enemy_push_timer[G.i] != 0 && (G.frame & 3) != 0)
-        {
-            if ((G.frame & 1) != 0)
-            {
-                G.enemy_push_timer[G.i]--;
-                G.temp6 = G.enemies_x[G.i];
-                G.temp7 = G.enemies_y[G.i];
-                if (G.enemy_push_dir[G.i] == (byte)PAD.LEFT) G.enemies_x[G.i] -= 2;
-                else if (G.enemy_push_dir[G.i] == (byte)PAD.RIGHT) G.enemies_x[G.i] += 2;
-                else if (G.enemy_push_dir[G.i] == (byte)PAD.UP) G.enemies_y[G.i] -= 2;
-                else if (G.enemy_push_dir[G.i] == (byte)PAD.DOWN) G.enemies_y[G.i] += 2;
-                if (isBlocked(G.enemies_x[G.i], G.enemies_y[G.i]) != 0)
-                {
-                    G.enemies_x[G.i] = G.temp6;
-                    G.enemies_y[G.i] = G.temp7;
-                }
-            }
-        }
-
-        G.temp5 = 0;
-        G.j = 0;
-        while (G.j < 2)
-        {
-            if ((G.frame & G.enemy_damage_modifier) == 0)
-            {
-                if ((byte)(G.enemies_x[G.i] - 5) < G.player_x[G.j] && (byte)(G.enemies_x[G.i] + 5) > G.player_x[G.j])
-                {
-                    if ((byte)(G.enemies_y[G.i] - 5) < G.player_y[G.j] && (byte)(G.enemies_y[G.i] + 5) > G.player_y[G.j])
-                    {
-                        if (G.player_hp[G.j] != 0 && G.player_god_mode[G.j] == 0)
-                        {
-                            G.temp5 = 1;
-                            G.player_hp[G.j]--;
-                            G.player_god_mode[G.j] = 4;
-                            sfx_play(0, 1);
-                        }
-                        if (G.player_hp[G.j] == 0 && G.enemies_enemy[G.i] == G.j)
-                        {
-                            G.enemies_enemy[G.i] = (byte)(1 - G.enemies_enemy[G.i]);
-                        }
-                    }
-                }
-            }
-            G.j++;
-        }
-
-        G.int_temp0 = G.enemies_x[G.i];
-        G.int_temp0 <<= 1;
-        G.int_temp0 -= G.scr_x;
-        if (G.int_temp0 < 0 || G.int_temp0 > 255) { G.i++; continue; }
-        G.temp0 = (byte)G.int_temp0;
-
-        G.int_temp0 = G.enemies_y[G.i];
-        G.int_temp0 <<= 1;
-        G.int_temp0 -= G.scr_y;
-        if (G.int_temp0 < 0 || G.int_temp0 > 255) { G.i++; continue; }
-        G.temp1 = (byte)G.int_temp0;
-
-        if ((G.enemy_push_timer[G.i] & 1) != 0)
-        {
-            if (G.temp5 != 0)
-            {
-                if (G.enemies_type[G.i] == 0)
-                {
-                    if (G.enemies_dir[G.i] == (byte)PAD.UP)
-                        G.spr = oam_meta_spr(G.temp0, (byte)(G.temp1 - 2), G.spr, spider_damaged_attack_up);
-                    else if (G.enemies_dir[G.i] == (byte)PAD.DOWN)
-                        G.spr = oam_meta_spr(G.temp0, (byte)(G.temp1 + 2), G.spr, spider_damaged_attack_down);
-                    else if (G.enemies_dir[G.i] == (byte)PAD.LEFT)
-                        G.spr = oam_meta_spr((byte)(G.temp0 - 2), G.temp1, G.spr, spider_damaged_attack_left);
-                    else if (G.enemies_dir[G.i] == (byte)PAD.RIGHT)
-                        G.spr = oam_meta_spr((byte)(G.temp0 + 2), G.temp1, G.spr, spider_damaged_attack_right);
-                }
-                else
-                {
-                    if (G.enemies_dir[G.i] == (byte)PAD.UP)
-                        G.spr = oam_meta_spr(G.temp0, (byte)(G.temp1 - 2), G.spr, bat_damaged_attack_up);
-                    else if (G.enemies_dir[G.i] == (byte)PAD.DOWN)
-                        G.spr = oam_meta_spr(G.temp0, (byte)(G.temp1 + 2), G.spr, bat_damaged_attack_down);
-                    else if (G.enemies_dir[G.i] == (byte)PAD.LEFT)
-                        G.spr = oam_meta_spr((byte)(G.temp0 - 2), G.temp1, G.spr, bat_damaged_attack_left);
-                    else if (G.enemies_dir[G.i] == (byte)PAD.RIGHT)
-                        G.spr = oam_meta_spr((byte)(G.temp0 + 2), G.temp1, G.spr, bat_damaged_attack_right);
-                }
-            }
-            else
-            {
-                if (G.enemy_leg[G.i] != 0)
-                {
-                    if (G.enemies_type[G.i] == 0)
-                    {
-                        if (G.enemies_dir[G.i] == (byte)PAD.UP)
-                            G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, spider_damaged_leg_0_up);
-                        else if (G.enemies_dir[G.i] == (byte)PAD.DOWN)
-                            G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, spider_damaged_leg_0_down);
-                        else if (G.enemies_dir[G.i] == (byte)PAD.LEFT)
-                            G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, spider_damaged_leg_0_left);
-                        else if (G.enemies_dir[G.i] == (byte)PAD.RIGHT)
-                            G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, spider_damaged_leg_0_right);
-                    }
-                    else
-                    {
-                        if (G.enemies_dir[G.i] == (byte)PAD.UP)
-                            G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, bat_damaged_leg_0_up);
-                        else if (G.enemies_dir[G.i] == (byte)PAD.DOWN)
-                            G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, bat_damaged_leg_0_down);
-                        else if (G.enemies_dir[G.i] == (byte)PAD.LEFT)
-                            G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, bat_damaged_leg_0_left);
-                        else if (G.enemies_dir[G.i] == (byte)PAD.RIGHT)
-                            G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, bat_damaged_leg_0_right);
-                    }
-                }
-                else
-                {
-                    if (G.enemies_type[G.i] == 0)
-                    {
-                        if (G.enemies_dir[G.i] == (byte)PAD.UP)
-                            G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, spider_damaged_leg_1_up);
-                        else if (G.enemies_dir[G.i] == (byte)PAD.DOWN)
-                            G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, spider_damaged_leg_1_down);
-                        else if (G.enemies_dir[G.i] == (byte)PAD.LEFT)
-                            G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, spider_damaged_leg_1_left);
-                        else if (G.enemies_dir[G.i] == (byte)PAD.RIGHT)
-                            G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, spider_damaged_leg_1_right);
-                    }
-                    else
-                    {
-                        if (G.enemies_dir[G.i] == (byte)PAD.UP)
-                            G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, bat_damaged_leg_1_up);
-                        else if (G.enemies_dir[G.i] == (byte)PAD.DOWN)
-                            G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, bat_damaged_leg_1_down);
-                        else if (G.enemies_dir[G.i] == (byte)PAD.LEFT)
-                            G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, bat_damaged_leg_1_left);
-                        else if (G.enemies_dir[G.i] == (byte)PAD.RIGHT)
-                            G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, bat_damaged_leg_1_right);
-                    }
-                }
-            }
-        }
-        else
-        {
-            if (G.temp5 != 0)
-            {
-                if (G.enemies_type[G.i] == 0)
-                {
-                    if (G.enemies_dir[G.i] == (byte)PAD.UP)
-                        G.spr = oam_meta_spr(G.temp0, (byte)(G.temp1 - 2), G.spr, spider_attack_up);
-                    else if (G.enemies_dir[G.i] == (byte)PAD.DOWN)
-                        G.spr = oam_meta_spr(G.temp0, (byte)(G.temp1 + 2), G.spr, spider_attack_down);
-                    else if (G.enemies_dir[G.i] == (byte)PAD.LEFT)
-                        G.spr = oam_meta_spr((byte)(G.temp0 - 2), G.temp1, G.spr, spider_attack_left);
-                    else if (G.enemies_dir[G.i] == (byte)PAD.RIGHT)
-                        G.spr = oam_meta_spr((byte)(G.temp0 + 2), G.temp1, G.spr, spider_attack_right);
-                }
-                else
-                {
-                    if (G.enemies_dir[G.i] == (byte)PAD.UP)
-                        G.spr = oam_meta_spr(G.temp0, (byte)(G.temp1 - 2), G.spr, bat_attack_up);
-                    else if (G.enemies_dir[G.i] == (byte)PAD.DOWN)
-                        G.spr = oam_meta_spr(G.temp0, (byte)(G.temp1 + 2), G.spr, bat_attack_down);
-                    else if (G.enemies_dir[G.i] == (byte)PAD.LEFT)
-                        G.spr = oam_meta_spr((byte)(G.temp0 - 2), G.temp1, G.spr, bat_attack_left);
-                    else if (G.enemies_dir[G.i] == (byte)PAD.RIGHT)
-                        G.spr = oam_meta_spr((byte)(G.temp0 + 2), G.temp1, G.spr, bat_attack_right);
-                }
-            }
-            else
-            {
-                if (G.enemy_leg[G.i] != 0)
-                {
-                    if (G.enemies_type[G.i] == 0)
-                    {
-                        if (G.enemies_dir[G.i] == (byte)PAD.UP)
-                            G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, spider_leg_0_up);
-                        else if (G.enemies_dir[G.i] == (byte)PAD.DOWN)
-                            G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, spider_leg_0_down);
-                        else if (G.enemies_dir[G.i] == (byte)PAD.LEFT)
-                            G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, spider_leg_0_left);
-                        else if (G.enemies_dir[G.i] == (byte)PAD.RIGHT)
-                            G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, spider_leg_0_right);
-                    }
-                    else
-                    {
-                        if (G.enemies_dir[G.i] == (byte)PAD.UP)
-                            G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, bat_leg_0_up);
-                        else if (G.enemies_dir[G.i] == (byte)PAD.DOWN)
-                            G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, bat_leg_0_down);
-                        else if (G.enemies_dir[G.i] == (byte)PAD.LEFT)
-                            G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, bat_leg_0_left);
-                        else if (G.enemies_dir[G.i] == (byte)PAD.RIGHT)
-                            G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, bat_leg_0_right);
-                    }
-                }
-                else
-                {
-                    if (G.enemies_type[G.i] == 0)
-                    {
-                        if (G.enemies_dir[G.i] == (byte)PAD.UP)
-                            G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, spider_leg_1_up);
-                        else if (G.enemies_dir[G.i] == (byte)PAD.DOWN)
-                            G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, spider_leg_1_down);
-                        else if (G.enemies_dir[G.i] == (byte)PAD.LEFT)
-                            G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, spider_leg_1_left);
-                        else if (G.enemies_dir[G.i] == (byte)PAD.RIGHT)
-                            G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, spider_leg_1_right);
-                    }
-                    else
-                    {
-                        if (G.enemies_dir[G.i] == (byte)PAD.UP)
-                            G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, bat_leg_1_up);
-                        else if (G.enemies_dir[G.i] == (byte)PAD.DOWN)
-                            G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, bat_leg_1_down);
-                        else if (G.enemies_dir[G.i] == (byte)PAD.LEFT)
-                            G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, bat_leg_1_left);
-                        else if (G.enemies_dir[G.i] == (byte)PAD.RIGHT)
-                            G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, bat_leg_1_right);
-                    }
-                }
-            }
-        }
-        G.i++;
-    }
-}
-
-void draw_player()
-{
-    if (G.i == 0)
-    {
-        if (G.player_carry[0] != 0xFF)
-        {
-            if ((G.temp2 & PAD_DPAD) != 0)
-            {
-                if (G.player_carry_dir[0] == (byte)PAD.UP)
-                {
-                    if ((G.frame & 16) != 0)
-                        G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_carry_0_meta_spr_left_foot_up);
-                    else
-                        G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_carry_0_meta_spr_right_foot_up);
-                }
-                else if (G.player_carry_dir[0] == (byte)PAD.DOWN)
-                {
-                    if ((G.frame & 16) != 0)
-                        G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_carry_0_meta_spr_left_foot_down);
-                    else
-                        G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_carry_0_meta_spr_right_foot_down);
-                }
-                else if (G.player_carry_dir[0] == (byte)PAD.LEFT)
-                {
-                    if ((G.frame & 16) != 0)
-                        G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_carry_0_meta_spr_left_foot_left);
-                    else
-                        G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_carry_0_meta_spr_right_foot_left);
-                }
-                else if (G.player_carry_dir[0] == (byte)PAD.RIGHT)
-                {
-                    if ((G.frame & 16) != 0)
-                        G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_carry_0_meta_spr_left_foot_right);
-                    else
-                        G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_carry_0_meta_spr_right_foot_right);
-                }
-            }
-            else
-            {
-                if (G.player_carry_dir[G.i] == (byte)PAD.UP)
-                    G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_carry_0_meta_spr_stand_up);
-                else if (G.player_carry_dir[G.i] == (byte)PAD.DOWN)
-                    G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_carry_0_meta_spr_stand_down);
-                else if (G.player_carry_dir[G.i] == (byte)PAD.LEFT)
-                    G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_carry_0_meta_spr_stand_left);
-                else if (G.player_carry_dir[G.i] == (byte)PAD.RIGHT)
-                    G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_carry_0_meta_spr_stand_right);
-            }
-        }
-        else if (G.player_attack_tick[G.i] != 0)
-        {
-            if (G.player_dir[G.i] == (byte)PAD.UP)
-            {
-                if (G.player_attack_tick[G.i] > 8)
-                    G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_0_meta_spr_attack_0_up);
-                else
-                    G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_0_meta_spr_attack_1_up);
-            }
-            else if (G.player_dir[G.i] == (byte)PAD.DOWN)
-            {
-                if (G.player_attack_tick[G.i] > 8)
-                    G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_0_meta_spr_attack_0_down);
-                else
-                    G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_0_meta_spr_attack_1_down);
-            }
-            else if (G.player_dir[G.i] == (byte)PAD.LEFT)
-            {
-                if (G.player_attack_tick[G.i] > 8)
-                    G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_0_meta_spr_attack_0_left);
-                else
-                    G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_0_meta_spr_attack_1_left);
-            }
-            else if (G.player_dir[G.i] == (byte)PAD.RIGHT)
-            {
-                if (G.player_attack_tick[G.i] > 8)
-                    G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_0_meta_spr_attack_0_right);
-                else
-                    G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_0_meta_spr_attack_1_right);
-            }
-            G.player_attack_tick[G.i]--;
-        }
-        else if ((G.temp2 & PAD_DPAD) != 0)
-        {
-            if (G.player_dir[G.i] == (byte)PAD.UP)
-            {
-                if ((G.frame & 16) != 0)
-                    G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_0_meta_spr_left_foot_up);
-                else
-                    G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_0_meta_spr_right_foot_up);
-            }
-            else if (G.player_dir[G.i] == (byte)PAD.DOWN)
-            {
-                if ((G.frame & 16) != 0)
-                    G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_0_meta_spr_left_foot_down);
-                else
-                    G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_0_meta_spr_right_foot_down);
-            }
-            else if (G.player_dir[G.i] == (byte)PAD.LEFT)
-            {
-                if ((G.frame & 16) != 0)
-                    G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_0_meta_spr_left_foot_left);
-                else
-                    G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_0_meta_spr_right_foot_left);
-            }
-            else if (G.player_dir[G.i] == (byte)PAD.RIGHT)
-            {
-                if ((G.frame & 16) != 0)
-                    G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_0_meta_spr_left_foot_right);
-                else
-                    G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_0_meta_spr_right_foot_right);
-            }
-        }
-        else
-        {
-            if (G.player_dir[G.i] == (byte)PAD.UP)
-                G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_0_meta_spr_stand_up);
-            else if (G.player_dir[G.i] == (byte)PAD.DOWN)
-                G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_0_meta_spr_stand_down);
-            else if (G.player_dir[G.i] == (byte)PAD.LEFT)
-                G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_0_meta_spr_stand_left);
-            else if (G.player_dir[G.i] == (byte)PAD.RIGHT)
-                G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_0_meta_spr_stand_right);
-        }
-    }
-    else if (G.i == 1)
-    {
-        if (G.player_carry[1] != 0xFF)
-        {
-            if ((G.temp2 & PAD_DPAD) != 0)
-            {
-                if (G.player_carry_dir[1] == (byte)PAD.UP)
-                {
-                    if ((G.frame & 16) != 0)
-                        G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_carry_1_meta_spr_left_foot_up);
-                    else
-                        G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_carry_1_meta_spr_right_foot_up);
-                }
-                else if (G.player_carry_dir[1] == (byte)PAD.DOWN)
-                {
-                    if ((G.frame & 16) != 0)
-                        G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_carry_1_meta_spr_left_foot_down);
-                    else
-                        G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_carry_1_meta_spr_right_foot_down);
-                }
-                else if (G.player_carry_dir[1] == (byte)PAD.LEFT)
-                {
-                    if ((G.frame & 16) != 0)
-                        G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_carry_1_meta_spr_left_foot_left);
-                    else
-                        G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_carry_1_meta_spr_right_foot_left);
-                }
-                else if (G.player_carry_dir[1] == (byte)PAD.RIGHT)
-                {
-                    if ((G.frame & 16) != 0)
-                        G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_carry_1_meta_spr_left_foot_right);
-                    else
-                        G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_carry_1_meta_spr_right_foot_right);
-                }
-            }
-            else
-            {
-                if (G.player_carry_dir[G.i] == (byte)PAD.UP)
-                    G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_carry_1_meta_spr_stand_up);
-                else if (G.player_carry_dir[G.i] == (byte)PAD.DOWN)
-                    G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_carry_1_meta_spr_stand_down);
-                else if (G.player_carry_dir[G.i] == (byte)PAD.LEFT)
-                    G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_carry_1_meta_spr_stand_left);
-                else if (G.player_carry_dir[G.i] == (byte)PAD.RIGHT)
-                    G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_carry_1_meta_spr_stand_right);
-            }
-        }
-        else if (G.player_attack_tick[G.i] != 0)
-        {
-            if (G.player_dir[G.i] == (byte)PAD.UP)
-            {
-                if (G.player_attack_tick[G.i] > 8)
-                    G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_1_meta_spr_attack_0_up);
-                else
-                    G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_1_meta_spr_attack_1_up);
-            }
-            else if (G.player_dir[G.i] == (byte)PAD.DOWN)
-            {
-                if (G.player_attack_tick[G.i] > 8)
-                    G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_1_meta_spr_attack_0_down);
-                else
-                    G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_1_meta_spr_attack_1_down);
-            }
-            else if (G.player_dir[G.i] == (byte)PAD.LEFT)
-            {
-                if (G.player_attack_tick[G.i] > 8)
-                    G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_1_meta_spr_attack_0_left);
-                else
-                    G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_1_meta_spr_attack_1_left);
-            }
-            else if (G.player_dir[G.i] == (byte)PAD.RIGHT)
-            {
-                if (G.player_attack_tick[G.i] > 8)
-                    G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_1_meta_spr_attack_0_right);
-                else
-                    G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_1_meta_spr_attack_1_right);
-            }
-            G.player_attack_tick[G.i]--;
-        }
-        else if ((G.temp2 & PAD_DPAD) != 0)
-        {
-            if (G.player_dir[G.i] == (byte)PAD.UP)
-            {
-                if ((G.frame & 16) != 0)
-                    G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_1_meta_spr_left_foot_up);
-                else
-                    G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_1_meta_spr_right_foot_up);
-            }
-            else if (G.player_dir[G.i] == (byte)PAD.DOWN)
-            {
-                if ((G.frame & 16) != 0)
-                    G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_1_meta_spr_left_foot_down);
-                else
-                    G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_1_meta_spr_right_foot_down);
-            }
-            else if (G.player_dir[G.i] == (byte)PAD.LEFT)
-            {
-                if ((G.frame & 16) != 0)
-                    G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_1_meta_spr_left_foot_left);
-                else
-                    G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_1_meta_spr_right_foot_left);
-            }
-            else if (G.player_dir[G.i] == (byte)PAD.RIGHT)
-            {
-                if ((G.frame & 16) != 0)
-                    G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_1_meta_spr_left_foot_right);
-                else
-                    G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_1_meta_spr_right_foot_right);
-            }
-        }
-        else
-        {
-            if (G.player_dir[G.i] == (byte)PAD.UP)
-                G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_1_meta_spr_stand_up);
-            else if (G.player_dir[G.i] == (byte)PAD.DOWN)
-                G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_1_meta_spr_stand_down);
-            else if (G.player_dir[G.i] == (byte)PAD.LEFT)
-                G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_1_meta_spr_stand_left);
-            else if (G.player_dir[G.i] == (byte)PAD.RIGHT)
-                G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_1_meta_spr_stand_right);
-        }
-    }
-}
-
-void tick_players()
-{
-    if (G.player_hp[0] >= 4)
-    {
-        G.spr = oam_spr(0x10, 0x10, 0x60, 0x00, G.spr);
-        G.spr = oam_spr(0x10, 0x20, 0x60, 0x00, G.spr);
-    }
-    else if (G.player_hp[0] == 3)
-    {
-        G.spr = oam_spr(0x10, 0x10, 0x62, 0x00, G.spr);
-        G.spr = oam_spr(0x10, 0x20, 0x60, 0x00, G.spr);
-    }
-    else if (G.player_hp[0] == 2)
-    {
-        G.spr = oam_spr(0x10, 0x10, 0x64, 0x00, G.spr);
-        G.spr = oam_spr(0x10, 0x20, 0x60, 0x00, G.spr);
-    }
-    else if (G.player_hp[0] == 1)
-    {
-        G.spr = oam_spr(0x10, 0x10, 0x64, 0x00, G.spr);
-        G.spr = oam_spr(0x10, 0x20, 0x62, 0x00, G.spr);
-    }
-    else
-    {
-        G.spr = oam_spr(0x10, 0x10, 0x64, 0x00, G.spr);
-        G.spr = oam_spr(0x10, 0x20, 0x64, 0x00, G.spr);
-    }
-    if (G.player_hp[1] >= 4)
-    {
-        G.spr = oam_spr(0xE8, 0x10, 0x60, 0x01, G.spr);
-        G.spr = oam_spr(0xE8, 0x20, 0x60, 0x01, G.spr);
-    }
-    else if (G.player_hp[1] == 3)
-    {
-        G.spr = oam_spr(0xE8, 0x10, 0x62, 0x01, G.spr);
-        G.spr = oam_spr(0xE8, 0x20, 0x60, 0x01, G.spr);
-    }
-    else if (G.player_hp[1] == 2)
-    {
-        G.spr = oam_spr(0xE8, 0x10, 0x64, 0x01, G.spr);
-        G.spr = oam_spr(0xE8, 0x20, 0x60, 0x01, G.spr);
-    }
-    else if (G.player_hp[1] == 1)
-    {
-        G.spr = oam_spr(0xE8, 0x10, 0x64, 0x01, G.spr);
-        G.spr = oam_spr(0xE8, 0x20, 0x62, 0x01, G.spr);
-    }
-    else
-    {
-        G.spr = oam_spr(0xE8, 0x10, 0x64, 0x01, G.spr);
-        G.spr = oam_spr(0xE8, 0x20, 0x64, 0x01, G.spr);
-    }
-
-    G.to_scroll_x = 0;
-    G.to_scroll_y = 0;
-
-    G.i = 0;
-    while (G.i < 2)
-    {
-        if (G.player_god_mode[G.i] != 0)
-        {
-            if ((G.frame & 2) == 0)
-            {
-                G.player_god_mode[G.i]--;
-                pal_col((byte)(16 + (G.i << 2) + 3), palette[16 + (G.i << 2) + 3]);
-                pal_col((byte)(16 + (G.i << 2) + 1), palette[16 + (G.i << 2) + 1]);
-            }
-            else
-            {
-                pal_col((byte)(16 + (G.i << 2) + 3), 0x20);
-                pal_col((byte)(16 + (G.i << 2) + 1), 0x0D);
-            }
-        }
-        if (G.player_hp[G.i] == 0) { G.i++; continue; }
-
-        G.int_temp0 = G.player_x[G.i];
-        G.int_temp0 <<= 1;
-        G.int_temp0 -= G.scr_x;
-        G.temp0 = (byte)G.int_temp0;
-
-        G.int_temp0 = G.player_y[G.i];
-        G.int_temp0 <<= 1;
-        G.int_temp0 -= G.scr_y;
-        G.temp1 = (byte)G.int_temp0;
-
-        G.temp2 = (byte)pad_poll(G.i);
-
-        draw_player();
-
-        if (G.temp0 < min_x && G.scr_x > 0)
-        {
-            G.to_scroll_x = (byte)((min_x - G.temp0) >> 1);
-            if (G.to_scroll_x > G.scr_x)
-                G.to_scroll_x = G.scr_x;
-            G.to_scroll_x_neg = 1;
-        }
-        else if (G.temp0 > max_x && G.scr_x < 255)
-        {
-            G.to_scroll_x = (byte)((G.temp0 - max_x) >> 1);
-            if (G.to_scroll_x > (byte)(254 - G.scr_x))
-                G.to_scroll_x = (byte)(254 - G.scr_x);
-            G.to_scroll_x_neg = 0;
-        }
-
-        if (G.temp1 < min_y && G.scr_y > 0)
-        {
-            G.to_scroll_y = (byte)((min_y - G.temp1) >> 1);
-            if (G.to_scroll_y > G.scr_y)
-                G.to_scroll_y = G.scr_y;
-            G.to_scroll_y_neg = 1;
-        }
-        else if (G.temp1 > max_y && G.scr_y < 255)
-        {
-            G.to_scroll_y = (byte)((G.temp1 - max_y) >> 1);
-            if (G.to_scroll_y > (byte)(238 - G.scr_y))
-                G.to_scroll_y = (byte)(238 - G.scr_y);
-            G.to_scroll_y_neg = 0;
-        }
-
-        if ((G.temp2 & (byte)PAD.B) != 0)
-        {
-            if (G.player_carry[G.i] == 0xFF)
-            {
-                G.temp4 = G.player_x[G.i];
-                G.temp5 = G.player_y[G.i];
-                if (G.player_dir[G.i] == (byte)PAD.LEFT) G.temp4 -= 4;
-                else if (G.player_dir[G.i] == (byte)PAD.RIGHT) G.temp4 += 4;
-                if (G.player_dir[G.i] == (byte)PAD.UP) G.temp5 -= 4;
-                else if (G.player_dir[G.i] == (byte)PAD.DOWN) G.temp5 += 2;
-                G.j = 0;
-                while (G.j < 4)
-                {
-                    if (G.item_placed[G.j] == 0)
-                    {
-                        if ((byte)(G.item_x[G.j] - 4) < G.temp4 && (byte)(G.item_x[G.j] + 4) > G.temp4)
-                        {
-                            if ((byte)(G.item_y[G.j] - 5) < G.temp5 && (byte)(G.item_y[G.j] + 5) > G.temp5)
-                            {
-                                if (G.player_carry[(byte)(1 - G.i)] != G.j || G.player_carry_dir[(byte)(1 - G.i)] != G.player_dir[G.i])
-                                {
-                                    G.player_carry[G.i] = G.j;
-                                    G.player_carry_dir[G.i] = G.player_dir[G.i];
-                                    sfx_play(5, 3);
-                                }
-                            }
-                        }
-                    }
-                    G.j++;
-                }
-            }
-        }
-        else
-        {
-            G.player_carry[G.i] = 0xFF;
-        }
-
-        if (G.player_attack_tick[G.i] < 3 && (G.temp2 & (byte)PAD.A) != 0)
-            G.player_attack_tick[G.i] = 16;
-
-        G.temp1 = (byte)(1 - G.i);
-
-        G.temp6 = 0;
-        if (G.player_carry[G.i] != 0xFF)
-        {
-            G.temp6++;
-            if (G.player_carry[G.temp1] == G.player_carry[G.i])
-                G.temp6++;
-        }
-
-        if (G.temp6 == 2)
-        {
-            if (G.i == 0 && (G.frame & 3) == 0)
-            {
-                G.temp2 = (byte)((byte)pad_poll(0) & (byte)pad_poll(1));
-                if ((G.temp2 & (byte)PAD.LEFT) != 0)
-                {
-                    if (isBlocked((byte)(G.player_x[0] - 1), G.player_y[0]) == 0 && isBlocked((byte)(G.player_x[1] - 1), G.player_y[1]) == 0)
-                    {
-                        G.player_x[0]--;
-                        G.player_x[1]--;
-                        G.item_x[G.player_carry[G.i]]--;
-                    }
-                }
-                else if ((G.temp2 & (byte)PAD.RIGHT) != 0)
-                {
-                    if (isBlocked((byte)(G.player_x[0] + 1), G.player_y[0]) == 0 && isBlocked((byte)(G.player_x[1] + 1), G.player_y[1]) == 0)
-                    {
-                        G.player_x[0]++;
-                        G.player_x[1]++;
-                        G.item_x[G.player_carry[G.i]]++;
-                    }
-                }
-                if ((G.temp2 & (byte)PAD.UP) != 0)
-                {
-                    if (isBlocked(G.player_x[0], (byte)(G.player_y[0] - 1)) == 0 && isBlocked(G.player_x[1], (byte)(G.player_y[1] - 1)) == 0)
-                    {
-                        G.player_y[0]--;
-                        G.player_y[1]--;
-                        G.item_y[G.player_carry[G.i]]--;
-                    }
-                }
-                else if ((G.temp2 & (byte)PAD.DOWN) != 0)
-                {
-                    if (isBlocked(G.player_x[0], (byte)(G.player_y[0] + 1)) == 0 && isBlocked(G.player_x[1], (byte)(G.player_y[1] + 1)) == 0)
-                    {
-                        G.player_y[0]++;
-                        G.player_y[1]++;
-                        G.item_y[G.player_carry[G.i]]++;
-                    }
-                }
-            }
-        }
-        else if ((G.temp6 == 0 || (G.frame & 7) == G.i) && (G.frame & 1) == G.i)
-        {
-            if ((G.player_dir[G.i] & G.temp2) == 0)
-            {
-                if ((G.temp2 & (byte)PAD.LEFT) != 0) G.player_dir[G.i] = (byte)PAD.LEFT;
-                else if ((G.temp2 & (byte)PAD.RIGHT) != 0) G.player_dir[G.i] = (byte)PAD.RIGHT;
-                else if ((G.temp2 & (byte)PAD.DOWN) != 0) G.player_dir[G.i] = (byte)PAD.DOWN;
-                else if ((G.temp2 & (byte)PAD.UP) != 0) G.player_dir[G.i] = (byte)PAD.UP;
-            }
-            G.temp4 = G.player_x[G.i];
-            G.temp5 = G.player_y[G.i];
-
-            if ((G.temp2 & (byte)PAD.LEFT) != 0)
-            {
-                if (G.player_hp[G.temp1] == 0 || G.player_x[G.temp1] < G.player_x[G.i] || (byte)(G.player_x[G.temp1] - G.player_x[G.i]) < 60)
-                    G.player_x[G.i]--;
-            }
-            else if ((G.temp2 & (byte)PAD.RIGHT) != 0)
-            {
-                if (G.player_hp[G.temp1] == 0 || (G.player_x[G.i] < 250 && (G.player_x[G.temp1] > G.player_x[G.i] || (byte)(G.player_x[G.i] - G.player_x[G.temp1]) < 60)))
-                    G.player_x[G.i]++;
-            }
-
-            if (isBlocked(G.player_x[G.i], G.player_y[G.i]) != 0)
-                G.player_x[G.i] = G.temp4;
-            else if (G.player_carry[G.i] != 0xFF)
-                G.item_x[G.player_carry[G.i]] += (byte)(G.player_x[G.i] - G.temp4);
-
-            if ((G.temp2 & (byte)PAD.UP) != 0)
-            {
-                if (G.player_hp[G.temp1] == 0 || G.player_y[G.temp1] < G.player_y[G.i] || (byte)(G.player_y[G.temp1] - G.player_y[G.i]) < 60)
-                    G.player_y[G.i]--;
-            }
-            else if ((G.temp2 & (byte)PAD.DOWN) != 0)
-            {
-                if (G.player_hp[G.temp1] == 0 || G.player_y[G.temp1] > G.player_y[G.i] || (byte)(G.player_y[G.i] - G.player_y[G.temp1]) < 60)
-                    G.player_y[G.i]++;
-            }
-
-            if (isBlocked(G.player_x[G.i], G.player_y[G.i]) != 0)
-                G.player_y[G.i] = G.temp5;
-            else if (G.player_carry[G.i] != 0xFF)
-                G.item_y[G.player_carry[G.i]] += (byte)(G.player_y[G.i] - G.temp5);
-        }
-
-        if (G.player_attack_tick[G.i] == 10)
-        {
-            G.temp0 = G.player_x[G.i];
-            G.temp1 = G.player_y[G.i];
-            G.temp6 = 5;
-            G.temp7 = 5;
-            if (G.player_dir[G.i] == (byte)PAD.LEFT) { G.temp0 -= 4; G.temp6 = 8; }
-            else if (G.player_dir[G.i] == (byte)PAD.RIGHT) { G.temp0 += 4; G.temp6 = 8; }
-            if (G.player_dir[G.i] == (byte)PAD.UP) { G.temp1 -= 4; G.temp7 = 8; }
-            else if (G.player_dir[G.i] == (byte)PAD.DOWN) { G.temp1 += 3; G.temp7 = 8; }
-            G.dx = G.temp0;
-            G.dy = G.temp1;
-            if (isBlocked(G.temp0, G.temp1) == 0)
-                took_damage();
-        }
-        G.i++;
-    }
-
-    G.temp2 = 0;
-    G.i = 0;
-    while (G.i < 4)
-    {
-        if (G.item_placed[G.i] == 0)
-        {
-            if ((byte)(G.item_x[G.i] - item_target_x[G.i]) < 2 || (byte)(item_target_x[G.i] - G.item_x[G.i]) < 2)
-            {
-                if ((byte)(G.item_y[G.i] - item_target_y[G.i]) < 2 || (byte)(item_target_y[G.i] - G.item_y[G.i]) < 2)
-                {
-                    G.item_placed[G.i] = 1;
-                    G.item_x[G.i] = item_target_x[G.i];
-                    G.item_y[G.i] = item_target_y[G.i];
-                    if (G.player_carry[0] == G.i) G.player_carry[0] = 0xFF;
-                    if (G.player_carry[1] == G.i) G.player_carry[1] = 0xFF;
-                    sfx_play(2, 3);
-                }
-            }
-        }
-        if (G.item_placed[G.i] == 0) G.temp2 = 1;
-
-        G.int_temp0 = G.item_x[G.i];
-        G.int_temp0 <<= 1;
-        G.int_temp0 -= G.scr_x;
-        if (G.int_temp0 < 0 || G.int_temp0 > 255) { G.i++; continue; }
-        G.temp0 = (byte)G.int_temp0;
-
-        G.int_temp0 = G.item_y[G.i];
-        G.int_temp0 <<= 1;
-        G.int_temp0 -= G.scr_y;
-        if (G.int_temp0 < 0 || G.int_temp0 > 255) { G.i++; continue; }
-        G.temp1 = (byte)G.int_temp0;
-
-        G.spr = oam_spr((byte)(G.temp0 - 4), (byte)(G.temp1 - 8), (byte)(0xC0 + (G.item_type[G.i] << 1)), 0x03, G.spr);
-        G.i++;
-    }
-
-    if (G.temp2 == 0) G.next_level = 1;
-}
-
-void init()
-{
-    oam_size(1);
-    bank_spr(0);
-    bank_bg(1);
-    vram_adr(NAMETABLE_A);
-    vram_unrle(bg_top_left);
-    vram_adr(NAMETABLE_B);
-    vram_unrle(bg_top_right);
-    vram_adr(NAMETABLE_C);
-    vram_unrle(bg_bottom_left);
-    vram_adr(NAMETABLE_D);
-    vram_unrle(bg_bottom_right);
-    ppu_on_all();
-    G.difficulty = 0;
-    G.next_level = 0;
-}
-
-void reset()
-{
-    G.next_level = 0;
-    G.frame = 0;
-    G.player_dir[0] = (byte)PAD.UP;
-    G.player_dir[1] = (byte)PAD.UP;
-    G.player_hp[0] = 4;
-    G.player_hp[1] = 4;
-    G.scr_x = 128;
-    G.scr_y = 128;
-    G.player_x[0] = 120;
-    G.player_y[0] = 120;
-    G.player_x[1] = 136;
-    G.player_y[1] = 120;
-    G.player_attack_tick[0] = 0;
-    G.player_attack_tick[1] = 0;
-    G.enemies_enemy[0] = PLAYER_1;
-    G.enemies_enemy[1] = PLAYER_2;
-    G.enemies_enemy[2] = PLAYER_1;
-    G.enemies_enemy[3] = PLAYER_2;
-    G.enemies_enemy[4] = PLAYER_1;
-    G.enemies_enemy[5] = PLAYER_2;
-    G.enemies_enemy[6] = PLAYER_1;
-    G.enemies_enemy[7] = PLAYER_2;
-    G.i = 0;
-    while (G.i < 8)
-    {
-        G.enemies_health[G.i] = 1;
-        G.enemies_dir[G.i] = (byte)PAD.UP;
-        G.enemy_leg[G.i] = (byte)(G.i & 1);
-        G.enemies_type[G.i] = (byte)(G.i & 1);
-        G.i++;
-    }
-    G.enemy_spawn_points_x[0] = 184;
-    G.enemy_spawn_points_y[0] = 24;
-    G.enemy_spawn_points_x[1] = 232;
-    G.enemy_spawn_points_y[1] = 72;
-    G.enemy_spawn_points_x[2] = 232;
-    G.enemy_spawn_points_y[2] = 168;
-    G.enemy_spawn_points_x[3] = 184;
-    G.enemy_spawn_points_y[3] = 216;
-    G.enemy_spawn_points_x[4] = 72;
-    G.enemy_spawn_points_y[4] = 217;
-    G.enemy_spawn_points_x[5] = 24;
-    G.enemy_spawn_points_y[5] = 167;
-    G.enemy_spawn_points_x[6] = 24;
-    G.enemy_spawn_points_y[6] = 73;
-    G.enemy_spawn_points_x[7] = 72;
-    G.enemy_spawn_points_y[7] = 24;
-    G.i = 0;
-    while (G.i < 8)
-    {
-        G.enemies_x[G.i] = G.enemy_spawn_points_x[G.i];
-        G.enemies_y[G.i] = G.enemy_spawn_points_y[G.i];
-        G.enemy_push_timer[G.i] = 0;
-        G.i++;
-    }
-    G.item_type[0] = 1;
-    G.item_x[0] = 128;
-    G.item_y[0] = 88;
-    G.item_type[1] = 2;
-    G.item_x[1] = 128;
-    G.item_y[1] = 108;
-    G.item_type[2] = 3;
-    G.item_x[2] = 128;
-    G.item_y[2] = 128;
-    G.item_type[3] = 4;
-    G.item_x[3] = 128;
-    G.item_y[3] = 148;
-
-    G.i = 0;
-    while (G.i < 4)
-    {
-        G.temp0 = (byte)(rand8() & 0xFE);
-        G.item_x[G.i] = (byte)(spawn[G.temp0] << 3);
-        G.item_y[G.i] = (byte)(spawn[G.temp0 + 1] << 3);
-        byte retry = 0;
-        G.j = 0;
-        while (G.j < G.i)
-        {
-            if (G.item_x[G.i] == G.item_x[G.j] && G.item_y[G.i] == G.item_y[G.j])
-            {
-                retry = 1;
-                break;
-            }
-            G.j++;
-        }
-        if (retry == 0) G.i++;
-    }
-
-    G.i = 0;
-    while (G.i < 4)
-    {
-        G.item_x[G.i] += (byte)(2 + (rand8() & 0x01) + (rand8() & 0x01));
-        G.item_y[G.i] += (byte)(2 + (rand8() & 0x01) + (rand8() & 0x01));
-        G.i++;
-    }
-
-    G.player_carry[0] = 0xFF;
-    G.player_carry[1] = 0xFF;
-    G.item_placed[0] = 0;
-    G.item_placed[1] = 0;
-    G.item_placed[2] = 0;
-    G.item_placed[3] = 0;
-    G.player_god_mode[0] = 0;
-    G.player_god_mode[1] = 0;
-
-    G.difficulty++;
-    if (G.difficulty == 1) { G.enemy_speed = 2; G.enemy_damage_modifier = 31; G.spawn_hp = 1; }
-    else if (G.difficulty == 2) { G.enemy_speed = 2; G.enemy_damage_modifier = 31; G.spawn_hp = 2; }
-    else if (G.difficulty == 4) { G.enemy_speed = 3; G.enemy_damage_modifier = 31; G.spawn_hp = 2; }
-    else if (G.difficulty == 6) { G.enemy_speed = 3; G.enemy_damage_modifier = 15; G.spawn_hp = 3; }
-    else if (G.difficulty == 7) { G.enemy_speed = 3; G.enemy_damage_modifier = 15; G.spawn_hp = 4; }
-    else if (G.difficulty == 8) { G.enemy_speed = 4; G.enemy_damage_modifier = 15; G.spawn_hp = 5; }
-    else if (G.difficulty == 9) { G.enemy_speed = 4; G.enemy_damage_modifier = 7; G.spawn_hp = 6; }
-    else if (G.difficulty >= 10) { G.enemy_speed = 5; G.enemy_damage_modifier = 7; G.spawn_hp = (byte)(6 + (G.difficulty - 10)); }
-    scroll(G.scr_x, G.scr_y);
-}
-init();
+// [inlined: init]
+oam_size(1);
+bank_spr(0);
+bank_bg(1);
+vram_adr(NAMETABLE_A);
+vram_unrle(bg_top_left);
+vram_adr(NAMETABLE_B);
+vram_unrle(bg_top_right);
+vram_adr(NAMETABLE_C);
+vram_unrle(bg_bottom_left);
+vram_adr(NAMETABLE_D);
+vram_unrle(bg_bottom_right);
+ppu_on_all();
+G.difficulty = 0;
+G.next_level = 0;
 oam_clear();
 
 while (true)
@@ -1725,7 +647,122 @@ while (true)
         if (G.next_level != 0)
         {
             sfx_play(3, 2);
-            reset();
+            // [inlined: reset]
+            G.next_level = 0;
+            G.frame = 0;
+            G.player_dir[0] = (byte)PAD.UP;
+            G.player_dir[1] = (byte)PAD.UP;
+            G.player_hp[0] = 4;
+            G.player_hp[1] = 4;
+            G.scr_x = 128;
+            G.scr_y = 128;
+            G.player_x[0] = 120;
+            G.player_y[0] = 120;
+            G.player_x[1] = 136;
+            G.player_y[1] = 120;
+            G.player_attack_tick[0] = 0;
+            G.player_attack_tick[1] = 0;
+            G.enemies_enemy[0] = PLAYER_1;
+            G.enemies_enemy[1] = PLAYER_2;
+            G.enemies_enemy[2] = PLAYER_1;
+            G.enemies_enemy[3] = PLAYER_2;
+            G.enemies_enemy[4] = PLAYER_1;
+            G.enemies_enemy[5] = PLAYER_2;
+            G.enemies_enemy[6] = PLAYER_1;
+            G.enemies_enemy[7] = PLAYER_2;
+            G.i = 0;
+            while (G.i < 8)
+            {
+                G.enemies_health[G.i] = 1;
+                G.enemies_dir[G.i] = (byte)PAD.UP;
+                G.enemy_leg[G.i] = (byte)(G.i & 1);
+                G.enemies_type[G.i] = (byte)(G.i & 1);
+                G.i++;
+            }
+            G.enemy_spawn_points_x[0] = 184;
+            G.enemy_spawn_points_y[0] = 24;
+            G.enemy_spawn_points_x[1] = 232;
+            G.enemy_spawn_points_y[1] = 72;
+            G.enemy_spawn_points_x[2] = 232;
+            G.enemy_spawn_points_y[2] = 168;
+            G.enemy_spawn_points_x[3] = 184;
+            G.enemy_spawn_points_y[3] = 216;
+            G.enemy_spawn_points_x[4] = 72;
+            G.enemy_spawn_points_y[4] = 217;
+            G.enemy_spawn_points_x[5] = 24;
+            G.enemy_spawn_points_y[5] = 167;
+            G.enemy_spawn_points_x[6] = 24;
+            G.enemy_spawn_points_y[6] = 73;
+            G.enemy_spawn_points_x[7] = 72;
+            G.enemy_spawn_points_y[7] = 24;
+            G.i = 0;
+            while (G.i < 8)
+            {
+                G.enemies_x[G.i] = G.enemy_spawn_points_x[G.i];
+                G.enemies_y[G.i] = G.enemy_spawn_points_y[G.i];
+                G.enemy_push_timer[G.i] = 0;
+                G.i++;
+            }
+            G.item_type[0] = 1;
+            G.item_x[0] = 128;
+            G.item_y[0] = 88;
+            G.item_type[1] = 2;
+            G.item_x[1] = 128;
+            G.item_y[1] = 108;
+            G.item_type[2] = 3;
+            G.item_x[2] = 128;
+            G.item_y[2] = 128;
+            G.item_type[3] = 4;
+            G.item_x[3] = 128;
+            G.item_y[3] = 148;
+
+            G.i = 0;
+            while (G.i < 4)
+            {
+                G.temp0 = (byte)(rand8() & 0xFE);
+                G.item_x[G.i] = (byte)(spawn[G.temp0] << 3);
+                G.item_y[G.i] = (byte)(spawn[G.temp0 + 1] << 3);
+                byte retry = 0;
+                G.j = 0;
+                while (G.j < G.i)
+                {
+                    if (G.item_x[G.i] == G.item_x[G.j] && G.item_y[G.i] == G.item_y[G.j])
+                    {
+                        retry = 1;
+                        break;
+                    }
+                    G.j++;
+                }
+                if (retry == 0) G.i++;
+            }
+
+            G.i = 0;
+            while (G.i < 4)
+            {
+                G.item_x[G.i] += (byte)(2 + (rand8() & 0x01) + (rand8() & 0x01));
+                G.item_y[G.i] += (byte)(2 + (rand8() & 0x01) + (rand8() & 0x01));
+                G.i++;
+            }
+
+            G.player_carry[0] = 0xFF;
+            G.player_carry[1] = 0xFF;
+            G.item_placed[0] = 0;
+            G.item_placed[1] = 0;
+            G.item_placed[2] = 0;
+            G.item_placed[3] = 0;
+            G.player_god_mode[0] = 0;
+            G.player_god_mode[1] = 0;
+
+            G.difficulty++;
+            if (G.difficulty == 1) { G.enemy_speed = 2; G.enemy_damage_modifier = 31; G.spawn_hp = 1; }
+            else if (G.difficulty == 2) { G.enemy_speed = 2; G.enemy_damage_modifier = 31; G.spawn_hp = 2; }
+            else if (G.difficulty == 4) { G.enemy_speed = 3; G.enemy_damage_modifier = 31; G.spawn_hp = 2; }
+            else if (G.difficulty == 6) { G.enemy_speed = 3; G.enemy_damage_modifier = 15; G.spawn_hp = 3; }
+            else if (G.difficulty == 7) { G.enemy_speed = 3; G.enemy_damage_modifier = 15; G.spawn_hp = 4; }
+            else if (G.difficulty == 8) { G.enemy_speed = 4; G.enemy_damage_modifier = 15; G.spawn_hp = 5; }
+            else if (G.difficulty == 9) { G.enemy_speed = 4; G.enemy_damage_modifier = 7; G.spawn_hp = 6; }
+            else if (G.difficulty >= 10) { G.enemy_speed = 5; G.enemy_damage_modifier = 7; G.spawn_hp = (byte)(6 + (G.difficulty - 10)); }
+            scroll(G.scr_x, G.scr_y);
             G.spr = 0;
             oam_clear();
             pal_all(paused_palette);
@@ -1765,7 +802,122 @@ while (true)
             sfx_play(4, 2);
             G.difficulty = 0;
             G.next_level = 0;
-            reset();
+            // [inlined: reset]
+            G.next_level = 0;
+            G.frame = 0;
+            G.player_dir[0] = (byte)PAD.UP;
+            G.player_dir[1] = (byte)PAD.UP;
+            G.player_hp[0] = 4;
+            G.player_hp[1] = 4;
+            G.scr_x = 128;
+            G.scr_y = 128;
+            G.player_x[0] = 120;
+            G.player_y[0] = 120;
+            G.player_x[1] = 136;
+            G.player_y[1] = 120;
+            G.player_attack_tick[0] = 0;
+            G.player_attack_tick[1] = 0;
+            G.enemies_enemy[0] = PLAYER_1;
+            G.enemies_enemy[1] = PLAYER_2;
+            G.enemies_enemy[2] = PLAYER_1;
+            G.enemies_enemy[3] = PLAYER_2;
+            G.enemies_enemy[4] = PLAYER_1;
+            G.enemies_enemy[5] = PLAYER_2;
+            G.enemies_enemy[6] = PLAYER_1;
+            G.enemies_enemy[7] = PLAYER_2;
+            G.i = 0;
+            while (G.i < 8)
+            {
+                G.enemies_health[G.i] = 1;
+                G.enemies_dir[G.i] = (byte)PAD.UP;
+                G.enemy_leg[G.i] = (byte)(G.i & 1);
+                G.enemies_type[G.i] = (byte)(G.i & 1);
+                G.i++;
+            }
+            G.enemy_spawn_points_x[0] = 184;
+            G.enemy_spawn_points_y[0] = 24;
+            G.enemy_spawn_points_x[1] = 232;
+            G.enemy_spawn_points_y[1] = 72;
+            G.enemy_spawn_points_x[2] = 232;
+            G.enemy_spawn_points_y[2] = 168;
+            G.enemy_spawn_points_x[3] = 184;
+            G.enemy_spawn_points_y[3] = 216;
+            G.enemy_spawn_points_x[4] = 72;
+            G.enemy_spawn_points_y[4] = 217;
+            G.enemy_spawn_points_x[5] = 24;
+            G.enemy_spawn_points_y[5] = 167;
+            G.enemy_spawn_points_x[6] = 24;
+            G.enemy_spawn_points_y[6] = 73;
+            G.enemy_spawn_points_x[7] = 72;
+            G.enemy_spawn_points_y[7] = 24;
+            G.i = 0;
+            while (G.i < 8)
+            {
+                G.enemies_x[G.i] = G.enemy_spawn_points_x[G.i];
+                G.enemies_y[G.i] = G.enemy_spawn_points_y[G.i];
+                G.enemy_push_timer[G.i] = 0;
+                G.i++;
+            }
+            G.item_type[0] = 1;
+            G.item_x[0] = 128;
+            G.item_y[0] = 88;
+            G.item_type[1] = 2;
+            G.item_x[1] = 128;
+            G.item_y[1] = 108;
+            G.item_type[2] = 3;
+            G.item_x[2] = 128;
+            G.item_y[2] = 128;
+            G.item_type[3] = 4;
+            G.item_x[3] = 128;
+            G.item_y[3] = 148;
+
+            G.i = 0;
+            while (G.i < 4)
+            {
+                G.temp0 = (byte)(rand8() & 0xFE);
+                G.item_x[G.i] = (byte)(spawn[G.temp0] << 3);
+                G.item_y[G.i] = (byte)(spawn[G.temp0 + 1] << 3);
+                byte retry = 0;
+                G.j = 0;
+                while (G.j < G.i)
+                {
+                    if (G.item_x[G.i] == G.item_x[G.j] && G.item_y[G.i] == G.item_y[G.j])
+                    {
+                        retry = 1;
+                        break;
+                    }
+                    G.j++;
+                }
+                if (retry == 0) G.i++;
+            }
+
+            G.i = 0;
+            while (G.i < 4)
+            {
+                G.item_x[G.i] += (byte)(2 + (rand8() & 0x01) + (rand8() & 0x01));
+                G.item_y[G.i] += (byte)(2 + (rand8() & 0x01) + (rand8() & 0x01));
+                G.i++;
+            }
+
+            G.player_carry[0] = 0xFF;
+            G.player_carry[1] = 0xFF;
+            G.item_placed[0] = 0;
+            G.item_placed[1] = 0;
+            G.item_placed[2] = 0;
+            G.item_placed[3] = 0;
+            G.player_god_mode[0] = 0;
+            G.player_god_mode[1] = 0;
+
+            G.difficulty++;
+            if (G.difficulty == 1) { G.enemy_speed = 2; G.enemy_damage_modifier = 31; G.spawn_hp = 1; }
+            else if (G.difficulty == 2) { G.enemy_speed = 2; G.enemy_damage_modifier = 31; G.spawn_hp = 2; }
+            else if (G.difficulty == 4) { G.enemy_speed = 3; G.enemy_damage_modifier = 31; G.spawn_hp = 2; }
+            else if (G.difficulty == 6) { G.enemy_speed = 3; G.enemy_damage_modifier = 15; G.spawn_hp = 3; }
+            else if (G.difficulty == 7) { G.enemy_speed = 3; G.enemy_damage_modifier = 15; G.spawn_hp = 4; }
+            else if (G.difficulty == 8) { G.enemy_speed = 4; G.enemy_damage_modifier = 15; G.spawn_hp = 5; }
+            else if (G.difficulty == 9) { G.enemy_speed = 4; G.enemy_damage_modifier = 7; G.spawn_hp = 6; }
+            else if (G.difficulty >= 10) { G.enemy_speed = 5; G.enemy_damage_modifier = 7; G.spawn_hp = (byte)(6 + (G.difficulty - 10)); }
+            scroll(G.scr_x, G.scr_y);
             G.spr = 0;
             oam_clear();
             pal_all(paused_palette);
@@ -1837,8 +989,1334 @@ while (true)
             }
         }
 
-        tick_players();
-        tick_enemies();
+        // [inlined: tick_players]
+        if (G.player_hp[0] >= 4)
+        {
+            G.spr = oam_spr(0x10, 0x10, 0x60, 0x00, G.spr);
+            G.spr = oam_spr(0x10, 0x20, 0x60, 0x00, G.spr);
+        }
+        else if (G.player_hp[0] == 3)
+        {
+            G.spr = oam_spr(0x10, 0x10, 0x62, 0x00, G.spr);
+            G.spr = oam_spr(0x10, 0x20, 0x60, 0x00, G.spr);
+        }
+        else if (G.player_hp[0] == 2)
+        {
+            G.spr = oam_spr(0x10, 0x10, 0x64, 0x00, G.spr);
+            G.spr = oam_spr(0x10, 0x20, 0x60, 0x00, G.spr);
+        }
+        else if (G.player_hp[0] == 1)
+        {
+            G.spr = oam_spr(0x10, 0x10, 0x64, 0x00, G.spr);
+            G.spr = oam_spr(0x10, 0x20, 0x62, 0x00, G.spr);
+        }
+        else
+        {
+            G.spr = oam_spr(0x10, 0x10, 0x64, 0x00, G.spr);
+            G.spr = oam_spr(0x10, 0x20, 0x64, 0x00, G.spr);
+        }
+        if (G.player_hp[1] >= 4)
+        {
+            G.spr = oam_spr(0xE8, 0x10, 0x60, 0x01, G.spr);
+            G.spr = oam_spr(0xE8, 0x20, 0x60, 0x01, G.spr);
+        }
+        else if (G.player_hp[1] == 3)
+        {
+            G.spr = oam_spr(0xE8, 0x10, 0x62, 0x01, G.spr);
+            G.spr = oam_spr(0xE8, 0x20, 0x60, 0x01, G.spr);
+        }
+        else if (G.player_hp[1] == 2)
+        {
+            G.spr = oam_spr(0xE8, 0x10, 0x64, 0x01, G.spr);
+            G.spr = oam_spr(0xE8, 0x20, 0x60, 0x01, G.spr);
+        }
+        else if (G.player_hp[1] == 1)
+        {
+            G.spr = oam_spr(0xE8, 0x10, 0x64, 0x01, G.spr);
+            G.spr = oam_spr(0xE8, 0x20, 0x62, 0x01, G.spr);
+        }
+        else
+        {
+            G.spr = oam_spr(0xE8, 0x10, 0x64, 0x01, G.spr);
+            G.spr = oam_spr(0xE8, 0x20, 0x64, 0x01, G.spr);
+        }
+
+        G.to_scroll_x = 0;
+        G.to_scroll_y = 0;
+
+        G.i = 0;
+        while (G.i < 2)
+        {
+            if (G.player_god_mode[G.i] != 0)
+            {
+                if ((G.frame & 2) == 0)
+                {
+                    G.player_god_mode[G.i]--;
+                    pal_col((byte)(16 + (G.i << 2) + 3), palette[16 + (G.i << 2) + 3]);
+                    pal_col((byte)(16 + (G.i << 2) + 1), palette[16 + (G.i << 2) + 1]);
+                }
+                else
+                {
+                    pal_col((byte)(16 + (G.i << 2) + 3), 0x20);
+                    pal_col((byte)(16 + (G.i << 2) + 1), 0x0D);
+                }
+            }
+            if (G.player_hp[G.i] == 0) { G.i++; continue; }
+
+            G.int_temp0 = G.player_x[G.i];
+            G.int_temp0 <<= 1;
+            G.int_temp0 -= G.scr_x;
+            G.temp0 = (byte)G.int_temp0;
+
+            G.int_temp0 = G.player_y[G.i];
+            G.int_temp0 <<= 1;
+            G.int_temp0 -= G.scr_y;
+            G.temp1 = (byte)G.int_temp0;
+
+            G.temp2 = (byte)pad_poll(G.i);
+
+            // [inlined: draw_player]
+            if (G.i == 0)
+            {
+                if (G.player_carry[0] != 0xFF)
+                {
+                    if ((G.temp2 & PAD_DPAD) != 0)
+                    {
+                        if (G.player_carry_dir[0] == (byte)PAD.UP)
+                        {
+                            if ((G.frame & 16) != 0)
+                                G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_carry_0_meta_spr_left_foot_up);
+                            else
+                                G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_carry_0_meta_spr_right_foot_up);
+                        }
+                        else if (G.player_carry_dir[0] == (byte)PAD.DOWN)
+                        {
+                            if ((G.frame & 16) != 0)
+                                G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_carry_0_meta_spr_left_foot_down);
+                            else
+                                G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_carry_0_meta_spr_right_foot_down);
+                        }
+                        else if (G.player_carry_dir[0] == (byte)PAD.LEFT)
+                        {
+                            if ((G.frame & 16) != 0)
+                                G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_carry_0_meta_spr_left_foot_left);
+                            else
+                                G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_carry_0_meta_spr_right_foot_left);
+                        }
+                        else if (G.player_carry_dir[0] == (byte)PAD.RIGHT)
+                        {
+                            if ((G.frame & 16) != 0)
+                                G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_carry_0_meta_spr_left_foot_right);
+                            else
+                                G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_carry_0_meta_spr_right_foot_right);
+                        }
+                    }
+                    else
+                    {
+                        if (G.player_carry_dir[G.i] == (byte)PAD.UP)
+                            G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_carry_0_meta_spr_stand_up);
+                        else if (G.player_carry_dir[G.i] == (byte)PAD.DOWN)
+                            G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_carry_0_meta_spr_stand_down);
+                        else if (G.player_carry_dir[G.i] == (byte)PAD.LEFT)
+                            G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_carry_0_meta_spr_stand_left);
+                        else if (G.player_carry_dir[G.i] == (byte)PAD.RIGHT)
+                            G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_carry_0_meta_spr_stand_right);
+                    }
+                }
+                else if (G.player_attack_tick[G.i] != 0)
+                {
+                    if (G.player_dir[G.i] == (byte)PAD.UP)
+                    {
+                        if (G.player_attack_tick[G.i] > 8)
+                            G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_0_meta_spr_attack_0_up);
+                        else
+                            G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_0_meta_spr_attack_1_up);
+                    }
+                    else if (G.player_dir[G.i] == (byte)PAD.DOWN)
+                    {
+                        if (G.player_attack_tick[G.i] > 8)
+                            G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_0_meta_spr_attack_0_down);
+                        else
+                            G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_0_meta_spr_attack_1_down);
+                    }
+                    else if (G.player_dir[G.i] == (byte)PAD.LEFT)
+                    {
+                        if (G.player_attack_tick[G.i] > 8)
+                            G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_0_meta_spr_attack_0_left);
+                        else
+                            G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_0_meta_spr_attack_1_left);
+                    }
+                    else if (G.player_dir[G.i] == (byte)PAD.RIGHT)
+                    {
+                        if (G.player_attack_tick[G.i] > 8)
+                            G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_0_meta_spr_attack_0_right);
+                        else
+                            G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_0_meta_spr_attack_1_right);
+                    }
+                    G.player_attack_tick[G.i]--;
+                }
+                else if ((G.temp2 & PAD_DPAD) != 0)
+                {
+                    if (G.player_dir[G.i] == (byte)PAD.UP)
+                    {
+                        if ((G.frame & 16) != 0)
+                            G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_0_meta_spr_left_foot_up);
+                        else
+                            G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_0_meta_spr_right_foot_up);
+                    }
+                    else if (G.player_dir[G.i] == (byte)PAD.DOWN)
+                    {
+                        if ((G.frame & 16) != 0)
+                            G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_0_meta_spr_left_foot_down);
+                        else
+                            G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_0_meta_spr_right_foot_down);
+                    }
+                    else if (G.player_dir[G.i] == (byte)PAD.LEFT)
+                    {
+                        if ((G.frame & 16) != 0)
+                            G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_0_meta_spr_left_foot_left);
+                        else
+                            G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_0_meta_spr_right_foot_left);
+                    }
+                    else if (G.player_dir[G.i] == (byte)PAD.RIGHT)
+                    {
+                        if ((G.frame & 16) != 0)
+                            G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_0_meta_spr_left_foot_right);
+                        else
+                            G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_0_meta_spr_right_foot_right);
+                    }
+                }
+                else
+                {
+                    if (G.player_dir[G.i] == (byte)PAD.UP)
+                        G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_0_meta_spr_stand_up);
+                    else if (G.player_dir[G.i] == (byte)PAD.DOWN)
+                        G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_0_meta_spr_stand_down);
+                    else if (G.player_dir[G.i] == (byte)PAD.LEFT)
+                        G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_0_meta_spr_stand_left);
+                    else if (G.player_dir[G.i] == (byte)PAD.RIGHT)
+                        G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_0_meta_spr_stand_right);
+                }
+            }
+            else if (G.i == 1)
+            {
+                if (G.player_carry[1] != 0xFF)
+                {
+                    if ((G.temp2 & PAD_DPAD) != 0)
+                    {
+                        if (G.player_carry_dir[1] == (byte)PAD.UP)
+                        {
+                            if ((G.frame & 16) != 0)
+                                G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_carry_1_meta_spr_left_foot_up);
+                            else
+                                G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_carry_1_meta_spr_right_foot_up);
+                        }
+                        else if (G.player_carry_dir[1] == (byte)PAD.DOWN)
+                        {
+                            if ((G.frame & 16) != 0)
+                                G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_carry_1_meta_spr_left_foot_down);
+                            else
+                                G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_carry_1_meta_spr_right_foot_down);
+                        }
+                        else if (G.player_carry_dir[1] == (byte)PAD.LEFT)
+                        {
+                            if ((G.frame & 16) != 0)
+                                G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_carry_1_meta_spr_left_foot_left);
+                            else
+                                G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_carry_1_meta_spr_right_foot_left);
+                        }
+                        else if (G.player_carry_dir[1] == (byte)PAD.RIGHT)
+                        {
+                            if ((G.frame & 16) != 0)
+                                G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_carry_1_meta_spr_left_foot_right);
+                            else
+                                G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_carry_1_meta_spr_right_foot_right);
+                        }
+                    }
+                    else
+                    {
+                        if (G.player_carry_dir[G.i] == (byte)PAD.UP)
+                            G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_carry_1_meta_spr_stand_up);
+                        else if (G.player_carry_dir[G.i] == (byte)PAD.DOWN)
+                            G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_carry_1_meta_spr_stand_down);
+                        else if (G.player_carry_dir[G.i] == (byte)PAD.LEFT)
+                            G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_carry_1_meta_spr_stand_left);
+                        else if (G.player_carry_dir[G.i] == (byte)PAD.RIGHT)
+                            G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_carry_1_meta_spr_stand_right);
+                    }
+                }
+                else if (G.player_attack_tick[G.i] != 0)
+                {
+                    if (G.player_dir[G.i] == (byte)PAD.UP)
+                    {
+                        if (G.player_attack_tick[G.i] > 8)
+                            G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_1_meta_spr_attack_0_up);
+                        else
+                            G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_1_meta_spr_attack_1_up);
+                    }
+                    else if (G.player_dir[G.i] == (byte)PAD.DOWN)
+                    {
+                        if (G.player_attack_tick[G.i] > 8)
+                            G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_1_meta_spr_attack_0_down);
+                        else
+                            G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_1_meta_spr_attack_1_down);
+                    }
+                    else if (G.player_dir[G.i] == (byte)PAD.LEFT)
+                    {
+                        if (G.player_attack_tick[G.i] > 8)
+                            G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_1_meta_spr_attack_0_left);
+                        else
+                            G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_1_meta_spr_attack_1_left);
+                    }
+                    else if (G.player_dir[G.i] == (byte)PAD.RIGHT)
+                    {
+                        if (G.player_attack_tick[G.i] > 8)
+                            G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_1_meta_spr_attack_0_right);
+                        else
+                            G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_1_meta_spr_attack_1_right);
+                    }
+                    G.player_attack_tick[G.i]--;
+                }
+                else if ((G.temp2 & PAD_DPAD) != 0)
+                {
+                    if (G.player_dir[G.i] == (byte)PAD.UP)
+                    {
+                        if ((G.frame & 16) != 0)
+                            G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_1_meta_spr_left_foot_up);
+                        else
+                            G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_1_meta_spr_right_foot_up);
+                    }
+                    else if (G.player_dir[G.i] == (byte)PAD.DOWN)
+                    {
+                        if ((G.frame & 16) != 0)
+                            G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_1_meta_spr_left_foot_down);
+                        else
+                            G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_1_meta_spr_right_foot_down);
+                    }
+                    else if (G.player_dir[G.i] == (byte)PAD.LEFT)
+                    {
+                        if ((G.frame & 16) != 0)
+                            G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_1_meta_spr_left_foot_left);
+                        else
+                            G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_1_meta_spr_right_foot_left);
+                    }
+                    else if (G.player_dir[G.i] == (byte)PAD.RIGHT)
+                    {
+                        if ((G.frame & 16) != 0)
+                            G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_1_meta_spr_left_foot_right);
+                        else
+                            G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_1_meta_spr_right_foot_right);
+                    }
+                }
+                else
+                {
+                    if (G.player_dir[G.i] == (byte)PAD.UP)
+                        G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_1_meta_spr_stand_up);
+                    else if (G.player_dir[G.i] == (byte)PAD.DOWN)
+                        G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_1_meta_spr_stand_down);
+                    else if (G.player_dir[G.i] == (byte)PAD.LEFT)
+                        G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_1_meta_spr_stand_left);
+                    else if (G.player_dir[G.i] == (byte)PAD.RIGHT)
+                        G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_1_meta_spr_stand_right);
+                }
+            }
+
+            if (G.temp0 < min_x && G.scr_x > 0)
+            {
+                G.to_scroll_x = (byte)((min_x - G.temp0) >> 1);
+                if (G.to_scroll_x > G.scr_x)
+                    G.to_scroll_x = G.scr_x;
+                G.to_scroll_x_neg = 1;
+            }
+            else if (G.temp0 > max_x && G.scr_x < 255)
+            {
+                G.to_scroll_x = (byte)((G.temp0 - max_x) >> 1);
+                if (G.to_scroll_x > (byte)(254 - G.scr_x))
+                    G.to_scroll_x = (byte)(254 - G.scr_x);
+                G.to_scroll_x_neg = 0;
+            }
+
+            if (G.temp1 < min_y && G.scr_y > 0)
+            {
+                G.to_scroll_y = (byte)((min_y - G.temp1) >> 1);
+                if (G.to_scroll_y > G.scr_y)
+                    G.to_scroll_y = G.scr_y;
+                G.to_scroll_y_neg = 1;
+            }
+            else if (G.temp1 > max_y && G.scr_y < 255)
+            {
+                G.to_scroll_y = (byte)((G.temp1 - max_y) >> 1);
+                if (G.to_scroll_y > (byte)(238 - G.scr_y))
+                    G.to_scroll_y = (byte)(238 - G.scr_y);
+                G.to_scroll_y_neg = 0;
+            }
+
+            if ((G.temp2 & (byte)PAD.B) != 0)
+            {
+                if (G.player_carry[G.i] == 0xFF)
+                {
+                    G.temp4 = G.player_x[G.i];
+                    G.temp5 = G.player_y[G.i];
+                    if (G.player_dir[G.i] == (byte)PAD.LEFT) G.temp4 -= 4;
+                    else if (G.player_dir[G.i] == (byte)PAD.RIGHT) G.temp4 += 4;
+                    if (G.player_dir[G.i] == (byte)PAD.UP) G.temp5 -= 4;
+                    else if (G.player_dir[G.i] == (byte)PAD.DOWN) G.temp5 += 2;
+                    G.j = 0;
+                    while (G.j < 4)
+                    {
+                        if (G.item_placed[G.j] == 0)
+                        {
+                            if ((byte)(G.item_x[G.j] - 4) < G.temp4 && (byte)(G.item_x[G.j] + 4) > G.temp4)
+                            {
+                                if ((byte)(G.item_y[G.j] - 5) < G.temp5 && (byte)(G.item_y[G.j] + 5) > G.temp5)
+                                {
+                                    if (G.player_carry[(byte)(1 - G.i)] != G.j || G.player_carry_dir[(byte)(1 - G.i)] != G.player_dir[G.i])
+                                    {
+                                        G.player_carry[G.i] = G.j;
+                                        G.player_carry_dir[G.i] = G.player_dir[G.i];
+                                        sfx_play(5, 3);
+                                    }
+                                }
+                            }
+                        }
+                        G.j++;
+                    }
+                }
+            }
+            else
+            {
+                G.player_carry[G.i] = 0xFF;
+            }
+
+            if (G.player_attack_tick[G.i] < 3 && (G.temp2 & (byte)PAD.A) != 0)
+                G.player_attack_tick[G.i] = 16;
+
+            G.temp1 = (byte)(1 - G.i);
+
+            G.temp6 = 0;
+            if (G.player_carry[G.i] != 0xFF)
+            {
+                G.temp6++;
+                if (G.player_carry[G.temp1] == G.player_carry[G.i])
+                    G.temp6++;
+            }
+
+            if (G.temp6 == 2)
+            {
+                if (G.i == 0 && (G.frame & 3) == 0)
+                {
+                    G.temp2 = (byte)((byte)pad_poll(0) & (byte)pad_poll(1));
+                    if ((G.temp2 & (byte)PAD.LEFT) != 0)
+                    {
+                        byte _ib_x3 = (byte)(G.player_x[0] - 1); byte _ib_y3 = G.player_y[0];
+                        byte _ib_result3;
+                        // [inlined: isBlocked]
+                        if (_ib_x3 > 122 && _ib_x3 < 134 && _ib_y3 > 114 && _ib_y3 < 125)
+                        {
+                            _ib_result3 = 1;
+                        }
+                        else if (_ib_x3 < 128)
+                        {
+                            if (_ib_y3 < 120)
+                            {
+                                _ib_result3 = collision_top_left[(_ib_x3 >> 3) + ((_ib_y3 >> 3) << 4)];
+                            }
+                            else
+                            {
+                                _ib_y3 -= 120;
+                                _ib_result3 = collision_bottom_left[(_ib_x3 >> 3) + ((_ib_y3 >> 3) << 4)];
+                            }
+                        }
+                        else
+                        {
+                            _ib_x3 -= 128;
+                            if (_ib_y3 < 120)
+                            {
+                                _ib_result3 = collision_top_right[(_ib_x3 >> 3) + ((_ib_y3 >> 3) << 4)];
+                            }
+                            else
+                            {
+                                _ib_y3 -= 120;
+                                _ib_result3 = collision_bottom_right[(_ib_x3 >> 3) + ((_ib_y3 >> 3) << 4)];
+                            }
+                        }
+                        byte _ib_x4 = (byte)(G.player_x[1] - 1); byte _ib_y4 = G.player_y[1];
+                        byte _ib_result4;
+                        // [inlined: isBlocked]
+                        if (_ib_x4 > 122 && _ib_x4 < 134 && _ib_y4 > 114 && _ib_y4 < 125)
+                        {
+                            _ib_result4 = 1;
+                        }
+                        else if (_ib_x4 < 128)
+                        {
+                            if (_ib_y4 < 120)
+                            {
+                                _ib_result4 = collision_top_left[(_ib_x4 >> 3) + ((_ib_y4 >> 3) << 4)];
+                            }
+                            else
+                            {
+                                _ib_y4 -= 120;
+                                _ib_result4 = collision_bottom_left[(_ib_x4 >> 3) + ((_ib_y4 >> 3) << 4)];
+                            }
+                        }
+                        else
+                        {
+                            _ib_x4 -= 128;
+                            if (_ib_y4 < 120)
+                            {
+                                _ib_result4 = collision_top_right[(_ib_x4 >> 3) + ((_ib_y4 >> 3) << 4)];
+                            }
+                            else
+                            {
+                                _ib_y4 -= 120;
+                                _ib_result4 = collision_bottom_right[(_ib_x4 >> 3) + ((_ib_y4 >> 3) << 4)];
+                            }
+                        }
+                        if (_ib_result3 == 0 && _ib_result4 == 0)
+                        {
+                            G.player_x[0]--;
+                            G.player_x[1]--;
+                            G.item_x[G.player_carry[G.i]]--;
+                        }
+                    }
+                    else if ((G.temp2 & (byte)PAD.RIGHT) != 0)
+                    {
+                        byte _ib_x5 = (byte)(G.player_x[0] + 1); byte _ib_y5 = G.player_y[0];
+                        byte _ib_result5;
+                        // [inlined: isBlocked]
+                        if (_ib_x5 > 122 && _ib_x5 < 134 && _ib_y5 > 114 && _ib_y5 < 125)
+                        {
+                            _ib_result5 = 1;
+                        }
+                        else if (_ib_x5 < 128)
+                        {
+                            if (_ib_y5 < 120)
+                            {
+                                _ib_result5 = collision_top_left[(_ib_x5 >> 3) + ((_ib_y5 >> 3) << 4)];
+                            }
+                            else
+                            {
+                                _ib_y5 -= 120;
+                                _ib_result5 = collision_bottom_left[(_ib_x5 >> 3) + ((_ib_y5 >> 3) << 4)];
+                            }
+                        }
+                        else
+                        {
+                            _ib_x5 -= 128;
+                            if (_ib_y5 < 120)
+                            {
+                                _ib_result5 = collision_top_right[(_ib_x5 >> 3) + ((_ib_y5 >> 3) << 4)];
+                            }
+                            else
+                            {
+                                _ib_y5 -= 120;
+                                _ib_result5 = collision_bottom_right[(_ib_x5 >> 3) + ((_ib_y5 >> 3) << 4)];
+                            }
+                        }
+                        byte _ib_x6 = (byte)(G.player_x[1] + 1); byte _ib_y6 = G.player_y[1];
+                        byte _ib_result6;
+                        // [inlined: isBlocked]
+                        if (_ib_x6 > 122 && _ib_x6 < 134 && _ib_y6 > 114 && _ib_y6 < 125)
+                        {
+                            _ib_result6 = 1;
+                        }
+                        else if (_ib_x6 < 128)
+                        {
+                            if (_ib_y6 < 120)
+                            {
+                                _ib_result6 = collision_top_left[(_ib_x6 >> 3) + ((_ib_y6 >> 3) << 4)];
+                            }
+                            else
+                            {
+                                _ib_y6 -= 120;
+                                _ib_result6 = collision_bottom_left[(_ib_x6 >> 3) + ((_ib_y6 >> 3) << 4)];
+                            }
+                        }
+                        else
+                        {
+                            _ib_x6 -= 128;
+                            if (_ib_y6 < 120)
+                            {
+                                _ib_result6 = collision_top_right[(_ib_x6 >> 3) + ((_ib_y6 >> 3) << 4)];
+                            }
+                            else
+                            {
+                                _ib_y6 -= 120;
+                                _ib_result6 = collision_bottom_right[(_ib_x6 >> 3) + ((_ib_y6 >> 3) << 4)];
+                            }
+                        }
+                        if (_ib_result5 == 0 && _ib_result6 == 0)
+                        {
+                            G.player_x[0]++;
+                            G.player_x[1]++;
+                            G.item_x[G.player_carry[G.i]]++;
+                        }
+                    }
+                    if ((G.temp2 & (byte)PAD.UP) != 0)
+                    {
+                        byte _ib_x7 = G.player_x[0]; byte _ib_y7 = (byte)(G.player_y[0] - 1);
+                        byte _ib_result7;
+                        // [inlined: isBlocked]
+                        if (_ib_x7 > 122 && _ib_x7 < 134 && _ib_y7 > 114 && _ib_y7 < 125)
+                        {
+                            _ib_result7 = 1;
+                        }
+                        else if (_ib_x7 < 128)
+                        {
+                            if (_ib_y7 < 120)
+                            {
+                                _ib_result7 = collision_top_left[(_ib_x7 >> 3) + ((_ib_y7 >> 3) << 4)];
+                            }
+                            else
+                            {
+                                _ib_y7 -= 120;
+                                _ib_result7 = collision_bottom_left[(_ib_x7 >> 3) + ((_ib_y7 >> 3) << 4)];
+                            }
+                        }
+                        else
+                        {
+                            _ib_x7 -= 128;
+                            if (_ib_y7 < 120)
+                            {
+                                _ib_result7 = collision_top_right[(_ib_x7 >> 3) + ((_ib_y7 >> 3) << 4)];
+                            }
+                            else
+                            {
+                                _ib_y7 -= 120;
+                                _ib_result7 = collision_bottom_right[(_ib_x7 >> 3) + ((_ib_y7 >> 3) << 4)];
+                            }
+                        }
+                        byte _ib_x8 = G.player_x[1]; byte _ib_y8 = (byte)(G.player_y[1] - 1);
+                        byte _ib_result8;
+                        // [inlined: isBlocked]
+                        if (_ib_x8 > 122 && _ib_x8 < 134 && _ib_y8 > 114 && _ib_y8 < 125)
+                        {
+                            _ib_result8 = 1;
+                        }
+                        else if (_ib_x8 < 128)
+                        {
+                            if (_ib_y8 < 120)
+                            {
+                                _ib_result8 = collision_top_left[(_ib_x8 >> 3) + ((_ib_y8 >> 3) << 4)];
+                            }
+                            else
+                            {
+                                _ib_y8 -= 120;
+                                _ib_result8 = collision_bottom_left[(_ib_x8 >> 3) + ((_ib_y8 >> 3) << 4)];
+                            }
+                        }
+                        else
+                        {
+                            _ib_x8 -= 128;
+                            if (_ib_y8 < 120)
+                            {
+                                _ib_result8 = collision_top_right[(_ib_x8 >> 3) + ((_ib_y8 >> 3) << 4)];
+                            }
+                            else
+                            {
+                                _ib_y8 -= 120;
+                                _ib_result8 = collision_bottom_right[(_ib_x8 >> 3) + ((_ib_y8 >> 3) << 4)];
+                            }
+                        }
+                        if (_ib_result7 == 0 && _ib_result8 == 0)
+                        {
+                            G.player_y[0]--;
+                            G.player_y[1]--;
+                            G.item_y[G.player_carry[G.i]]--;
+                        }
+                    }
+                    else if ((G.temp2 & (byte)PAD.DOWN) != 0)
+                    {
+                        byte _ib_x9 = G.player_x[0]; byte _ib_y9 = (byte)(G.player_y[0] + 1);
+                        byte _ib_result9;
+                        // [inlined: isBlocked]
+                        if (_ib_x9 > 122 && _ib_x9 < 134 && _ib_y9 > 114 && _ib_y9 < 125)
+                        {
+                            _ib_result9 = 1;
+                        }
+                        else if (_ib_x9 < 128)
+                        {
+                            if (_ib_y9 < 120)
+                            {
+                                _ib_result9 = collision_top_left[(_ib_x9 >> 3) + ((_ib_y9 >> 3) << 4)];
+                            }
+                            else
+                            {
+                                _ib_y9 -= 120;
+                                _ib_result9 = collision_bottom_left[(_ib_x9 >> 3) + ((_ib_y9 >> 3) << 4)];
+                            }
+                        }
+                        else
+                        {
+                            _ib_x9 -= 128;
+                            if (_ib_y9 < 120)
+                            {
+                                _ib_result9 = collision_top_right[(_ib_x9 >> 3) + ((_ib_y9 >> 3) << 4)];
+                            }
+                            else
+                            {
+                                _ib_y9 -= 120;
+                                _ib_result9 = collision_bottom_right[(_ib_x9 >> 3) + ((_ib_y9 >> 3) << 4)];
+                            }
+                        }
+                        byte _ib_x10 = G.player_x[1]; byte _ib_y10 = (byte)(G.player_y[1] + 1);
+                        byte _ib_result10;
+                        // [inlined: isBlocked]
+                        if (_ib_x10 > 122 && _ib_x10 < 134 && _ib_y10 > 114 && _ib_y10 < 125)
+                        {
+                            _ib_result10 = 1;
+                        }
+                        else if (_ib_x10 < 128)
+                        {
+                            if (_ib_y10 < 120)
+                            {
+                                _ib_result10 = collision_top_left[(_ib_x10 >> 3) + ((_ib_y10 >> 3) << 4)];
+                            }
+                            else
+                            {
+                                _ib_y10 -= 120;
+                                _ib_result10 = collision_bottom_left[(_ib_x10 >> 3) + ((_ib_y10 >> 3) << 4)];
+                            }
+                        }
+                        else
+                        {
+                            _ib_x10 -= 128;
+                            if (_ib_y10 < 120)
+                            {
+                                _ib_result10 = collision_top_right[(_ib_x10 >> 3) + ((_ib_y10 >> 3) << 4)];
+                            }
+                            else
+                            {
+                                _ib_y10 -= 120;
+                                _ib_result10 = collision_bottom_right[(_ib_x10 >> 3) + ((_ib_y10 >> 3) << 4)];
+                            }
+                        }
+                        if (_ib_result9 == 0 && _ib_result10 == 0)
+                        {
+                            G.player_y[0]++;
+                            G.player_y[1]++;
+                            G.item_y[G.player_carry[G.i]]++;
+                        }
+                    }
+                }
+            }
+            else if ((G.temp6 == 0 || (G.frame & 7) == G.i) && (G.frame & 1) == G.i)
+            {
+                if ((G.player_dir[G.i] & G.temp2) == 0)
+                {
+                    if ((G.temp2 & (byte)PAD.LEFT) != 0) G.player_dir[G.i] = (byte)PAD.LEFT;
+                    else if ((G.temp2 & (byte)PAD.RIGHT) != 0) G.player_dir[G.i] = (byte)PAD.RIGHT;
+                    else if ((G.temp2 & (byte)PAD.DOWN) != 0) G.player_dir[G.i] = (byte)PAD.DOWN;
+                    else if ((G.temp2 & (byte)PAD.UP) != 0) G.player_dir[G.i] = (byte)PAD.UP;
+                }
+                G.temp4 = G.player_x[G.i];
+                G.temp5 = G.player_y[G.i];
+
+                if ((G.temp2 & (byte)PAD.LEFT) != 0)
+                {
+                    if (G.player_hp[G.temp1] == 0 || G.player_x[G.temp1] < G.player_x[G.i] || (byte)(G.player_x[G.temp1] - G.player_x[G.i]) < 60)
+                        G.player_x[G.i]--;
+                }
+                else if ((G.temp2 & (byte)PAD.RIGHT) != 0)
+                {
+                    if (G.player_hp[G.temp1] == 0 || (G.player_x[G.i] < 250 && (G.player_x[G.temp1] > G.player_x[G.i] || (byte)(G.player_x[G.i] - G.player_x[G.temp1]) < 60)))
+                        G.player_x[G.i]++;
+                }
+
+                byte _ib_x11 = G.player_x[G.i]; byte _ib_y11 = G.player_y[G.i];
+                byte _ib_result11;
+                // [inlined: isBlocked]
+                if (_ib_x11 > 122 && _ib_x11 < 134 && _ib_y11 > 114 && _ib_y11 < 125)
+                {
+                    _ib_result11 = 1;
+                }
+                else if (_ib_x11 < 128)
+                {
+                    if (_ib_y11 < 120)
+                    {
+                        _ib_result11 = collision_top_left[(_ib_x11 >> 3) + ((_ib_y11 >> 3) << 4)];
+                    }
+                    else
+                    {
+                        _ib_y11 -= 120;
+                        _ib_result11 = collision_bottom_left[(_ib_x11 >> 3) + ((_ib_y11 >> 3) << 4)];
+                    }
+                }
+                else
+                {
+                    _ib_x11 -= 128;
+                    if (_ib_y11 < 120)
+                    {
+                        _ib_result11 = collision_top_right[(_ib_x11 >> 3) + ((_ib_y11 >> 3) << 4)];
+                    }
+                    else
+                    {
+                        _ib_y11 -= 120;
+                        _ib_result11 = collision_bottom_right[(_ib_x11 >> 3) + ((_ib_y11 >> 3) << 4)];
+                    }
+                }
+                if (_ib_result11 != 0)
+                    G.player_x[G.i] = G.temp4;
+                else if (G.player_carry[G.i] != 0xFF)
+                    G.item_x[G.player_carry[G.i]] += (byte)(G.player_x[G.i] - G.temp4);
+
+                if ((G.temp2 & (byte)PAD.UP) != 0)
+                {
+                    if (G.player_hp[G.temp1] == 0 || G.player_y[G.temp1] < G.player_y[G.i] || (byte)(G.player_y[G.temp1] - G.player_y[G.i]) < 60)
+                        G.player_y[G.i]--;
+                }
+                else if ((G.temp2 & (byte)PAD.DOWN) != 0)
+                {
+                    if (G.player_hp[G.temp1] == 0 || G.player_y[G.temp1] > G.player_y[G.i] || (byte)(G.player_y[G.i] - G.player_y[G.temp1]) < 60)
+                        G.player_y[G.i]++;
+                }
+
+                byte _ib_x12 = G.player_x[G.i]; byte _ib_y12 = G.player_y[G.i];
+                byte _ib_result12;
+                // [inlined: isBlocked]
+                if (_ib_x12 > 122 && _ib_x12 < 134 && _ib_y12 > 114 && _ib_y12 < 125)
+                {
+                    _ib_result12 = 1;
+                }
+                else if (_ib_x12 < 128)
+                {
+                    if (_ib_y12 < 120)
+                    {
+                        _ib_result12 = collision_top_left[(_ib_x12 >> 3) + ((_ib_y12 >> 3) << 4)];
+                    }
+                    else
+                    {
+                        _ib_y12 -= 120;
+                        _ib_result12 = collision_bottom_left[(_ib_x12 >> 3) + ((_ib_y12 >> 3) << 4)];
+                    }
+                }
+                else
+                {
+                    _ib_x12 -= 128;
+                    if (_ib_y12 < 120)
+                    {
+                        _ib_result12 = collision_top_right[(_ib_x12 >> 3) + ((_ib_y12 >> 3) << 4)];
+                    }
+                    else
+                    {
+                        _ib_y12 -= 120;
+                        _ib_result12 = collision_bottom_right[(_ib_x12 >> 3) + ((_ib_y12 >> 3) << 4)];
+                    }
+                }
+                if (_ib_result12 != 0)
+                    G.player_y[G.i] = G.temp5;
+                else if (G.player_carry[G.i] != 0xFF)
+                    G.item_y[G.player_carry[G.i]] += (byte)(G.player_y[G.i] - G.temp5);
+            }
+
+            if (G.player_attack_tick[G.i] == 10)
+            {
+                G.temp0 = G.player_x[G.i];
+                G.temp1 = G.player_y[G.i];
+                G.temp6 = 5;
+                G.temp7 = 5;
+                if (G.player_dir[G.i] == (byte)PAD.LEFT) { G.temp0 -= 4; G.temp6 = 8; }
+                else if (G.player_dir[G.i] == (byte)PAD.RIGHT) { G.temp0 += 4; G.temp6 = 8; }
+                if (G.player_dir[G.i] == (byte)PAD.UP) { G.temp1 -= 4; G.temp7 = 8; }
+                else if (G.player_dir[G.i] == (byte)PAD.DOWN) { G.temp1 += 3; G.temp7 = 8; }
+                G.dx = G.temp0;
+                G.dy = G.temp1;
+                byte _ib_x13 = G.temp0; byte _ib_y13 = G.temp1;
+                byte _ib_result13;
+                // [inlined: isBlocked]
+                if (_ib_x13 > 122 && _ib_x13 < 134 && _ib_y13 > 114 && _ib_y13 < 125)
+                {
+                    _ib_result13 = 1;
+                }
+                else if (_ib_x13 < 128)
+                {
+                    if (_ib_y13 < 120)
+                    {
+                        _ib_result13 = collision_top_left[(_ib_x13 >> 3) + ((_ib_y13 >> 3) << 4)];
+                    }
+                    else
+                    {
+                        _ib_y13 -= 120;
+                        _ib_result13 = collision_bottom_left[(_ib_x13 >> 3) + ((_ib_y13 >> 3) << 4)];
+                    }
+                }
+                else
+                {
+                    _ib_x13 -= 128;
+                    if (_ib_y13 < 120)
+                    {
+                        _ib_result13 = collision_top_right[(_ib_x13 >> 3) + ((_ib_y13 >> 3) << 4)];
+                    }
+                    else
+                    {
+                        _ib_y13 -= 120;
+                        _ib_result13 = collision_bottom_right[(_ib_x13 >> 3) + ((_ib_y13 >> 3) << 4)];
+                    }
+                }
+                if (_ib_result13 == 0)
+                {
+                    // [inlined: took_damage]
+                    G.j = 0;
+                    while (G.j < 8)
+                    {
+                        if (G.enemies_health[G.j] == 0)
+                        {
+                            G.j++;
+                            continue;
+                        }
+                        G.temp2 = G.enemies_x[G.j];
+                        G.temp3 = G.enemies_y[G.j];
+                        if (G.temp0 > G.temp2)
+                            G.temp4 = (byte)(G.temp0 - G.temp2);
+                        else
+                            G.temp4 = (byte)(G.temp2 - G.temp0);
+                        if (G.temp1 > G.temp3)
+                            G.temp5 = (byte)(G.temp1 - G.temp3);
+                        else
+                            G.temp5 = (byte)(G.temp3 - G.temp1);
+                        if (G.temp4 < G.temp6 && G.temp5 < G.temp7)
+                        {
+                            G.enemies_health[G.j]--;
+                            if (G.enemies_health[G.j] != 0)
+                            {
+                                G.enemy_push_timer[G.j] = 4;
+                                G.enemy_push_dir[G.j] = G.player_dir[G.i];
+                            }
+                            else
+                            {
+                                sfx_play(1, 0);
+                            }
+                            break;
+                        }
+                        G.j++;
+                    }
+                }
+            }
+            G.i++;
+        }
+
+        G.temp2 = 0;
+        G.i = 0;
+        while (G.i < 4)
+        {
+            if (G.item_placed[G.i] == 0)
+            {
+                if ((byte)(G.item_x[G.i] - item_target_x[G.i]) < 2 || (byte)(item_target_x[G.i] - G.item_x[G.i]) < 2)
+                {
+                    if ((byte)(G.item_y[G.i] - item_target_y[G.i]) < 2 || (byte)(item_target_y[G.i] - G.item_y[G.i]) < 2)
+                    {
+                        G.item_placed[G.i] = 1;
+                        G.item_x[G.i] = item_target_x[G.i];
+                        G.item_y[G.i] = item_target_y[G.i];
+                        if (G.player_carry[0] == G.i) G.player_carry[0] = 0xFF;
+                        if (G.player_carry[1] == G.i) G.player_carry[1] = 0xFF;
+                        sfx_play(2, 3);
+                    }
+                }
+            }
+            if (G.item_placed[G.i] == 0) G.temp2 = 1;
+
+            G.int_temp0 = G.item_x[G.i];
+            G.int_temp0 <<= 1;
+            G.int_temp0 -= G.scr_x;
+            if (G.int_temp0 < 0 || G.int_temp0 > 255) { G.i++; continue; }
+            G.temp0 = (byte)G.int_temp0;
+
+            G.int_temp0 = G.item_y[G.i];
+            G.int_temp0 <<= 1;
+            G.int_temp0 -= G.scr_y;
+            if (G.int_temp0 < 0 || G.int_temp0 > 255) { G.i++; continue; }
+            G.temp1 = (byte)G.int_temp0;
+
+            G.spr = oam_spr((byte)(G.temp0 - 4), (byte)(G.temp1 - 8), (byte)(0xC0 + (G.item_type[G.i] << 1)), 0x03, G.spr);
+            G.i++;
+        }
+
+        if (G.temp2 == 0) G.next_level = 1;
+        // [inlined: tick_enemies]
+        G.temp4 = (byte)(rand8() & 7);
+        G.i = 0;
+        while (G.i < 8)
+        {
+            if (G.enemies_health[G.i] == 0 && (G.frame & 7) == G.i)
+            {
+                G.enemies_x[G.i] = G.enemy_spawn_points_x[G.temp4];
+                G.enemies_y[G.i] = G.enemy_spawn_points_y[G.temp4];
+                G.enemy_push_timer[G.i] = 0;
+                G.enemies_health[G.i] = G.spawn_hp;
+                G.enemies_type[G.i] = (byte)(G.i & 1);
+                return;
+            }
+            G.i++;
+        }
+
+        G.temp2 = (byte)(G.frame & 7);
+        G.enemy_leg[G.temp2] = (byte)(1 - G.enemy_leg[G.temp2]);
+        G.temp1 = G.enemies_enemy[G.temp2];
+
+        G.temp6 = (byte)(rand8() & 3);
+        if (G.temp6 == 0)
+        {
+            G.temp6 = (byte)(rand8() & 3);
+            if (G.temp6 == 0) G.temp3 = (byte)PAD.LEFT;
+            else if (G.temp6 == 1) G.temp3 = (byte)PAD.RIGHT;
+            else if (G.temp6 == 2) G.temp3 = (byte)PAD.UP;
+            else G.temp3 = (byte)PAD.DOWN;
+        }
+        else if (G.temp6 == 1)
+        {
+            G.temp3 = G.enemies_dir[G.temp2];
+        }
+        else
+        {
+            G.temp0 = (byte)(rand8() & 1);
+            if (G.temp0 != 0)
+            {
+                if (G.enemies_x[G.temp2] > G.player_x[G.temp1])
+                    G.temp3 = (byte)PAD.LEFT;
+                else
+                    G.temp3 = (byte)PAD.RIGHT;
+            }
+            else
+            {
+                if (G.enemies_y[G.temp2] > G.player_y[G.temp1])
+                    G.temp3 = (byte)PAD.UP;
+                else
+                    G.temp3 = (byte)PAD.DOWN;
+            }
+        }
+
+        G.enemies_dir[G.temp2] = G.temp3;
+        G.temp6 = G.enemies_x[G.temp2];
+        G.temp7 = G.enemies_y[G.temp2];
+
+        if (G.enemy_push_timer[G.temp2] != 0)
+        {
+        }
+        else if (G.temp3 == (byte)PAD.RIGHT)
+            G.enemies_x[G.temp2] += G.enemy_speed;
+        else if (G.temp3 == (byte)PAD.LEFT)
+            G.enemies_x[G.temp2] -= G.enemy_speed;
+        else if (G.temp3 == (byte)PAD.UP)
+            G.enemies_y[G.temp2] -= G.enemy_speed;
+        else if (G.temp3 == (byte)PAD.DOWN)
+            G.enemies_y[G.temp2] += G.enemy_speed;
+
+        byte _ib_x1 = G.enemies_x[G.temp2]; byte _ib_y1 = G.enemies_y[G.temp2];
+        byte _ib_result1;
+        // [inlined: isBlocked]
+        if (_ib_x1 > 122 && _ib_x1 < 134 && _ib_y1 > 114 && _ib_y1 < 125)
+        {
+            _ib_result1 = 1;
+        }
+        else if (_ib_x1 < 128)
+        {
+            if (_ib_y1 < 120)
+            {
+                _ib_result1 = collision_top_left[(_ib_x1 >> 3) + ((_ib_y1 >> 3) << 4)];
+            }
+            else
+            {
+                _ib_y1 -= 120;
+                _ib_result1 = collision_bottom_left[(_ib_x1 >> 3) + ((_ib_y1 >> 3) << 4)];
+            }
+        }
+        else
+        {
+            _ib_x1 -= 128;
+            if (_ib_y1 < 120)
+            {
+                _ib_result1 = collision_top_right[(_ib_x1 >> 3) + ((_ib_y1 >> 3) << 4)];
+            }
+            else
+            {
+                _ib_y1 -= 120;
+                _ib_result1 = collision_bottom_right[(_ib_x1 >> 3) + ((_ib_y1 >> 3) << 4)];
+            }
+        }
+        G.temp5 = _ib_result1;
+        if (G.temp5 != 0)
+        {
+            G.enemies_x[G.temp2] = G.temp6;
+            G.enemies_y[G.temp2] = G.temp7;
+        }
+        else
+        {
+            G.i = 0;
+            while (G.i < 8)
+            {
+                if (G.temp2 != G.i)
+                {
+                    if ((byte)(G.enemies_x[G.i] - 6) < G.enemies_x[G.temp2] && (byte)(G.enemies_x[G.i] + 6) > G.enemies_x[G.temp2])
+                    {
+                        if ((byte)(G.enemies_y[G.i] - 6) < G.enemies_y[G.temp2] && (byte)(G.enemies_y[G.i] + 6) > G.enemies_y[G.temp2])
+                        {
+                            G.enemies_x[G.temp2] = G.temp6;
+                            G.enemies_y[G.temp2] = G.temp7;
+                        }
+                    }
+                }
+                G.i++;
+            }
+        }
+
+        G.i = 0;
+        while (G.i < 8)
+        {
+            if (G.enemy_push_timer[G.i] != 0 && (G.frame & 3) != 0)
+            {
+                if ((G.frame & 1) != 0)
+                {
+                    G.enemy_push_timer[G.i]--;
+                    G.temp6 = G.enemies_x[G.i];
+                    G.temp7 = G.enemies_y[G.i];
+                    if (G.enemy_push_dir[G.i] == (byte)PAD.LEFT) G.enemies_x[G.i] -= 2;
+                    else if (G.enemy_push_dir[G.i] == (byte)PAD.RIGHT) G.enemies_x[G.i] += 2;
+                    else if (G.enemy_push_dir[G.i] == (byte)PAD.UP) G.enemies_y[G.i] -= 2;
+                    else if (G.enemy_push_dir[G.i] == (byte)PAD.DOWN) G.enemies_y[G.i] += 2;
+                    byte _ib_x2 = G.enemies_x[G.i]; byte _ib_y2 = G.enemies_y[G.i];
+                    byte _ib_result2;
+                    // [inlined: isBlocked]
+                    if (_ib_x2 > 122 && _ib_x2 < 134 && _ib_y2 > 114 && _ib_y2 < 125)
+                    {
+                        _ib_result2 = 1;
+                    }
+                    else if (_ib_x2 < 128)
+                    {
+                        if (_ib_y2 < 120)
+                        {
+                            _ib_result2 = collision_top_left[(_ib_x2 >> 3) + ((_ib_y2 >> 3) << 4)];
+                        }
+                        else
+                        {
+                            _ib_y2 -= 120;
+                            _ib_result2 = collision_bottom_left[(_ib_x2 >> 3) + ((_ib_y2 >> 3) << 4)];
+                        }
+                    }
+                    else
+                    {
+                        _ib_x2 -= 128;
+                        if (_ib_y2 < 120)
+                        {
+                            _ib_result2 = collision_top_right[(_ib_x2 >> 3) + ((_ib_y2 >> 3) << 4)];
+                        }
+                        else
+                        {
+                            _ib_y2 -= 120;
+                            _ib_result2 = collision_bottom_right[(_ib_x2 >> 3) + ((_ib_y2 >> 3) << 4)];
+                        }
+                    }
+                    if (_ib_result2 != 0)
+                    {
+                        G.enemies_x[G.i] = G.temp6;
+                        G.enemies_y[G.i] = G.temp7;
+                    }
+                }
+            }
+
+            G.temp5 = 0;
+            G.j = 0;
+            while (G.j < 2)
+            {
+                if ((G.frame & G.enemy_damage_modifier) == 0)
+                {
+                    if ((byte)(G.enemies_x[G.i] - 5) < G.player_x[G.j] && (byte)(G.enemies_x[G.i] + 5) > G.player_x[G.j])
+                    {
+                        if ((byte)(G.enemies_y[G.i] - 5) < G.player_y[G.j] && (byte)(G.enemies_y[G.i] + 5) > G.player_y[G.j])
+                        {
+                            if (G.player_hp[G.j] != 0 && G.player_god_mode[G.j] == 0)
+                            {
+                                G.temp5 = 1;
+                                G.player_hp[G.j]--;
+                                G.player_god_mode[G.j] = 4;
+                                sfx_play(0, 1);
+                            }
+                            if (G.player_hp[G.j] == 0 && G.enemies_enemy[G.i] == G.j)
+                            {
+                                G.enemies_enemy[G.i] = (byte)(1 - G.enemies_enemy[G.i]);
+                            }
+                        }
+                    }
+                }
+                G.j++;
+            }
+
+            G.int_temp0 = G.enemies_x[G.i];
+            G.int_temp0 <<= 1;
+            G.int_temp0 -= G.scr_x;
+            if (G.int_temp0 < 0 || G.int_temp0 > 255) { G.i++; continue; }
+            G.temp0 = (byte)G.int_temp0;
+
+            G.int_temp0 = G.enemies_y[G.i];
+            G.int_temp0 <<= 1;
+            G.int_temp0 -= G.scr_y;
+            if (G.int_temp0 < 0 || G.int_temp0 > 255) { G.i++; continue; }
+            G.temp1 = (byte)G.int_temp0;
+
+            if ((G.enemy_push_timer[G.i] & 1) != 0)
+            {
+                if (G.temp5 != 0)
+                {
+                    if (G.enemies_type[G.i] == 0)
+                    {
+                        if (G.enemies_dir[G.i] == (byte)PAD.UP)
+                            G.spr = oam_meta_spr(G.temp0, (byte)(G.temp1 - 2), G.spr, spider_damaged_attack_up);
+                        else if (G.enemies_dir[G.i] == (byte)PAD.DOWN)
+                            G.spr = oam_meta_spr(G.temp0, (byte)(G.temp1 + 2), G.spr, spider_damaged_attack_down);
+                        else if (G.enemies_dir[G.i] == (byte)PAD.LEFT)
+                            G.spr = oam_meta_spr((byte)(G.temp0 - 2), G.temp1, G.spr, spider_damaged_attack_left);
+                        else if (G.enemies_dir[G.i] == (byte)PAD.RIGHT)
+                            G.spr = oam_meta_spr((byte)(G.temp0 + 2), G.temp1, G.spr, spider_damaged_attack_right);
+                    }
+                    else
+                    {
+                        if (G.enemies_dir[G.i] == (byte)PAD.UP)
+                            G.spr = oam_meta_spr(G.temp0, (byte)(G.temp1 - 2), G.spr, bat_damaged_attack_up);
+                        else if (G.enemies_dir[G.i] == (byte)PAD.DOWN)
+                            G.spr = oam_meta_spr(G.temp0, (byte)(G.temp1 + 2), G.spr, bat_damaged_attack_down);
+                        else if (G.enemies_dir[G.i] == (byte)PAD.LEFT)
+                            G.spr = oam_meta_spr((byte)(G.temp0 - 2), G.temp1, G.spr, bat_damaged_attack_left);
+                        else if (G.enemies_dir[G.i] == (byte)PAD.RIGHT)
+                            G.spr = oam_meta_spr((byte)(G.temp0 + 2), G.temp1, G.spr, bat_damaged_attack_right);
+                    }
+                }
+                else
+                {
+                    if (G.enemy_leg[G.i] != 0)
+                    {
+                        if (G.enemies_type[G.i] == 0)
+                        {
+                            if (G.enemies_dir[G.i] == (byte)PAD.UP)
+                                G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, spider_damaged_leg_0_up);
+                            else if (G.enemies_dir[G.i] == (byte)PAD.DOWN)
+                                G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, spider_damaged_leg_0_down);
+                            else if (G.enemies_dir[G.i] == (byte)PAD.LEFT)
+                                G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, spider_damaged_leg_0_left);
+                            else if (G.enemies_dir[G.i] == (byte)PAD.RIGHT)
+                                G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, spider_damaged_leg_0_right);
+                        }
+                        else
+                        {
+                            if (G.enemies_dir[G.i] == (byte)PAD.UP)
+                                G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, bat_damaged_leg_0_up);
+                            else if (G.enemies_dir[G.i] == (byte)PAD.DOWN)
+                                G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, bat_damaged_leg_0_down);
+                            else if (G.enemies_dir[G.i] == (byte)PAD.LEFT)
+                                G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, bat_damaged_leg_0_left);
+                            else if (G.enemies_dir[G.i] == (byte)PAD.RIGHT)
+                                G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, bat_damaged_leg_0_right);
+                        }
+                    }
+                    else
+                    {
+                        if (G.enemies_type[G.i] == 0)
+                        {
+                            if (G.enemies_dir[G.i] == (byte)PAD.UP)
+                                G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, spider_damaged_leg_1_up);
+                            else if (G.enemies_dir[G.i] == (byte)PAD.DOWN)
+                                G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, spider_damaged_leg_1_down);
+                            else if (G.enemies_dir[G.i] == (byte)PAD.LEFT)
+                                G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, spider_damaged_leg_1_left);
+                            else if (G.enemies_dir[G.i] == (byte)PAD.RIGHT)
+                                G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, spider_damaged_leg_1_right);
+                        }
+                        else
+                        {
+                            if (G.enemies_dir[G.i] == (byte)PAD.UP)
+                                G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, bat_damaged_leg_1_up);
+                            else if (G.enemies_dir[G.i] == (byte)PAD.DOWN)
+                                G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, bat_damaged_leg_1_down);
+                            else if (G.enemies_dir[G.i] == (byte)PAD.LEFT)
+                                G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, bat_damaged_leg_1_left);
+                            else if (G.enemies_dir[G.i] == (byte)PAD.RIGHT)
+                                G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, bat_damaged_leg_1_right);
+                        }
+                    }
+                }
+            }
+            else
+            {
+                if (G.temp5 != 0)
+                {
+                    if (G.enemies_type[G.i] == 0)
+                    {
+                        if (G.enemies_dir[G.i] == (byte)PAD.UP)
+                            G.spr = oam_meta_spr(G.temp0, (byte)(G.temp1 - 2), G.spr, spider_attack_up);
+                        else if (G.enemies_dir[G.i] == (byte)PAD.DOWN)
+                            G.spr = oam_meta_spr(G.temp0, (byte)(G.temp1 + 2), G.spr, spider_attack_down);
+                        else if (G.enemies_dir[G.i] == (byte)PAD.LEFT)
+                            G.spr = oam_meta_spr((byte)(G.temp0 - 2), G.temp1, G.spr, spider_attack_left);
+                        else if (G.enemies_dir[G.i] == (byte)PAD.RIGHT)
+                            G.spr = oam_meta_spr((byte)(G.temp0 + 2), G.temp1, G.spr, spider_attack_right);
+                    }
+                    else
+                    {
+                        if (G.enemies_dir[G.i] == (byte)PAD.UP)
+                            G.spr = oam_meta_spr(G.temp0, (byte)(G.temp1 - 2), G.spr, bat_attack_up);
+                        else if (G.enemies_dir[G.i] == (byte)PAD.DOWN)
+                            G.spr = oam_meta_spr(G.temp0, (byte)(G.temp1 + 2), G.spr, bat_attack_down);
+                        else if (G.enemies_dir[G.i] == (byte)PAD.LEFT)
+                            G.spr = oam_meta_spr((byte)(G.temp0 - 2), G.temp1, G.spr, bat_attack_left);
+                        else if (G.enemies_dir[G.i] == (byte)PAD.RIGHT)
+                            G.spr = oam_meta_spr((byte)(G.temp0 + 2), G.temp1, G.spr, bat_attack_right);
+                    }
+                }
+                else
+                {
+                    if (G.enemy_leg[G.i] != 0)
+                    {
+                        if (G.enemies_type[G.i] == 0)
+                        {
+                            if (G.enemies_dir[G.i] == (byte)PAD.UP)
+                                G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, spider_leg_0_up);
+                            else if (G.enemies_dir[G.i] == (byte)PAD.DOWN)
+                                G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, spider_leg_0_down);
+                            else if (G.enemies_dir[G.i] == (byte)PAD.LEFT)
+                                G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, spider_leg_0_left);
+                            else if (G.enemies_dir[G.i] == (byte)PAD.RIGHT)
+                                G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, spider_leg_0_right);
+                        }
+                        else
+                        {
+                            if (G.enemies_dir[G.i] == (byte)PAD.UP)
+                                G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, bat_leg_0_up);
+                            else if (G.enemies_dir[G.i] == (byte)PAD.DOWN)
+                                G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, bat_leg_0_down);
+                            else if (G.enemies_dir[G.i] == (byte)PAD.LEFT)
+                                G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, bat_leg_0_left);
+                            else if (G.enemies_dir[G.i] == (byte)PAD.RIGHT)
+                                G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, bat_leg_0_right);
+                        }
+                    }
+                    else
+                    {
+                        if (G.enemies_type[G.i] == 0)
+                        {
+                            if (G.enemies_dir[G.i] == (byte)PAD.UP)
+                                G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, spider_leg_1_up);
+                            else if (G.enemies_dir[G.i] == (byte)PAD.DOWN)
+                                G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, spider_leg_1_down);
+                            else if (G.enemies_dir[G.i] == (byte)PAD.LEFT)
+                                G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, spider_leg_1_left);
+                            else if (G.enemies_dir[G.i] == (byte)PAD.RIGHT)
+                                G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, spider_leg_1_right);
+                        }
+                        else
+                        {
+                            if (G.enemies_dir[G.i] == (byte)PAD.UP)
+                                G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, bat_leg_1_up);
+                            else if (G.enemies_dir[G.i] == (byte)PAD.DOWN)
+                                G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, bat_leg_1_down);
+                            else if (G.enemies_dir[G.i] == (byte)PAD.LEFT)
+                                G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, bat_leg_1_left);
+                            else if (G.enemies_dir[G.i] == (byte)PAD.RIGHT)
+                                G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, bat_leg_1_right);
+                        }
+                    }
+                }
+            }
+            G.i++;
+        }
 
         G.temp0 = 0;
         if (G.to_scroll_x != 0)
