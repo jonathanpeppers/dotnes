@@ -179,6 +179,19 @@ public class DecompilerTests
     }
 
     [Fact]
+    public void Decompiler_Shoot2_RecognizesSetRand()
+    {
+        var romBytes = GetVerifiedRom("shoot2");
+        var rom = new NESRomReader(romBytes);
+        var decompiler = new Decompiler(rom, _logger);
+
+        var code = decompiler.Decompile();
+
+        // shoot2 calls set_rand(42) near the start of main
+        Assert.Contains("set_rand(", code);
+    }
+
+    [Fact]
     public void Decompiler_Attributetable_RecoversPalBgData()
     {
         var romBytes = GetVerifiedRom("attributetable");
@@ -405,6 +418,39 @@ public class DecompilerTests
         // All these samples have while(true){body} game loops
         // that should be recovered via backward JMP detection
         Assert.Contains("while (true) ;", code);
+    }
+
+    [Fact]
+    public void Decompiler_Scroll_RecoverLocalVariables()
+    {
+        // scroll has scroll_y local at $0325 — verify it's recovered as a variable, not poke/peek
+        var romBytes = GetVerifiedRom("scroll");
+        var rom = new NESRomReader(romBytes);
+        var decompiler = new Decompiler(rom, _logger);
+
+        var code = decompiler.Decompile();
+
+        // Should declare a local variable for $0325
+        Assert.Contains("byte var_0325 = 0;", code);
+        // Should use variable assignment, not poke
+        Assert.Contains("var_0325 = ", code);
+        Assert.DoesNotContain("poke(0x0325", code);
+    }
+
+    [Fact]
+    public void Decompiler_Shoot2_RecoverLocalVariables()
+    {
+        // shoot2 has 20+ locals at $0325+ — verify they're recovered as variables
+        var romBytes = GetVerifiedRom("shoot2");
+        var rom = new NESRomReader(romBytes);
+        var decompiler = new Decompiler(rom, _logger);
+
+        var code = decompiler.Decompile();
+
+        // Should have local variable declarations
+        Assert.Contains("byte var_0325 = 0;", code);
+        // Should NOT use poke for local variable addresses
+        Assert.DoesNotContain("poke(0x0325", code);
     }
 
     static string FindTestSourceDirectory()

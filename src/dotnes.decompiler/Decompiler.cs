@@ -14,6 +14,7 @@ class Decompiler
     readonly ILogger _logger;
     readonly Dictionary<ushort, string> _symbolTable = new();
     readonly List<(ushort Address, int Size)> _arrayDeclarations = new();
+    readonly Dictionary<ushort, string> _localVariables = new();
 
     ushort _mainAddress;
     ushort _mainEnd;
@@ -223,6 +224,8 @@ class Decompiler
             ("incsp1", new byte[] { 0xA0, 0x00, 0xF0 }),
             // vram_write subroutine starting with ptr1/ptr2 setup
             ("vram_write", new byte[] { 0x85, 0x2A, 0x86, 0x2B }),
+            // set_rand: STA RAND_SEED ($3C); RTS  (85 3C 60)
+            ("set_rand", new byte[] { 0x85, 0x3C, 0x60 }),
         };
 
         // Try to match each JSR target against known patterns
@@ -307,6 +310,9 @@ class Decompiler
 
         // Detect byte[] array declarations from indexed addressing patterns
         DetectArrayDeclarations(instructions);
+
+        // Detect local variable usage (non-indexed STA/LDA to $0325+ not claimed by arrays)
+        DetectLocalVariables(instructions);
 
         if (instructions.Count > 0)
             _logger.WriteLine($"Collected {instructions.Count} instructions (${_mainAddress:X4}-${instructions[^1].Address:X4})");
@@ -426,6 +432,46 @@ class Decompiler
                         i++; // skip the JSR
                         continue;
                     }
+                }
+            }
+
+            // Pattern: LDA #imm / STA $local → local variable assignment
+            if (opcode == 0xA9 && op1.HasValue && i + 1 < instructions.Count)
+            {
+                var next = instructions[i + 1];
+                if (next.Opcode == 0x8D && next.Op1.HasValue && next.Op2.HasValue)
+                {
+                    ushort addr = (ushort)(next.Op1.Value | (next.Op2.Value << 8));
+                    if (_localVariables.TryGetValue(addr, out var varName))
+                    {
+                        statements.Add($"{varName} = 0x{op1.Value:X2};");
+                        lastImmediateA = op1.Value;
+                        i++; // skip the STA
+                        continue;
+                    }
+                }
+            }
+
+            // Pattern: STA $local (consecutive — A still holds last immediate value)
+            if (opcode == 0x8D && op1.HasValue && op2.HasValue && lastImmediateA.HasValue)
+            {
+                ushort addr = (ushort)(op1.Value | (op2.Value << 8));
+                if (_localVariables.TryGetValue(addr, out var varName))
+                {
+                    statements.Add($"{varName} = 0x{lastImmediateA.Value:X2};");
+                    continue;
+                }
+            }
+
+            // Pattern: LDA $local → load local variable into A (track for use in subsequent calls)
+            if (opcode == 0xAD && op1.HasValue && op2.HasValue)
+            {
+                ushort addr = (ushort)(op1.Value | (op2.Value << 8));
+                if (_localVariables.ContainsKey(addr))
+                {
+                    // Don't emit a statement — the value in A will be consumed by the next JSR or STA
+                    lastImmediateA = null;
+                    continue;
                 }
             }
 
@@ -558,6 +604,49 @@ class Decompiler
 
             _arrayDeclarations.Add((sortedBases[i], size));
             _logger.WriteLine($"  Detected array at ${sortedBases[i]:X4}, size {size}");
+        }
+    }
+
+    /// <summary>
+    /// Detects local variables by finding non-indexed STA/LDA instructions targeting
+    /// addresses in the $0325+ range that aren't claimed by array declarations.
+    /// </summary>
+    void DetectLocalVariables(List<(ushort Address, byte Opcode, byte? Op1, byte? Op2)> instructions)
+    {
+        const ushort MaxLocalAddress = 0x0800;
+
+        // Build set of addresses claimed by arrays
+        var arrayAddresses = new HashSet<ushort>();
+        foreach (var (addr, size) in _arrayDeclarations)
+        {
+            for (int j = 0; j < size; j++)
+                arrayAddresses.Add((ushort)(addr + j));
+        }
+
+        // Find non-indexed accesses to local variable area
+        var localAddresses = new SortedSet<ushort>();
+        foreach (var (_, opcode, op1, op2) in instructions)
+        {
+            if (!op1.HasValue || !op2.HasValue) continue;
+            if (GetInstructionSize(opcode) != 3) continue;
+            if (IsIndexedOpcode(opcode)) continue;
+
+            // STA absolute (0x8D) or LDA absolute (0xAD)
+            if (opcode is not (0x8D or 0xAD)) continue;
+
+            ushort operandAddr = (ushort)(op1.Value | (op2.Value << 8));
+            if (operandAddr < NESConstants.LocalStackBase || operandAddr >= MaxLocalAddress) continue;
+            if (arrayAddresses.Contains(operandAddr)) continue;
+
+            localAddresses.Add(operandAddr);
+        }
+
+        // Assign names: var_0325, var_0326, etc.
+        foreach (var addr in localAddresses)
+        {
+            var name = $"var_{addr:X4}";
+            _localVariables[addr] = name;
+            _logger.WriteLine($"  Detected local variable '{name}' at ${addr:X4}");
         }
     }
 
@@ -826,6 +915,16 @@ class Decompiler
             foreach (var (addr, size) in _arrayDeclarations)
             {
                 sb.AppendLine($"byte[] array_{addr:X4} = new byte[{size}];");
+            }
+            sb.AppendLine();
+        }
+
+        // Emit local variable declarations
+        if (_localVariables.Count > 0)
+        {
+            foreach (var (addr, name) in _localVariables.OrderBy(kvp => kvp.Key))
+            {
+                sb.AppendLine($"byte {name} = 0;");
             }
             sb.AppendLine();
         }
