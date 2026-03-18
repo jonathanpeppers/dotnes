@@ -1696,7 +1696,7 @@ while (true)
         G.spr = oam_spr(0x88, 0xD4, 0xE6, 0x01, G.spr);
         G.spr = oam_spr(0x90, 0xD4, 0xFA, 0x01, G.spr);
 
-        if (((pad_trigger(0) | pad_trigger(1)) & ((byte)PAD.A | (byte)PAD.B | (byte)PAD.START)) != 0)
+        if (((pad_trigger(0) | pad_trigger(1)) & (PAD.A | PAD.B | PAD.START)) != 0)
             break;
     }
 
@@ -1749,7 +1749,7 @@ while (true)
             {
                 ppu_wait_nmi();
                 G.frame++;
-                if (G.frame > 100 && (G.frame == 255 || ((pad_trigger(0) | pad_trigger(1)) & ((byte)PAD.A | (byte)PAD.B | (byte)PAD.START)) != 0))
+                if (G.frame > 100 && (G.frame == 255 || ((pad_trigger(0) | pad_trigger(1)) & (PAD.A | PAD.B | PAD.START)) != 0))
                 {
                     G.spr++;
                     break;
@@ -1784,7 +1784,7 @@ while (true)
                 ppu_wait_nmi();
                 G.frame++;
                 if (G.frame == 255) G.spr++;
-                if (G.spr == 4 || (G.spr >= 1 && ((pad_trigger(0) | pad_trigger(1)) & ((byte)PAD.A | (byte)PAD.B | (byte)PAD.START)) != 0))
+                if (G.spr == 4 || (G.spr >= 1 && ((pad_trigger(0) | pad_trigger(1)) & (PAD.A | PAD.B | PAD.START)) != 0))
                     break;
             }
             pal_all(palette);
@@ -1805,7 +1805,7 @@ while (true)
             G.spr = oam_spr(128, 114, 0xE8, 0x01, G.spr);
             G.spr = oam_spr(136, 114, 0xEA, 0x01, G.spr);
             G.spr = oam_spr(144, 114, 0xEC, 0x01, G.spr);
-            while ((pad_trigger(0) & (byte)PAD.START) == 0)
+            while ((pad_trigger(0) & PAD.START) == 0)
                 ppu_wait_nmi();
             pal_all(palette);
             G.spr = 0;
