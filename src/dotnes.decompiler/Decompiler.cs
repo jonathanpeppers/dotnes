@@ -292,10 +292,12 @@ class Decompiler
             tempAddr += (ushort)size;
 
             // Stop if we've reached the detected end of main
+            // (_mainEnd is always >= $8000 when set, so 0 is a safe sentinel for "not set")
             if (_mainEnd != 0 && tempAddr >= _mainEnd) break;
         }
 
-        _logger.WriteLine($"Collected {instructions.Count} instructions (${_mainAddress:X4}-${instructions[^1].Address:X4})");
+        if (instructions.Count > 0)
+            _logger.WriteLine($"Collected {instructions.Count} instructions (${_mainAddress:X4}-${instructions[^1].Address:X4})");
 
         // Now walk through instructions with look-ahead for pattern matching
         var pushedBytes = new Stack<byte>();   // Track values pushed via pusha (8-bit)
