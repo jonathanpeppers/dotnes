@@ -1,5 +1,6 @@
 using System.Text;
 using dotnes.ObjectModel;
+using NES;
 
 namespace dotnes;
 
@@ -273,6 +274,7 @@ class Decompiler
         // Now walk through instructions with look-ahead for pattern matching
         var pushedBytes = new Stack<byte>();   // Track values pushed via pusha (8-bit)
         var pushedWords = new Stack<ushort>(); // Track values pushed via pushax (16-bit)
+        byte? lastImmediateA = null;           // Track last LDA #imm value for consecutive poke detection
 
         for (int i = 0; i < instructions.Count; i++)
         {
@@ -296,6 +298,7 @@ class Decompiler
                 if (next.Opcode == 0x20 && IsSubroutine(next, "pusha"))
                 {
                     pushedBytes.Push(op1.Value);
+                    lastImmediateA = null; // JSR modifies A
                     i++; // skip the JSR pusha
                     continue;
                 }
@@ -311,6 +314,7 @@ class Decompiler
                 {
                     ushort value16 = (ushort)(op1.Value | (nextLdx.Op1.Value << 8));
                     pushedWords.Push(value16);
+                    lastImmediateA = null; // JSR modifies A
                     i += 2; // skip LDX and JSR pushax
                     continue;
                 }
@@ -332,6 +336,7 @@ class Decompiler
                         ushort? pushedPtr = pushedWords.Count > 0 ? pushedWords.Pop() : null;
                         var stmt = DecompileCallXA(name, xVal, aVal, pushedPtr);
                         if (stmt != null) statements.Add(stmt);
+                        lastImmediateA = null; // JSR modifies A
                         i += 2; // skip LDA and JSR
                         continue;
                     }
@@ -350,9 +355,50 @@ class Decompiler
                         byte? pushedArg = pushedBytes.Count > 0 ? pushedBytes.Pop() : null;
                         var stmt = DecompileCall(name, op1.Value, pushedArg);
                         if (stmt != null) statements.Add(stmt);
+                        lastImmediateA = null; // JSR modifies A
                         i++; // skip the JSR
                         continue;
                     }
+                }
+            }
+
+            // Pattern: LDA #imm / STA $abs → poke(addr, val)
+            if (opcode == 0xA9 && op1.HasValue && i + 1 < instructions.Count)
+            {
+                var next = instructions[i + 1];
+                if (next.Opcode == 0x8D && next.Op1.HasValue && next.Op2.HasValue)
+                {
+                    ushort addr = (ushort)(next.Op1.Value | (next.Op2.Value << 8));
+                    if (!_symbolTable.ContainsKey(addr))
+                    {
+                        statements.Add(FormatPoke(addr, op1.Value));
+                        lastImmediateA = op1.Value;
+                        i++; // skip the STA
+                        continue;
+                    }
+                }
+            }
+
+            // Pattern: STA $abs (consecutive poke — A still holds last immediate value)
+            if (opcode == 0x8D && op1.HasValue && op2.HasValue && lastImmediateA.HasValue)
+            {
+                ushort addr = (ushort)(op1.Value | (op2.Value << 8));
+                if (!_symbolTable.ContainsKey(addr))
+                {
+                    statements.Add(FormatPoke(addr, lastImmediateA.Value));
+                    continue;
+                }
+            }
+
+            // Pattern: LDA $abs → peek(addr) for non-symbol-table absolute addresses
+            if (opcode == 0xAD && op1.HasValue && op2.HasValue)
+            {
+                ushort addr = (ushort)(op1.Value | (op2.Value << 8));
+                if (!_symbolTable.ContainsKey(addr))
+                {
+                    statements.Add(FormatPeek(addr));
+                    lastImmediateA = null; // A now holds peek result, not an immediate
+                    continue;
                 }
             }
 
@@ -365,8 +411,12 @@ class Decompiler
                     var stmt = DecompileCall(name, null, null);
                     if (stmt != null) statements.Add(stmt);
                 }
+                lastImmediateA = null; // JSR may modify A
                 continue;
             }
+
+            // Unrecognized instruction — clear A tracking for safety
+            lastImmediateA = null;
         }
 
         return statements;
@@ -494,6 +544,58 @@ class Decompiler
         }
         return $"vram_adr(0x{addr:X4});";
     }
+
+    /// <summary>
+    /// Map of known NES hardware register addresses to their NESLib constant names.
+    /// </summary>
+    static readonly Dictionary<ushort, string> KnownAddresses = new()
+    {
+        // PPU registers
+        { NESLib.PPU_CTRL, nameof(NESLib.PPU_CTRL) },
+        { NESLib.PPU_MASK, nameof(NESLib.PPU_MASK) },
+        { NESLib.PPU_STATUS, nameof(NESLib.PPU_STATUS) },
+        { NESLib.PPU_SCROLL, nameof(NESLib.PPU_SCROLL) },
+        { NESLib.PPU_ADDR, nameof(NESLib.PPU_ADDR) },
+        { NESLib.PPU_DATA, nameof(NESLib.PPU_DATA) },
+        // APU registers
+        { NESLib.APU_PULSE1_CTRL, nameof(NESLib.APU_PULSE1_CTRL) },
+        { NESLib.APU_PULSE1_SWEEP, nameof(NESLib.APU_PULSE1_SWEEP) },
+        { NESLib.APU_PULSE1_TIMER_LO, nameof(NESLib.APU_PULSE1_TIMER_LO) },
+        { NESLib.APU_PULSE1_TIMER_HI, nameof(NESLib.APU_PULSE1_TIMER_HI) },
+        { NESLib.APU_PULSE2_CTRL, nameof(NESLib.APU_PULSE2_CTRL) },
+        { NESLib.APU_PULSE2_SWEEP, nameof(NESLib.APU_PULSE2_SWEEP) },
+        { NESLib.APU_PULSE2_TIMER_LO, nameof(NESLib.APU_PULSE2_TIMER_LO) },
+        { NESLib.APU_PULSE2_TIMER_HI, nameof(NESLib.APU_PULSE2_TIMER_HI) },
+        { NESLib.APU_TRIANGLE_CTRL, nameof(NESLib.APU_TRIANGLE_CTRL) },
+        { NESLib.APU_TRIANGLE_TIMER_LO, nameof(NESLib.APU_TRIANGLE_TIMER_LO) },
+        { NESLib.APU_TRIANGLE_TIMER_HI, nameof(NESLib.APU_TRIANGLE_TIMER_HI) },
+        { NESLib.APU_NOISE_CTRL, nameof(NESLib.APU_NOISE_CTRL) },
+        { NESLib.APU_NOISE_PERIOD, nameof(NESLib.APU_NOISE_PERIOD) },
+        { NESLib.APU_NOISE_LENGTH, nameof(NESLib.APU_NOISE_LENGTH) },
+        { NESLib.APU_STATUS, nameof(NESLib.APU_STATUS) },
+    };
+
+    /// <summary>
+    /// Format an absolute address as a NESLib constant name or hex literal.
+    /// </summary>
+    static string FormatAddress(ushort addr)
+    {
+        if (KnownAddresses.TryGetValue(addr, out var name))
+            return name;
+        return $"0x{addr:X4}";
+    }
+
+    /// <summary>
+    /// Format a poke() statement with a named or hex address and hex value.
+    /// </summary>
+    static string FormatPoke(ushort addr, byte value) =>
+        $"poke({FormatAddress(addr)}, 0x{value:X2});";
+
+    /// <summary>
+    /// Format a peek() statement with a named or hex address.
+    /// </summary>
+    static string FormatPeek(ushort addr) =>
+        $"peek({FormatAddress(addr)});";
 
     /// <summary>
     /// Generate the final C# source code from decompiled statements.
