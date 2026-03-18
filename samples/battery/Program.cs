@@ -29,14 +29,14 @@ ppu_on_all();
 while (true)
 {
     ppu_wait_frame();
-    byte pad = pad_trigger(0);
-    if ((pad & (byte)PAD.A) != 0)
+    PAD pad = pad_trigger(0);
+    if ((pad & PAD.A) != 0)
     {
         count++;
         poke(SRAM_START, count);
         display_count(count);
     }
-    if ((pad & (byte)PAD.B) != 0)
+    if ((pad & PAD.B) != 0)
     {
         count = 0;
         poke(SRAM_START, count);

@@ -38,6 +38,12 @@ class LocalVariableManager
     public HashSet<int> WordLocals { get; set; } = new();
 
     /// <summary>
+    /// Static field names that are word-sized (ushort/short/int).
+    /// Detected from metadata field signatures. Word fields get 2 bytes of zero page.
+    /// </summary>
+    public HashSet<string> WordStaticFields { get; set; } = new(StringComparer.Ordinal);
+
+    /// <summary>
     /// Struct type layouts: type name → ordered list of (fieldName, fieldSizeInBytes).
     /// Field offsets are cumulative from the first field.
     /// </summary>
@@ -139,9 +145,10 @@ class LocalVariableManager
 
             // Advance LocalCount so subsequent allocations don't overlap
             // any pre-allocated static field addresses.
-            foreach (var addr in value.Values)
+            foreach (var kvp in value)
             {
-                int slotsPastBase = addr - _baseAddress + 1;
+                int size = WordStaticFields.Contains(kvp.Key) ? 2 : 1;
+                int slotsPastBase = kvp.Value - _baseAddress + size;
                 if (slotsPastBase > LocalCount)
                     LocalCount = slotsPastBase;
             }

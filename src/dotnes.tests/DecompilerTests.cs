@@ -78,6 +78,36 @@ public class DecompilerTests
     }
 
     [Fact]
+    public void Decompiler_Shoot2_RecognizesPoke()
+    {
+        var romBytes = GetVerifiedRom("shoot2");
+        var rom = new NESRomReader(romBytes);
+        var decompiler = new Decompiler(rom, _logger);
+
+        var code = decompiler.Decompile();
+
+        // shoot2 uses poke() for APU initialization (silence channels)
+        Assert.Contains("poke(APU_PULSE1_CTRL, 0x30);", code);
+        Assert.Contains("poke(APU_PULSE2_CTRL, 0x30);", code);
+        Assert.Contains("poke(APU_TRIANGLE_CTRL, 0x80);", code);
+        Assert.Contains("poke(APU_NOISE_CTRL, 0x30);", code);
+        Assert.Contains("poke(APU_STATUS, 0x0F);", code);
+    }
+
+    [Fact]
+    public void Decompiler_Shoot2_RecognizesPeek()
+    {
+        var romBytes = GetVerifiedRom("shoot2");
+        var rom = new NESRomReader(romBytes);
+        var decompiler = new Decompiler(rom, _logger);
+
+        var code = decompiler.Decompile();
+
+        // shoot2 uses peek() for reading random seed
+        Assert.Contains("peek(", code);
+    }
+
+    [Fact]
     public void Decompiler_Hello_ProducesCorrectOutput()
     {
         var romBytes = GetVerifiedRom("hello");

@@ -1,0 +1,113 @@
+================================================================================
+6502 INSTRUCTION SEQUENCES FOR MISSING DECOMPILER DATA
+================================================================================
+
+[1] vram_write(/* 96 bytes */); - Line 6 of Program.cs
+    and vram_write(/* 256 bytes */); - Line 7 of Program.cs
+────────────────────────────────────────────────────────────────────────────────
+
+Setup routine called at 8063: JSR 8279
+
+The 8279 routine (data pointer initialization):
+  8279: 20 5D 82     JSR 825D        -- First data pointer setup
+  827C: 8A           TXA             -- Transfer X register to A
+  827D: 4C 6B 82     JMP 826B        -- Second data pointer setup
+
+Pointer setup at 825D (loads from table at 8422):
+  825D: AA           TAX             -- Transfer A to X (index)
+  825E: BD 22 84     LDA 8422,X      -- Load low byte from table
+  8261: 85 0A        STA 0A          -- Store in zero page 0A
+  8263: BD 2B 84     LDA 842B,X      -- Load high byte from table
+  8266: 85 0B        STA 0B          -- Store in zero page 0B
+  8268: 85 07        STA 07          -- Mark as dirty
+  826A: 60           RTS
+
+Pointer setup at 826B (alternate):
+  826B: AA           TAX             -- Transfer A to X
+  826C: BD 22 84     LDA 8422,X      -- Load low byte from table
+  826F: 85 08        STA 08          -- Store in zero page 08
+  8271: BD 2B 84     LDA 842B,X      -- Load high byte from table
+  8274: 85 09        STA 09          -- Store in zero page 09
+  8276: 85 07        STA 07          -- Mark as dirty
+  8278: 60           RTS
+
+Data tables in ROM:
+  8422: 34 44 54 64 74 84 94 A4    (low bytes of ROM addresses)
+  842B: 84 84 84 84 84 0F 0F 0F    (high bytes of ROM addresses)
+
+The decompiler shows "/* 96 bytes */" and "/* 256 bytes */" because it cannot:
+  - Trace where the data pointers come from
+  - Determine how much data is actually written
+  - Resolve the lookup tables to actual data
+
+════════════════════════════════════════════════════════════════════════════════
+
+[2] // pal_bg(); and // pal_spr(); - Lines 8-9 (commented out)
+────────────────────────────────────────────────────────────────────────────────
+
+These are recognized as palette operations but marked as comments.
+
+Palette data in ROM at 8433-8473 (64 bytes):
+  8433: 0F (repeated 64 times - all black palette)
+
+The decompiler recognizes these operations but cannot determine:
+  - Which specific palette is being loaded
+  - Whether it is background or sprite palette
+  - Where the palette operations are invoked from
+
+════════════════════════════════════════════════════════════════════════════════
+
+[3] vram_fill(/* data */); - Line 11 of Program.cs
+────────────────────────────────────────────────────────────────────────────────
+
+Bulk VRAM write loop at 834F-8375:
+
+  834F: 85 17        STA 17          -- Store fill count (low byte)
+  8351: 86 18        STX 18          -- Store fill count (high byte)
+  8353: 20 80 8C     JSR 8C80        -- Get pointer to fill data
+  8356: 85 19        STA 19          -- Store data pointer (low byte)
+  8358: 86 1A        STX 1A          -- Store data pointer (high byte)
+  835A: A0 00        LDY #00         -- Y = 0
+
+  Loop at 835C:
+  835C: B1 19        LDA (19),Y      -- Read byte from (*),Y
+  835E: 8D 07 20     STA 2007        -- Write to PPU VRAM register
+  8361: E6 19        INC 19          -- Increment pointer low
+  8363: D0 02        BNE 8367        -- If not zero, skip next instruction
+  8365: E6 1A        INC 1A          -- Increment pointer high
+  8367: A5 17        LDA 17          -- Load count low
+  8369: D0 02        BNE 836D        -- If not zero, skip next instruction
+  836B: C6 18        DEC 18          -- Decrement count high
+  836D: C6 17        DEC 17          -- Decrement count low
+  836F: A5 17        LDA 17          -- Load count low again
+  8371: 05 18        ORA 18          -- OR with count high
+  8373: D0 E7        BNE 835C        -- If either non-zero, loop back
+
+Missing data:
+  - The actual fill pattern or value being written
+  - The exact byte count (in zero page 17/18)
+  - Where this data comes from (JSR 8C80 result)
+
+════════════════════════════════════════════════════════════════════════════════
+
+[4] Missing: while (true) ; at end of Program.cs
+────────────────────────────────────────────────────────────────────────────────
+
+Jump to main loop at 85FC:
+  85FC: 4C 0A 86     JMP 860A        -- Jump to main game loop at 860A
+
+The disassembly provided (8000-8D00) does not show address 860A, so the
+infinite main loop is not included in the output. The decompiler shows the
+initialization code but is missing the main game loop that executes after.
+
+════════════════════════════════════════════════════════════════════════════════
+
+SUMMARY: WHAT THE DECOMPILER IS MISSING
+────────────────────────────────────────────────────────────────────────────────
+
+1. DATA RESOLUTION: Look up table addresses (8422, 842B) to find actual data
+2. INDIRECT ADDRESSING: Trace zero page pointers to understand data flow
+3. ROM DATA EMBEDDING: Include hardcoded data from tables in decompiled output
+4. CONTROL FLOW: Continue tracing beyond initial ranges to find main loop
+5. CONTEXT ANALYSIS: Understand that same generic loop (834F) serves different
+   purposes based on loaded parameters

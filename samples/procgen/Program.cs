@@ -26,8 +26,8 @@ ppu_on_all();
 while (true)
 {
     ppu_wait_nmi();
-    byte trigger = pad_trigger(0);
-    if ((trigger & (byte)PAD.START) != 0)
+    PAD trigger = pad_trigger(0);
+    if ((trigger & PAD.START) != 0)
     {
         seed = (byte)(seed + 1);
         set_rand(seed);
