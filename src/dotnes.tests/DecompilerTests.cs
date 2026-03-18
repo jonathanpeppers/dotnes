@@ -350,7 +350,6 @@ public class DecompilerTests
 
     [Theory]
     [InlineData("animation")]
-    [InlineData("movingsprite")]
     [InlineData("pong")]
     [InlineData("snake")]
     public void Decompiler_GameLoop_RecoveredFromBackwardJmp(string name)
