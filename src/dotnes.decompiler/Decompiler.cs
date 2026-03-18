@@ -584,9 +584,8 @@ class Decompiler
         // Emit byte[] array declarations
         if (_arrayDeclarations.Count > 0)
         {
-            for (int i = 0; i < _arrayDeclarations.Count; i++)
+            foreach (var (addr, size) in _arrayDeclarations)
             {
-                var (addr, size) = _arrayDeclarations[i];
                 sb.AppendLine($"byte[] array_{addr:X4} = new byte[{size}];");
             }
             sb.AppendLine();
