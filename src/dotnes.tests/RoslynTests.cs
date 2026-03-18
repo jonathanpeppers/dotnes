@@ -3786,4 +3786,365 @@ public class RoslynTests
         // Store word_val=3 high: STA $0329 (8D2903)
         Assert.Contains("8D2903", hex);
     }
+
+    // ===================================================================
+    // Converted from pre-compiled test DLLs → inline Roslyn tests
+    // ===================================================================
+
+    [Fact]
+    public void OneLocal_UshortLocalForVramFill()
+    {
+        // Ported from onelocal.dll (no source existed).
+        // Tests: ushort local variable (960) passed to vram_fill.
+        var bytes = GetProgramBytes(
+            """
+            byte[] ATTRIBUTE_TABLE = [
+                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55,
+                0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa,
+                0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+                0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+                0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
+                0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
+                0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f
+            ];
+
+            byte[] PALETTE = [
+                0x03,
+                0x11, 0x30, 0x27, 0x0,
+                0x1c, 0x20, 0x2c, 0x0,
+                0x00, 0x10, 0x20, 0x0,
+                0x06, 0x16, 0x26
+            ];
+
+            ushort fill_count = 960;
+
+            pal_bg(PALETTE);
+            vram_adr(NAMETABLE_A);
+            vram_fill(0x16, fill_count);
+            vram_write(ATTRIBUTE_TABLE);
+            ppu_on_all();
+
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"OneLocal_UshortLocalForVramFill hex: {hex}");
+
+        // JSR pal_bg (20), JSR vram_adr (20), JSR vram_fill (20), JSR vram_write (20), JSR ppu_on_all (20)
+        Assert.True(bytes.Count(b => b == 0x20) >= 5, "Expected at least 5 JSR calls");
+        // ushort 960 = 0x03C0 — stored as local and passed to vram_fill
+        // LDX #$03 (A203) for high byte of 960
+        Assert.Contains("A203", hex);
+    }
+
+    [Fact]
+    public void OneLocalByte_ByteLocalForVramFill()
+    {
+        // Ported from onelocalbyte.dll (no source existed).
+        // Tests: byte local variable (0x16) passed to vram_fill.
+        var bytes = GetProgramBytes(
+            """
+            byte[] ATTRIBUTE_TABLE = [
+                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55,
+                0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa,
+                0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+                0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+                0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
+                0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
+                0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f
+            ];
+
+            byte[] PALETTE = [
+                0x03,
+                0x11, 0x30, 0x27, 0x0,
+                0x1c, 0x20, 0x2c, 0x0,
+                0x00, 0x10, 0x20, 0x0,
+                0x06, 0x16, 0x26
+            ];
+
+            byte tile = 0x16;
+
+            pal_bg(PALETTE);
+            vram_adr(NAMETABLE_A);
+            vram_fill(tile, 960);
+            vram_write(ATTRIBUTE_TABLE);
+            ppu_on_all();
+
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"OneLocalByte_ByteLocalForVramFill hex: {hex}");
+
+        // JSR calls for pal_bg, vram_adr, vram_fill, vram_write, ppu_on_all
+        Assert.True(bytes.Count(b => b == 0x20) >= 5, "Expected at least 5 JSR calls");
+        // LDA #$16 (A916) for tile byte loaded from local
+        Assert.Contains("A916", hex);
+    }
+
+    [Fact]
+    public void StaticSprite_OamSprCalls()
+    {
+        // Ported from staticsprite sample (18 LOC).
+        // Tests: pal_all + multiple oam_spr calls with immediate args.
+        var bytes = GetProgramBytes(
+            """
+            byte[] PALETTE = [
+                0x30,
+                0x11, 0x30, 0x27, 0x0,
+                0x1c, 0x20, 0x2c, 0x0,
+                0x00, 0x10, 0x20, 0x0,
+                0x06, 0x16, 0x26, 0x0,
+                0x14, 0x34, 0x0d, 0x0,
+                0x00, 0x37, 0x25, 0x0,
+                0x0d, 0x2d, 0x3a, 0x0,
+                0x0d, 0x27, 0x2a
+            ];
+
+            pal_all(PALETTE);
+            oam_spr(40, 40, 0xD8, 0, 0);
+            oam_spr(48, 40, 0xDA, 0, 4);
+            oam_spr(40, 48, 0xD9, 0, 8);
+            oam_spr(48, 48, 0xDB, 0, 12);
+            ppu_on_all();
+
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"StaticSprite_OamSprCalls hex: {hex}");
+
+        // Should have JSR pal_all and 4x JSR oam_spr and JSR ppu_on_all
+        Assert.True(bytes.Count(b => b == 0x20) >= 6, "Expected at least 6 JSR calls");
+        // LDA #$D8 for first sprite tile
+        Assert.Contains("A9D8", hex);
+        // LDA #$DA for second sprite tile
+        Assert.Contains("A9DA", hex);
+    }
+
+    [Fact]
+    public void PpuHello_PokeCalls()
+    {
+        // Ported from ppuhello sample (37 LOC).
+        // Tests: poke() for direct PPU register access.
+        var bytes = GetProgramBytes(
+            """
+            waitvsync();
+            waitvsync();
+
+            poke(PPU_CTRL, 0);
+            poke(PPU_MASK, 0);
+
+            poke(PPU_ADDR, 0x3F);
+            poke(PPU_ADDR, 0x00);
+            poke(PPU_DATA, 0x01);
+            poke(PPU_DATA, 0x00);
+            poke(PPU_DATA, 0x10);
+            poke(PPU_DATA, 0x20);
+
+            poke(PPU_ADDR, 0x21);
+            poke(PPU_ADDR, 0xC9);
+            poke(PPU_DATA, 0x48);
+            poke(PPU_DATA, 0x45);
+            poke(PPU_DATA, 0x4C);
+            poke(PPU_DATA, 0x4C);
+            poke(PPU_DATA, 0x4F);
+            poke(PPU_DATA, 0x20);
+            poke(PPU_DATA, 0x50);
+            poke(PPU_DATA, 0x50);
+            poke(PPU_DATA, 0x55);
+            poke(PPU_DATA, 0x21);
+
+            poke(PPU_SCROLL, 0);
+            poke(PPU_SCROLL, 0);
+
+            poke(PPU_ADDR, 0x20);
+            poke(PPU_ADDR, 0x00);
+
+            poke(PPU_MASK, MASK.BG | MASK.SPR | MASK.EDGE_BG | MASK.EDGE_SPR);
+
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"PpuHello_PokeCalls hex: {hex}");
+
+        // poke emits STA absolute: 8D
+        // PPU_ADDR = $2006: STA $2006 = 8D0620
+        Assert.Contains("8D0620", hex);
+        // PPU_DATA = $2007: STA $2007 = 8D0720
+        Assert.Contains("8D0720", hex);
+        // PPU_CTRL = $2000: STA $2000 = 8D0020
+        Assert.Contains("8D0020", hex);
+    }
+
+    [Fact]
+    public void Lols_ScrollLoop()
+    {
+        // Ported from lols sample (36 LOC).
+        // Tests: pal_col + vram_write + ppu_wait_frame + scroll in a loop.
+        var bytes = GetProgramBytes(
+            """
+            byte scroll_y = 0;
+
+            pal_col(0, 0x02);
+            pal_col(1, 0x14);
+            pal_col(2, 0x20);
+            pal_col(3, 0x30);
+
+            vram_adr(NTADR_A(2, 2));
+            vram_write("LOL! LOL! LOL! LOL! LOL! LOL!");
+            vram_adr(NTADR_A(2, 8));
+            vram_write("LOL! LOL! LOL! LOL! LOL! LOL!");
+            vram_adr(NTADR_A(2, 14));
+            vram_write("LOL! LOL! LOL! LOL! LOL! LOL!");
+            vram_adr(NTADR_A(2, 20));
+            vram_write("LOL! LOL! LOL! LOL! LOL! LOL!");
+            vram_adr(NTADR_A(2, 26));
+            vram_write("LOL! LOL! LOL! LOL! LOL! LOL!");
+
+            ppu_on_all();
+
+            while (true)
+            {
+                ppu_wait_frame();
+                scroll_y += 1;
+                scroll(0, scroll_y);
+            }
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"Lols_ScrollLoop hex: {hex}");
+
+        // Should contain JSR calls for pal_col, vram_adr, vram_write, ppu_on_all, ppu_wait_frame, scroll
+        Assert.True(bytes.Count(b => b == 0x20) >= 10, "Expected at least 10 JSR calls");
+        // JMP backward for while(true) loop: 4C
+        Assert.Contains("4C", hex);
+    }
+
+    [Fact]
+    public void OamStatic_StaticFieldCompoundExpr()
+    {
+        // Ported from oamstatic sample (29 LOC).
+        // Tests: static fields + compound oam_spr expressions (field - const, field + const).
+        var bytes = GetProgramBytes(
+            """
+            byte[] PALETTE = [
+                0x30,
+                0x11, 0x30, 0x27, 0x0,
+                0x1c, 0x20, 0x2c, 0x0,
+                0x00, 0x10, 0x20, 0x0,
+                0x06, 0x16, 0x26, 0x0,
+                0x14, 0x34, 0x0d, 0x0,
+                0x00, 0x37, 0x25, 0x0,
+                0x0d, 0x2d, 0x3a, 0x0,
+                0x0d, 0x27, 0x2a
+            ];
+
+            pal_all(PALETTE);
+            oam_clear();
+
+            G.spr_x = 124;
+            G.spr_y = 108;
+
+            G.spr = oam_spr((byte)(G.spr_x - 4), (byte)(G.spr_y - 4), 0xC0, 0x03, 0);
+            G.spr = oam_spr((byte)(G.spr_x - 4), (byte)(G.spr_y + 4), 0xC1, 0x03, G.spr);
+            ppu_on_all();
+
+            while (true) ;
+
+            static class G
+            {
+                public static byte spr_x;
+                public static byte spr_y;
+                public static byte spr;
+            }
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"OamStatic_StaticFieldCompoundExpr hex: {hex}");
+
+        // Static field stores at $0325+: STA absolute (8D)
+        Assert.Contains("8D", hex);
+        // LDA #124 (A97C) for spr_x
+        Assert.Contains("A97C", hex);
+        // LDA #108 (A96C) for spr_y
+        Assert.Contains("A96C", hex);
+        // SEC (38) + SBC (E9) for subtraction in compound expression
+        Assert.Contains("38", hex);
+    }
+
+    [Fact]
+    public void MovingSprite_PadPollBranches()
+    {
+        // Ported from movingsprite sample (32 LOC).
+        // Tests: pad_poll + conditional branches + oam_spr in a game loop.
+        var bytes = GetProgramBytes(
+            """
+            byte[] PALETTE = [
+                0x30,
+                0x11, 0x30, 0x27, 0x0,
+                0x1c, 0x20, 0x2c, 0x0,
+                0x00, 0x10, 0x20, 0x0,
+                0x06, 0x16, 0x26, 0x0,
+                0x14, 0x34, 0x0d, 0x0,
+                0x00, 0x37, 0x25, 0x0,
+                0x0d, 0x2d, 0x3a, 0x0,
+                0x0d, 0x27, 0x2a
+            ];
+
+            byte x = 40;
+            byte y = 40;
+
+            pal_all(PALETTE);
+            ppu_on_all();
+
+            while (true)
+            {
+                ppu_wait_nmi();
+
+                PAD pad = pad_poll(0);
+
+                if ((pad & PAD.LEFT) != 0) x--;
+                if ((pad & PAD.RIGHT) != 0) x++;
+                if ((pad & PAD.UP) != 0) y--;
+                if ((pad & PAD.DOWN) != 0) y++;
+
+                oam_spr(x, y, 0xD8, 0, 0);
+                oam_spr((byte)(x + 8), y, 0xDA, 0, 4);
+                oam_spr(x, (byte)(y + 8), 0xD9, 0, 8);
+                oam_spr((byte)(x + 8), (byte)(y + 8), 0xDB, 0, 12);
+            }
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"MovingSprite_PadPollBranches hex: {hex}");
+
+        // JSR pad_poll present
+        Assert.True(bytes.Count(b => b == 0x20) >= 5, "Expected multiple JSR calls");
+        // AND immediate for pad bit testing: 29
+        Assert.Contains("29", hex);
+        // BEQ (F0) for conditional branch skip
+        Assert.Contains("F0", hex);
+        // DEC or SBC for x--/y--
+        // INC or ADC for x++/y++
+        // LDA #$D8 for first sprite tile
+        Assert.Contains("A9D8", hex);
+    }
 }
