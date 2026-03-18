@@ -224,6 +224,8 @@ class Decompiler
             ("incsp1", new byte[] { 0xA0, 0x00, 0xF0 }),
             // vram_write subroutine starting with ptr1/ptr2 setup
             ("vram_write", new byte[] { 0x85, 0x2A, 0x86, 0x2B }),
+            // set_rand: STA RAND_SEED ($3C); RTS  (85 3C 60)
+            ("set_rand", new byte[] { 0x85, 0x3C, 0x60 }),
         };
 
         // Try to match each JSR target against known patterns

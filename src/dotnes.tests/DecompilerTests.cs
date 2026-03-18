@@ -179,6 +179,19 @@ public class DecompilerTests
     }
 
     [Fact]
+    public void Decompiler_Shoot2_RecognizesSetRand()
+    {
+        var romBytes = GetVerifiedRom("shoot2");
+        var rom = new NESRomReader(romBytes);
+        var decompiler = new Decompiler(rom, _logger);
+
+        var code = decompiler.Decompile();
+
+        // shoot2 calls set_rand(42) near the start of main
+        Assert.Contains("set_rand(", code);
+    }
+
+    [Fact]
     public void Decompiler_Attributetable_RecoversPalBgData()
     {
         var romBytes = GetVerifiedRom("attributetable");
