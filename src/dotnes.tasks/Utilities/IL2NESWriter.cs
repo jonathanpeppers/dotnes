@@ -62,7 +62,21 @@ partial class IL2NESWriter : NESWriter
     string? _pendingArrayType;
     int _pendingStructArrayCount;
     ushort? _pendingStructArrayBase; // Pre-allocated base address from newarr for struct arrays
+    readonly Dictionary<string, Local> _staticFieldArrayLocals = new(); // Maps static field names to their array Local entries
     ImmutableArray<byte>? _pendingUShortArray;
+
+    /// <summary>
+    /// Static field arrays pre-allocated by the Transpiler from .cctor scanning.
+    /// Maps field name to (base address, array byte count).
+    /// </summary>
+    internal Dictionary<string, (ushort Address, int ArraySize)> StaticArrayFields
+    {
+        set
+        {
+            foreach (var kvp in value)
+                _staticFieldArrayLocals[kvp.Key] = new Local(kvp.Value.ArraySize, kvp.Value.Address, ArraySize: kvp.Value.ArraySize);
+        }
+    }
     
     /// <summary>
     /// Tracks if pad_poll was called and the result is available in A or _padReloadAddress.

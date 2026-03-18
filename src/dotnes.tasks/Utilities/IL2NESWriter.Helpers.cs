@@ -3,6 +3,7 @@ using dotnes.ObjectModel;
 using static NES.NESLib;
 using static dotnes.NESConstants;
 using static dotnes.ObjectModel.Asm;
+using Local = dotnes.LocalVariableManager.Local;
 
 namespace dotnes;
 
@@ -37,6 +38,25 @@ partial class IL2NESWriter
         ILOpCode.Ldloc_s => instr.Integer,
         _ => null
     };
+
+    /// <summary>
+    /// Tries to resolve an array Local from an IL instruction.
+    /// Handles both ldloc (local variable) and ldsfld (static field) array sources.
+    /// </summary>
+    Local? TryResolveArrayLocal(ILInstruction instr)
+    {
+        // Try local variable first
+        var localIdx = GetLdlocIndex(instr);
+        if (localIdx != null && Locals.TryGetValue(localIdx.Value, out var loc))
+            return loc;
+
+        // Try static field array
+        if (instr.OpCode == ILOpCode.Ldsfld && instr.String != null
+            && _staticFieldArrayLocals.TryGetValue(instr.String, out var sfLoc))
+            return sfLoc;
+
+        return null;
+    }
 
     static int? GetLdcValue(ILInstruction instr) => instr.OpCode switch
     {

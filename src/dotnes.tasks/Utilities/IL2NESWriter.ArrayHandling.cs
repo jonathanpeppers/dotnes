@@ -353,6 +353,10 @@ partial class IL2NESWriter
 
         int? indexLocalIdx = GetLdlocIndex(indexInstr);
         int? arrayLocalIdx = GetLdlocIndex(arrayInstr);
+        // Also try static field arrays (ldsfld pattern)
+        Local? arrayLocalFromField = null;
+        if (arrayLocalIdx == null)
+            arrayLocalFromField = TryResolveArrayLocal(arrayInstr);
 
         // Handle constant index (Ldc_i4_* or Ldc_i4_s)
         int? constantIndex = null;
@@ -361,18 +365,27 @@ partial class IL2NESWriter
             constantIndex = GetLdcValue(indexInstr);
         }
 
+        // Also try static field for index
+        int? indexLocalFromField = null;
+        if (indexLocalIdx == null && constantIndex == null && indexInstr.OpCode == ILOpCode.Ldsfld && indexInstr.String != null)
+        {
+            var sfLocal = TryResolveArrayLocal(indexInstr);
+            if (sfLocal?.Address != null)
+                indexLocalFromField = sfLocal.Address;
+        }
+
         // Complex index expression: the index was computed by preceding arithmetic
         // operations (shr, shl, add, sub, and, or, etc.). The result is already in A.
-        if (indexLocalIdx == null && constantIndex == null)
+        if (indexLocalIdx == null && constantIndex == null && indexLocalFromField == null)
         {
             HandleLdelemU1ComplexIndex();
             return;
         }
-        if (arrayLocalIdx == null)
+        if (arrayLocalIdx == null && arrayLocalFromField == null)
             throw new TranspileException("Array element access requires the array to be stored in a local variable.", MethodName);
 
         Local? indexLocal = indexLocalIdx != null ? Locals[indexLocalIdx.Value] : null;
-        var arrayLocal = Locals[arrayLocalIdx.Value];
+        var arrayLocal = arrayLocalIdx != null ? Locals[arrayLocalIdx.Value] : arrayLocalFromField!;
 
         // Remove the previously emitted instructions from WriteLdloc/WriteLdc calls
         int arrayILOffset = arrayInstr.Offset;
@@ -453,6 +466,10 @@ partial class IL2NESWriter
         {
             Emit(Opcode.LDX, AddressMode.Absolute, (ushort)indexLocal.Address);
         }
+        else if (indexLocalFromField != null)
+        {
+            Emit(Opcode.LDX, AddressMode.Absolute, (ushort)indexLocalFromField);
+        }
 
         if (arrayLocal.ArraySize > 0 && arrayLocal.Address is not null)
         {
@@ -526,10 +543,18 @@ partial class IL2NESWriter
 
         var arrayInstr = Instructions![arrayILIndex.Value];
         int? arrayLocalIdx = GetLdlocIndex(arrayInstr);
-        if (arrayLocalIdx == null)
-            throw new TranspileException("Array element access requires the array to be stored in a local variable.", MethodName);
-
-        var arrayLocal = Locals[arrayLocalIdx.Value];
+        Local? arrayLocal;
+        if (arrayLocalIdx != null)
+        {
+            arrayLocal = Locals[arrayLocalIdx.Value];
+        }
+        else
+        {
+            // Try static field array (ldsfld pattern)
+            arrayLocal = TryResolveArrayLocal(arrayInstr);
+            if (arrayLocal == null)
+                throw new TranspileException("Array element access requires the array to be stored in a local variable or static field.", MethodName);
+        }
 
         // Remove the array-load instructions from the block buffer.
         // The block count at the array IL offset tells us where the array-load instructions
