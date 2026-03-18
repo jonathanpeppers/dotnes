@@ -627,6 +627,9 @@ class Decompiler
     List<string> FormatPaletteCall(string funcName, string varName, ushort pointer, int size)
     {
         int offset = pointer - 0x8000;
+        // NROM-128 (16KB PRG): $C000-$FFFF mirrors $8000-$BFFF
+        if (_rom.PrgRom.Length == 0x4000)
+            offset %= 0x4000;
         if (offset >= 0 && offset + size <= _rom.PrgRom.Length)
         {
             return new List<string>
