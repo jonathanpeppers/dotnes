@@ -5,7 +5,8 @@ namespace dotnes;
 
 /// <summary>
 /// Local frame allocation — detects word locals, estimates method stack frame sizes,
-/// and computes non-overlapping frame offsets for the user method call graph.
+/// computes non-overlapping frame offsets for the user method call graph, and
+/// pre-allocates shared static field addresses.
 /// </summary>
 partial class Transpiler
 {
@@ -250,5 +251,67 @@ partial class Transpiler
                 "NES programs do not support recursion due to limited stack space.");
 
         return offsets;
+    }
+
+    /// <summary>
+    /// Pre-scans main and all user method IL for user-defined static field references
+    /// (Stsfld/Ldsfld) and allocates a shared address for each unique field.
+    /// This ensures all methods resolve the same field name to the same RAM address.
+    /// Multi-byte fields (int, ushort, short) get 2 bytes of zero page.
+    /// </summary>
+    (Dictionary<string, ushort> addresses, HashSet<string> wordFields, int totalBytes, Dictionary<string, (ushort Address, int ArraySize)> arrayFields) PreAllocateStaticFields(ILInstruction[] mainInstructions)
+    {
+        var fieldNames = new HashSet<string>(StringComparer.Ordinal);
+
+        // Scan main IL
+        foreach (var instr in mainInstructions)
+        {
+            if (instr.OpCode is ILOpCode.Stsfld or ILOpCode.Ldsfld && instr.String is not null)
+                fieldNames.Add(instr.String);
+        }
+
+        // Scan user method IL
+        foreach (var kvp in UserMethods)
+        {
+            foreach (var instr in kvp.Value)
+            {
+                if (instr.OpCode is ILOpCode.Stsfld or ILOpCode.Ldsfld && instr.String is not null)
+                    fieldNames.Add(instr.String);
+            }
+        }
+
+        // Remove NESLib fields that are handled specially
+        fieldNames.Remove("oam_off");
+
+        // Build field size map from metadata
+        var fieldSizes = BuildStaticFieldSizes();
+
+        // Allocate addresses sequentially starting at LocalStackBase,
+        // using the correct byte size for each field.
+        var addresses = new Dictionary<string, ushort>(StringComparer.Ordinal);
+        var wordFields = new HashSet<string>(StringComparer.Ordinal);
+        var arrayFields = new Dictionary<string, (ushort Address, int ArraySize)>(StringComparer.Ordinal);
+        ushort offset = 0;
+        foreach (var name in fieldNames.OrderBy(n => n, StringComparer.Ordinal))
+        {
+            addresses[name] = (ushort)(NESConstants.LocalStackBase + offset);
+            int size = fieldSizes.TryGetValue(name, out var s) ? s : 1;
+            if (size < 0)
+            {
+                // Array field: negative size encodes array byte count
+                int arraySize = -size;
+                arrayFields[name] = ((ushort)(NESConstants.LocalStackBase + offset), arraySize);
+                offset += (ushort)arraySize;
+                _logger.WriteLine($"Static field '{name}' allocated at ${addresses[name]:X4} (byte[{arraySize}])");
+            }
+            else
+            {
+                if (size > 1)
+                    wordFields.Add(name);
+                offset += (ushort)size;
+                _logger.WriteLine($"Static field '{name}' allocated at ${addresses[name]:X4} ({size} byte{(size > 1 ? "s" : "")})");
+            }
+        }
+        return (addresses, wordFields, offset, arrayFields);
     }
 }
