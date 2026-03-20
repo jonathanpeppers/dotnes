@@ -302,10 +302,25 @@ partial class IL2NESWriter
                 {
                     EmitLdsfldForArg(arg.compoundStaticFieldName);
                 }
-                else
+                else if (arg.compoundLocalIdx >= 0)
                 {
                     var loc = Locals[arg.compoundLocalIdx];
                     Emit(Opcode.LDA, AddressMode.Absolute, (ushort)loc.Address!);
+                }
+                else
+                {
+                    // No source variable — this is a constant-only compound expression.
+                    // Only safe for pure add-constant case; if a binary op is present,
+                    // we can't evaluate it at compile time without the source operand.
+                    if (arg.compoundBinOp != 0)
+                    {
+                        throw new TranspileException(
+                            $"Unsupported constant-only compound oam_spr argument with binary op '{arg.compoundBinOp}'.",
+                            MethodName);
+                    }
+                    int constResult = arg.compoundAddConst;
+                    Emit(Opcode.LDA, AddressMode.Immediate, (byte)(constResult & 0xFF));
+                    goto emitDecspStore;
                 }
 
                 // Apply the inner binary operation
@@ -384,9 +399,10 @@ partial class IL2NESWriter
             }
             else
             {
-                Emit(Opcode.LDA, AddressMode.Immediate, checked((byte)arg.constValue));
+                Emit(Opcode.LDA, AddressMode.Immediate, (byte)(arg.constValue & 0xFF));
             }
 
+            emitDecspStore:
             if (i == 0)
                 Emit(Opcode.LDY, AddressMode.Immediate, 0x03);
             else
@@ -419,7 +435,7 @@ partial class IL2NESWriter
             }
             else
             {
-                byte idVal = checked((byte)idArg.constValue);
+                byte idVal = (byte)(idArg.constValue & 0xFF);
                 // Check if A already has the right value from the 4th arg STA
                 if (argInfos.Count >= 4)
                 {

@@ -174,7 +174,11 @@ public class Block
     /// </summary>
     public void RemoveAt(int index)
     {
+        var (_, label) = _instructions[index];
         _instructions.RemoveAt(index);
+        // Preserve any label that was on the removed instruction
+        if (label != null)
+            _pendingLabels.Insert(0, label);
     }
 
     /// <summary>
