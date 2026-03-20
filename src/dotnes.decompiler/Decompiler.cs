@@ -16,6 +16,8 @@ class Decompiler
     readonly List<(ushort Address, int Size)> _arrayDeclarations = new();
     readonly Dictionary<ushort, string> _localVariables = new();
     readonly List<(ushort PpuAddress, byte[] Data)> _chrRamTileData = new();
+    readonly List<(ushort Address, string Name)> _userFunctionAddresses = new();
+    readonly HashSet<string> _userFunctionNames = new();
 
     ushort _mainAddress;
     ushort _mainEnd;
@@ -44,8 +46,11 @@ class Decompiler
         // Phase 2: Find and decompile the main program
         var mainCode = DecompileMain();
 
-        // Phase 3: Generate C# source
-        return GenerateCSharp(mainCode);
+        // Phase 3: Detect and decompile user-defined functions
+        var userFunctions = DecompileUserFunctions();
+
+        // Phase 4: Generate C# source
+        return GenerateCSharp(mainCode, userFunctions);
     }
 
     /// <summary>
@@ -114,6 +119,10 @@ class Decompiler
         // Identify final built-ins after main by scanning JSR targets from within main
         // and matching byte patterns at those addresses
         IdentifyFinalBuiltIns(_mainEnd);
+
+        // Detect user-defined functions: unresolved JSR targets from main that
+        // point to addresses after main (between main and the final built-ins)
+        DetectUserFunctions();
     }
 
     /// <summary>
@@ -270,12 +279,92 @@ class Decompiler
     }
 
     /// <summary>
+    /// Detect user-defined functions by scanning main for JSR targets that are
+    /// not in the symbol table and point to addresses after main. These are
+    /// subroutines written by the user (not built-in NESLib subroutines).
+    /// </summary>
+    void DetectUserFunctions()
+    {
+        int offset = _mainAddress - 0x8000;
+        ushort address = _mainAddress;
+        var candidates = new SortedSet<ushort>();
+
+        while (address < _mainEnd && offset < _rom.PrgRom.Length - 2)
+        {
+            if (_rom.PrgRom[offset] == 0x20) // JSR
+            {
+                ushort target = (ushort)(_rom.PrgRom[offset + 1] | (_rom.PrgRom[offset + 2] << 8));
+                if (!_symbolTable.ContainsKey(target) && target >= _mainEnd)
+                    candidates.Add(target);
+            }
+            int size = GetInstructionSize(_rom.PrgRom[offset]);
+            offset += size;
+            address += (ushort)size;
+        }
+
+        foreach (var target in candidates)
+        {
+            string name = $"func_{target:X4}";
+            _symbolTable[target] = name;
+            _userFunctionAddresses.Add((target, name));
+            _userFunctionNames.Add(name);
+            _logger.WriteLine($"  Detected user function '{name}' at ${target:X4}");
+        }
+    }
+
+    /// <summary>
+    /// Decompile all detected user-defined functions.
+    /// Returns a list of (name, statements) pairs in address order.
+    /// </summary>
+    List<(string Name, List<string> Statements)> DecompileUserFunctions()
+    {
+        var result = new List<(string Name, List<string> Statements)>();
+
+        foreach (var (addr, name) in _userFunctionAddresses)
+        {
+            _logger.WriteLine($"Decompiling user function '{name}' at ${addr:X4}...");
+            var statements = DecompileBlock(addr);
+            result.Add((name, statements));
+            _logger.WriteLine($"  {statements.Count} statements");
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Decompile a block of 6502 code starting at the given address, ending at RTS.
+    /// Used for user-defined function bodies.
+    /// </summary>
+    List<string> DecompileBlock(ushort startAddress)
+    {
+        // Collect instructions from start to RTS
+        var instructions = new List<(ushort Address, byte Opcode, byte? Op1, byte? Op2)>();
+        int offset = startAddress - 0x8000;
+        ushort addr = startAddress;
+
+        while (offset < _rom.PrgRom.Length)
+        {
+            byte opcode = _rom.PrgRom[offset];
+            int size = GetInstructionSize(opcode);
+            byte? op1 = size >= 2 && offset + 1 < _rom.PrgRom.Length ? _rom.PrgRom[offset + 1] : null;
+            byte? op2 = size >= 3 && offset + 2 < _rom.PrgRom.Length ? _rom.PrgRom[offset + 2] : null;
+            instructions.Add((addr, opcode, op1, op2));
+
+            if (opcode == 0x60) break; // RTS marks end of function
+
+            offset += size;
+            addr += (ushort)size;
+        }
+
+        return ProcessInstructions(instructions, startAddress);
+    }
+
+    /// <summary>
     /// Decompile the main program block into a list of C# statements.
     /// Recognizes multi-instruction patterns like LDA #arg / JSR pusha / LDA #arg / JSR pal_col.
     /// </summary>
     List<string> DecompileMain()
     {
-        var statements = new List<string>();
         int offset = _mainAddress - 0x8000;
         ushort address = _mainAddress;
 
@@ -320,6 +409,25 @@ class Decompiler
         if (instructions.Count > 0)
             _logger.WriteLine($"Collected {instructions.Count} instructions (${_mainAddress:X4}-${instructions[^1].Address:X4})");
 
+        var statements = ProcessInstructions(instructions, _mainAddress);
+
+        // NES programs must end with an infinite loop; ensure one is present
+        if (statements.Count == 0 || statements[^1] != "while (true) ;")
+            statements.Add("while (true) ;");
+
+        return statements;
+    }
+
+    /// <summary>
+    /// Process a list of 6502 instructions and return decompiled C# statements.
+    /// Shared by DecompileMain (for the main program) and DecompileBlock (for user functions).
+    /// </summary>
+    List<string> ProcessInstructions(
+        List<(ushort Address, byte Opcode, byte? Op1, byte? Op2)> instructions,
+        ushort blockStart)
+    {
+        var statements = new List<string>();
+
         // Now walk through instructions with look-ahead for pattern matching
         var pushedBytes = new Stack<byte>();   // Track values pushed via pusha (8-bit)
         var pushedWords = new Stack<ushort>(); // Track values pushed via pushax (16-bit)
@@ -340,6 +448,10 @@ class Decompiler
                 statements.Add("}");
             }
 
+            // RTS = end of function (user-defined functions end here)
+            if (opcode == 0x60)
+                break;
+
             // Pattern: JMP to self = while (true) ;
             if (opcode == 0x4C && op1.HasValue && op2.HasValue)
             {
@@ -350,8 +462,8 @@ class Decompiler
                     statements.Add("while (true) ;");
                     break;
                 }
-                // Last instruction is a backward JMP within main = while (true) { body } game loop
-                if (i == instructions.Count - 1 && target >= _mainAddress && target < instrAddr)
+                // Last instruction is a backward JMP within the block = while (true) { body } game loop
+                if (i == instructions.Count - 1 && target >= blockStart && target < instrAddr)
                 {
                     FlushUnknownInstructions(unknownInstructions, statements);
                     statements.Add("while (true) ;");
@@ -636,20 +748,16 @@ class Decompiler
             lastCmpValue = null;
         }
 
-        // Close any remaining open if-blocks (may happen when branch target is past the end of main)
+        // Close any remaining open if-blocks (may happen when branch target is past the end)
         while (pendingCloseBraces.Count > 0)
         {
             var addr = pendingCloseBraces.Pop();
-            _logger.WriteLine($"  Warning: unclosed if-block at ${addr:X4} — target may be outside main");
+            _logger.WriteLine($"  Warning: unclosed if-block at ${addr:X4} — target may be outside block");
             statements.Add("}");
         }
 
-        // Flush any remaining unknown instructions before the final while(true)
+        // Flush any remaining unknown instructions
         FlushUnknownInstructions(unknownInstructions, statements);
-
-        // NES programs must end with an infinite loop; ensure one is present
-        if (statements.Count == 0 || statements[^1] != "while (true) ;")
-            statements.Add("while (true) ;");
 
         return statements;
     }
@@ -821,6 +929,8 @@ class Decompiler
             "pusha" or "pushax" or "popa" or "popax"
                 or "incsp1" or "incsp2" or "addysp" or "decsp4"
                 or "zerobss" or "copydata" or "initlib" or "donelib" => null,
+            // User-defined functions - emit actual call
+            _ when _userFunctionNames.Contains(name) => FormatUserFunctionCall(name, aValue, pushedArg),
             _ => $"// {name}({(aValue.HasValue ? $"0x{aValue:X2}" : "")});",
         };
     }
@@ -855,6 +965,8 @@ class Decompiler
             "pusha" or "pushax" or "popa" or "popax"
                 or "incsp1" or "incsp2" or "addysp" or "decsp4"
                 or "zerobss" or "copydata" or "initlib" or "donelib" => new List<string>(),
+            // User-defined functions - emit actual call
+            _ when _userFunctionNames.Contains(name) => new List<string> { FormatUserFunctionCall(name, aValue, pushedByte) },
             _ => new List<string> { $"// {name}(0x{value16:X4});" },
         };
     }
@@ -1087,9 +1199,20 @@ class Decompiler
         $"peek({FormatAddress(addr)});";
 
     /// <summary>
+    /// Format a call to a user-defined function with detected arguments.
+    /// </summary>
+    static string FormatUserFunctionCall(string name, byte? aValue, byte? pushedArg)
+    {
+        if (pushedArg.HasValue && aValue.HasValue)
+            return $"{name}({pushedArg.Value}, {aValue.Value});";
+        if (aValue.HasValue)
+            return $"{name}({aValue.Value});";
+        return $"{name}();";
+    }
+    /// <summary>
     /// Generate the final C# source code from decompiled statements.
     /// </summary>
-    string GenerateCSharp(List<string> statements)
+    string GenerateCSharp(List<string> statements, List<(string Name, List<string> Statements)> userFunctions)
     {
         var sb = new StringBuilder();
         sb.AppendLine("// Decompiled from .nes ROM by dotnes decompiler");
@@ -1126,6 +1249,29 @@ class Decompiler
 
             if (statement == "{")
                 indent++;
+        }
+
+        // Emit user-defined functions
+        foreach (var (funcName, funcStatements) in userFunctions)
+        {
+            sb.AppendLine();
+            sb.AppendLine($"static void {funcName}()");
+            sb.AppendLine("{");
+
+            indent = 1;
+            foreach (var statement in funcStatements)
+            {
+                if (statement == "}")
+                    indent = Math.Max(1, indent - 1);
+
+                string prefix = new string(' ', indent * 4);
+                sb.AppendLine(prefix + statement);
+
+                if (statement == "{")
+                    indent++;
+            }
+
+            sb.AppendLine("}");
         }
 
         return sb.ToString();

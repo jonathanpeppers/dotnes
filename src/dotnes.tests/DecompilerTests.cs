@@ -667,4 +667,85 @@ public class DecompilerTests
         var chrRamData = decompiler.GetChrRamTileData();
         Assert.Empty(chrRamData);
     }
+
+    [Fact]
+    public void Decompiler_Shoot2_DetectsUserFunctions()
+    {
+        var romBytes = GetVerifiedRom("shoot2");
+        var rom = new NESRomReader(romBytes);
+        var decompiler = new Decompiler(rom, _logger);
+        var code = decompiler.Decompile();
+
+        // shoot2 has user-defined functions after main that should be detected
+        // and emitted as static void declarations
+        Assert.Contains("static void func_", code);
+    }
+
+    [Fact]
+    public void Decompiler_Shoot2_UserFunctionCallsNotCommented()
+    {
+        var romBytes = GetVerifiedRom("shoot2");
+        var rom = new NESRomReader(romBytes);
+        var decompiler = new Decompiler(rom, _logger);
+        var code = decompiler.Decompile();
+
+        // User function calls from main should be actual calls, not comments
+        // At least one func_ call should appear without a leading "//"
+        var lines = code.Split('\n');
+        var funcCalls = lines.Where(l => l.TrimStart().StartsWith("func_")).ToList();
+        Assert.NotEmpty(funcCalls);
+    }
+
+    [Fact]
+    public void Decompiler_Shoot2_UserFunctionHasPokeBody()
+    {
+        var romBytes = GetVerifiedRom("shoot2");
+        var rom = new NESRomReader(romBytes);
+        var decompiler = new Decompiler(rom, _logger);
+        var code = decompiler.Decompile();
+
+        // The sfx functions contain poke() calls for APU registers.
+        // At least one user function body should decompile APU poke calls.
+        // func_8C64 is sfx_shoot: poke(APU_PULSE1_CTRL, 0x4A)
+        Assert.Contains("poke(APU_PULSE1_CTRL, 0x4A);", code);
+        Assert.Contains("poke(APU_PULSE1_SWEEP, 0x00);", code);
+        Assert.Contains("poke(APU_PULSE1_TIMER_LO, 0x80);", code);
+        Assert.Contains("poke(APU_PULSE1_TIMER_HI, 0xF9);", code);
+    }
+
+    [Fact]
+    public void Decompiler_Shoot2_UserFunctionsHaveBraces()
+    {
+        var romBytes = GetVerifiedRom("shoot2");
+        var rom = new NESRomReader(romBytes);
+        var decompiler = new Decompiler(rom, _logger);
+        var code = decompiler.Decompile();
+
+        // Each user function should have an opening and closing brace
+        var lines = code.Split('\n').Select(l => l.Trim()).ToArray();
+        var funcDecls = lines.Where(l => l.StartsWith("static void func_")).ToList();
+        Assert.True(funcDecls.Count > 0, "Should have at least one user function declaration");
+
+        // Each function declaration should be followed by { ... }
+        for (int i = 0; i < lines.Length; i++)
+        {
+            if (lines[i].StartsWith("static void func_"))
+            {
+                Assert.True(i + 1 < lines.Length && lines[i + 1] == "{",
+                    $"Function declaration at line {i} should be followed by opening brace");
+            }
+        }
+    }
+
+    [Fact]
+    public void Decompiler_Hello_NoUserFunctions()
+    {
+        var romBytes = GetVerifiedRom("hello");
+        var rom = new NESRomReader(romBytes);
+        var decompiler = new Decompiler(rom, _logger);
+        var code = decompiler.Decompile();
+
+        // hello sample has no user-defined functions
+        Assert.DoesNotContain("static void func_", code);
+    }
 }
