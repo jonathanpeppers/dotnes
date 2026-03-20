@@ -4381,4 +4381,30 @@ public class RoslynTests
         // ASL + CLC + ADC #1 (second index: positions[f] * 2 + 1)
         Assert.Contains("0A186901", hex);
     }
+
+    [Fact]
+    public void ByteComparison_LessThanOrEqual255()
+    {
+        // Regression: if (x <= 0xFF) caused OverflowException because
+        // Ble emits CMP #(value+1), and 255+1 overflows a byte.
+        // The transpiler should emit an unconditional JMP (always true for bytes).
+        var bytes = GetProgramBytes(
+            """
+            byte x = rand8();
+            if (x <= 0xFF)
+            {
+                pal_col(0, x);
+            }
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"ByteComparison_LessThanOrEqual255 hex: {hex}");
+
+        // Should contain JMP (4C) for the always-true branch, not CMP #$00 (overflow)
+        Assert.Contains("4C", hex);
+    }
 }

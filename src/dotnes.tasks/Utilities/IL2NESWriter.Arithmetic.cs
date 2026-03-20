@@ -112,7 +112,7 @@ partial class IL2NESWriter
                 return true;
             }
 
-            // Handle LDA ZeroPage(ImmediateOperand — byte overload in Emit).
+            // Handle LDA ZeroPage (ImmediateOperand) — byte overload in Emit.
             // This occurs when the dup cascade handler reloads a value from TEMP.
             if (lastInstr.Opcode == Opcode.LDA
                 && lastInstr.Mode == AddressMode.ZeroPage
