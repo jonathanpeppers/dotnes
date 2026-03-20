@@ -621,29 +621,34 @@ while (true)
                 }
             }
 
-            // Pickup object
+            // Pickup object — split into two phases to prevent stelem backward scan
+            // from consuming the item type comparison and score/sfx code.
+            // Phase 1: detect item type
+            byte pickup_type = 0;
             if (actor_state[pi] <= WALKING && floor_objtype[pf] != 0)
             {
                 byte objx = (byte)(floor_objpos[pf] * 16);
                 if (actor_x[pi] >= objx && actor_x[pi] < (byte)(objx + 16))
                 {
-                    byte ot = floor_objtype[pf];
-                    floor_objtype[pf] = 0;
-                    if (ot == 1)
-                    {
-                        if (pf > 0) actor_floor[pi] = (byte)(pf - 1);
-                        actor_state[pi] = FALLING;
-                        actor_xvel[pi] = 0;
-                        actor_yvel[pi] = 0;
-                        sfx_play(SND_HIT, 0);
-                        vbright = 8;
-                    }
-                    else
-                    {
-                        score = (byte)bcd_add(score, 1);
-                        sfx_play(SND_COIN, 0);
-                    }
+                    pickup_type = floor_objtype[pf];
                 }
+            }
+            // Phase 2: act on pickup (mine = fall, others = score)
+            if (pickup_type == 1)
+            {
+                floor_objtype[pf] = 0;
+                if (pf > 0) actor_floor[pi] = (byte)(pf - 1);
+                actor_state[pi] = FALLING;
+                actor_xvel[pi] = 0;
+                actor_yvel[pi] = 0;
+                sfx_play(SND_HIT, 0);
+                vbright = 8;
+            }
+            if (pickup_type >= 2)
+            {
+                floor_objtype[pf] = 0;
+                score = (byte)bcd_add(score, 1);
+                sfx_play(SND_COIN, 0);
             }
 
             // Scroll check
