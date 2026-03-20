@@ -15,6 +15,7 @@ class Decompiler
     readonly Dictionary<ushort, string> _symbolTable = new();
     readonly List<(ushort Address, int Size)> _arrayDeclarations = new();
     readonly Dictionary<ushort, string> _localVariables = new();
+    readonly HashSet<ushort> _padVariables = new(); // Locals that store pad_poll/pad_trigger results (typed as PAD)
     readonly List<(ushort PpuAddress, byte[] Data)> _chrRamTileData = new();
 
     ushort _mainAddress;
@@ -229,6 +230,10 @@ class Decompiler
             ("vram_write", new byte[] { 0x85, 0x2A, 0x86, 0x2B }),
             // set_rand: STA RAND_SEED ($3C); RTS  (85 3C 60)
             ("set_rand", new byte[] { 0x85, 0x3C, 0x60 }),
+            // pad_poll: TAY; LDX #$00; LDA #$01; STA $4016  (A8 A2 00 A9 01 8D 16 40)
+            ("pad_poll", new byte[] { 0xA8, 0xA2, 0x00, 0xA9, 0x01, 0x8D, 0x16, 0x40 }),
+            // pad_state: TAX; LDA $3C,X; LDX #$00; RTS  (AA B5 3C A2 00 60)
+            ("pad_state", new byte[] { 0xAA, 0xB5, 0x3C, 0xA2, 0x00, 0x60 }),
         };
 
         // Try to match each JSR target against known patterns
@@ -326,6 +331,7 @@ class Decompiler
         byte? lastImmediateA = null;           // Track last LDA #imm value for consecutive poke detection
         string? lastLoadedVarName = null;      // Track name of last local variable loaded into A
         byte? lastCmpValue = null;             // Track value from last CMP #imm instruction
+        byte? lastAndMask = null;              // Track AND #imm mask for subsequent branch conditions
         var pendingCloseBraces = new Stack<ushort>(); // Target addresses where if-blocks end
 
         for (int i = 0; i < instructions.Count; i++)
@@ -366,6 +372,7 @@ class Decompiler
                     lastImmediateA = null; // JSR modifies A
                     lastLoadedVarName = null;
                     lastCmpValue = null;
+                    lastAndMask = null;
                     i++; // skip the JSR pusha
                     continue;
                 }
@@ -390,6 +397,7 @@ class Decompiler
                             lastImmediateA = null; // JSR modifies A
                             lastLoadedVarName = null;
                             lastCmpValue = null;
+                            lastAndMask = null;
                             i += 2; // skip LDX and JSR pushax
                             continue;
                         }
@@ -404,6 +412,7 @@ class Decompiler
                             lastImmediateA = null; // JSR modifies A
                             lastLoadedVarName = null;
                             lastCmpValue = null;
+                            lastAndMask = null;
                             i += 2;
                             continue;
                         }
@@ -431,8 +440,38 @@ class Decompiler
                         lastImmediateA = null; // JSR modifies A
                         lastLoadedVarName = null;
                         lastCmpValue = null;
+                        lastAndMask = null;
                         i += 2; // skip LDA and JSR
                         continue;
+                    }
+                }
+            }
+
+            // Pattern: LDA #imm / JSR <returning subroutine> / STA $local → var = call(arg)
+            if (opcode == 0xA9 && op1.HasValue && i + 2 < instructions.Count)
+            {
+                var jsrInstr = instructions[i + 1];
+                var staInstr = instructions[i + 2];
+                if (jsrInstr.Opcode == 0x20 && jsrInstr.Op1.HasValue && jsrInstr.Op2.HasValue
+                    && staInstr.Opcode == 0x8D && staInstr.Op1.HasValue && staInstr.Op2.HasValue)
+                {
+                    ushort jsrTarget = (ushort)(jsrInstr.Op1.Value | (jsrInstr.Op2.Value << 8));
+                    if (_symbolTable.TryGetValue(jsrTarget, out var name) && IsReturningFunction(name))
+                    {
+                        ushort stAddr = (ushort)(staInstr.Op1.Value | (staInstr.Op2.Value << 8));
+                        if (_localVariables.TryGetValue(stAddr, out var varName))
+                        {
+                            var callExpr = FormatCallExpression(name, op1.Value);
+                            statements.Add($"{varName} = {callExpr};");
+                            if (name is "pad_poll" or "pad_trigger")
+                                _padVariables.Add(stAddr);
+                            lastImmediateA = null;
+                            lastLoadedVarName = null;
+                            lastCmpValue = null;
+                            lastAndMask = null;
+                            i += 2; // skip JSR and STA
+                            continue;
+                        }
                     }
                 }
             }
@@ -452,6 +491,7 @@ class Decompiler
                         lastImmediateA = null; // JSR modifies A
                         lastLoadedVarName = null;
                         lastCmpValue = null;
+                        lastAndMask = null;
                         i++; // skip the JSR
                         continue;
                     }
@@ -471,6 +511,7 @@ class Decompiler
                         lastImmediateA = op1.Value;
                         lastLoadedVarName = null;
                         lastCmpValue = null;
+                        lastAndMask = null;
                         i++; // skip the STA
                         continue;
                     }
@@ -498,6 +539,7 @@ class Decompiler
                     lastLoadedVarName = loadedName;
                     lastImmediateA = null;
                     lastCmpValue = null;
+                    lastAndMask = null; // New load resets AND tracking
                     continue;
                 }
             }
@@ -542,8 +584,17 @@ class Decompiler
                     lastImmediateA = null; // A now holds peek result, not an immediate
                     lastLoadedVarName = null;
                     lastCmpValue = null;
+                    lastAndMask = null;
                     continue;
                 }
+            }
+
+            // Pattern: AND #imm → mask accumulator, track for subsequent branch condition
+            if (opcode == 0x29 && op1.HasValue && lastLoadedVarName != null)
+            {
+                lastAndMask = op1.Value;
+                // Don't clear lastLoadedVarName — AND result still references the variable
+                continue;
             }
 
             // Pattern: CMP #imm → track comparison value for subsequent branch
@@ -562,7 +613,18 @@ class Decompiler
                 if (branchOffset > 0) // Forward branch = skip body when condition is met
                 {
                     string condition;
-                    if (lastCmpValue.HasValue)
+                    if (lastAndMask.HasValue)
+                    {
+                        // After AND #mask: flags reflect A & mask
+                        string maskStr = FormatPadMask(lastAndMask.Value);
+                        condition = opcode switch
+                        {
+                            0xF0 => $"({lastLoadedVarName} & {maskStr}) != 0",  // BEQ skip → body runs when AND result nonzero
+                            0xD0 => $"({lastLoadedVarName} & {maskStr}) == 0",  // BNE skip → body runs when AND result zero
+                            _ => "/* unknown */"
+                        };
+                    }
+                    else if (lastCmpValue.HasValue)
                     {
                         // After CMP #N: flags reflect A - N
                         condition = opcode switch
@@ -591,6 +653,7 @@ class Decompiler
 
                     lastLoadedVarName = null;
                     lastCmpValue = null;
+                    lastAndMask = null;
                     lastImmediateA = null;
                     continue;
                 }
@@ -608,6 +671,7 @@ class Decompiler
                 lastImmediateA = null; // JSR may modify A
                 lastLoadedVarName = null;
                 lastCmpValue = null;
+                lastAndMask = null;
                 continue;
             }
 
@@ -615,6 +679,7 @@ class Decompiler
             lastImmediateA = null;
             lastLoadedVarName = null;
             lastCmpValue = null;
+            lastAndMask = null;
         }
 
         // Close any remaining open if-blocks (may happen when branch target is past the end of main)
@@ -638,6 +703,40 @@ class Decompiler
         ushort target = (ushort)(instr.Op1.Value | (instr.Op2.Value << 8));
         return _symbolTable.TryGetValue(target, out var n) && n == name;
     }
+
+    /// <summary>
+    /// Returns true if the named subroutine returns a meaningful value in A
+    /// that callers typically store to a local variable.
+    /// </summary>
+    static bool IsReturningFunction(string name) =>
+        name is "pad_poll" or "pad_trigger" or "rand8" or "rand";
+
+    /// <summary>
+    /// Format a call expression (without trailing semicolon) for a returning function.
+    /// </summary>
+    static string FormatCallExpression(string name, byte? aValue) => name switch
+    {
+        "pad_poll" => $"pad_poll({aValue?.ToString() ?? "0"})",
+        "pad_trigger" => $"pad_trigger({aValue?.ToString() ?? "0"})",
+        "rand8" or "rand" => "rand8()",
+        _ => $"{name}({(aValue.HasValue ? $"0x{aValue:X2}" : "")})"
+    };
+
+    /// <summary>
+    /// Format an AND mask value, using PAD enum names when the mask matches a single PAD button.
+    /// </summary>
+    static string FormatPadMask(byte mask) => mask switch
+    {
+        0x01 => "PAD.A",
+        0x02 => "PAD.B",
+        0x04 => "PAD.SELECT",
+        0x08 => "PAD.START",
+        0x10 => "PAD.UP",
+        0x20 => "PAD.DOWN",
+        0x40 => "PAD.LEFT",
+        0x80 => "PAD.RIGHT",
+        _ => $"0x{mask:X2}"
+    };
 
     /// <summary>
     /// Detect byte[] array declarations by scanning for indexed addressing modes
@@ -1088,7 +1187,8 @@ class Decompiler
         {
             foreach (var (addr, name) in _localVariables.OrderBy(kvp => kvp.Key))
             {
-                sb.AppendLine($"byte {name} = 0;");
+                string type = _padVariables.Contains(addr) ? "PAD" : "byte";
+                sb.AppendLine($"{type} {name} = 0;");
             }
             sb.AppendLine();
         }
