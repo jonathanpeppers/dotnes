@@ -4209,6 +4209,47 @@ public class RoslynTests
     }
 
     [Fact]
+    public void OamSpr_ConstantOnlyCompoundArg()
+    {
+        // Regression: oam_spr with constant-only compound expressions like
+        // (byte)(0x41 | 0x43) in the attr arg caused KeyNotFoundException or
+        // "Unsupported constant-only compound" because the backward scan
+        // produced a compound arg with no source variable. The transpiler
+        // should evaluate the expression at compile time.
+        // Uses overlapping bits: 0x41 | 0x43 = 0x43 (but 0x41 + 0x43 = 0x84),
+        // so the test distinguishes OR from accidental addition.
+        var bytes = GetProgramBytes(
+            """
+            byte[] PALETTE = [
+                0x30,
+                0x11, 0x30, 0x27, 0x0,
+                0x1c, 0x20, 0x2c, 0x0,
+                0x00, 0x10, 0x20, 0x0,
+                0x06, 0x16, 0x26, 0x0,
+                0x14, 0x34, 0x0d, 0x0,
+                0x00, 0x37, 0x25, 0x0,
+                0x0d, 0x2d, 0x3a, 0x0,
+                0x0d, 0x27, 0x2a
+            ];
+
+            pal_all(PALETTE);
+            // attr arg is a constant-only compound: (0x41 | 0x43) = 0x43
+            oam_spr(40, 50, 0x10, (byte)(0x41 | 0x43), 0);
+            ppu_on_all();
+            while (true) ;
+            """);
+
+        Assert.NotNull(bytes);
+        var hex = Convert.ToHexString(bytes);
+
+        // The attr byte should be 0x43 (0x41 | 0x43 evaluated at compile time)
+        // NOT 0x84 which would result from incorrect addition
+        // In the decsp4 sequence: LDA #43 / DEY / STA ($22),Y
+        Assert.Contains("A943", hex);
+        Assert.DoesNotContain("A984", hex);
+    }
+
+    [Fact]
     public void MovingSprite_PadPollBranches()
     {
         // Ported from movingsprite sample (32 LOC).

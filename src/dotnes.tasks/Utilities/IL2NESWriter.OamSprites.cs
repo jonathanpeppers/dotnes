@@ -309,16 +309,24 @@ partial class IL2NESWriter
                 }
                 else
                 {
-                    // No source variable — this is a constant-only compound expression.
-                    // Only safe for pure add-constant case; if a binary op is present,
-                    // we can't evaluate it at compile time without the source operand.
-                    if (arg.compoundBinOp != 0)
+                    // No source variable — constant-only compound expression.
+                    // Apply the binary op to the two captured constants directly.
+                    // compAddConst is the first operand, compBinOpConst is the second.
+                    int constResult = arg.compoundBinOp switch
                     {
-                        throw new TranspileException(
-                            $"Unsupported constant-only compound oam_spr argument with binary op '{arg.compoundBinOp}'.",
-                            MethodName);
-                    }
-                    int constResult = arg.compoundAddConst;
+                        ILOpCode.Add => arg.compoundAddConst + arg.compoundBinOpConst,
+                        ILOpCode.Sub => arg.compoundAddConst - arg.compoundBinOpConst,
+                        ILOpCode.Shl => arg.compoundAddConst << arg.compoundBinOpConst,
+                        ILOpCode.Shr or ILOpCode.Shr_un => arg.compoundAddConst >> arg.compoundBinOpConst,
+                        ILOpCode.And => arg.compoundAddConst & arg.compoundBinOpConst,
+                        ILOpCode.Or => arg.compoundAddConst | arg.compoundBinOpConst,
+                        ILOpCode.Xor => arg.compoundAddConst ^ arg.compoundBinOpConst,
+                        ILOpCode.Mul => arg.compoundAddConst * arg.compoundBinOpConst,
+                        ILOpCode.Nop => arg.compoundAddConst, // no binary op, just a constant
+                        _ => throw new TranspileException(
+                            $"Unsupported binary op '{arg.compoundBinOp}' in constant-only compound oam_spr arg.",
+                            MethodName),
+                    };
                     Emit(Opcode.LDA, AddressMode.Immediate, (byte)(constResult & 0xFF));
                     goto emitDecspStore;
                 }
