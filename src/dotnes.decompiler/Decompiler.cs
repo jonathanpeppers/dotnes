@@ -15,6 +15,8 @@ class Decompiler
     readonly Dictionary<ushort, string> _symbolTable = new();
     readonly List<(ushort Address, int Size)> _arrayDeclarations = new();
     readonly Dictionary<ushort, string> _localVariables = new();
+    readonly List<ForLoopInfo> _forLoops = new();
+    readonly HashSet<ushort> _forLoopLocals = new();
     readonly List<(ushort PpuAddress, byte[] Data)> _chrRamTileData = new();
 
     ushort _mainAddress;
@@ -22,6 +24,16 @@ class Decompiler
     int _dataCounter;
     ushort? _lastVramAdrTarget;
     byte? _ppuAddrHigh; // Tracks first byte written to PPU_ADDR ($2006) for CHR RAM detection
+
+    record ForLoopInfo(
+        ushort LocalAddress,     // counter variable address ($03xx)
+        byte InitValue,          // initial value (usually 0)
+        byte Limit,              // upper bound (N in i < N)
+        int InitIndex,           // index of LDA #imm (first init instruction)
+        int BodyStartIndex,      // index of first body instruction
+        int FooterStartIndex,    // index of first footer instruction
+        int AfterLoopIndex       // index of first instruction after BCC
+    );
 
     public Decompiler(NESRomReader rom, ILogger? logger = null)
     {
@@ -317,8 +329,20 @@ class Decompiler
         // Detect local variable usage (non-indexed STA/LDA to $0325+ not claimed by arrays)
         DetectLocalVariables(instructions);
 
+        // Detect for-loop structures (init/footer patterns)
+        DetectForLoops(instructions);
+
         if (instructions.Count > 0)
             _logger.WriteLine($"Collected {instructions.Count} instructions (${_mainAddress:X4}-${instructions[^1].Address:X4})");
+
+        // Build lookup tables for for-loop init and footer indices
+        var forLoopByInit = new Dictionary<int, ForLoopInfo>();
+        var forLoopByFooter = new Dictionary<int, ForLoopInfo>();
+        foreach (var fl in _forLoops)
+        {
+            forLoopByInit[fl.InitIndex] = fl;
+            forLoopByFooter[fl.FooterStartIndex] = fl;
+        }
 
         // Now walk through instructions with look-ahead for pattern matching
         var pushedBytes = new Stack<byte>();   // Track values pushed via pusha (8-bit)
@@ -331,6 +355,30 @@ class Decompiler
 
         for (int i = 0; i < instructions.Count; i++)
         {
+            // Check if this is a for-loop init (LDA #imm / STA $local)
+            if (forLoopByInit.TryGetValue(i, out var loopInit))
+            {
+                var varName = _localVariables[loopInit.LocalAddress];
+                statements.Add($"for (byte {varName} = {loopInit.InitValue}; {varName} < {loopInit.Limit}; {varName}++)");
+                statements.Add("{");
+                i = loopInit.BodyStartIndex - 1; // -1 because the for loop will i++
+                lastImmediateA = null;
+                lastLoadedVarName = null;
+                lastCmpValue = null;
+                continue;
+            }
+
+            // Check if this is a for-loop footer (LDA $local / CLC / ADC / STA / CMP / BCC)
+            if (forLoopByFooter.TryGetValue(i, out var loopFooter))
+            {
+                statements.Add("}");
+                i = loopFooter.AfterLoopIndex - 1; // -1 because the for loop will i++
+                lastImmediateA = null;
+                lastLoadedVarName = null;
+                lastCmpValue = null;
+                continue;
+            }
+
             var (instrAddr, opcode, op1, op2) = instructions[i];
 
             // Emit closing braces for any if-blocks that end at this address
@@ -766,6 +814,178 @@ class Decompiler
     }
 
     /// <summary>
+    /// Detect for-loop structures by scanning for the condition/branch footer pattern
+    /// and matching them to their initialization (LDA #imm / STA $local / JMP forward).
+    ///
+    /// Pattern 1 (INC): INC $local / LDA $local / CMP #$NN / BCC backward
+    /// Pattern 2 (ADC): LDA $local / CLC / ADC #$01 / STA $local / CMP #$NN / BCC backward
+    /// </summary>
+    void DetectForLoops(List<(ushort Address, byte Opcode, byte? Op1, byte? Op2)> instructions)
+    {
+        // Build address→index lookup for resolving branch targets
+        var addrToIndex = new Dictionary<ushort, int>();
+        for (int k = 0; k < instructions.Count; k++)
+            addrToIndex[instructions[k].Address] = k;
+
+        // Track claimed init indices to prevent overlapping matches
+        var claimedInits = new HashSet<int>();
+
+        for (int j = 0; j < instructions.Count; j++)
+        {
+            // Try to match a for-loop footer starting at index j
+            ushort localAddr;
+            byte limit;
+            int footerStart, afterLoopIndex;
+            ushort bccTarget;
+            int conditionCheckIndex; // index of the LDA $local in the condition check
+
+            if (TryMatchIncFooter(instructions, j, out localAddr, out limit, out bccTarget, out afterLoopIndex))
+            {
+                footerStart = j;
+                conditionCheckIndex = j + 1; // LDA is after INC
+            }
+            else if (TryMatchAdcFooter(instructions, j, out localAddr, out limit, out bccTarget, out afterLoopIndex))
+            {
+                footerStart = j;
+                conditionCheckIndex = j; // LDA is at start of ADC footer
+            }
+            else
+            {
+                continue;
+            }
+
+            if (!_localVariables.ContainsKey(localAddr)) continue;
+
+            // Find the body start index from the BCC target address
+            if (!addrToIndex.TryGetValue(bccTarget, out int bodyStartIndex)) continue;
+
+            // Find the initialization: LDA #imm / STA $local / JMP forward
+            // The JMP targets the condition check (LDA $local in the footer)
+            int initIndex = -1;
+            byte initValue = 0;
+            if (bodyStartIndex >= 3)
+            {
+                var ldaInit = instructions[bodyStartIndex - 3];
+                var staInit = instructions[bodyStartIndex - 2];
+                var jmpInit = instructions[bodyStartIndex - 1];
+
+                if (ldaInit.Opcode == 0xA9 // LDA immediate
+                    && staInit.Opcode == 0x8D // STA absolute
+                    && jmpInit.Opcode == 0x4C) // JMP absolute
+                {
+                    ushort staInitAddr = (ushort)(staInit.Op1!.Value | (staInit.Op2!.Value << 8));
+                    ushort jmpTarget = (ushort)(jmpInit.Op1!.Value | (jmpInit.Op2!.Value << 8));
+                    // Verify STA writes to the loop counter and JMP targets the condition check (LDA $local)
+                    if (staInitAddr == localAddr && jmpTarget == instructions[conditionCheckIndex].Address)
+                    {
+                        initIndex = bodyStartIndex - 3;
+                        initValue = ldaInit.Op1!.Value;
+                    }
+                }
+            }
+            // Also try without JMP: LDA #imm / STA $local (direct fall-through to body)
+            if (initIndex < 0 && bodyStartIndex >= 2)
+            {
+                var ldaInit = instructions[bodyStartIndex - 2];
+                var staInit = instructions[bodyStartIndex - 1];
+
+                if (ldaInit.Opcode == 0xA9 // LDA immediate
+                    && staInit.Opcode == 0x8D) // STA absolute
+                {
+                    ushort staInitAddr = (ushort)(staInit.Op1!.Value | (staInit.Op2!.Value << 8));
+                    if (staInitAddr == localAddr)
+                    {
+                        byte candidateInit = ldaInit.Op1!.Value;
+                        // For fall-through init, only treat this as a for-loop initializer when
+                        // the initial value is strictly less than the loop limit, so that the
+                        // decompiled `for (...; var < limit; ...)` preserves semantics.
+                        if (candidateInit < limit)
+                        {
+                            initIndex = bodyStartIndex - 2;
+                            initValue = candidateInit;
+                        }
+                    }
+                }
+            }
+            if (initIndex < 0) continue;
+            if (claimedInits.Contains(initIndex)) continue;
+
+            _forLoops.Add(new ForLoopInfo(localAddr, initValue, limit, initIndex, bodyStartIndex, footerStart, afterLoopIndex));
+            _forLoopLocals.Add(localAddr);
+            claimedInits.Add(initIndex);
+            _logger.WriteLine($"  Detected for loop: {_localVariables[localAddr]} = {initValue} to {limit} (init@{initIndex}, body@{bodyStartIndex}, footer@{footerStart})");
+        }
+    }
+
+    /// <summary>
+    /// Try to match the INC-based footer pattern: INC $local / LDA $local / CMP #NN / BCC backward
+    /// </summary>
+    static bool TryMatchIncFooter(
+        List<(ushort Address, byte Opcode, byte? Op1, byte? Op2)> instructions, int j,
+        out ushort localAddr, out byte limit, out ushort bccTarget, out int afterLoopIndex)
+    {
+        localAddr = 0; limit = 0; bccTarget = 0; afterLoopIndex = 0;
+        if (j + 3 >= instructions.Count) return false;
+
+        if (instructions[j].Opcode != 0xEE) return false;     // INC absolute
+        if (instructions[j + 1].Opcode != 0xAD) return false;  // LDA absolute
+        if (instructions[j + 2].Opcode != 0xC9) return false;  // CMP immediate
+        if (instructions[j + 3].Opcode != 0x90) return false;  // BCC
+
+        ushort incAddr = (ushort)(instructions[j].Op1!.Value | (instructions[j].Op2!.Value << 8));
+        ushort ldaAddr = (ushort)(instructions[j + 1].Op1!.Value | (instructions[j + 1].Op2!.Value << 8));
+        if (incAddr != ldaAddr) return false;
+
+        localAddr = incAddr;
+        limit = instructions[j + 2].Op1!.Value;
+
+        // Resolve BCC target — must be a backward branch
+        // BCC is 2 bytes (opcode + relative offset), so target = address + 2 + signed_offset
+        ushort bccInstrAddr = instructions[j + 3].Address;
+        sbyte bccOffset = (sbyte)instructions[j + 3].Op1!.Value;
+        bccTarget = (ushort)(bccInstrAddr + 2 + bccOffset);
+        if (bccTarget >= bccInstrAddr) return false;
+
+        afterLoopIndex = j + 4;
+        return true;
+    }
+
+    /// <summary>
+    /// Try to match the ADC-based footer pattern: LDA $local / CLC / ADC #$01 / STA $local / CMP #NN / BCC backward
+    /// </summary>
+    static bool TryMatchAdcFooter(
+        List<(ushort Address, byte Opcode, byte? Op1, byte? Op2)> instructions, int j,
+        out ushort localAddr, out byte limit, out ushort bccTarget, out int afterLoopIndex)
+    {
+        localAddr = 0; limit = 0; bccTarget = 0; afterLoopIndex = 0;
+        if (j + 5 >= instructions.Count) return false;
+
+        if (instructions[j].Opcode != 0xAD) return false;      // LDA absolute
+        if (instructions[j + 1].Opcode != 0x18) return false;   // CLC
+        if (instructions[j + 2].Opcode != 0x69 || instructions[j + 2].Op1 != 0x01) return false; // ADC #$01
+        if (instructions[j + 3].Opcode != 0x8D) return false;   // STA absolute
+        if (instructions[j + 4].Opcode != 0xC9) return false;   // CMP immediate
+        if (instructions[j + 5].Opcode != 0x90) return false;   // BCC
+
+        ushort ldaAddr = (ushort)(instructions[j].Op1!.Value | (instructions[j].Op2!.Value << 8));
+        ushort staAddr = (ushort)(instructions[j + 3].Op1!.Value | (instructions[j + 3].Op2!.Value << 8));
+        if (ldaAddr != staAddr) return false;
+
+        localAddr = ldaAddr;
+        limit = instructions[j + 4].Op1!.Value;
+
+        // Resolve BCC target — must be a backward branch
+        // BCC is 2 bytes (opcode + relative offset), so target = address + 2 + signed_offset
+        ushort bccInstrAddr = instructions[j + 5].Address;
+        sbyte bccOffset = (sbyte)instructions[j + 5].Op1!.Value;
+        bccTarget = (ushort)(bccInstrAddr + 2 + bccOffset);
+        if (bccTarget >= bccInstrAddr) return false;
+
+        afterLoopIndex = j + 6;
+        return true;
+    }
+
+    /// <summary>
     /// Returns true if the opcode uses Absolute,X or Absolute,Y addressing mode.
     /// </summary>
     static bool IsIndexedOpcode(byte opcode) => opcode is
@@ -1105,10 +1325,14 @@ class Decompiler
             sb.AppendLine();
         }
 
-        // Emit local variable declarations
-        if (_localVariables.Count > 0)
+        // Emit local variable declarations (excluding for-loop counter variables)
+        var nonLoopLocals = _localVariables
+            .Where(kvp => !_forLoopLocals.Contains(kvp.Key))
+            .OrderBy(kvp => kvp.Key)
+            .ToList();
+        if (nonLoopLocals.Count > 0)
         {
-            foreach (var (addr, name) in _localVariables.OrderBy(kvp => kvp.Key))
+            foreach (var (addr, name) in nonLoopLocals)
             {
                 sb.AppendLine($"byte {name} = 0;");
             }
