@@ -718,14 +718,17 @@ class Decompiler
             byte limit;
             int footerStart, afterLoopIndex;
             ushort bccTarget;
+            int conditionCheckIndex; // index of the LDA $local in the condition check
 
             if (TryMatchIncFooter(instructions, j, out localAddr, out limit, out bccTarget, out afterLoopIndex))
             {
                 footerStart = j;
+                conditionCheckIndex = j + 1; // LDA is after INC
             }
             else if (TryMatchAdcFooter(instructions, j, out localAddr, out limit, out bccTarget, out afterLoopIndex))
             {
                 footerStart = j;
+                conditionCheckIndex = j; // LDA is at start of ADC footer
             }
             else
             {
@@ -738,7 +741,7 @@ class Decompiler
             if (!addrToIndex.TryGetValue(bccTarget, out int bodyStartIndex)) continue;
 
             // Find the initialization: LDA #imm / STA $local / JMP forward
-            // The JMP should target the condition check (LDA $local in the footer)
+            // The JMP targets the condition check (LDA $local in the footer)
             int initIndex = -1;
             byte initValue = 0;
             if (bodyStartIndex >= 3)
@@ -752,7 +755,9 @@ class Decompiler
                     && jmpInit.Opcode == 0x4C) // JMP absolute
                 {
                     ushort staInitAddr = (ushort)(staInit.Op1!.Value | (staInit.Op2!.Value << 8));
-                    if (staInitAddr == localAddr)
+                    ushort jmpTarget = (ushort)(jmpInit.Op1!.Value | (jmpInit.Op2!.Value << 8));
+                    // Verify STA writes to the loop counter and JMP targets the condition check (LDA $local)
+                    if (staInitAddr == localAddr && jmpTarget == instructions[conditionCheckIndex].Address)
                     {
                         initIndex = bodyStartIndex - 3;
                         initValue = ldaInit.Op1!.Value;
@@ -809,6 +814,7 @@ class Decompiler
         limit = instructions[j + 2].Op1!.Value;
 
         // Resolve BCC target — must be a backward branch
+        // BCC is 2 bytes (opcode + relative offset), so target = address + 2 + signed_offset
         ushort bccInstrAddr = instructions[j + 3].Address;
         sbyte bccOffset = (sbyte)instructions[j + 3].Op1!.Value;
         bccTarget = (ushort)(bccInstrAddr + 2 + bccOffset);
@@ -843,6 +849,7 @@ class Decompiler
         limit = instructions[j + 4].Op1!.Value;
 
         // Resolve BCC target — must be a backward branch
+        // BCC is 2 bytes (opcode + relative offset), so target = address + 2 + signed_offset
         ushort bccInstrAddr = instructions[j + 5].Address;
         sbyte bccOffset = (sbyte)instructions[j + 5].Op1!.Value;
         bccTarget = (ushort)(bccInstrAddr + 2 + bccOffset);
