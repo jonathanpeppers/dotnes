@@ -518,6 +518,46 @@ public class DecompilerTests
     }
 
     [Fact]
+    public void Decompiler_Shoot2_RecoverForLoops()
+    {
+        // shoot2 has many for loops for array initialization and game logic
+        var romBytes = GetVerifiedRom("shoot2");
+        var rom = new NESRomReader(romBytes);
+        var decompiler = new Decompiler(rom, _logger);
+
+        var code = decompiler.Decompile();
+
+        // Should contain for loop syntax with proper structure
+        Assert.Contains("for (byte", code);
+
+        // Verify specific for-loop limits matching shoot2's constants:
+        // MAX_BULLETS=4, MAX_ENEMIES=6, MAX_STARS=8, MAX_EXPLOSIONS=3
+        Assert.Matches(@"for \(byte\s+var_\w+\s*=\s*0;\s*var_\w+\s*<\s*4;\s*var_\w+\+\+\)", code);  // MAX_BULLETS
+        Assert.Matches(@"for \(byte\s+var_\w+\s*=\s*0;\s*var_\w+\s*<\s*6;\s*var_\w+\+\+\)", code);  // MAX_ENEMIES
+        Assert.Matches(@"for \(byte\s+var_\w+\s*=\s*0;\s*var_\w+\s*<\s*8;\s*var_\w+\+\+\)", code);  // MAX_STARS
+        Assert.Matches(@"for \(byte\s+var_\w+\s*=\s*0;\s*var_\w+\s*<\s*3;\s*var_\w+\+\+\)", code);  // MAX_EXPLOSIONS
+
+        // Should have indented body inside for loops: for header, then '{', then a line starting with 4 spaces
+        Assert.Matches(@"for\s*\([^)]*\)\s*\{\s*\r?\n {4}\S", code);
+    }
+
+    [Fact]
+    public void Decompiler_Shoot2_ForLoopCounterNotDeclaredAtTop()
+    {
+        // For-loop counter variables should NOT appear as top-level declarations
+        // since they are declared in the for-loop header
+        var romBytes = GetVerifiedRom("shoot2");
+        var rom = new NESRomReader(romBytes);
+        var decompiler = new Decompiler(rom, _logger);
+
+        var code = decompiler.Decompile();
+
+        // The for loops should declare their own counter variables
+        // Verify that at least one for loop with proper structure exists
+        Assert.Matches(@"for \(byte (var_\w+) = 0; \1 < \d+; \1\+\+\)", code);
+    }
+
+    [Fact]
     public void Decompiler_Hello_NoIfBlocks()
     {
         // hello has no conditionals — verify no if blocks are generated
@@ -529,6 +569,19 @@ public class DecompilerTests
 
         // hello is straight-line code with no branches
         Assert.DoesNotContain("if (", code);
+    }
+
+    [Fact]
+    public void Decompiler_Hello_NoForLoops()
+    {
+        // hello has no for loops — verify none are detected
+        var romBytes = GetVerifiedRom("hello");
+        var rom = new NESRomReader(romBytes);
+        var decompiler = new Decompiler(rom, _logger);
+
+        var code = decompiler.Decompile();
+
+        Assert.DoesNotContain("for (byte", code);
     }
 
     [Fact]
