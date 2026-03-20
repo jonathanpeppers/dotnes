@@ -17,10 +17,20 @@ partial class IL2NESWriter
     /// Peeks at the last emitted instruction: if it's LDA with Absolute/ZeroPage mode
     /// (runtime variable), uses CMP $addr. Otherwise removes the LDA #imm and uses CMP #imm.
     /// stackValue is the value popped from IL stack (correct for constants, 0 for runtime).
-    /// For <= and > comparisons, pass adjustValue=1 to compare with value+1.
+    /// For &lt;= and &gt; comparisons, pass adjustValue=1 to compare with value+1.
+    /// Returns true if the CMP was emitted normally. Returns false if stackValue+adjustValue
+    /// overflows a byte (&gt; 255), meaning the caller must handle the always-true/false case.
     /// </summary>
-    void EmitBranchCompare(int stackValue, int adjustValue = 0)
+    bool EmitBranchCompare(int stackValue, int adjustValue = 0)
     {
+        int compareValue = stackValue + adjustValue;
+
+        // If the combined compare value overflows a byte, the comparison is trivially
+        // true or false (no byte can be >= 256). Return false so the caller can emit
+        // an unconditional branch or skip the branch entirely.
+        if (compareValue > 255 || compareValue < 0)
+            return false;
+
         var block = CurrentBlock!;
         if (block.Count > 0)
         {
@@ -54,9 +64,9 @@ partial class IL2NESWriter
                 else
                 {
                     // A holds the runtime value from LDA array,X — compare with the constant
-                    Emit(Opcode.CMP, AddressMode.Immediate, checked((byte)(stackValue + adjustValue)));
+                    Emit(Opcode.CMP, AddressMode.Immediate, (byte)compareValue);
                 }
-                return;
+                return true;
             }
 
             if (lastInstr.Opcode == Opcode.LDA
@@ -97,20 +107,20 @@ partial class IL2NESWriter
                 else
                 {
                     // Single runtime value + constant: keep the LDA, emit CMP #constant.
-                    Emit(Opcode.CMP, AddressMode.Immediate, checked((byte)(stackValue + adjustValue)));
+                    Emit(Opcode.CMP, AddressMode.Immediate, (byte)compareValue);
                 }
-                return;
+                return true;
             }
 
-            // Handle LDA ZeroPage (ImmediateOperand — byte overload in Emit).
+            // Handle LDA ZeroPage (ImmediateOperand) — byte overload in Emit.
             // This occurs when the dup cascade handler reloads a value from TEMP.
             if (lastInstr.Opcode == Opcode.LDA
                 && lastInstr.Mode == AddressMode.ZeroPage
                 && lastInstr.Operand is ImmediateOperand)
             {
                 // Single runtime value from zero page — keep the LDA, emit CMP #constant.
-                Emit(Opcode.CMP, AddressMode.Immediate, checked((byte)(stackValue + adjustValue)));
-                return;
+                Emit(Opcode.CMP, AddressMode.Immediate, (byte)compareValue);
+                return true;
             }
         }
         // Constant comparison: remove last LDA #imm, emit CMP #imm
@@ -123,7 +133,8 @@ partial class IL2NESWriter
             if (last.Opcode == Opcode.LDA && last.Mode == AddressMode.Immediate)
                 RemoveLastInstructions(1);
         }
-        Emit(Opcode.CMP, AddressMode.Immediate, checked((byte)(stackValue + adjustValue)));
+        Emit(Opcode.CMP, AddressMode.Immediate, (byte)compareValue);
+        return true;
     }
 
     /// <summary>

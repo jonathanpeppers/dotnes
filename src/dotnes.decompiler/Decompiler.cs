@@ -15,6 +15,7 @@ class Decompiler
     readonly Dictionary<ushort, string> _symbolTable = new();
     readonly List<(ushort Address, int Size)> _arrayDeclarations = new();
     readonly Dictionary<ushort, string> _localVariables = new();
+    readonly HashSet<ushort> _padVariables = new(); // Locals that store pad_poll results (typed as PAD)
     readonly List<ForLoopInfo> _forLoops = new();
     readonly HashSet<ushort> _forLoopLocals = new();
     readonly List<(ushort PpuAddress, byte[] Data)> _chrRamTileData = new();
@@ -240,8 +241,12 @@ class Decompiler
             ("pushax", new byte[] { 0x48, 0xA5, 0x22, 0x38, 0xE9, 0x02 }),
             // popa: LDY #$00; LDA ($22),Y; INC $22  (A0 00 B1 22 E6 22)
             ("popa", new byte[] { 0xA0, 0x00, 0xB1, 0x22, 0xE6, 0x22 }),
+            // oam_spr: TAX; LDY #$00; LDA ($22),Y; INY  (AA A0 00 B1 22 C8)
+            ("oam_spr", new byte[] { 0xAA, 0xA0, 0x00, 0xB1, 0x22, 0xC8 }),
             // popax: TAX; DEY; LDA ($22),Y; INC $22  (AA 88 B1 22 E6 22)
             ("popax", new byte[] { 0xAA, 0x88, 0xB1, 0x22, 0xE6, 0x22 }),
+            // decsp4: LDA $22; SEC; SBC #$04; STA $22  (A5 22 38 E9 04 85 22)
+            ("decsp4", new byte[] { 0xA5, 0x22, 0x38, 0xE9, 0x04, 0x85, 0x22 }),
             // incsp2: ... INC $22; BNE (standard cc65 incsp2 pattern)
             ("incsp2", new byte[] { 0xA0, 0x01, 0xB1, 0x22 }),
             // incsp1: LDY #$00; BEQ (cc65 tail-share with incsp2)
@@ -250,6 +255,10 @@ class Decompiler
             ("vram_write", new byte[] { 0x85, 0x2A, 0x86, 0x2B }),
             // set_rand: STA RAND_SEED ($3C); RTS  (85 3C 60)
             ("set_rand", new byte[] { 0x85, 0x3C, 0x60 }),
+            // pad_poll: TAY; LDX #$00; LDA #$01; STA $4016  (A8 A2 00 A9 01 8D 16 40)
+            ("pad_poll", new byte[] { 0xA8, 0xA2, 0x00, 0xA9, 0x01, 0x8D, 0x16, 0x40 }),
+            // pad_state: TAX; LDA $3C,X; LDX #$00; RTS  (AA B5 3C A2 00 60)
+            ("pad_state", new byte[] { 0xAA, 0xB5, 0x3C, 0xA2, 0x00, 0x60 }),
         };
 
         // Try to match each JSR target against known patterns
@@ -466,12 +475,17 @@ class Decompiler
         }
 
         // Now walk through instructions with look-ahead for pattern matching
-        var pushedBytes = new Stack<byte>();   // Track values pushed via pusha (8-bit)
+        var pushedArgs = new Stack<string>();   // Track arg representations pushed via pusha (immediate or local var name)
         var pushedWords = new Stack<ushort>(); // Track values pushed via pushax (16-bit)
         byte? lastImmediateA = null;           // Track last LDA #imm value for consecutive poke detection
+        List<string>? decspArgs = null;        // Non-null when collecting args after JSR decsp4
+        string? pendingDecspValue = null;      // Value loaded for next STA ($22),Y in decsp4 block
+        string? pendingDecspIndexVar = null;   // Variable name from LDX $abs for array index resolution
         var unknownInstructions = new List<(ushort Address, byte Opcode, byte? Op1, byte? Op2)>();
         string? lastLoadedVarName = null;      // Track name of last local variable loaded into A
+        ushort? lastLoadedVarAddr = null;       // Track address of last local variable loaded into A
         byte? lastCmpValue = null;             // Track value from last CMP #imm instruction
+        byte? lastAndMask = null;              // Track AND #imm mask for subsequent branch conditions
         var pendingCloseBraces = new Stack<ushort>(); // Target addresses where if-blocks end
 
         for (int i = 0; i < instructions.Count; i++)
@@ -484,7 +498,7 @@ class Decompiler
                 statements.Add("{");
                 i = loopInit.BodyStartIndex - 1; // -1 because the for loop will i++
                 lastImmediateA = null;
-                lastLoadedVarName = null;
+                lastLoadedVarName = null; lastLoadedVarAddr = null;
                 lastCmpValue = null;
                 continue;
             }
@@ -495,7 +509,7 @@ class Decompiler
                 statements.Add("}");
                 i = loopFooter.AfterLoopIndex - 1; // -1 because the for loop will i++
                 lastImmediateA = null;
-                lastLoadedVarName = null;
+                lastLoadedVarName = null; lastLoadedVarAddr = null;
                 lastCmpValue = null;
                 continue;
             }
@@ -507,6 +521,124 @@ class Decompiler
             {
                 pendingCloseBraces.Pop();
                 statements.Add("}");
+            }
+
+            // === decsp4 stack args collection ===
+            // When inside a decsp4 block, intercept instructions that build stack arguments
+            // Pattern: JSR decsp4 / (LDA val / [LDY #3|DEY] / STA ($22),Y) × 4 / LDA val / JSR <sub>
+            if (decspArgs != null)
+            {
+                // STA ($22),Y → collect the pending value as a stack arg
+                if (opcode == 0x91 && op1 == 0x22 && pendingDecspValue != null)
+                {
+                    decspArgs.Add(pendingDecspValue);
+                    pendingDecspValue = null;
+                    continue;
+                }
+
+                // DEY or LDY → skip (stack index management)
+                if (opcode == 0x88 || opcode == 0xA0)
+                    continue;
+
+                // LDX $abs (0xAE) → track the index variable for subsequent LDA $abs,X array access
+                if (opcode == 0xAE && op1.HasValue && op2.HasValue)
+                {
+                    ushort ldxAddr = (ushort)(op1.Value | (op2.Value << 8));
+                    pendingDecspIndexVar = _localVariables.TryGetValue(ldxAddr, out var xn) ? xn : $"var_{ldxAddr:X4}";
+                    continue;
+                }
+
+                // LDA $abs,X (0xBD) → indexed array access (value for STA ($22),Y or A arg)
+                if (opcode == 0xBD && op1.HasValue && op2.HasValue)
+                {
+                    ushort baseAddr = (ushort)(op1.Value | (op2.Value << 8));
+                    string indexName = pendingDecspIndexVar ?? "i";
+                    string valStr = $"array_{baseAddr:X4}[{indexName}]";
+                    pendingDecspIndexVar = null;
+                    if (i + 1 < instructions.Count && TryMatchDecspCall(instructions[i + 1], out var callName2))
+                    {
+                        var stmt = DecompileCallN(callName2, valStr, decspArgs);
+                        if (stmt != null) statements.Add(stmt);
+                        decspArgs = null;
+                        pendingDecspValue = null;
+                        pendingDecspIndexVar = null;
+                        lastImmediateA = null;
+                        i++;
+                        continue;
+                    }
+                    pendingDecspValue = valStr;
+                    continue;
+                }
+
+                // STA $zp (0x85) → skip (zero-page store, e.g. result storage after JSR)
+                if (opcode == 0x85)
+                    continue;
+
+                // BEQ/BNE/BCC/BCS forward branches → skip (conditional within decsp4 block)
+                if (opcode is 0xF0 or 0xD0 or 0x90 or 0xB0)
+                    continue;
+
+                // LDA #imm → value for STA ($22),Y or final A argument
+                if (opcode == 0xA9 && op1.HasValue)
+                {
+                    if (i + 1 < instructions.Count && TryMatchDecspCall(instructions[i + 1], out var callName))
+                    {
+                        var stmt = DecompileCallN(callName, $"0x{op1.Value:X2}", decspArgs);
+                        if (stmt != null) statements.Add(stmt);
+                        decspArgs = null;
+                        pendingDecspValue = null;
+                        pendingDecspIndexVar = null;
+                        lastImmediateA = null;
+                        i++;
+                        continue;
+                    }
+                    pendingDecspValue = op1.Value.ToString();
+                    continue;
+                }
+
+                // LDA $abs → value from local variable or absolute address
+                if (opcode == 0xAD && op1.HasValue && op2.HasValue)
+                {
+                    ushort addr = (ushort)(op1.Value | (op2.Value << 8));
+                    string valStr = _localVariables.TryGetValue(addr, out var vn) ? vn : $"var_{addr:X4}";
+                    if (i + 1 < instructions.Count && TryMatchDecspCall(instructions[i + 1], out var callName))
+                    {
+                        var stmt = DecompileCallN(callName, valStr, decspArgs);
+                        if (stmt != null) statements.Add(stmt);
+                        decspArgs = null;
+                        pendingDecspValue = null;
+                        pendingDecspIndexVar = null;
+                        lastImmediateA = null;
+                        i++;
+                        continue;
+                    }
+                    pendingDecspValue = valStr;
+                    continue;
+                }
+
+                // LDA $zp → value from zero-page variable
+                if (opcode == 0xA5 && op1.HasValue)
+                {
+                    string valStr = $"var_{op1.Value:X4}";
+                    if (i + 1 < instructions.Count && TryMatchDecspCall(instructions[i + 1], out var callName))
+                    {
+                        var stmt = DecompileCallN(callName, valStr, decspArgs);
+                        if (stmt != null) statements.Add(stmt);
+                        decspArgs = null;
+                        pendingDecspValue = null;
+                        pendingDecspIndexVar = null;
+                        lastImmediateA = null;
+                        i++;
+                        continue;
+                    }
+                    pendingDecspValue = valStr;
+                    continue;
+                }
+
+                // Unexpected instruction in decsp4 block → bail out
+                decspArgs = null;
+                pendingDecspValue = null;
+                pendingDecspIndexVar = null;
             }
 
             // RTS = end of function (user-defined functions end here)
@@ -538,12 +670,30 @@ class Decompiler
                 var next = instructions[i + 1];
                 if (next.Opcode == 0x20 && IsSubroutine(next, "pusha"))
                 {
-                    pushedBytes.Push(op1.Value);
+                    pushedArgs.Push(op1.Value.ToString());
                     lastImmediateA = null; // JSR modifies A
-                    lastLoadedVarName = null;
+                    lastLoadedVarName = null; lastLoadedVarAddr = null;
                     lastCmpValue = null;
+                    lastAndMask = null;
                     i++; // skip the JSR pusha
                     continue;
+                }
+            }
+
+            // Pattern: LDA $local / JSR pusha → push local variable name for a multi-arg call
+            if (opcode == 0xAD && op1.HasValue && op2.HasValue && i + 1 < instructions.Count)
+            {
+                ushort addr = (ushort)(op1.Value | (op2.Value << 8));
+                if (_localVariables.TryGetValue(addr, out var varName))
+                {
+                    var next = instructions[i + 1];
+                    if (next.Opcode == 0x20 && IsSubroutine(next, "pusha"))
+                    {
+                        pushedArgs.Push(varName);
+                        lastImmediateA = null; // JSR modifies A
+                        i++; // skip the JSR pusha
+                        continue;
+                    }
                 }
             }
 
@@ -564,8 +714,9 @@ class Decompiler
                             ushort value16 = (ushort)(op1.Value | (nextLdx.Op1.Value << 8));
                             pushedWords.Push(value16);
                             lastImmediateA = null; // JSR modifies A
-                            lastLoadedVarName = null;
+                            lastLoadedVarName = null; lastLoadedVarAddr = null;
                             lastCmpValue = null;
+                            lastAndMask = null;
                             i += 2; // skip LDX and JSR pushax
                             continue;
                         }
@@ -579,8 +730,9 @@ class Decompiler
                             FlushUnknownInstructions(unknownInstructions, statements);
                             statements.AddRange(stmts);
                             lastImmediateA = null; // JSR modifies A
-                            lastLoadedVarName = null;
+                            lastLoadedVarName = null; lastLoadedVarAddr = null;
                             lastCmpValue = null;
+                            lastAndMask = null;
                             i += 2;
                             continue;
                         }
@@ -602,15 +754,46 @@ class Decompiler
                         byte xVal = op1.Value;
                         byte aVal = nextLda.Op1.Value;
                         ushort? pw = pushedWords.Count > 0 ? pushedWords.Pop() : null;
-                        byte? pb = pushedBytes.Count > 0 ? pushedBytes.Pop() : null;
+                        string? pbStr = pushedArgs.Count > 0 ? pushedArgs.Pop() : null;
+                        byte? pb = pbStr != null && byte.TryParse(pbStr, out var pbVal) ? pbVal : (byte?)null;
                         var stmts = DecompileCallXA(name, xVal, aVal, pw, pb);
                         FlushUnknownInstructions(unknownInstructions, statements);
                         statements.AddRange(stmts);
                         lastImmediateA = null; // JSR modifies A
-                        lastLoadedVarName = null;
+                        lastLoadedVarName = null; lastLoadedVarAddr = null;
                         lastCmpValue = null;
+                        lastAndMask = null;
                         i += 2; // skip LDA and JSR
                         continue;
+                    }
+                }
+            }
+
+            // Pattern: LDA #imm / JSR <returning subroutine> / STA $local → var = call(arg)
+            if (opcode == 0xA9 && op1.HasValue && i + 2 < instructions.Count)
+            {
+                var jsrInstr = instructions[i + 1];
+                var staInstr = instructions[i + 2];
+                if (jsrInstr.Opcode == 0x20 && jsrInstr.Op1.HasValue && jsrInstr.Op2.HasValue
+                    && staInstr.Opcode == 0x8D && staInstr.Op1.HasValue && staInstr.Op2.HasValue)
+                {
+                    ushort jsrTarget = (ushort)(jsrInstr.Op1.Value | (jsrInstr.Op2.Value << 8));
+                    if (_symbolTable.TryGetValue(jsrTarget, out var name) && IsReturningFunction(name))
+                    {
+                        ushort stAddr = (ushort)(staInstr.Op1.Value | (staInstr.Op2.Value << 8));
+                        if (_localVariables.TryGetValue(stAddr, out var varName))
+                        {
+                            var callExpr = FormatCallExpression(name, op1.Value);
+                            statements.Add($"{varName} = {callExpr};");
+                            if (name == "pad_poll")
+                                _padVariables.Add(stAddr);
+                            lastImmediateA = null;
+                            lastLoadedVarName = null; lastLoadedVarAddr = null;
+                            lastCmpValue = null;
+                            lastAndMask = null;
+                            i += 2; // skip JSR and STA
+                            continue;
+                        }
                     }
                 }
             }
@@ -624,16 +807,32 @@ class Decompiler
                     ushort jsrTarget = (ushort)(next.Op1.Value | (next.Op2.Value << 8));
                     if (_symbolTable.TryGetValue(jsrTarget, out var name))
                     {
-                        byte? pushedArg = pushedBytes.Count > 0 ? pushedBytes.Pop() : null;
-                        var stmt = DecompileCall(name, op1.Value, pushedArg);
-                        if (stmt != null)
+                        var allPushed = DrainPushedArgs(pushedArgs);
+                        if (allPushed.Count <= 1 && allPushed.All(a => byte.TryParse(a, out _)))
                         {
-                            FlushUnknownInstructions(unknownInstructions, statements);
-                            statements.Add(stmt);
+                            // Simple case: 0-1 immediate pushed args — use existing byte-based handler
+                            byte? pb = allPushed.Count > 0 ? byte.Parse(allPushed[0]) : null;
+                            var stmt = DecompileCall(name, op1.Value, pb);
+                            if (stmt != null)
+                            {
+                                FlushUnknownInstructions(unknownInstructions, statements);
+                                statements.Add(stmt);
+                            }
+                        }
+                        else
+                        {
+                            // Multi-arg or variable args — use N-arg handler
+                            var stmt = DecompileCallN(name, $"0x{op1.Value:X2}", allPushed);
+                            if (stmt != null)
+                            {
+                                FlushUnknownInstructions(unknownInstructions, statements);
+                                statements.Add(stmt);
+                            }
                         }
                         lastImmediateA = null; // JSR modifies A
-                        lastLoadedVarName = null;
+                        lastLoadedVarName = null; lastLoadedVarAddr = null;
                         lastCmpValue = null;
+                        lastAndMask = null;
                         i++; // skip the JSR
                         continue;
                     }
@@ -652,8 +851,9 @@ class Decompiler
                         FlushUnknownInstructions(unknownInstructions, statements);
                         statements.Add($"{varName} = 0x{op1.Value:X2};");
                         lastImmediateA = op1.Value;
-                        lastLoadedVarName = null;
+                        lastLoadedVarName = null; lastLoadedVarAddr = null;
                         lastCmpValue = null;
+                        lastAndMask = null;
                         i++; // skip the STA
                         continue;
                     }
@@ -676,12 +876,33 @@ class Decompiler
             if (opcode == 0xAD && op1.HasValue && op2.HasValue)
             {
                 ushort addr = (ushort)(op1.Value | (op2.Value << 8));
-                if (_localVariables.TryGetValue(addr, out var loadedName))
+                if (_localVariables.TryGetValue(addr, out var localVarName))
                 {
+                    // Check if followed by JSR <subroutine> (not pusha/pushax) → call with local var in A
+                    if (i + 1 < instructions.Count)
+                    {
+                        var next = instructions[i + 1];
+                        if (next.Opcode == 0x20 && next.Op1.HasValue && next.Op2.HasValue)
+                        {
+                            ushort jsrTarget = (ushort)(next.Op1.Value | (next.Op2.Value << 8));
+                            if (_symbolTable.TryGetValue(jsrTarget, out var callName)
+                                && callName != "pusha" && callName != "pushax")
+                            {
+                                var allPushed = DrainPushedArgs(pushedArgs);
+                                var stmt = DecompileCallN(callName, localVarName, allPushed);
+                                if (stmt != null) statements.Add(stmt);
+                                lastImmediateA = null;
+                                i++; // skip the JSR
+                                continue;
+                            }
+                        }
+                    }
                     // Don't emit a statement — the value in A will be consumed by the next JSR, STA, or branch
-                    lastLoadedVarName = loadedName;
+                    lastLoadedVarName = localVarName;
+                    lastLoadedVarAddr = addr;
                     lastImmediateA = null;
                     lastCmpValue = null;
+                    lastAndMask = null; // New load resets AND tracking
                     continue;
                 }
             }
@@ -727,8 +948,22 @@ class Decompiler
                     FlushUnknownInstructions(unknownInstructions, statements);
                     statements.Add(FormatPeek(addr));
                     lastImmediateA = null; // A now holds peek result, not an immediate
-                    lastLoadedVarName = null;
+                    lastLoadedVarName = null; lastLoadedVarAddr = null;
                     lastCmpValue = null;
+                    lastAndMask = null;
+                    continue;
+                }
+            }
+
+            // Pattern: AND #imm → mask accumulator, track for subsequent branch condition
+            // Only consume when followed by a branch (BEQ/BNE), otherwise fall through to unknown
+            if (opcode == 0x29 && op1.HasValue && lastLoadedVarName != null && i + 1 < instructions.Count)
+            {
+                byte nextOp = instructions[i + 1].Opcode;
+                if (nextOp is 0xF0 or 0xD0) // BEQ or BNE
+                {
+                    lastAndMask = op1.Value;
+                    // Don't clear lastLoadedVarName — AND result still references the variable
                     continue;
                 }
             }
@@ -737,6 +972,7 @@ class Decompiler
             if (opcode == 0xC9 && op1.HasValue)
             {
                 lastCmpValue = op1.Value;
+                lastAndMask = null; // CMP sets flags — branch is based on CMP, not prior AND
                 continue;
             }
 
@@ -749,7 +985,19 @@ class Decompiler
                 if (branchOffset > 0) // Forward branch = skip body when condition is met
                 {
                     string condition;
-                    if (lastCmpValue.HasValue)
+                    if (lastAndMask.HasValue)
+                    {
+                        // After AND #mask: flags reflect A & mask
+                        bool isPadVar = lastLoadedVarAddr.HasValue && _padVariables.Contains(lastLoadedVarAddr.Value);
+                        string maskStr = isPadVar ? FormatPadMask(lastAndMask.Value) : $"0x{lastAndMask.Value:X2}";
+                        condition = opcode switch
+                        {
+                            0xF0 => $"({lastLoadedVarName} & {maskStr}) != 0",  // BEQ skip → body runs when AND result nonzero
+                            0xD0 => $"({lastLoadedVarName} & {maskStr}) == 0",  // BNE skip → body runs when AND result zero
+                            _ => "/* unknown */"
+                        };
+                    }
+                    else if (lastCmpValue.HasValue)
                     {
                         // After CMP #N: flags reflect A - N
                         condition = opcode switch
@@ -776,8 +1024,9 @@ class Decompiler
                     statements.Add("{");
                     pendingCloseBraces.Push(target);
 
-                    lastLoadedVarName = null;
+                    lastLoadedVarName = null; lastLoadedVarAddr = null;
                     lastCmpValue = null;
+                    lastAndMask = null;
                     lastImmediateA = null;
                     continue;
                 }
@@ -789,24 +1038,48 @@ class Decompiler
                 ushort jsrTarget = (ushort)(op1.Value | (op2.Value << 8));
                 if (_symbolTable.TryGetValue(jsrTarget, out var name))
                 {
-                    var stmt = DecompileCall(name, null, null);
-                    if (stmt != null)
+                    // JSR decsp4 → start collecting stack args for multi-arg call (e.g. oam_spr)
+                    if (name == "decsp4")
                     {
-                        FlushUnknownInstructions(unknownInstructions, statements);
-                        statements.Add(stmt);
+                        decspArgs = new List<string>(4);
+                        pendingDecspValue = null;
+                        lastImmediateA = null;
+                        continue;
+                    }
+
+                    var allPushed = DrainPushedArgs(pushedArgs);
+                    if (allPushed.Count == 0)
+                    {
+                        var stmt = DecompileCall(name, null, null);
+                        if (stmt != null)
+                        {
+                            FlushUnknownInstructions(unknownInstructions, statements);
+                            statements.Add(stmt);
+                        }
+                    }
+                    else
+                    {
+                        var stmt = DecompileCallN(name, null, allPushed);
+                        if (stmt != null)
+                        {
+                            FlushUnknownInstructions(unknownInstructions, statements);
+                            statements.Add(stmt);
+                        }
                     }
                 }
                 lastImmediateA = null; // JSR may modify A
-                lastLoadedVarName = null;
+                lastLoadedVarName = null; lastLoadedVarAddr = null;
                 lastCmpValue = null;
+                lastAndMask = null;
                 continue;
             }
 
             // Unrecognized instruction — accumulate for comment emission
             unknownInstructions.Add((instrAddr, opcode, op1, op2));
             lastImmediateA = null;
-            lastLoadedVarName = null;
+            lastLoadedVarName = null; lastLoadedVarAddr = null;
             lastCmpValue = null;
+            lastAndMask = null;
         }
 
         // Close any remaining open if-blocks (may happen when branch target is past the end)
@@ -828,6 +1101,54 @@ class Decompiler
         if (instr.Opcode != 0x20 || !instr.Op1.HasValue || !instr.Op2.HasValue) return false;
         ushort target = (ushort)(instr.Op1.Value | (instr.Op2.Value << 8));
         return _symbolTable.TryGetValue(target, out var n) && n == name;
+    }
+
+    /// <summary>
+    /// Returns true if the named subroutine returns a meaningful value in A
+    /// that callers typically store to a local variable.
+    /// </summary>
+    static bool IsReturningFunction(string name) =>
+        name is "pad_poll" or "rand8" or "rand";
+
+    /// <summary>
+    /// Format a call expression (without trailing semicolon) for a returning function.
+    /// </summary>
+    static string FormatCallExpression(string name, byte? aValue) => name switch
+    {
+        "pad_poll" => $"pad_poll({aValue?.ToString() ?? "0"})",
+        "rand8" or "rand" => "rand8()",
+        _ => $"{name}({(aValue.HasValue ? $"0x{aValue:X2}" : "")})"
+    };
+
+    /// <summary>
+    /// Format an AND mask value, using PAD enum names when the mask matches a single PAD button.
+    /// </summary>
+    static string FormatPadMask(byte mask) => mask switch
+    {
+        0x01 => "PAD.A",
+        0x02 => "PAD.B",
+        0x04 => "PAD.SELECT",
+        0x08 => "PAD.START",
+        0x10 => "PAD.UP",
+        0x20 => "PAD.DOWN",
+        0x40 => "PAD.LEFT",
+        0x80 => "PAD.RIGHT",
+        _ => $"0x{mask:X2}"
+    };
+
+    /// <summary>
+    /// Check if an instruction is a JSR to a known subroutine (not pusha/pushax/decsp4).
+    /// Used within decsp4 block to detect the final function call.
+    /// </summary>
+    bool TryMatchDecspCall((ushort Address, byte Opcode, byte? Op1, byte? Op2) instr, out string callName)
+    {
+        callName = "";
+        if (instr.Opcode != 0x20 || !instr.Op1.HasValue || !instr.Op2.HasValue) return false;
+        ushort target = (ushort)(instr.Op1.Value | (instr.Op2.Value << 8));
+        if (!_symbolTable.TryGetValue(target, out var name)) return false;
+        if (name is "pusha" or "pushax" or "decsp4") return false;
+        callName = name;
+        return true;
     }
 
     /// <summary>
@@ -1169,6 +1490,51 @@ class Decompiler
     }
 
     /// <summary>
+    /// Drain all pushed arguments from the stack into a list, in push order (first-pushed = first element).
+    /// </summary>
+    static List<string> DrainPushedArgs(Stack<string> pushedArgs)
+    {
+        if (pushedArgs.Count == 0) return new List<string>();
+        var args = pushedArgs.ToList();
+        pushedArgs.Clear();
+        args.Reverse(); // Stack pops in LIFO order; reverse to get push order
+        return args;
+    }
+
+    /// <summary>
+    /// Decompile a call with N pushed arguments and optionally a value in A.
+    /// Used for multi-arg calls like oam_spr(x, y, tile, attr, oam_off).
+    /// Pushed args are in parameter order (first = first parameter).
+    /// aArg is the last parameter (loaded into A before the call).
+    /// </summary>
+    static string? DecompileCallN(string name, string? aArg, List<string> pushedArgs)
+    {
+        return name switch
+        {
+            // oam_spr(x, y, chrnum, attr, sprid) — 4 pushed + 1 in A
+            "oam_spr" when pushedArgs.Count == 4 && aArg != null =>
+                aArg.StartsWith("var_")
+                    ? $"{aArg} = oam_spr({FormatOamArg(pushedArgs[0])}, {FormatOamArg(pushedArgs[1])}, {FormatOamArg(pushedArgs[2])}, {FormatOamArg(pushedArgs[3])}, {aArg});"
+                    : $"oam_spr({FormatOamArg(pushedArgs[0])}, {FormatOamArg(pushedArgs[1])}, {FormatOamArg(pushedArgs[2])}, {FormatOamArg(pushedArgs[3])}, {FormatOamArg(aArg)});",
+            // oam_hide_rest with local var arg
+            "oam_hide_rest" => $"oam_hide_rest({aArg ?? "0"});",
+            // pad_poll with local var arg
+            "pad_poll" => $"pad_poll({aArg ?? "0"});",
+            // Internal runtime support - skip
+            "pusha" or "pushax" or "popa" or "popax"
+                or "incsp1" or "incsp2" or "addysp" or "decsp4"
+                or "zerobss" or "copydata" or "initlib" or "donelib" => null,
+            _ => $"// {name}({string.Join(", ", pushedArgs.Concat(aArg != null ? new[] { aArg } : Array.Empty<string>()))});",
+        };
+    }
+
+    /// <summary>
+    /// Format an oam_spr argument: variable names pass through, numeric values format as hex for tile/attr.
+    /// </summary>
+    static string FormatOamArg(string arg) =>
+        byte.TryParse(arg, out var b) ? (b <= 9 ? b.ToString() : $"0x{b:X2}") : arg;
+
+    /// <summary>
     /// Decompile a call where X:A contain a 16-bit value (hi:lo).
     /// Used for vram_adr(NTADR_A(x,y)), vram_write(data), pal_bg/pal_spr, vram_fill, etc.
     /// Returns a list of statements (may include byte array declarations before the call).
@@ -1468,7 +1834,8 @@ class Decompiler
         {
             foreach (var (addr, name) in nonLoopLocals)
             {
-                sb.AppendLine($"byte {name} = 0;");
+                string type = _padVariables.Contains(addr) ? "PAD" : "byte";
+                sb.AppendLine($"{type} {name} = 0;");
             }
             sb.AppendLine();
         }

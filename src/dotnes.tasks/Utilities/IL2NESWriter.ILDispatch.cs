@@ -826,7 +826,8 @@ partial class IL2NESWriter
                     int instrSize = instruction.OpCode == ILOpCode.Bne_un_s ? 2 : 5;
                     int cmpVal = Stack.Count > 0 ? Stack.Pop() : 0;
                     if (Stack.Count > 0) Stack.Pop();
-                    EmitBranchCompare(cmpVal);
+                    if (!EmitBranchCompare(cmpVal))
+                        throw new TranspileException($"Branch comparison value {cmpVal} exceeds byte range.", MethodName);
                     
                     // If the last instruction is INC/DEC (from x++ pattern),
                     // A doesn't have the variable's value. Re-emit LDA to reload it.
@@ -870,7 +871,8 @@ partial class IL2NESWriter
                     int instrSize = instruction.OpCode == ILOpCode.Beq_s ? 2 : 5;
                     int cmpVal = Stack.Count > 0 ? Stack.Pop() : 0;
                     if (Stack.Count > 0) Stack.Pop();
-                    EmitBranchCompare(cmpVal);
+                    if (!EmitBranchCompare(cmpVal))
+                        throw new TranspileException($"Branch comparison value {cmpVal} exceeds byte range.", MethodName);
 
                     if (_dupPendingSave)
                     {
@@ -920,7 +922,8 @@ partial class IL2NESWriter
                     int instrSize = instruction.OpCode == ILOpCode.Blt_s ? 2 : 5;
                     int cmpVal = Stack.Count > 0 ? Stack.Pop() : 0;
                     if (Stack.Count > 0) Stack.Pop();
-                    EmitBranchCompare(cmpVal);
+                    if (!EmitBranchCompare(cmpVal))
+                        throw new TranspileException($"Branch comparison value {cmpVal} exceeds byte range.", MethodName);
                     var labelName = InstructionLabel(instruction.Offset + branchOffset + instrSize);
                     if (instruction.OpCode == ILOpCode.Blt_s)
                         EmitWithLabel(Opcode.BCC, AddressMode.Relative, labelName);
@@ -941,9 +944,13 @@ partial class IL2NESWriter
                     int instrSize = instruction.OpCode == ILOpCode.Ble_s ? 2 : 5;
                     int cmpVal = Stack.Count > 0 ? Stack.Pop() : 0;
                     if (Stack.Count > 0) Stack.Pop();
-                    EmitBranchCompare(cmpVal, adjustValue: 1);
                     var labelName = InstructionLabel(instruction.Offset + branchOffset + instrSize);
-                    if (instruction.OpCode == ILOpCode.Ble_s)
+                    if (!EmitBranchCompare(cmpVal, adjustValue: 1))
+                    {
+                        // Overflow: x <= 255 is always true for bytes → unconditional jump
+                        EmitWithLabel(Opcode.JMP, AddressMode.Absolute, labelName);
+                    }
+                    else if (instruction.OpCode == ILOpCode.Ble_s)
                         EmitWithLabel(Opcode.BCC, AddressMode.Relative, labelName);
                     else
                     {
@@ -962,7 +969,8 @@ partial class IL2NESWriter
                     int instrSize = instruction.OpCode == ILOpCode.Bge_s ? 2 : 5;
                     int cmpVal = Stack.Count > 0 ? Stack.Pop() : 0;
                     if (Stack.Count > 0) Stack.Pop();
-                    EmitBranchCompare(cmpVal);
+                    if (!EmitBranchCompare(cmpVal))
+                        throw new TranspileException($"Branch comparison value {cmpVal} exceeds byte range.", MethodName);
                     var labelName = InstructionLabel(instruction.Offset + branchOffset + instrSize);
                     if (instruction.OpCode == ILOpCode.Bge_s)
                         EmitWithLabel(Opcode.BCS, AddressMode.Relative, labelName);
@@ -983,9 +991,12 @@ partial class IL2NESWriter
                     int instrSize = instruction.OpCode == ILOpCode.Bgt_s ? 2 : 5;
                     int cmpVal = Stack.Count > 0 ? Stack.Pop() : 0;
                     if (Stack.Count > 0) Stack.Pop();
-                    EmitBranchCompare(cmpVal, adjustValue: 1);
                     var labelName = InstructionLabel(instruction.Offset + branchOffset + instrSize);
-                    if (instruction.OpCode == ILOpCode.Bgt_s)
+                    if (!EmitBranchCompare(cmpVal, adjustValue: 1))
+                    {
+                        // Overflow: x > 255 is always false for bytes → skip branch (no-op)
+                    }
+                    else if (instruction.OpCode == ILOpCode.Bgt_s)
                         EmitWithLabel(Opcode.BCS, AddressMode.Relative, labelName);
                     else
                     {
