@@ -309,16 +309,21 @@ partial class IL2NESWriter
                 }
                 else
                 {
-                    // No source variable — this is a constant-only compound expression.
-                    // Only safe for pure add-constant case; if a binary op is present,
-                    // we can't evaluate it at compile time without the source operand.
-                    if (arg.compoundBinOp != 0)
+                    // No source variable — constant-only compound expression.
+                    // Evaluate binary op at compile time: addConst + (0 BINOP binOpConst)
+                    int inner = arg.compoundBinOp switch
                     {
-                        throw new TranspileException(
-                            $"Unsupported constant-only compound oam_spr argument with binary op '{arg.compoundBinOp}'.",
-                            MethodName);
-                    }
-                    int constResult = arg.compoundAddConst;
+                        ILOpCode.Add => arg.compoundBinOpConst,
+                        ILOpCode.Sub => -arg.compoundBinOpConst,
+                        ILOpCode.Shl => 0, // 0 << N = 0
+                        ILOpCode.Shr or ILOpCode.Shr_un => 0, // 0 >> N = 0
+                        ILOpCode.And => 0, // 0 & N = 0
+                        ILOpCode.Or => arg.compoundBinOpConst, // 0 | N = N
+                        ILOpCode.Xor => arg.compoundBinOpConst, // 0 ^ N = N
+                        ILOpCode.Mul => 0, // 0 * N = 0
+                        _ => arg.compoundBinOpConst
+                    };
+                    int constResult = arg.compoundAddConst + inner;
                     Emit(Opcode.LDA, AddressMode.Immediate, (byte)(constResult & 0xFF));
                     goto emitDecspStore;
                 }
