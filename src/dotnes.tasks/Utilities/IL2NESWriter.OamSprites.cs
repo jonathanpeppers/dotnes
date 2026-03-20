@@ -302,10 +302,18 @@ partial class IL2NESWriter
                 {
                     EmitLdsfldForArg(arg.compoundStaticFieldName);
                 }
-                else
+                else if (arg.compoundLocalIdx >= 0)
                 {
                     var loc = Locals[arg.compoundLocalIdx];
                     Emit(Opcode.LDA, AddressMode.Absolute, (ushort)loc.Address!);
+                }
+                else
+                {
+                    // No source variable — this is a constant-only compound expression.
+                    // Evaluate at compile time: addConst + (0 BINOP binOpConst) → just emit the constant.
+                    int constResult = arg.compoundAddConst;
+                    Emit(Opcode.LDA, AddressMode.Immediate, (byte)(constResult & 0xFF));
+                    goto emitDecspStore;
                 }
 
                 // Apply the inner binary operation
@@ -384,9 +392,10 @@ partial class IL2NESWriter
             }
             else
             {
-                Emit(Opcode.LDA, AddressMode.Immediate, checked((byte)arg.constValue));
+                Emit(Opcode.LDA, AddressMode.Immediate, (byte)(arg.constValue & 0xFF));
             }
 
+            emitDecspStore:
             if (i == 0)
                 Emit(Opcode.LDY, AddressMode.Immediate, 0x03);
             else
@@ -419,7 +428,7 @@ partial class IL2NESWriter
             }
             else
             {
-                byte idVal = checked((byte)idArg.constValue);
+                byte idVal = (byte)(idArg.constValue & 0xFF);
                 // Check if A already has the right value from the 4th arg STA
                 if (argInfos.Count >= 4)
                 {
