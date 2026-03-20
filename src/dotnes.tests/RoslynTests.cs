@@ -4334,6 +4334,50 @@ public class RoslynTests
     }
 
     [Fact]
+    public void ArrayStelem_TwoLocalsAdd()
+    {
+        // arr[i] = (byte)(local1 + local2) — both operands are locals.
+        // Regression test: previously the second ldloc overwrote the first,
+        // emitting ADC #$00 instead of ADC local2.
+        var bytes = GetProgramBytes(
+            """
+            byte[] arr = new byte[8];
+            byte i = 0;
+            byte prev = 10;
+            byte dv = 5;
+            arr[i] = (byte)(prev + dv);
+            while (true) ;
+            """);
+        var hex = Convert.ToHexString(bytes);
+
+        // Must emit CLC + ADC Absolute (opcode 6D), not ADC #imm (opcode 69)
+        Assert.Contains("18", hex);       // CLC
+        Assert.Contains("6D", hex);       // ADC Absolute
+        // Must NOT contain ADC #$00 (the old buggy pattern: 6900)
+        Assert.DoesNotContain("6900", hex);
+    }
+
+    [Fact]
+    public void ArrayStelem_TwoLocalsSub()
+    {
+        // arr[i] = (byte)(local1 - local2) — subtraction variant.
+        var bytes = GetProgramBytes(
+            """
+            byte[] arr = new byte[8];
+            byte i = 0;
+            byte prev = 10;
+            byte dv = 3;
+            arr[i] = (byte)(prev - dv);
+            while (true) ;
+            """);
+        var hex = Convert.ToHexString(bytes);
+
+        // Must emit SEC + SBC Absolute (opcode ED), not SBC #imm (opcode E9)
+        Assert.Contains("38", hex);       // SEC
+        Assert.Contains("ED", hex);       // SBC Absolute
+    }
+
+    [Fact]
     public void StelemI1_ArrayElementIndex()
     {
         // Regression: In the climber sample, the pattern:
