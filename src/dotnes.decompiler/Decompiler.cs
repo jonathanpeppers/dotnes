@@ -349,7 +349,7 @@ class Decompiler
                 if (opcode == 0x88 || opcode == 0xA0)
                     continue;
 
-                // LDX $abs (0xAE) → skip (index register setup for array access)
+                // LDX $abs (0xAE) → skip; sets the X register for subsequent LDA $abs,X array access
                 if (opcode == 0xAE && op1.HasValue && op2.HasValue)
                     continue;
 

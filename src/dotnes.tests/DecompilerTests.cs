@@ -456,18 +456,30 @@ public class DecompilerTests
     [Fact]
     public void Decompiler_Shoot2_RecognizesOamSpr()
     {
-        // shoot2 has oam_spr(player_x, player_y, SPR_PLAYER, 0, oam_off) calls
-        // The decompiler should recognize the 5-arg pattern: 4 pushed via pusha + 1 in A
+        // shoot2 has oam_spr calls with local variables, immediates, and array indexing
+        // Pattern: JSR decsp4 / (LDA val / STA ($22),Y) × 4 / LDA val / JSR oam_spr
         var romBytes = GetVerifiedRom("shoot2");
         var rom = new NESRomReader(romBytes);
         var decompiler = new Decompiler(rom, _logger);
 
         var code = decompiler.Decompile();
 
-        // Verify oam_spr calls are recovered (with variable args and assignment)
+        // Verify oam_spr calls are recovered with 5 arguments and assignment
         Assert.Contains("oam_spr(", code);
         // Should NOT have oam_spr as an unknown comment
         Assert.DoesNotContain("// oam_spr(", code);
+        // First oam_spr call uses local vars + immediates and assigns result back
+        // oam_off = oam_spr(player_x, player_y, SPR_PLAYER, 0, oam_off)
+        Assert.Contains("= oam_spr(var_", code);
+        // All oam_spr calls should have exactly 5 comma-separated arguments
+        foreach (var line in code.Split('\n'))
+        {
+            if (!line.Contains("oam_spr(")) continue;
+            var argsStr = line.Substring(line.IndexOf("oam_spr(") + 8);
+            argsStr = argsStr.Substring(0, argsStr.IndexOf(')'));
+            var args = argsStr.Split(',');
+            Assert.Equal(5, args.Length);
+        }
     }
 
     static string FindTestSourceDirectory()
