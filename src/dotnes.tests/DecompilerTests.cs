@@ -453,6 +453,23 @@ public class DecompilerTests
         Assert.DoesNotContain("poke(0x0325", code);
     }
 
+    [Fact]
+    public void Decompiler_Shoot2_RecognizesOamSpr()
+    {
+        // shoot2 has oam_spr(player_x, player_y, SPR_PLAYER, 0, oam_off) calls
+        // The decompiler should recognize the 5-arg pattern: 4 pushed via pusha + 1 in A
+        var romBytes = GetVerifiedRom("shoot2");
+        var rom = new NESRomReader(romBytes);
+        var decompiler = new Decompiler(rom, _logger);
+
+        var code = decompiler.Decompile();
+
+        // Verify oam_spr calls are recovered (with variable args and assignment)
+        Assert.Contains("oam_spr(", code);
+        // Should NOT have oam_spr as an unknown comment
+        Assert.DoesNotContain("// oam_spr(", code);
+    }
+
     static string FindTestSourceDirectory()
     {
         // Navigate from the test output directory to the source directory
