@@ -454,6 +454,54 @@ public class DecompilerTests
     }
 
     [Fact]
+    public void Decompiler_Shoot2_RecoverIfBlocks()
+    {
+        // shoot2 has many conditionals — verify if blocks are recovered
+        var romBytes = GetVerifiedRom("shoot2");
+        var rom = new NESRomReader(romBytes);
+        var decompiler = new Decompiler(rom, _logger);
+
+        var code = decompiler.Decompile();
+
+        // fire_cooldown check: LDA $0327 / BEQ skip → if (var_0327 != 0)
+        Assert.Contains("if (var_0327 != 0)", code);
+        // Should contain opening and closing braces for if blocks
+        Assert.Contains("{", code);
+        Assert.Contains("}", code);
+    }
+
+    [Fact]
+    public void Decompiler_Shoot2_RecoverCmpBranch()
+    {
+        // shoot2 uses CMP #N / BCC for loop comparisons and boundary checks
+        var romBytes = GetVerifiedRom("shoot2");
+        var rom = new NESRomReader(romBytes);
+        var decompiler = new Decompiler(rom, _logger);
+
+        var code = decompiler.Decompile();
+
+        // Loop-like patterns use LDA $local / CMP #N / BCC
+        // Verify at least one comparison-based if block exists
+        Assert.Contains("if (var_", code);
+    }
+
+    [Fact]
+    public void Decompiler_Scroll_RecoverIfBlock()
+    {
+        // scroll has a conditional check on scroll_y ($0326)
+        var romBytes = GetVerifiedRom("scroll");
+        var rom = new NESRomReader(romBytes);
+        var decompiler = new Decompiler(rom, _logger);
+
+        var code = decompiler.Decompile();
+
+        // scroll uses LDA $0326 / BEQ skip → if (var_0326 != 0)
+        Assert.Contains("if (var_0326 != 0)", code);
+        Assert.Contains("{", code);
+        Assert.Contains("}", code);
+    }
+
+    [Fact]
     public void Decompiler_Shoot2_EmitsUnknownAssemblyComments()
     {
         // shoot2 has complex game logic that can't be mapped back to NESLib calls
@@ -467,6 +515,20 @@ public class DecompilerTests
         Assert.Contains("// Unknown 6502 assembly at $", code);
         // Should contain disassembled instructions inside comments
         Assert.Contains("//   ", code);
+    }
+
+    [Fact]
+    public void Decompiler_Hello_NoIfBlocks()
+    {
+        // hello has no conditionals — verify no if blocks are generated
+        var romBytes = GetVerifiedRom("hello");
+        var rom = new NESRomReader(romBytes);
+        var decompiler = new Decompiler(rom, _logger);
+
+        var code = decompiler.Decompile();
+
+        // hello is straight-line code with no branches
+        Assert.DoesNotContain("if (", code);
     }
 
     [Fact]
