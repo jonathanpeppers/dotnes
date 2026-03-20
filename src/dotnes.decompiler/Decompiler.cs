@@ -355,6 +355,7 @@ class Decompiler
         byte? lastImmediateA = null;           // Track last LDA #imm value for consecutive poke detection
         var unknownInstructions = new List<(ushort Address, byte Opcode, byte? Op1, byte? Op2)>();
         string? lastLoadedVarName = null;      // Track name of last local variable loaded into A
+        ushort? lastLoadedVarAddr = null;       // Track address of last local variable loaded into A
         byte? lastCmpValue = null;             // Track value from last CMP #imm instruction
         byte? lastAndMask = null;              // Track AND #imm mask for subsequent branch conditions
         var pendingCloseBraces = new Stack<ushort>(); // Target addresses where if-blocks end
@@ -369,7 +370,7 @@ class Decompiler
                 statements.Add("{");
                 i = loopInit.BodyStartIndex - 1; // -1 because the for loop will i++
                 lastImmediateA = null;
-                lastLoadedVarName = null;
+                lastLoadedVarName = null; lastLoadedVarAddr = null;
                 lastCmpValue = null;
                 continue;
             }
@@ -380,7 +381,7 @@ class Decompiler
                 statements.Add("}");
                 i = loopFooter.AfterLoopIndex - 1; // -1 because the for loop will i++
                 lastImmediateA = null;
-                lastLoadedVarName = null;
+                lastLoadedVarName = null; lastLoadedVarAddr = null;
                 lastCmpValue = null;
                 continue;
             }
@@ -421,7 +422,7 @@ class Decompiler
                 {
                     pushedBytes.Push(op1.Value);
                     lastImmediateA = null; // JSR modifies A
-                    lastLoadedVarName = null;
+                    lastLoadedVarName = null; lastLoadedVarAddr = null;
                     lastCmpValue = null;
                     lastAndMask = null;
                     i++; // skip the JSR pusha
@@ -446,7 +447,7 @@ class Decompiler
                             ushort value16 = (ushort)(op1.Value | (nextLdx.Op1.Value << 8));
                             pushedWords.Push(value16);
                             lastImmediateA = null; // JSR modifies A
-                            lastLoadedVarName = null;
+                            lastLoadedVarName = null; lastLoadedVarAddr = null;
                             lastCmpValue = null;
                             lastAndMask = null;
                             i += 2; // skip LDX and JSR pushax
@@ -462,7 +463,7 @@ class Decompiler
                             FlushUnknownInstructions(unknownInstructions, statements);
                             statements.AddRange(stmts);
                             lastImmediateA = null; // JSR modifies A
-                            lastLoadedVarName = null;
+                            lastLoadedVarName = null; lastLoadedVarAddr = null;
                             lastCmpValue = null;
                             lastAndMask = null;
                             i += 2;
@@ -491,7 +492,7 @@ class Decompiler
                         FlushUnknownInstructions(unknownInstructions, statements);
                         statements.AddRange(stmts);
                         lastImmediateA = null; // JSR modifies A
-                        lastLoadedVarName = null;
+                        lastLoadedVarName = null; lastLoadedVarAddr = null;
                         lastCmpValue = null;
                         lastAndMask = null;
                         i += 2; // skip LDA and JSR
@@ -519,7 +520,7 @@ class Decompiler
                             if (name == "pad_poll")
                                 _padVariables.Add(stAddr);
                             lastImmediateA = null;
-                            lastLoadedVarName = null;
+                            lastLoadedVarName = null; lastLoadedVarAddr = null;
                             lastCmpValue = null;
                             lastAndMask = null;
                             i += 2; // skip JSR and STA
@@ -546,7 +547,7 @@ class Decompiler
                             statements.Add(stmt);
                         }
                         lastImmediateA = null; // JSR modifies A
-                        lastLoadedVarName = null;
+                        lastLoadedVarName = null; lastLoadedVarAddr = null;
                         lastCmpValue = null;
                         lastAndMask = null;
                         i++; // skip the JSR
@@ -567,7 +568,7 @@ class Decompiler
                         FlushUnknownInstructions(unknownInstructions, statements);
                         statements.Add($"{varName} = 0x{op1.Value:X2};");
                         lastImmediateA = op1.Value;
-                        lastLoadedVarName = null;
+                        lastLoadedVarName = null; lastLoadedVarAddr = null;
                         lastCmpValue = null;
                         lastAndMask = null;
                         i++; // skip the STA
@@ -596,6 +597,7 @@ class Decompiler
                 {
                     // Don't emit a statement — the value in A will be consumed by the next JSR, STA, or branch
                     lastLoadedVarName = loadedName;
+                    lastLoadedVarAddr = addr;
                     lastImmediateA = null;
                     lastCmpValue = null;
                     lastAndMask = null; // New load resets AND tracking
@@ -644,7 +646,7 @@ class Decompiler
                     FlushUnknownInstructions(unknownInstructions, statements);
                     statements.Add(FormatPeek(addr));
                     lastImmediateA = null; // A now holds peek result, not an immediate
-                    lastLoadedVarName = null;
+                    lastLoadedVarName = null; lastLoadedVarAddr = null;
                     lastCmpValue = null;
                     lastAndMask = null;
                     continue;
@@ -652,11 +654,16 @@ class Decompiler
             }
 
             // Pattern: AND #imm → mask accumulator, track for subsequent branch condition
-            if (opcode == 0x29 && op1.HasValue && lastLoadedVarName != null)
+            // Only consume when followed by a branch (BEQ/BNE), otherwise fall through to unknown
+            if (opcode == 0x29 && op1.HasValue && lastLoadedVarName != null && i + 1 < instructions.Count)
             {
-                lastAndMask = op1.Value;
-                // Don't clear lastLoadedVarName — AND result still references the variable
-                continue;
+                byte nextOp = instructions[i + 1].Opcode;
+                if (nextOp is 0xF0 or 0xD0) // BEQ or BNE
+                {
+                    lastAndMask = op1.Value;
+                    // Don't clear lastLoadedVarName — AND result still references the variable
+                    continue;
+                }
             }
 
             // Pattern: CMP #imm → track comparison value for subsequent branch
@@ -679,7 +686,8 @@ class Decompiler
                     if (lastAndMask.HasValue)
                     {
                         // After AND #mask: flags reflect A & mask
-                        string maskStr = FormatPadMask(lastAndMask.Value);
+                        bool isPadVar = lastLoadedVarAddr.HasValue && _padVariables.Contains(lastLoadedVarAddr.Value);
+                        string maskStr = isPadVar ? FormatPadMask(lastAndMask.Value) : $"0x{lastAndMask.Value:X2}";
                         condition = opcode switch
                         {
                             0xF0 => $"({lastLoadedVarName} & {maskStr}) != 0",  // BEQ skip → body runs when AND result nonzero
@@ -714,7 +722,7 @@ class Decompiler
                     statements.Add("{");
                     pendingCloseBraces.Push(target);
 
-                    lastLoadedVarName = null;
+                    lastLoadedVarName = null; lastLoadedVarAddr = null;
                     lastCmpValue = null;
                     lastAndMask = null;
                     lastImmediateA = null;
@@ -736,7 +744,7 @@ class Decompiler
                     }
                 }
                 lastImmediateA = null; // JSR may modify A
-                lastLoadedVarName = null;
+                lastLoadedVarName = null; lastLoadedVarAddr = null;
                 lastCmpValue = null;
                 lastAndMask = null;
                 continue;
@@ -745,7 +753,7 @@ class Decompiler
             // Unrecognized instruction — accumulate for comment emission
             unknownInstructions.Add((instrAddr, opcode, op1, op2));
             lastImmediateA = null;
-            lastLoadedVarName = null;
+            lastLoadedVarName = null; lastLoadedVarAddr = null;
             lastCmpValue = null;
             lastAndMask = null;
         }
