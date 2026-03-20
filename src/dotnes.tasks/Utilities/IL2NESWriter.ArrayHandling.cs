@@ -291,10 +291,8 @@ partial class IL2NESWriter
                 EmitMultiplyA(structSize);
                 Emit(Opcode.TAX, AddressMode.Implied);
 
-                _pendingStructArrayRuntimeIndex = true;
+                _pendingStructElement = new PendingStructElement(structType, ConstantBase: null, RuntimeIndex: true);
                 _structArrayBaseForRuntimeIndex = arrayBase;
-                _pendingStructElementType = structType;
-                _pendingStructElementBase = null;
             }
             else
             {
@@ -305,9 +303,7 @@ partial class IL2NESWriter
         {
             // Constant index: compute element base at compile time
             ushort elementBase = (ushort)(arrayBase + index * structSize);
-            _pendingStructElementBase = elementBase;
-            _pendingStructElementType = structType;
-            _pendingStructArrayRuntimeIndex = false;
+            _pendingStructElement = new PendingStructElement(structType, elementBase, RuntimeIndex: false);
         }
 
         _runtimeValueInA = false;

@@ -192,15 +192,15 @@ partial class IL2NESWriter
         }
 
         // Check for struct array element access (from ldelema)
-        if (_pendingStructElementType != null)
+        if (_pendingStructElement is PendingStructElement stfldElement)
         {
-            string structType = _pendingStructElementType;
+            string structType = stfldElement.Type;
             int fieldOffset = GetFieldOffset(structType, fieldName);
 
             // The value to store was pushed by ldc before stfld
             int value = Stack.Count > 0 ? Stack.Pop() : 0;
 
-            if (_pendingStructArrayRuntimeIndex)
+            if (stfldElement.RuntimeIndex)
             {
                 // Variable index: X holds element offset, use AbsoluteX
                 ushort fieldAddr = (ushort)(_structArrayBaseForRuntimeIndex + fieldOffset);
@@ -218,8 +218,8 @@ partial class IL2NESWriter
             }
             else
             {
-                // Constant index: _pendingStructElementBase has the element base
-                ushort fieldAddr = (ushort)(_pendingStructElementBase!.Value + fieldOffset);
+                // Constant index: ConstantBase has the element base
+                ushort fieldAddr = (ushort)(stfldElement.ConstantBase!.Value + fieldOffset);
                 if (_runtimeValueInA)
                 {
                     Emit(Opcode.STA, AddressMode.Absolute, fieldAddr);
@@ -233,9 +233,7 @@ partial class IL2NESWriter
                 }
             }
 
-            _pendingStructElementType = null;
-            _pendingStructElementBase = null;
-            _pendingStructArrayRuntimeIndex = false;
+            _pendingStructElement = null;
             _immediateInA = null;
             return;
         }
@@ -320,12 +318,12 @@ partial class IL2NESWriter
         }
 
         // Check for struct array element access (from ldelema)
-        if (_pendingStructElementType != null)
+        if (_pendingStructElement is PendingStructElement ldfldElement)
         {
-            string structType = _pendingStructElementType;
+            string structType = ldfldElement.Type;
             int fieldOffset = GetFieldOffset(structType, fieldName);
 
-            if (_pendingStructArrayRuntimeIndex)
+            if (ldfldElement.RuntimeIndex)
             {
                 // Variable index: X holds element offset, use AbsoluteX
                 ushort fieldAddr = (ushort)(_structArrayBaseForRuntimeIndex + fieldOffset);
@@ -333,14 +331,12 @@ partial class IL2NESWriter
             }
             else
             {
-                // Constant index: _pendingStructElementBase has the element base
-                ushort fieldAddr = (ushort)(_pendingStructElementBase!.Value + fieldOffset);
+                // Constant index: ConstantBase has the element base
+                ushort fieldAddr = (ushort)(ldfldElement.ConstantBase!.Value + fieldOffset);
                 Emit(Opcode.LDA, AddressMode.Absolute, fieldAddr);
             }
 
-            _pendingStructElementType = null;
-            _pendingStructElementBase = null;
-            _pendingStructArrayRuntimeIndex = false;
+            _pendingStructElement = null;
             _runtimeValueInA = true;
             _immediateInA = null;
             Stack.Push(0);
