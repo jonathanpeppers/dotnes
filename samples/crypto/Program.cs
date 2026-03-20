@@ -646,7 +646,7 @@ while (true)
 
         if (G.next_level != 0)
         {
-            sfx_play(3, 2);
+            // sfx_play(3, 2);
             // [inlined: reset]
             G.next_level = 0;
             G.frame = 0;
@@ -739,8 +739,8 @@ while (true)
             G.i = 0;
             while (G.i < 4)
             {
-                G.item_x[G.i] += (byte)(2 + (rand8() & 0x01) + (rand8() & 0x01));
-                G.item_y[G.i] += (byte)(2 + (rand8() & 0x01) + (rand8() & 0x01));
+                G.item_x[G.i] = (byte)(G.item_x[G.i] + 2 + (rand8() & 0x01) + (rand8() & 0x01));
+                G.item_y[G.i] = (byte)(G.item_y[G.i] + 2 + (rand8() & 0x01) + (rand8() & 0x01));
                 G.i++;
             }
 
@@ -777,8 +777,10 @@ while (true)
             }
             else
             {
-                G.spr = oam_spr(148, 114, (byte)(0x05 + (G.difficulty / 10)), 0x01, G.spr);
-                G.spr = oam_spr(156, 114, (byte)(0x04 + (G.difficulty % 10)), 0x01, G.spr);
+                G.temp0 = (byte)(G.difficulty / 10);
+                G.temp1 = (byte)(G.difficulty % 10);
+                G.spr = oam_spr(148, 114, (byte)(0x05 + G.temp0), 0x01, G.spr);
+                G.spr = oam_spr(156, 114, (byte)(0x04 + G.temp1), 0x01, G.spr);
             }
             G.spr = 0;
             G.frame = 0;
@@ -799,7 +801,7 @@ while (true)
 
         if (G.player_hp[0] == 0 || G.player_hp[1] == 0)
         {
-            sfx_play(4, 2);
+            // sfx_play(4, 2);
             G.difficulty = 0;
             G.next_level = 0;
             // [inlined: reset]
@@ -894,8 +896,8 @@ while (true)
             G.i = 0;
             while (G.i < 4)
             {
-                G.item_x[G.i] += (byte)(2 + (rand8() & 0x01) + (rand8() & 0x01));
-                G.item_y[G.i] += (byte)(2 + (rand8() & 0x01) + (rand8() & 0x01));
+                G.item_x[G.i] = (byte)(G.item_x[G.i] + 2 + (rand8() & 0x01) + (rand8() & 0x01));
+                G.item_y[G.i] = (byte)(G.item_y[G.i] + 2 + (rand8() & 0x01) + (rand8() & 0x01));
                 G.i++;
             }
 
@@ -1051,7 +1053,7 @@ while (true)
             {
                 if ((G.frame & 2) == 0)
                 {
-                    G.player_god_mode[G.i]--;
+                    G.player_god_mode[G.i] = (byte)(G.player_god_mode[G.i] - 1);
                     pal_col((byte)(16 + (G.i << 2) + 3), palette[16 + (G.i << 2) + 3]);
                     pal_col((byte)(16 + (G.i << 2) + 1), palette[16 + (G.i << 2) + 1]);
                 }
@@ -1153,7 +1155,7 @@ while (true)
                         else
                             G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_0_meta_spr_attack_1_right);
                     }
-                    G.player_attack_tick[G.i]--;
+                    G.player_attack_tick[G.i] = (byte)(G.player_attack_tick[G.i] - 1);
                 }
                 else if ((G.temp2 & PAD_DPAD) != 0)
                 {
@@ -1275,7 +1277,7 @@ while (true)
                         else
                             G.spr = oam_meta_spr(G.temp0, G.temp1, G.spr, player_1_meta_spr_attack_1_right);
                     }
-                    G.player_attack_tick[G.i]--;
+                    G.player_attack_tick[G.i] = (byte)(G.player_attack_tick[G.i] - 1);
                 }
                 else if ((G.temp2 & PAD_DPAD) != 0)
                 {
@@ -1374,7 +1376,7 @@ while (true)
                                     {
                                         G.player_carry[G.i] = G.j;
                                         G.player_carry_dir[G.i] = G.player_dir[G.i];
-                                        sfx_play(5, 3);
+                                        // sfx_play(5, 3);
                                     }
                                 }
                             }
@@ -1474,9 +1476,9 @@ while (true)
                         }
                         if (_ib_result3 == 0 && _ib_result4 == 0)
                         {
-                            G.player_x[0]--;
-                            G.player_x[1]--;
-                            G.item_x[G.player_carry[G.i]]--;
+                            G.player_x[0] = (byte)(G.player_x[0] - 1);
+                            G.player_x[1] = (byte)(G.player_x[1] - 1);
+                            G.item_x[G.player_carry[G.i]] = (byte)(G.item_x[G.player_carry[G.i]] - 1);
                         }
                     }
                     else if ((G.temp2 & (byte)PAD.RIGHT) != 0)
@@ -1547,9 +1549,9 @@ while (true)
                         }
                         if (_ib_result5 == 0 && _ib_result6 == 0)
                         {
-                            G.player_x[0]++;
-                            G.player_x[1]++;
-                            G.item_x[G.player_carry[G.i]]++;
+                            G.player_x[0] = (byte)(G.player_x[0] + 1);
+                            G.player_x[1] = (byte)(G.player_x[1] + 1);
+                            G.item_x[G.player_carry[G.i]] = (byte)(G.item_x[G.player_carry[G.i]] + 1);
                         }
                     }
                     if ((G.temp2 & (byte)PAD.UP) != 0)
@@ -1620,9 +1622,9 @@ while (true)
                         }
                         if (_ib_result7 == 0 && _ib_result8 == 0)
                         {
-                            G.player_y[0]--;
-                            G.player_y[1]--;
-                            G.item_y[G.player_carry[G.i]]--;
+                            G.player_y[0] = (byte)(G.player_y[0] - 1);
+                            G.player_y[1] = (byte)(G.player_y[1] - 1);
+                            G.item_y[G.player_carry[G.i]] = (byte)(G.item_y[G.player_carry[G.i]] - 1);
                         }
                     }
                     else if ((G.temp2 & (byte)PAD.DOWN) != 0)
@@ -1693,9 +1695,9 @@ while (true)
                         }
                         if (_ib_result9 == 0 && _ib_result10 == 0)
                         {
-                            G.player_y[0]++;
-                            G.player_y[1]++;
-                            G.item_y[G.player_carry[G.i]]++;
+                            G.player_y[0] = (byte)(G.player_y[0] + 1);
+                            G.player_y[1] = (byte)(G.player_y[1] + 1);
+                            G.item_y[G.player_carry[G.i]] = (byte)(G.item_y[G.player_carry[G.i]] + 1);
                         }
                     }
                 }
@@ -1715,12 +1717,12 @@ while (true)
                 if ((G.temp2 & (byte)PAD.LEFT) != 0)
                 {
                     if (G.player_hp[G.temp1] == 0 || G.player_x[G.temp1] < G.player_x[G.i] || (byte)(G.player_x[G.temp1] - G.player_x[G.i]) < 60)
-                        G.player_x[G.i]--;
+                        G.player_x[G.i] = (byte)(G.player_x[G.i] - 1);
                 }
                 else if ((G.temp2 & (byte)PAD.RIGHT) != 0)
                 {
                     if (G.player_hp[G.temp1] == 0 || (G.player_x[G.i] < 250 && (G.player_x[G.temp1] > G.player_x[G.i] || (byte)(G.player_x[G.i] - G.player_x[G.temp1]) < 60)))
-                        G.player_x[G.i]++;
+                        G.player_x[G.i] = (byte)(G.player_x[G.i] + 1);
                 }
 
                 byte _ib_x11 = G.player_x[G.i]; byte _ib_y11 = G.player_y[G.i];
@@ -1758,17 +1760,17 @@ while (true)
                 if (_ib_result11 != 0)
                     G.player_x[G.i] = G.temp4;
                 else if (G.player_carry[G.i] != 0xFF)
-                    G.item_x[G.player_carry[G.i]] += (byte)(G.player_x[G.i] - G.temp4);
+                    G.item_x[G.player_carry[G.i]] = (byte)(G.item_x[G.player_carry[G.i]] + G.player_x[G.i] - G.temp4);
 
                 if ((G.temp2 & (byte)PAD.UP) != 0)
                 {
                     if (G.player_hp[G.temp1] == 0 || G.player_y[G.temp1] < G.player_y[G.i] || (byte)(G.player_y[G.temp1] - G.player_y[G.i]) < 60)
-                        G.player_y[G.i]--;
+                        G.player_y[G.i] = (byte)(G.player_y[G.i] - 1);
                 }
                 else if ((G.temp2 & (byte)PAD.DOWN) != 0)
                 {
                     if (G.player_hp[G.temp1] == 0 || G.player_y[G.temp1] > G.player_y[G.i] || (byte)(G.player_y[G.i] - G.player_y[G.temp1]) < 60)
-                        G.player_y[G.i]++;
+                        G.player_y[G.i] = (byte)(G.player_y[G.i] + 1);
                 }
 
                 byte _ib_x12 = G.player_x[G.i]; byte _ib_y12 = G.player_y[G.i];
@@ -1806,7 +1808,7 @@ while (true)
                 if (_ib_result12 != 0)
                     G.player_y[G.i] = G.temp5;
                 else if (G.player_carry[G.i] != 0xFF)
-                    G.item_y[G.player_carry[G.i]] += (byte)(G.player_y[G.i] - G.temp5);
+                    G.item_y[G.player_carry[G.i]] = (byte)(G.item_y[G.player_carry[G.i]] + G.player_y[G.i] - G.temp5);
             }
 
             if (G.player_attack_tick[G.i] == 10)
@@ -1876,7 +1878,7 @@ while (true)
                             G.temp5 = (byte)(G.temp3 - G.temp1);
                         if (G.temp4 < G.temp6 && G.temp5 < G.temp7)
                         {
-                            G.enemies_health[G.j]--;
+                            G.enemies_health[G.j] = (byte)(G.enemies_health[G.j] - 1);
                             if (G.enemies_health[G.j] != 0)
                             {
                                 G.enemy_push_timer[G.j] = 4;
@@ -1884,7 +1886,7 @@ while (true)
                             }
                             else
                             {
-                                sfx_play(1, 0);
+                                // sfx_play(1, 0);
                             }
                             break;
                         }
@@ -1910,7 +1912,7 @@ while (true)
                         G.item_y[G.i] = item_target_y[G.i];
                         if (G.player_carry[0] == G.i) G.player_carry[0] = 0xFF;
                         if (G.player_carry[1] == G.i) G.player_carry[1] = 0xFF;
-                        sfx_play(2, 3);
+                        // sfx_play(2, 3);
                     }
                 }
             }
@@ -1994,13 +1996,13 @@ while (true)
         {
         }
         else if (G.temp3 == (byte)PAD.RIGHT)
-            G.enemies_x[G.temp2] += G.enemy_speed;
+            G.enemies_x[G.temp2] = (byte)(G.enemies_x[G.temp2] + G.enemy_speed);
         else if (G.temp3 == (byte)PAD.LEFT)
-            G.enemies_x[G.temp2] -= G.enemy_speed;
+            G.enemies_x[G.temp2] = (byte)(G.enemies_x[G.temp2] - G.enemy_speed);
         else if (G.temp3 == (byte)PAD.UP)
-            G.enemies_y[G.temp2] -= G.enemy_speed;
+            G.enemies_y[G.temp2] = (byte)(G.enemies_y[G.temp2] - G.enemy_speed);
         else if (G.temp3 == (byte)PAD.DOWN)
-            G.enemies_y[G.temp2] += G.enemy_speed;
+            G.enemies_y[G.temp2] = (byte)(G.enemies_y[G.temp2] + G.enemy_speed);
 
         byte _ib_x1 = G.enemies_x[G.temp2]; byte _ib_y1 = G.enemies_y[G.temp2];
         byte _ib_result1;
@@ -2067,13 +2069,13 @@ while (true)
             {
                 if ((G.frame & 1) != 0)
                 {
-                    G.enemy_push_timer[G.i]--;
+                    G.enemy_push_timer[G.i] = (byte)(G.enemy_push_timer[G.i] - 1);
                     G.temp6 = G.enemies_x[G.i];
                     G.temp7 = G.enemies_y[G.i];
-                    if (G.enemy_push_dir[G.i] == (byte)PAD.LEFT) G.enemies_x[G.i] -= 2;
-                    else if (G.enemy_push_dir[G.i] == (byte)PAD.RIGHT) G.enemies_x[G.i] += 2;
-                    else if (G.enemy_push_dir[G.i] == (byte)PAD.UP) G.enemies_y[G.i] -= 2;
-                    else if (G.enemy_push_dir[G.i] == (byte)PAD.DOWN) G.enemies_y[G.i] += 2;
+                    if (G.enemy_push_dir[G.i] == (byte)PAD.LEFT) G.enemies_x[G.i] = (byte)(G.enemies_x[G.i] - 2);
+                    else if (G.enemy_push_dir[G.i] == (byte)PAD.RIGHT) G.enemies_x[G.i] = (byte)(G.enemies_x[G.i] + 2);
+                    else if (G.enemy_push_dir[G.i] == (byte)PAD.UP) G.enemies_y[G.i] = (byte)(G.enemies_y[G.i] - 2);
+                    else if (G.enemy_push_dir[G.i] == (byte)PAD.DOWN) G.enemies_y[G.i] = (byte)(G.enemies_y[G.i] + 2);
                     byte _ib_x2 = G.enemies_x[G.i]; byte _ib_y2 = G.enemies_y[G.i];
                     byte _ib_result2;
                     // [inlined: isBlocked]
@@ -2127,9 +2129,9 @@ while (true)
                             if (G.player_hp[G.j] != 0 && G.player_god_mode[G.j] == 0)
                             {
                                 G.temp5 = 1;
-                                G.player_hp[G.j]--;
+                                G.player_hp[G.j] = (byte)(G.player_hp[G.j] - 1);
                                 G.player_god_mode[G.j] = 4;
-                                sfx_play(0, 1);
+                                // sfx_play(0, 1);
                             }
                             if (G.player_hp[G.j] == 0 && G.enemies_enemy[G.i] == G.j)
                             {
