@@ -49,10 +49,20 @@ partial class Transpiler
             {
                 // Catalog closure fields instead of throwing — closure support is handled
                 // by rewriting the IL patterns in BuildProgram6502.
+                // Note: field names are keyed by simple name since IL parsing produces
+                // simple names from FieldDefinition tokens (same-module references).
+                // If multiple DisplayClass types have fields with the same name,
+                // we detect the collision and throw a helpful error.
                 foreach (var f in type.GetFields())
                 {
                     var field = _reader.GetFieldDefinition(f);
                     var fieldName = _reader.GetString(field.Name);
+                    if (_closureFieldTypes.ContainsKey(fieldName))
+                    {
+                        throw new TranspileException(
+                            $"Multiple closure structs capture a variable named '{fieldName}'. " +
+                            "Rename one of the captured variables to avoid the collision.");
+                    }
                     int fieldSize = DecodeFieldSize(field);
                     _closureFieldTypes[fieldName] = fieldSize;
                 }

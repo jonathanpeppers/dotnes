@@ -147,20 +147,44 @@ partial class IL2NESWriter
                 _immediateInA = null;
                 return;
             }
-            else // scalar field
+            else // scalar field (byte, ushort, short, int captured in closure)
             {
                 ushort addr = ClosureFieldAddresses[fieldName];
                 int value = Stack.Count > 0 ? Stack.Pop() : 0;
-                if (_runtimeValueInA)
+
+                if (fieldSize == 1)
                 {
-                    Emit(Opcode.STA, AddressMode.Absolute, addr);
-                    _runtimeValueInA = false;
+                    if (_runtimeValueInA)
+                    {
+                        Emit(Opcode.STA, AddressMode.Absolute, addr);
+                        _runtimeValueInA = false;
+                    }
+                    else
+                    {
+                        RemoveLastInstructions(1);
+                        Emit(Opcode.LDA, AddressMode.Immediate, (byte)(value & 0xFF));
+                        Emit(Opcode.STA, AddressMode.Absolute, addr);
+                    }
                 }
                 else
                 {
-                    RemoveLastInstructions(1);
-                    Emit(Opcode.LDA, AddressMode.Immediate, (byte)(value & 0xFF));
-                    Emit(Opcode.STA, AddressMode.Absolute, addr);
+                    // Multi-byte scalar (16-bit word: low/high bytes)
+                    if (_runtimeValueInA && _ushortInAX)
+                    {
+                        Emit(Opcode.STA, AddressMode.Absolute, addr);
+                        Emit(Opcode.STX, AddressMode.Absolute, (ushort)(addr + 1));
+                    }
+                    else
+                    {
+                        byte low = (byte)(value & 0xFF);
+                        byte high = (byte)((value >> 8) & 0xFF);
+                        Emit(Opcode.LDA, AddressMode.Immediate, low);
+                        Emit(Opcode.STA, AddressMode.Absolute, addr);
+                        Emit(Opcode.LDA, AddressMode.Immediate, high);
+                        Emit(Opcode.STA, AddressMode.Absolute, (ushort)(addr + 1));
+                    }
+                    _runtimeValueInA = false;
+                    _ushortInAX = false;
                 }
                 _immediateInA = null;
                 return;
@@ -283,6 +307,11 @@ partial class IL2NESWriter
             {
                 ushort addr = ClosureFieldAddresses[fieldName];
                 Emit(Opcode.LDA, AddressMode.Absolute, addr);
+                if (fieldSize > 1)
+                {
+                    Emit(Opcode.LDX, AddressMode.Absolute, (ushort)(addr + 1));
+                    _ushortInAX = true;
+                }
             }
             _runtimeValueInA = true;
             _immediateInA = null;
