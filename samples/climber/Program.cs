@@ -628,7 +628,8 @@ while (true)
             if (actor_state[pi] <= WALKING && floor_objtype[pf] != 0)
             {
                 byte objx = (byte)(floor_objpos[pf] * 16);
-                if (actor_x[pi] >= objx && actor_x[pi] < (byte)(objx + 16))
+                byte objx_end = (byte)(objx + 16);
+                if (actor_x[pi] >= objx && actor_x[pi] < objx_end)
                 {
                     pickup_type = floor_objtype[pf];
                 }
