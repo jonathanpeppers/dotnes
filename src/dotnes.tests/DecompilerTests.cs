@@ -502,6 +502,40 @@ public class DecompilerTests
     }
 
     [Fact]
+    public void Decompiler_Shoot2_RecoverPadPollResultStorage()
+    {
+        // shoot2 calls pad_poll(0) and stores result: LDA #$00 / JSR pad_poll / STA $037F
+        var romBytes = GetVerifiedRom("shoot2");
+        var rom = new NESRomReader(romBytes);
+        var decompiler = new Decompiler(rom, _logger);
+
+        var code = decompiler.Decompile();
+
+        // pad_poll result should be stored to a local variable
+        Assert.Contains("var_037F = pad_poll(0);", code);
+        // Variable storing pad_poll should be typed as PAD, not byte
+        Assert.Contains("PAD var_037F = 0;", code);
+        Assert.DoesNotContain("byte var_037F", code);
+    }
+
+    [Fact]
+    public void Decompiler_Shoot2_RecoverPadMasking()
+    {
+        // shoot2 uses LDA $037F / AND #$01 / BEQ → if ((var_037F & PAD.A) != 0)
+        // and LDA $037F / AND #$40 / BEQ → if ((var_037F & PAD.LEFT) != 0)
+        var romBytes = GetVerifiedRom("shoot2");
+        var rom = new NESRomReader(romBytes);
+        var decompiler = new Decompiler(rom, _logger);
+
+        var code = decompiler.Decompile();
+
+        // PAD.A masking (AND #$01)
+        Assert.Contains("if ((var_037F & PAD.A) != 0)", code);
+        // PAD.LEFT masking (AND #$40)
+        Assert.Contains("if ((var_037F & PAD.LEFT) != 0)", code);
+    }
+
+    [Fact]
     public void Decompiler_Shoot2_RecognizesOamSpr()
     {
         // shoot2 has oam_spr calls with local variables, immediates, and array indexing
@@ -601,6 +635,21 @@ public class DecompilerTests
         // The for loops should declare their own counter variables
         // Verify that at least one for loop with proper structure exists
         Assert.Matches(@"for \(byte (var_\w+) = 0; \1 < \d+; \1\+\+\)", code);
+    }
+
+    [Fact]
+    public void Decompiler_Hello_NoPadVariables()
+    {
+        // hello has no pad_poll — verify no PAD-typed variables are generated
+        var romBytes = GetVerifiedRom("hello");
+        var rom = new NESRomReader(romBytes);
+        var decompiler = new Decompiler(rom, _logger);
+
+        var code = decompiler.Decompile();
+
+        // hello doesn't use pad_poll, so no PAD variables should appear
+        Assert.DoesNotContain("PAD ", code);
+        Assert.DoesNotContain("pad_poll", code);
     }
 
     [Fact]
