@@ -15,10 +15,13 @@ class Decompiler
     readonly Dictionary<ushort, string> _symbolTable = new();
     readonly List<(ushort Address, int Size)> _arrayDeclarations = new();
     readonly Dictionary<ushort, string> _localVariables = new();
+    readonly List<(ushort PpuAddress, byte[] Data)> _chrRamTileData = new();
 
     ushort _mainAddress;
     ushort _mainEnd;
     int _dataCounter;
+    ushort? _lastVramAdrTarget;
+    byte? _ppuAddrHigh; // Tracks first byte written to PPU_ADDR ($2006) for CHR RAM detection
 
     public Decompiler(NESRomReader rom, ILogger? logger = null)
     {
@@ -327,10 +330,20 @@ class Decompiler
         byte? lastImmediateA = null;           // Track last LDA #imm value for consecutive poke detection
         List<string>? decspArgs = null;        // Non-null when collecting args after JSR decsp4
         string? pendingDecspValue = null;      // Value loaded for next STA ($22),Y in decsp4 block
+        string? lastLoadedVarName = null;      // Track name of last local variable loaded into A
+        byte? lastCmpValue = null;             // Track value from last CMP #imm instruction
+        var pendingCloseBraces = new Stack<ushort>(); // Target addresses where if-blocks end
 
         for (int i = 0; i < instructions.Count; i++)
         {
             var (instrAddr, opcode, op1, op2) = instructions[i];
+
+            // Emit closing braces for any if-blocks that end at this address
+            while (pendingCloseBraces.Count > 0 && pendingCloseBraces.Peek() == instrAddr)
+            {
+                pendingCloseBraces.Pop();
+                statements.Add("}");
+            }
 
             // === decsp4 stack args collection ===
             // When inside a decsp4 block, intercept instructions that build stack arguments
@@ -464,6 +477,8 @@ class Decompiler
                 {
                     pushedArgs.Push(op1.Value.ToString());
                     lastImmediateA = null; // JSR modifies A
+                    lastLoadedVarName = null;
+                    lastCmpValue = null;
                     i++; // skip the JSR pusha
                     continue;
                 }
@@ -503,6 +518,8 @@ class Decompiler
                             ushort value16 = (ushort)(op1.Value | (nextLdx.Op1.Value << 8));
                             pushedWords.Push(value16);
                             lastImmediateA = null; // JSR modifies A
+                            lastLoadedVarName = null;
+                            lastCmpValue = null;
                             i += 2; // skip LDX and JSR pushax
                             continue;
                         }
@@ -515,6 +532,8 @@ class Decompiler
                             var stmts = DecompileCallXA(targetName, xVal, aVal, null, null);
                             statements.AddRange(stmts);
                             lastImmediateA = null; // JSR modifies A
+                            lastLoadedVarName = null;
+                            lastCmpValue = null;
                             i += 2;
                             continue;
                         }
@@ -541,6 +560,8 @@ class Decompiler
                         var stmts = DecompileCallXA(name, xVal, aVal, pw, pb);
                         statements.AddRange(stmts);
                         lastImmediateA = null; // JSR modifies A
+                        lastLoadedVarName = null;
+                        lastCmpValue = null;
                         i += 2; // skip LDA and JSR
                         continue;
                     }
@@ -571,6 +592,8 @@ class Decompiler
                             if (stmt != null) statements.Add(stmt);
                         }
                         lastImmediateA = null; // JSR modifies A
+                        lastLoadedVarName = null;
+                        lastCmpValue = null;
                         i++; // skip the JSR
                         continue;
                     }
@@ -588,6 +611,8 @@ class Decompiler
                     {
                         statements.Add($"{varName} = 0x{op1.Value:X2};");
                         lastImmediateA = op1.Value;
+                        lastLoadedVarName = null;
+                        lastCmpValue = null;
                         i++; // skip the STA
                         continue;
                     }
@@ -605,7 +630,7 @@ class Decompiler
                 }
             }
 
-            // Pattern: LDA $local → load local variable into A (track for use in subsequent calls)
+            // Pattern: LDA $local → load local variable into A (track for use in subsequent calls/branches)
             if (opcode == 0xAD && op1.HasValue && op2.HasValue)
             {
                 ushort addr = (ushort)(op1.Value | (op2.Value << 8));
@@ -630,8 +655,10 @@ class Decompiler
                             }
                         }
                     }
-                    // Don't emit a statement — the value in A will be consumed by the next JSR or STA
+                    // Don't emit a statement — the value in A will be consumed by the next JSR, STA, or branch
+                    lastLoadedVarName = localVarName;
                     lastImmediateA = null;
+                    lastCmpValue = null;
                     continue;
                 }
             }
@@ -645,6 +672,7 @@ class Decompiler
                     ushort addr = (ushort)(next.Op1.Value | (next.Op2.Value << 8));
                     if (!_symbolTable.ContainsKey(addr))
                     {
+                        TrackPpuAddrWrite(addr, op1.Value);
                         statements.Add(FormatPoke(addr, op1.Value));
                         lastImmediateA = op1.Value;
                         i++; // skip the STA
@@ -659,6 +687,7 @@ class Decompiler
                 ushort addr = (ushort)(op1.Value | (op2.Value << 8));
                 if (!_symbolTable.ContainsKey(addr))
                 {
+                    TrackPpuAddrWrite(addr, lastImmediateA.Value);
                     statements.Add(FormatPoke(addr, lastImmediateA.Value));
                     continue;
                 }
@@ -672,6 +701,58 @@ class Decompiler
                 {
                     statements.Add(FormatPeek(addr));
                     lastImmediateA = null; // A now holds peek result, not an immediate
+                    lastLoadedVarName = null;
+                    lastCmpValue = null;
+                    continue;
+                }
+            }
+
+            // Pattern: CMP #imm → track comparison value for subsequent branch
+            if (opcode == 0xC9 && op1.HasValue)
+            {
+                lastCmpValue = op1.Value;
+                continue;
+            }
+
+            // Pattern: forward BEQ/BNE/BCS/BCC → if block
+            if (opcode is 0xF0 or 0xD0 or 0xB0 or 0x90 && op1.HasValue && lastLoadedVarName != null)
+            {
+                sbyte branchOffset = (sbyte)op1.Value;
+                ushort target = (ushort)(instrAddr + 2 + branchOffset);
+
+                if (branchOffset > 0) // Forward branch = skip body when condition is met
+                {
+                    string condition;
+                    if (lastCmpValue.HasValue)
+                    {
+                        // After CMP #N: flags reflect A - N
+                        condition = opcode switch
+                        {
+                            0xF0 => $"{lastLoadedVarName} != {lastCmpValue.Value}",  // BEQ skip → body runs when not equal
+                            0xD0 => $"{lastLoadedVarName} == {lastCmpValue.Value}",  // BNE skip → body runs when equal
+                            0xB0 => $"{lastLoadedVarName} < {lastCmpValue.Value}",   // BCS skip → body runs when < N
+                            0x90 => $"{lastLoadedVarName} >= {lastCmpValue.Value}",  // BCC skip → body runs when >= N
+                            _ => "/* unknown */"
+                        };
+                    }
+                    else
+                    {
+                        // After LDA: flags reflect loaded value
+                        condition = opcode switch
+                        {
+                            0xF0 => $"{lastLoadedVarName} != 0",  // BEQ skip → body runs when not zero
+                            0xD0 => $"{lastLoadedVarName} == 0",  // BNE skip → body runs when zero
+                            _ => "/* unknown */"
+                        };
+                    }
+
+                    statements.Add($"if ({condition})");
+                    statements.Add("{");
+                    pendingCloseBraces.Push(target);
+
+                    lastLoadedVarName = null;
+                    lastCmpValue = null;
+                    lastImmediateA = null;
                     continue;
                 }
             }
@@ -704,11 +785,23 @@ class Decompiler
                     }
                 }
                 lastImmediateA = null; // JSR may modify A
+                lastLoadedVarName = null;
+                lastCmpValue = null;
                 continue;
             }
 
             // Unrecognized instruction — clear A tracking for safety
             lastImmediateA = null;
+            lastLoadedVarName = null;
+            lastCmpValue = null;
+        }
+
+        // Close any remaining open if-blocks (may happen when branch target is past the end of main)
+        while (pendingCloseBraces.Count > 0)
+        {
+            var addr = pendingCloseBraces.Pop();
+            _logger.WriteLine($"  Warning: unclosed if-block at ${addr:X4} — target may be outside main");
+            statements.Add("}");
         }
 
         // NES programs must end with an infinite loop; ensure one is present
@@ -860,8 +953,15 @@ class Decompiler
     /// Decompile a call where A contains a value (the last argument),
     /// and optionally a pushed value was the first argument.
     /// </summary>
-    static string? DecompileCall(string name, byte? aValue, byte? pushedArg = null)
+    string? DecompileCall(string name, byte? aValue, byte? pushedArg = null)
     {
+        // Track single-byte vram_adr calls (transpiler omits LDX #$00 for zero addresses)
+        if (name == "vram_adr" && aValue.HasValue)
+        {
+            _lastVramAdrTarget = aValue.Value;
+            return $"vram_adr(0x{aValue.Value:X4});";
+        }
+
         return name switch
         {
             "pal_col" => $"pal_col({pushedArg?.ToString() ?? "0"}, 0x{aValue ?? 0:X2});",
@@ -951,6 +1051,12 @@ class Decompiler
     {
         ushort value16 = (ushort)((xValue << 8) | aValue);
 
+        // Track vram_adr targets for CHR RAM tile extraction
+        if (name == "vram_adr")
+            _lastVramAdrTarget = value16;
+        else if (name == "vram_write")
+            TrackChrRamUpload(value16, pushedPtr);
+
         return name switch
         {
             "vram_adr" => new List<string> { FormatVramAdr(aValue, xValue) },
@@ -1024,6 +1130,64 @@ class Decompiler
             return $"vram_adr(NTADR_A({x}, {y}));";
         }
         return $"vram_adr(0x{addr:X4});";
+    }
+
+    /// <summary>
+    /// Track vram_write calls that upload tile data to CHR RAM pattern tables ($0000-$1FFF).
+    /// Called before FormatVramWrite to record data for .s file extraction.
+    /// </summary>
+    void TrackChrRamUpload(ushort length, ushort? dataPointer)
+    {
+        if (_rom.ChrBanks > 0 || !_lastVramAdrTarget.HasValue || !dataPointer.HasValue || length == 0)
+            return;
+
+        ushort ppuAddr = _lastVramAdrTarget.Value;
+        _lastVramAdrTarget = null;
+
+        // Only track writes to CHR pattern tables ($0000-$1FFF)
+        if (ppuAddr >= 0x2000)
+            return;
+
+        int offset = dataPointer.Value - 0x8000;
+        // NROM-128 (16KB PRG): $C000-$FFFF mirrors $8000-$BFFF
+        if (_rom.PrgRom.Length == 0x4000)
+            offset %= 0x4000;
+        if (offset >= 0 && offset + length <= _rom.PrgRom.Length)
+        {
+            var data = new byte[length];
+            Array.Copy(_rom.PrgRom, offset, data, 0, length);
+            _chrRamTileData.Add((ppuAddr, data));
+            _logger.WriteLine($"CHR RAM upload: {length} bytes to PPU ${ppuAddr:X4} from PRG ${dataPointer.Value:X4}");
+        }
+    }
+
+    /// <summary>
+    /// Returns tile data extracted from vram_write calls to CHR RAM pattern tables.
+    /// Each entry contains the PPU target address and the raw tile data.
+    /// </summary>
+    public IReadOnlyList<(ushort PpuAddress, byte[] Data)> GetChrRamTileData() => _chrRamTileData;
+
+    /// <summary>
+    /// Track poke() writes to PPU_ADDR ($2006) for CHR RAM detection.
+    /// Two consecutive writes set the full 16-bit PPU address (high byte first).
+    /// </summary>
+    void TrackPpuAddrWrite(ushort addr, byte value)
+    {
+        if (addr != NESLib.PPU_ADDR)
+        {
+            _ppuAddrHigh = null;
+            return;
+        }
+
+        if (!_ppuAddrHigh.HasValue)
+        {
+            _ppuAddrHigh = value; // First write = high byte
+        }
+        else
+        {
+            _lastVramAdrTarget = (ushort)((_ppuAddrHigh.Value << 8) | value);
+            _ppuAddrHigh = null;
+        }
     }
 
     /// <summary>
@@ -1168,9 +1332,17 @@ class Decompiler
             sb.AppendLine();
         }
 
+        int indent = 0;
         foreach (var statement in statements)
         {
-            sb.AppendLine(statement);
+            if (statement == "}")
+                indent = Math.Max(0, indent - 1);
+
+            string prefix = indent > 0 ? new string(' ', indent * 4) : "";
+            sb.AppendLine(prefix + statement);
+
+            if (statement == "{")
+                indent++;
         }
 
         return sb.ToString();
