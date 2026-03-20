@@ -354,6 +354,7 @@ class Decompiler
         byte? lastImmediateA = null;           // Track last LDA #imm value for consecutive poke detection
         List<string>? decspArgs = null;        // Non-null when collecting args after JSR decsp4
         string? pendingDecspValue = null;      // Value loaded for next STA ($22),Y in decsp4 block
+        string? pendingDecspIndexVar = null;   // Variable name from LDX $abs for array index resolution
         var unknownInstructions = new List<(ushort Address, byte Opcode, byte? Op1, byte? Op2)>();
         string? lastLoadedVarName = null;      // Track name of last local variable loaded into A
         byte? lastCmpValue = null;             // Track value from last CMP #imm instruction
@@ -411,21 +412,28 @@ class Decompiler
                 if (opcode == 0x88 || opcode == 0xA0)
                     continue;
 
-                // LDX $abs (0xAE) → skip; sets the X register for subsequent LDA $abs,X array access
+                // LDX $abs (0xAE) → track the index variable for subsequent LDA $abs,X array access
                 if (opcode == 0xAE && op1.HasValue && op2.HasValue)
+                {
+                    ushort ldxAddr = (ushort)(op1.Value | (op2.Value << 8));
+                    pendingDecspIndexVar = _localVariables.TryGetValue(ldxAddr, out var xn) ? xn : $"var_{ldxAddr:X4}";
                     continue;
+                }
 
                 // LDA $abs,X (0xBD) → indexed array access (value for STA ($22),Y or A arg)
                 if (opcode == 0xBD && op1.HasValue && op2.HasValue)
                 {
                     ushort baseAddr = (ushort)(op1.Value | (op2.Value << 8));
-                    string valStr = $"data_{baseAddr:X4}[i]";
+                    string indexName = pendingDecspIndexVar ?? "i";
+                    string valStr = $"array_{baseAddr:X4}[{indexName}]";
+                    pendingDecspIndexVar = null;
                     if (i + 1 < instructions.Count && TryMatchDecspCall(instructions[i + 1], out var callName2))
                     {
                         var stmt = DecompileCallN(callName2, valStr, decspArgs);
                         if (stmt != null) statements.Add(stmt);
                         decspArgs = null;
                         pendingDecspValue = null;
+                        pendingDecspIndexVar = null;
                         lastImmediateA = null;
                         i++;
                         continue;
@@ -451,6 +459,7 @@ class Decompiler
                         if (stmt != null) statements.Add(stmt);
                         decspArgs = null;
                         pendingDecspValue = null;
+                        pendingDecspIndexVar = null;
                         lastImmediateA = null;
                         i++;
                         continue;
@@ -470,6 +479,7 @@ class Decompiler
                         if (stmt != null) statements.Add(stmt);
                         decspArgs = null;
                         pendingDecspValue = null;
+                        pendingDecspIndexVar = null;
                         lastImmediateA = null;
                         i++;
                         continue;
@@ -488,6 +498,7 @@ class Decompiler
                         if (stmt != null) statements.Add(stmt);
                         decspArgs = null;
                         pendingDecspValue = null;
+                        pendingDecspIndexVar = null;
                         lastImmediateA = null;
                         i++;
                         continue;
@@ -499,6 +510,7 @@ class Decompiler
                 // Unexpected instruction in decsp4 block → bail out
                 decspArgs = null;
                 pendingDecspValue = null;
+                pendingDecspIndexVar = null;
             }
 
             // Pattern: JMP to self = while (true) ;

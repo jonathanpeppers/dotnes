@@ -527,6 +527,23 @@ public class DecompilerTests
             argsStr = argsStr.Substring(0, argsStr.IndexOf(')'));
             var args = argsStr.Split(',');
             Assert.Equal(5, args.Length);
+
+            // For any array-indexed argument, ensure it uses the array_XXXX identifier
+            // (matching GenerateCSharp declarations) and has a resolved index variable
+            foreach (var rawArg in args)
+            {
+                var arg = rawArg.Trim();
+                var openBracket = arg.IndexOf('[');
+                var closeBracket = arg.IndexOf(']');
+                if (openBracket < 0 || closeBracket <= openBracket)
+                    continue;
+
+                var baseIdentifier = arg.Substring(0, openBracket).Trim();
+                var indexExpression = arg.Substring(openBracket + 1, closeBracket - openBracket - 1);
+
+                Assert.StartsWith("array_", baseIdentifier);
+                Assert.False(string.IsNullOrWhiteSpace(indexExpression));
+            }
         }
     }
 
