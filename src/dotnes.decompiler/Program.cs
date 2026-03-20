@@ -98,6 +98,8 @@ static string GenerateChrRamAssembly(IReadOnlyList<(ushort PpuAddress, byte[] Da
     foreach (var (ppuAddr, data) in uploads)
     {
         int destOffset = ppuAddr;
+        if (destOffset >= chrSize)
+            continue;
         int copyLen = Math.Min(data.Length, chrSize - destOffset);
         if (copyLen > 0)
             Array.Copy(data, 0, chr, destOffset, copyLen);
