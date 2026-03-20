@@ -16,6 +16,8 @@ class Decompiler
     readonly List<(ushort Address, int Size)> _arrayDeclarations = new();
     readonly Dictionary<ushort, string> _localVariables = new();
     readonly HashSet<ushort> _padVariables = new(); // Locals that store pad_poll results (typed as PAD)
+    readonly List<ForLoopInfo> _forLoops = new();
+    readonly HashSet<ushort> _forLoopLocals = new();
     readonly List<(ushort PpuAddress, byte[] Data)> _chrRamTileData = new();
 
     ushort _mainAddress;
@@ -23,6 +25,16 @@ class Decompiler
     int _dataCounter;
     ushort? _lastVramAdrTarget;
     byte? _ppuAddrHigh; // Tracks first byte written to PPU_ADDR ($2006) for CHR RAM detection
+
+    record ForLoopInfo(
+        ushort LocalAddress,     // counter variable address ($03xx)
+        byte InitValue,          // initial value (usually 0)
+        byte Limit,              // upper bound (N in i < N)
+        int InitIndex,           // index of LDA #imm (first init instruction)
+        int BodyStartIndex,      // index of first body instruction
+        int FooterStartIndex,    // index of first footer instruction
+        int AfterLoopIndex       // index of first instruction after BCC
+    );
 
     public Decompiler(NESRomReader rom, ILogger? logger = null)
     {
@@ -322,13 +334,26 @@ class Decompiler
         // Detect local variable usage (non-indexed STA/LDA to $0325+ not claimed by arrays)
         DetectLocalVariables(instructions);
 
+        // Detect for-loop structures (init/footer patterns)
+        DetectForLoops(instructions);
+
         if (instructions.Count > 0)
             _logger.WriteLine($"Collected {instructions.Count} instructions (${_mainAddress:X4}-${instructions[^1].Address:X4})");
+
+        // Build lookup tables for for-loop init and footer indices
+        var forLoopByInit = new Dictionary<int, ForLoopInfo>();
+        var forLoopByFooter = new Dictionary<int, ForLoopInfo>();
+        foreach (var fl in _forLoops)
+        {
+            forLoopByInit[fl.InitIndex] = fl;
+            forLoopByFooter[fl.FooterStartIndex] = fl;
+        }
 
         // Now walk through instructions with look-ahead for pattern matching
         var pushedBytes = new Stack<byte>();   // Track values pushed via pusha (8-bit)
         var pushedWords = new Stack<ushort>(); // Track values pushed via pushax (16-bit)
         byte? lastImmediateA = null;           // Track last LDA #imm value for consecutive poke detection
+        var unknownInstructions = new List<(ushort Address, byte Opcode, byte? Op1, byte? Op2)>();
         string? lastLoadedVarName = null;      // Track name of last local variable loaded into A
         byte? lastCmpValue = null;             // Track value from last CMP #imm instruction
         byte? lastAndMask = null;              // Track AND #imm mask for subsequent branch conditions
@@ -336,6 +361,30 @@ class Decompiler
 
         for (int i = 0; i < instructions.Count; i++)
         {
+            // Check if this is a for-loop init (LDA #imm / STA $local)
+            if (forLoopByInit.TryGetValue(i, out var loopInit))
+            {
+                var varName = _localVariables[loopInit.LocalAddress];
+                statements.Add($"for (byte {varName} = {loopInit.InitValue}; {varName} < {loopInit.Limit}; {varName}++)");
+                statements.Add("{");
+                i = loopInit.BodyStartIndex - 1; // -1 because the for loop will i++
+                lastImmediateA = null;
+                lastLoadedVarName = null;
+                lastCmpValue = null;
+                continue;
+            }
+
+            // Check if this is a for-loop footer (LDA $local / CLC / ADC / STA / CMP / BCC)
+            if (forLoopByFooter.TryGetValue(i, out var loopFooter))
+            {
+                statements.Add("}");
+                i = loopFooter.AfterLoopIndex - 1; // -1 because the for loop will i++
+                lastImmediateA = null;
+                lastLoadedVarName = null;
+                lastCmpValue = null;
+                continue;
+            }
+
             var (instrAddr, opcode, op1, op2) = instructions[i];
 
             // Emit closing braces for any if-blocks that end at this address
@@ -351,12 +400,14 @@ class Decompiler
                 ushort target = (ushort)(op1.Value | (op2.Value << 8));
                 if (target == instrAddr)
                 {
+                    FlushUnknownInstructions(unknownInstructions, statements);
                     statements.Add("while (true) ;");
                     break;
                 }
                 // Last instruction is a backward JMP within main = while (true) { body } game loop
                 if (i == instructions.Count - 1 && target >= _mainAddress && target < instrAddr)
                 {
+                    FlushUnknownInstructions(unknownInstructions, statements);
                     statements.Add("while (true) ;");
                     break;
                 }
@@ -408,6 +459,7 @@ class Decompiler
                             byte aVal = op1.Value;
                             byte xVal = nextLdx.Op1.Value;
                             var stmts = DecompileCallXA(targetName, xVal, aVal, null, null);
+                            FlushUnknownInstructions(unknownInstructions, statements);
                             statements.AddRange(stmts);
                             lastImmediateA = null; // JSR modifies A
                             lastLoadedVarName = null;
@@ -436,6 +488,7 @@ class Decompiler
                         ushort? pw = pushedWords.Count > 0 ? pushedWords.Pop() : null;
                         byte? pb = pushedBytes.Count > 0 ? pushedBytes.Pop() : null;
                         var stmts = DecompileCallXA(name, xVal, aVal, pw, pb);
+                        FlushUnknownInstructions(unknownInstructions, statements);
                         statements.AddRange(stmts);
                         lastImmediateA = null; // JSR modifies A
                         lastLoadedVarName = null;
@@ -487,7 +540,11 @@ class Decompiler
                     {
                         byte? pushedArg = pushedBytes.Count > 0 ? pushedBytes.Pop() : null;
                         var stmt = DecompileCall(name, op1.Value, pushedArg);
-                        if (stmt != null) statements.Add(stmt);
+                        if (stmt != null)
+                        {
+                            FlushUnknownInstructions(unknownInstructions, statements);
+                            statements.Add(stmt);
+                        }
                         lastImmediateA = null; // JSR modifies A
                         lastLoadedVarName = null;
                         lastCmpValue = null;
@@ -507,6 +564,7 @@ class Decompiler
                     ushort addr = (ushort)(next.Op1.Value | (next.Op2.Value << 8));
                     if (_localVariables.TryGetValue(addr, out var varName))
                     {
+                        FlushUnknownInstructions(unknownInstructions, statements);
                         statements.Add($"{varName} = 0x{op1.Value:X2};");
                         lastImmediateA = op1.Value;
                         lastLoadedVarName = null;
@@ -524,6 +582,7 @@ class Decompiler
                 ushort addr = (ushort)(op1.Value | (op2.Value << 8));
                 if (_localVariables.TryGetValue(addr, out var varName))
                 {
+                    FlushUnknownInstructions(unknownInstructions, statements);
                     statements.Add($"{varName} = 0x{lastImmediateA.Value:X2};");
                     continue;
                 }
@@ -553,6 +612,7 @@ class Decompiler
                     ushort addr = (ushort)(next.Op1.Value | (next.Op2.Value << 8));
                     if (!_symbolTable.ContainsKey(addr))
                     {
+                        FlushUnknownInstructions(unknownInstructions, statements);
                         TrackPpuAddrWrite(addr, op1.Value);
                         statements.Add(FormatPoke(addr, op1.Value));
                         lastImmediateA = op1.Value;
@@ -568,6 +628,7 @@ class Decompiler
                 ushort addr = (ushort)(op1.Value | (op2.Value << 8));
                 if (!_symbolTable.ContainsKey(addr))
                 {
+                    FlushUnknownInstructions(unknownInstructions, statements);
                     TrackPpuAddrWrite(addr, lastImmediateA.Value);
                     statements.Add(FormatPoke(addr, lastImmediateA.Value));
                     continue;
@@ -580,6 +641,7 @@ class Decompiler
                 ushort addr = (ushort)(op1.Value | (op2.Value << 8));
                 if (!_symbolTable.ContainsKey(addr))
                 {
+                    FlushUnknownInstructions(unknownInstructions, statements);
                     statements.Add(FormatPeek(addr));
                     lastImmediateA = null; // A now holds peek result, not an immediate
                     lastLoadedVarName = null;
@@ -666,7 +728,11 @@ class Decompiler
                 if (_symbolTable.TryGetValue(jsrTarget, out var name))
                 {
                     var stmt = DecompileCall(name, null, null);
-                    if (stmt != null) statements.Add(stmt);
+                    if (stmt != null)
+                    {
+                        FlushUnknownInstructions(unknownInstructions, statements);
+                        statements.Add(stmt);
+                    }
                 }
                 lastImmediateA = null; // JSR may modify A
                 lastLoadedVarName = null;
@@ -675,7 +741,8 @@ class Decompiler
                 continue;
             }
 
-            // Unrecognized instruction — clear A tracking for safety
+            // Unrecognized instruction — accumulate for comment emission
+            unknownInstructions.Add((instrAddr, opcode, op1, op2));
             lastImmediateA = null;
             lastLoadedVarName = null;
             lastCmpValue = null;
@@ -689,6 +756,9 @@ class Decompiler
             _logger.WriteLine($"  Warning: unclosed if-block at ${addr:X4} — target may be outside main");
             statements.Add("}");
         }
+
+        // Flush any remaining unknown instructions before the final while(true)
+        FlushUnknownInstructions(unknownInstructions, statements);
 
         // NES programs must end with an infinite loop; ensure one is present
         if (statements.Count == 0 || statements[^1] != "while (true) ;")
@@ -839,6 +909,178 @@ class Decompiler
             _localVariables[addr] = name;
             _logger.WriteLine($"  Detected local variable '{name}' at ${addr:X4}");
         }
+    }
+
+    /// <summary>
+    /// Detect for-loop structures by scanning for the condition/branch footer pattern
+    /// and matching them to their initialization (LDA #imm / STA $local / JMP forward).
+    ///
+    /// Pattern 1 (INC): INC $local / LDA $local / CMP #$NN / BCC backward
+    /// Pattern 2 (ADC): LDA $local / CLC / ADC #$01 / STA $local / CMP #$NN / BCC backward
+    /// </summary>
+    void DetectForLoops(List<(ushort Address, byte Opcode, byte? Op1, byte? Op2)> instructions)
+    {
+        // Build address→index lookup for resolving branch targets
+        var addrToIndex = new Dictionary<ushort, int>();
+        for (int k = 0; k < instructions.Count; k++)
+            addrToIndex[instructions[k].Address] = k;
+
+        // Track claimed init indices to prevent overlapping matches
+        var claimedInits = new HashSet<int>();
+
+        for (int j = 0; j < instructions.Count; j++)
+        {
+            // Try to match a for-loop footer starting at index j
+            ushort localAddr;
+            byte limit;
+            int footerStart, afterLoopIndex;
+            ushort bccTarget;
+            int conditionCheckIndex; // index of the LDA $local in the condition check
+
+            if (TryMatchIncFooter(instructions, j, out localAddr, out limit, out bccTarget, out afterLoopIndex))
+            {
+                footerStart = j;
+                conditionCheckIndex = j + 1; // LDA is after INC
+            }
+            else if (TryMatchAdcFooter(instructions, j, out localAddr, out limit, out bccTarget, out afterLoopIndex))
+            {
+                footerStart = j;
+                conditionCheckIndex = j; // LDA is at start of ADC footer
+            }
+            else
+            {
+                continue;
+            }
+
+            if (!_localVariables.ContainsKey(localAddr)) continue;
+
+            // Find the body start index from the BCC target address
+            if (!addrToIndex.TryGetValue(bccTarget, out int bodyStartIndex)) continue;
+
+            // Find the initialization: LDA #imm / STA $local / JMP forward
+            // The JMP targets the condition check (LDA $local in the footer)
+            int initIndex = -1;
+            byte initValue = 0;
+            if (bodyStartIndex >= 3)
+            {
+                var ldaInit = instructions[bodyStartIndex - 3];
+                var staInit = instructions[bodyStartIndex - 2];
+                var jmpInit = instructions[bodyStartIndex - 1];
+
+                if (ldaInit.Opcode == 0xA9 // LDA immediate
+                    && staInit.Opcode == 0x8D // STA absolute
+                    && jmpInit.Opcode == 0x4C) // JMP absolute
+                {
+                    ushort staInitAddr = (ushort)(staInit.Op1!.Value | (staInit.Op2!.Value << 8));
+                    ushort jmpTarget = (ushort)(jmpInit.Op1!.Value | (jmpInit.Op2!.Value << 8));
+                    // Verify STA writes to the loop counter and JMP targets the condition check (LDA $local)
+                    if (staInitAddr == localAddr && jmpTarget == instructions[conditionCheckIndex].Address)
+                    {
+                        initIndex = bodyStartIndex - 3;
+                        initValue = ldaInit.Op1!.Value;
+                    }
+                }
+            }
+            // Also try without JMP: LDA #imm / STA $local (direct fall-through to body)
+            if (initIndex < 0 && bodyStartIndex >= 2)
+            {
+                var ldaInit = instructions[bodyStartIndex - 2];
+                var staInit = instructions[bodyStartIndex - 1];
+
+                if (ldaInit.Opcode == 0xA9 // LDA immediate
+                    && staInit.Opcode == 0x8D) // STA absolute
+                {
+                    ushort staInitAddr = (ushort)(staInit.Op1!.Value | (staInit.Op2!.Value << 8));
+                    if (staInitAddr == localAddr)
+                    {
+                        byte candidateInit = ldaInit.Op1!.Value;
+                        // For fall-through init, only treat this as a for-loop initializer when
+                        // the initial value is strictly less than the loop limit, so that the
+                        // decompiled `for (...; var < limit; ...)` preserves semantics.
+                        if (candidateInit < limit)
+                        {
+                            initIndex = bodyStartIndex - 2;
+                            initValue = candidateInit;
+                        }
+                    }
+                }
+            }
+            if (initIndex < 0) continue;
+            if (claimedInits.Contains(initIndex)) continue;
+
+            _forLoops.Add(new ForLoopInfo(localAddr, initValue, limit, initIndex, bodyStartIndex, footerStart, afterLoopIndex));
+            _forLoopLocals.Add(localAddr);
+            claimedInits.Add(initIndex);
+            _logger.WriteLine($"  Detected for loop: {_localVariables[localAddr]} = {initValue} to {limit} (init@{initIndex}, body@{bodyStartIndex}, footer@{footerStart})");
+        }
+    }
+
+    /// <summary>
+    /// Try to match the INC-based footer pattern: INC $local / LDA $local / CMP #NN / BCC backward
+    /// </summary>
+    static bool TryMatchIncFooter(
+        List<(ushort Address, byte Opcode, byte? Op1, byte? Op2)> instructions, int j,
+        out ushort localAddr, out byte limit, out ushort bccTarget, out int afterLoopIndex)
+    {
+        localAddr = 0; limit = 0; bccTarget = 0; afterLoopIndex = 0;
+        if (j + 3 >= instructions.Count) return false;
+
+        if (instructions[j].Opcode != 0xEE) return false;     // INC absolute
+        if (instructions[j + 1].Opcode != 0xAD) return false;  // LDA absolute
+        if (instructions[j + 2].Opcode != 0xC9) return false;  // CMP immediate
+        if (instructions[j + 3].Opcode != 0x90) return false;  // BCC
+
+        ushort incAddr = (ushort)(instructions[j].Op1!.Value | (instructions[j].Op2!.Value << 8));
+        ushort ldaAddr = (ushort)(instructions[j + 1].Op1!.Value | (instructions[j + 1].Op2!.Value << 8));
+        if (incAddr != ldaAddr) return false;
+
+        localAddr = incAddr;
+        limit = instructions[j + 2].Op1!.Value;
+
+        // Resolve BCC target — must be a backward branch
+        // BCC is 2 bytes (opcode + relative offset), so target = address + 2 + signed_offset
+        ushort bccInstrAddr = instructions[j + 3].Address;
+        sbyte bccOffset = (sbyte)instructions[j + 3].Op1!.Value;
+        bccTarget = (ushort)(bccInstrAddr + 2 + bccOffset);
+        if (bccTarget >= bccInstrAddr) return false;
+
+        afterLoopIndex = j + 4;
+        return true;
+    }
+
+    /// <summary>
+    /// Try to match the ADC-based footer pattern: LDA $local / CLC / ADC #$01 / STA $local / CMP #NN / BCC backward
+    /// </summary>
+    static bool TryMatchAdcFooter(
+        List<(ushort Address, byte Opcode, byte? Op1, byte? Op2)> instructions, int j,
+        out ushort localAddr, out byte limit, out ushort bccTarget, out int afterLoopIndex)
+    {
+        localAddr = 0; limit = 0; bccTarget = 0; afterLoopIndex = 0;
+        if (j + 5 >= instructions.Count) return false;
+
+        if (instructions[j].Opcode != 0xAD) return false;      // LDA absolute
+        if (instructions[j + 1].Opcode != 0x18) return false;   // CLC
+        if (instructions[j + 2].Opcode != 0x69 || instructions[j + 2].Op1 != 0x01) return false; // ADC #$01
+        if (instructions[j + 3].Opcode != 0x8D) return false;   // STA absolute
+        if (instructions[j + 4].Opcode != 0xC9) return false;   // CMP immediate
+        if (instructions[j + 5].Opcode != 0x90) return false;   // BCC
+
+        ushort ldaAddr = (ushort)(instructions[j].Op1!.Value | (instructions[j].Op2!.Value << 8));
+        ushort staAddr = (ushort)(instructions[j + 3].Op1!.Value | (instructions[j + 3].Op2!.Value << 8));
+        if (ldaAddr != staAddr) return false;
+
+        localAddr = ldaAddr;
+        limit = instructions[j + 4].Op1!.Value;
+
+        // Resolve BCC target — must be a backward branch
+        // BCC is 2 bytes (opcode + relative offset), so target = address + 2 + signed_offset
+        ushort bccInstrAddr = instructions[j + 5].Address;
+        sbyte bccOffset = (sbyte)instructions[j + 5].Op1!.Value;
+        bccTarget = (ushort)(bccInstrAddr + 2 + bccOffset);
+        if (bccTarget >= bccInstrAddr) return false;
+
+        afterLoopIndex = j + 6;
+        return true;
     }
 
     /// <summary>
@@ -1181,10 +1423,14 @@ class Decompiler
             sb.AppendLine();
         }
 
-        // Emit local variable declarations
-        if (_localVariables.Count > 0)
+        // Emit local variable declarations (excluding for-loop counter variables)
+        var nonLoopLocals = _localVariables
+            .Where(kvp => !_forLoopLocals.Contains(kvp.Key))
+            .OrderBy(kvp => kvp.Key)
+            .ToList();
+        if (nonLoopLocals.Count > 0)
         {
-            foreach (var (addr, name) in _localVariables.OrderBy(kvp => kvp.Key))
+            foreach (var (addr, name) in nonLoopLocals)
             {
                 string type = _padVariables.Contains(addr) ? "PAD" : "byte";
                 sb.AppendLine($"{type} {name} = 0;");
@@ -1270,4 +1516,169 @@ class Decompiler
         // All other valid opcodes are 2 bytes (immediate, zero page, relative, indexed indirect, indirect indexed)
         return 2;
     }
+
+    /// <summary>
+    /// Flush accumulated unknown instructions as comment lines in the output.
+    /// Splits into separate blocks when addresses are not contiguous (i.e., a recognized-
+    /// but-not-emitted instruction was between two unknowns).
+    /// </summary>
+    static void FlushUnknownInstructions(
+        List<(ushort Address, byte Opcode, byte? Op1, byte? Op2)> unknowns,
+        List<string> statements)
+    {
+        if (unknowns.Count == 0)
+            return;
+
+        int groupStart = 0;
+        for (int i = 1; i <= unknowns.Count; i++)
+        {
+            // Split when the next unknown isn't contiguous with the previous one
+            if (i < unknowns.Count)
+            {
+                var prev = unknowns[i - 1];
+                ushort expectedNext = (ushort)(prev.Address + GetInstructionSize(prev.Opcode));
+                if (unknowns[i].Address != expectedNext)
+                {
+                    EmitUnknownBlock(unknowns, groupStart, i, statements);
+                    groupStart = i;
+                }
+            }
+        }
+
+        EmitUnknownBlock(unknowns, groupStart, unknowns.Count, statements);
+        unknowns.Clear();
+    }
+
+    static void EmitUnknownBlock(
+        List<(ushort Address, byte Opcode, byte? Op1, byte? Op2)> unknowns,
+        int start, int end, List<string> statements)
+    {
+        ushort startAddr = unknowns[start].Address;
+        var last = unknowns[end - 1];
+        ushort endAddr = (ushort)(last.Address + GetInstructionSize(last.Opcode) - 1);
+
+        if (startAddr == endAddr)
+            statements.Add($"// Unknown 6502 assembly at ${startAddr:X4}:");
+        else
+            statements.Add($"// Unknown 6502 assembly at ${startAddr:X4}-${endAddr:X4}:");
+
+        for (int i = start; i < end; i++)
+        {
+            var (addr, opcode, op1, op2) = unknowns[i];
+            statements.Add($"//   {FormatDisassembly(addr, opcode, op1, op2)}");
+        }
+    }
+
+    /// <summary>
+    /// Format a single 6502 instruction as a disassembly string (e.g., "LDA #$01", "STA $2005").
+    /// </summary>
+    static string FormatDisassembly(ushort address, byte opcode, byte? op1, byte? op2)
+    {
+        string mnemonic = GetMnemonic(opcode);
+        int size = GetInstructionSize(opcode);
+
+        if (size == 1)
+            return mnemonic;
+
+        if (size == 2 && op1.HasValue)
+        {
+            // Determine addressing mode from opcode
+            return opcode switch
+            {
+                // Immediate: #$xx
+                0x09 or 0x29 or 0x49 or 0x69 or 0xA0 or 0xA2 or 0xA9
+                    or 0xC0 or 0xC9 or 0xE0 or 0xE9
+                    => $"{mnemonic} #${op1.Value:X2}",
+
+                // Relative: branch instructions
+                0x10 or 0x30 or 0x50 or 0x70 or 0x90 or 0xB0 or 0xD0 or 0xF0
+                    => $"{mnemonic} ${(ushort)(address + 2 + (sbyte)op1.Value):X4}",
+
+                // Zero Page,X
+                0x15 or 0x16 or 0x35 or 0x36 or 0x55 or 0x56 or 0x75 or 0x76
+                    or 0x94 or 0x95 or 0xB4 or 0xB5 or 0xD5 or 0xD6 or 0xF5 or 0xF6
+                    => $"{mnemonic} ${op1.Value:X2},X",
+
+                // Zero Page,Y
+                0x96 or 0xB6
+                    => $"{mnemonic} ${op1.Value:X2},Y",
+
+                // Indexed Indirect (X)
+                0x01 or 0x21 or 0x41 or 0x61 or 0x81 or 0xA1 or 0xC1 or 0xE1
+                    => $"{mnemonic} (${op1.Value:X2},X)",
+
+                // Indirect Indexed (Y)
+                0x11 or 0x31 or 0x51 or 0x71 or 0x91 or 0xB1 or 0xD1 or 0xF1
+                    => $"{mnemonic} (${op1.Value:X2}),Y",
+
+                // Default: Zero Page
+                _ => $"{mnemonic} ${op1.Value:X2}",
+            };
+        }
+
+        if (size == 3 && op1.HasValue && op2.HasValue)
+        {
+            ushort addr = (ushort)(op1.Value | (op2.Value << 8));
+
+            return opcode switch
+            {
+                // Indirect (JMP only)
+                0x6C => $"{mnemonic} (${addr:X4})",
+
+                // Absolute,X
+                0x1D or 0x1E or 0x3D or 0x3E or 0x5D or 0x5E or 0x7D or 0x7E
+                    or 0x9D or 0xBC or 0xBD or 0xDD or 0xDE or 0xFD or 0xFE
+                    => $"{mnemonic} ${addr:X4},X",
+
+                // Absolute,Y
+                0x19 or 0x39 or 0x59 or 0x79 or 0x99 or 0xB9 or 0xBE or 0xD9 or 0xF9
+                    => $"{mnemonic} ${addr:X4},Y",
+
+                // Default: Absolute
+                _ => $"{mnemonic} ${addr:X4}",
+            };
+        }
+
+        return mnemonic;
+    }
+
+    /// <summary>
+    /// Get the mnemonic name for a 6502 opcode byte.
+    /// </summary>
+    static string GetMnemonic(byte opcode) => opcode switch
+    {
+        0x00 => "BRK", 0x01 => "ORA", 0x05 => "ORA", 0x06 => "ASL", 0x08 => "PHP", 0x09 => "ORA", 0x0A => "ASL",
+        0x0D => "ORA", 0x0E => "ASL",
+        0x10 => "BPL", 0x11 => "ORA", 0x15 => "ORA", 0x16 => "ASL", 0x18 => "CLC", 0x19 => "ORA", 0x1D => "ORA",
+        0x1E => "ASL",
+        0x20 => "JSR", 0x21 => "AND", 0x24 => "BIT", 0x25 => "AND", 0x26 => "ROL", 0x28 => "PLP", 0x29 => "AND",
+        0x2A => "ROL", 0x2C => "BIT", 0x2D => "AND", 0x2E => "ROL",
+        0x30 => "BMI", 0x31 => "AND", 0x35 => "AND", 0x36 => "ROL", 0x38 => "SEC", 0x39 => "AND", 0x3D => "AND",
+        0x3E => "ROL",
+        0x40 => "RTI", 0x41 => "EOR", 0x45 => "EOR", 0x46 => "LSR", 0x48 => "PHA", 0x49 => "EOR", 0x4A => "LSR",
+        0x4C => "JMP", 0x4D => "EOR", 0x4E => "LSR",
+        0x50 => "BVC", 0x51 => "EOR", 0x55 => "EOR", 0x56 => "LSR", 0x58 => "CLI", 0x59 => "EOR", 0x5D => "EOR",
+        0x5E => "LSR",
+        0x60 => "RTS", 0x61 => "ADC", 0x65 => "ADC", 0x66 => "ROR", 0x68 => "PLA", 0x69 => "ADC", 0x6A => "ROR",
+        0x6C => "JMP", 0x6D => "ADC", 0x6E => "ROR",
+        0x70 => "BVS", 0x71 => "ADC", 0x75 => "ADC", 0x76 => "ROR", 0x78 => "SEI", 0x79 => "ADC", 0x7D => "ADC",
+        0x7E => "ROR",
+        0x81 => "STA", 0x84 => "STY", 0x85 => "STA", 0x86 => "STX", 0x88 => "DEY", 0x8A => "TXA", 0x8C => "STY",
+        0x8D => "STA", 0x8E => "STX",
+        0x90 => "BCC", 0x91 => "STA", 0x94 => "STY", 0x95 => "STA", 0x96 => "STX", 0x98 => "TYA", 0x99 => "STA",
+        0x9A => "TXS", 0x9D => "STA",
+        0xA0 => "LDY", 0xA1 => "LDA", 0xA2 => "LDX", 0xA4 => "LDY", 0xA5 => "LDA", 0xA6 => "LDX", 0xA8 => "TAY",
+        0xA9 => "LDA", 0xAA => "TAX", 0xAC => "LDY", 0xAD => "LDA", 0xAE => "LDX",
+        0xB0 => "BCS", 0xB1 => "LDA", 0xB4 => "LDY", 0xB5 => "LDA", 0xB6 => "LDX", 0xB8 => "CLV", 0xB9 => "LDA",
+        0xBA => "TSX", 0xBC => "LDY", 0xBD => "LDA", 0xBE => "LDX",
+        0xC0 => "CPY", 0xC1 => "CMP", 0xC4 => "CPY", 0xC5 => "CMP", 0xC6 => "DEC", 0xC8 => "INY", 0xC9 => "CMP",
+        0xCA => "DEX", 0xCC => "CPY", 0xCD => "CMP", 0xCE => "DEC",
+        0xD0 => "BNE", 0xD1 => "CMP", 0xD5 => "CMP", 0xD6 => "DEC", 0xD8 => "CLD", 0xD9 => "CMP", 0xDD => "CMP",
+        0xDE => "DEC",
+        0xE0 => "CPX", 0xE1 => "SBC", 0xE4 => "CPX", 0xE5 => "SBC", 0xE6 => "INC", 0xE8 => "INX", 0xE9 => "SBC",
+        0xEA => "NOP", 0xEC => "CPX", 0xED => "SBC", 0xEE => "INC",
+        0xF0 => "BEQ", 0xF1 => "SBC", 0xF5 => "SBC", 0xF6 => "INC", 0xF8 => "SED", 0xF9 => "SBC", 0xFD => "SBC",
+        0xFE => "INC",
+        _ => $"???({opcode:X2})",
+    };
 }
