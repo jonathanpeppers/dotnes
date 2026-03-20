@@ -103,12 +103,6 @@ partial class IL2NESWriter : NESWriter
     int? _lastLoadedLocalIndex;
 
     /// <summary>
-    /// Tracks the immediate value currently in the A register (for redundant LDA elimination).
-    /// Cleared when A is modified by JSR, LDA absolute, AND, etc.
-    /// </summary>
-    byte? _immediateInA;
-
-    /// <summary>
     /// Tracks the last value stored by poke() — used to skip redundant LDA across consecutive pokes.
     /// Separate from _immediateInA because poke's RemoveLastInstructions makes _immediateInA unreliable.
     /// </summary>
@@ -145,24 +139,134 @@ partial class IL2NESWriter : NESWriter
     /// </summary>
     string? _ldlocByteArrayLabel;
 
+    // ── Accumulator state ──────────────────────────────────────────────
+    // Replaces the former _runtimeValueInA (bool), _ushortInAX (bool),
+    // and _immediateInA (byte?) fields with a single enum that makes
+    // invalid combinations unrepresentable.
+
+    /// <summary>
+    /// Tracks what the A register (and optionally X) currently holds.
+    /// </summary>
+    enum AccumulatorState
+    {
+        /// <summary>No tracked value in A.</summary>
+        Empty,
+        /// <summary>A has a known compile-time constant (value in <see cref="_immediateValue"/>).</summary>
+        Immediate,
+        /// <summary>A has an 8-bit runtime-computed value.</summary>
+        Runtime,
+        /// <summary>A:X have a compile-time 16-bit value (A=lo, X=hi).</summary>
+        Ushort,
+        /// <summary>A:X have a runtime 16-bit value (A=lo, X=hi).</summary>
+        RuntimeUshort,
+    }
+
+    AccumulatorState _accState;
+    byte _immediateValue; // only valid when _accState == Immediate
+
+    // Backward-compatible properties — existing code reads/writes these.
+    // The properties enforce the invariant through the underlying enum.
+
     /// <summary>
     /// True when A holds a runtime-computed value (from Ldelem, function return, etc.)
     /// that cannot be known at compile time. Used by HandleAddSub to emit runtime CLC+ADC/SEC+SBC.
     /// </summary>
-    bool _runtimeValueInA;
+    bool _runtimeValueInA
+    {
+        get => _accState is AccumulatorState.Runtime or AccumulatorState.RuntimeUshort;
+        set
+        {
+            if (value)
+                _accState = _accState is AccumulatorState.Ushort or AccumulatorState.RuntimeUshort
+                    ? AccumulatorState.RuntimeUshort : AccumulatorState.Runtime;
+            else if (_accState == AccumulatorState.Runtime)
+                _accState = AccumulatorState.Empty;
+            else if (_accState == AccumulatorState.RuntimeUshort)
+                _accState = AccumulatorState.Ushort;
+        }
+    }
+
+    /// <summary>
+    /// True when A and X hold a 16-bit value (A=lo, X=hi) from a ushort load.
+    /// Used by WriteLdc to emit pushax instead of pusha.
+    /// </summary>
+    bool _ushortInAX
+    {
+        get => _accState is AccumulatorState.Ushort or AccumulatorState.RuntimeUshort;
+        set
+        {
+            if (value)
+                _accState = _accState is AccumulatorState.Runtime or AccumulatorState.RuntimeUshort
+                    ? AccumulatorState.RuntimeUshort : AccumulatorState.Ushort;
+            else if (_accState == AccumulatorState.RuntimeUshort)
+                _accState = AccumulatorState.Runtime;
+            else if (_accState == AccumulatorState.Ushort)
+                _accState = AccumulatorState.Empty;
+        }
+    }
+
+    /// <summary>
+    /// Tracks the immediate value currently in the A register (for redundant LDA elimination).
+    /// Cleared when A is modified by JSR, LDA absolute, AND, etc.
+    /// </summary>
+    byte? _immediateInA
+    {
+        get => _accState == AccumulatorState.Immediate ? _immediateValue : null;
+        set
+        {
+            if (value is byte v)
+            {
+                _accState = AccumulatorState.Immediate;
+                _immediateValue = v;
+            }
+            else if (_accState == AccumulatorState.Immediate)
+            {
+                _accState = AccumulatorState.Empty;
+            }
+        }
+    }
+
+    // ── Saved-value state ────────────────────────────────────────────
+    // Replaces the former _savedRuntimeToTemp (bool) and
+    // _savedConstantViaPusha (bool) fields. These track a previously
+    // saved value (orthogonal to the current accumulator state).
+
+    /// <summary>
+    /// Tracks where a previously active value was saved before the
+    /// accumulator was reused for a new load.
+    /// </summary>
+    enum SavedValueState
+    {
+        /// <summary>No saved value.</summary>
+        None,
+        /// <summary>Runtime value was saved to TEMP ($17).</summary>
+        ToTemp,
+        /// <summary>Compile-time constant was pushed via JSR pusha.</summary>
+        ViaPusha,
+    }
+
+    SavedValueState _savedState;
 
     /// <summary>
     /// True when a runtime value was saved to TEMP ($17) because a subsequent Ldloc needed to clobber A.
     /// Used by HandleAddSub to know the first operand is in TEMP and second in A.
     /// </summary>
-    bool _savedRuntimeToTemp;
+    bool _savedRuntimeToTemp
+    {
+        get => _savedState == SavedValueState.ToTemp;
+        set => _savedState = value ? SavedValueState.ToTemp : SavedValueState.None;
+    }
 
     /// <summary>
     /// True when a compile-time constant was saved to the cc65 stack via JSR pusha,
     /// because a subsequent Ldloc needed A for a runtime value. HandleAddSub must
     /// use JSR popa to retrieve it (and keep the cc65 stack balanced).
     /// </summary>
-    bool _savedConstantViaPusha;
+    bool _savedConstantViaPusha
+    {
+        get => _savedState == SavedValueState.ViaPusha;
+        set => _savedState = value ? SavedValueState.ViaPusha : SavedValueState.None;
+    }
 
     /// <summary>
     /// True when a runtime NTADR result (A=lo, X=hi) is available.
@@ -170,28 +274,56 @@ partial class IL2NESWriter : NESWriter
     /// </summary>
     bool _ntadrRuntimeResult;
 
+    // ── Dup cascade state ────────────────────────────────────────────
+    // Replaces the former _dupCascadeActive (bool) and _dupPendingSave
+    // (bool) fields. _dupPreservedUshortHi remains a separate bool
+    // because it is orthogonal (can be set when cascade is inactive).
+
     /// <summary>
-    /// True when A and X hold a 16-bit value (A=lo, X=hi) from a ushort load.
-    /// Used by WriteLdc to emit pushax instead of pusha.
+    /// Tracks the state of a dup cascade (cascading if-else using dup+ldc+bne/beq pattern).
     /// </summary>
-    bool _ushortInAX;
+    enum DupCascadeState
+    {
+        /// <summary>No dup cascade is active.</summary>
+        Inactive,
+        /// <summary>Cascade is active; branch handler already consumed the pending save.</summary>
+        Active,
+        /// <summary>Cascade is active; next branch instruction should save A to TEMP_HI.</summary>
+        ActivePendingSave,
+    }
+
+    DupCascadeState _dupState;
 
     /// <summary>
     /// True when inside a dup cascade (cascading if-else using dup+ldc+bne/beq pattern).
-    /// Set on the first dup when _runtimeValueInA is true. Causes subsequent dups to
-    /// emit LDA TEMP_HI (reload saved value) and branch handlers to emit STA TEMP_HI
-    /// (save A for the next check). This ensures A holds the correct comparison value
-    /// even after intermediate if-blocks modify A via JSR calls.
     /// </summary>
-    bool _dupCascadeActive;
+    bool _dupCascadeActive
+    {
+        get => _dupState is DupCascadeState.Active or DupCascadeState.ActivePendingSave;
+        set
+        {
+            if (value)
+                _dupState = DupCascadeState.Active;
+            else
+                _dupState = DupCascadeState.Inactive;
+        }
+    }
 
     /// <summary>
     /// Set by the dup handler when the next branch instruction should save A to TEMP_HI.
-    /// Consumed (cleared) by the bne/beq handler after emitting STA TEMP_HI. This ensures
-    /// only the branch immediately following a dup+ldc compare writes to TEMP_HI, not
-    /// unrelated branches inside the if-body.
+    /// Consumed (cleared) by the bne/beq handler after emitting STA TEMP_HI.
     /// </summary>
-    bool _dupPendingSave;
+    bool _dupPendingSave
+    {
+        get => _dupState == DupCascadeState.ActivePendingSave;
+        set
+        {
+            if (value)
+                _dupState = DupCascadeState.ActivePendingSave;
+            else if (_dupState == DupCascadeState.ActivePendingSave)
+                _dupState = DupCascadeState.Active;
+        }
+    }
 
     /// <summary>
     /// Set by dup when _ushortInAX was true, indicating X still holds the high byte
@@ -248,6 +380,12 @@ partial class IL2NESWriter : NESWriter
     /// </summary>
     public Dictionary<string, List<(string Name, int Size)>> StructLayouts { get => Variables.StructLayouts; init => Variables.StructLayouts = value; }
 
+    // ── Pending struct state ─────────────────────────────────────────
+    // _pendingStructLocal is set by ldloca.s for simple struct locals.
+    // _pendingStructElement consolidates the former _pendingStructElementType,
+    // _pendingStructElementBase, and _pendingStructArrayRuntimeIndex fields
+    // into a single nullable record so they are always set/cleared together.
+
     /// <summary>
     /// The local index targeted by the most recent ldloca.s instruction.
     /// Used by stfld/ldfld to know which struct local to access.
@@ -255,22 +393,22 @@ partial class IL2NESWriter : NESWriter
     int? _pendingStructLocal;
 
     /// <summary>
-    /// Computed base address for a struct array element after ldelema with constant index.
-    /// Used by stfld/ldfld to know which struct element to access.
+    /// Pending struct array element access state from ldelema.
+    /// Null when no ldelema is pending.
     /// </summary>
-    ushort? _pendingStructElementBase;
+    PendingStructElement? _pendingStructElement;
 
     /// <summary>
-    /// The struct type from the most recent ldelema instruction.
+    /// State for a pending struct array element access (from ldelema).
     /// </summary>
-    string? _pendingStructElementType;
-
-    /// <summary>
-    /// When true, X register holds the element byte-offset within the struct array
-    /// (index * structSize) after ldelema with a variable index.
-    /// stfld/ldfld should use AbsoluteX addressing.
-    /// </summary>
-    bool _pendingStructArrayRuntimeIndex;
+    readonly record struct PendingStructElement(
+        /// <summary>The struct type name.</summary>
+        string Type,
+        /// <summary>Base address for constant-index access; null for runtime-index access.</summary>
+        ushort? ConstantBase,
+        /// <summary>When true, X holds the runtime element offset; use AbsoluteX addressing.</summary>
+        bool RuntimeIndex
+    );
 
     /// <summary>
     /// Base address of the struct array for variable-index ldelema.
