@@ -822,6 +822,9 @@ class Decompiler
             return;
 
         int offset = dataPointer.Value - 0x8000;
+        // NROM-128 (16KB PRG): $C000-$FFFF mirrors $8000-$BFFF
+        if (_rom.PrgRom.Length == 0x4000)
+            offset %= 0x4000;
         if (offset >= 0 && offset + length <= _rom.PrgRom.Length)
         {
             var data = new byte[length];
