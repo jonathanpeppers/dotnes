@@ -151,7 +151,7 @@ partial class IL2NESWriter : NESWriter
     {
         /// <summary>No tracked value in A.</summary>
         Empty,
-        /// <summary>A has a known compile-time constant (value in <see cref="_immediateValue"/>).</summary>
+        /// <summary>A has a known compile-time constant (value stored in the _immediateValue field).</summary>
         Immediate,
         /// <summary>A has an 8-bit runtime-computed value.</summary>
         Runtime,
