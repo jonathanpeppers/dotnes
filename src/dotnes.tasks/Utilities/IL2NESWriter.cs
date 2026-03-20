@@ -307,6 +307,40 @@ partial class IL2NESWriter : NESWriter
     public HashSet<string> ExternMethodNames { get; init; } = new(StringComparer.Ordinal);
 
     /// <summary>
+    /// Closure field types: field name → size (-1 for byte[], positive for scalars).
+    /// When non-null, closure struct support is active.
+    /// </summary>
+    public Dictionary<string, int>? ClosureFieldTypes { get; init; }
+
+    /// <summary>
+    /// Closure byte[] field labels: field name → byte array label.
+    /// Shared between main and user method writers. Populated during main transpilation.
+    /// </summary>
+    public Dictionary<string, string> ClosureFieldLabels { get; init; } = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// Closure scalar field addresses: field name → zero-page address.
+    /// Pre-allocated and shared between all writers.
+    /// </summary>
+    public Dictionary<string, ushort> ClosureFieldAddresses { get; init; } = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// True when transpiling a closure-capturing user method (first param is the closure struct ref).
+    /// </summary>
+    public bool IsClosureMethod { get; init; }
+
+    /// <summary>
+    /// The local variable index in main that holds the closure struct instance (-1 if no closure).
+    /// </summary>
+    public int ClosureStructLocalIndex { get; init; } = -1;
+
+    /// <summary>
+    /// Set when ldarg.0 is encountered in a closure method, indicating the next ldfld/stfld
+    /// should access a closure field rather than a struct field.
+    /// </summary>
+    bool _pendingClosureAccess;
+
+    /// <summary>
     /// Generates a branch target label name scoped to the current method.
     /// For main(), returns "instruction_XX". For user methods, returns "methodName_instruction_XX".
     /// </summary>

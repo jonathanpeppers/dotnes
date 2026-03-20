@@ -125,6 +125,48 @@ partial class IL2NESWriter
     /// </summary>
     void HandleStfld(string fieldName)
     {
+        // Handle closure struct field store
+        if (_pendingStructLocal != null
+            && ClosureFieldTypes != null
+            && ClosureFieldTypes.ContainsKey(fieldName))
+        {
+            _pendingStructLocal = null;
+            int fieldSize = ClosureFieldTypes[fieldName];
+
+            if (fieldSize == -1) // byte[] field
+            {
+                // Associate the byte array label from the preceding ldtoken
+                if (_lastByteArrayLabel != null)
+                {
+                    ClosureFieldLabels[fieldName] = _lastByteArrayLabel;
+                    _lastByteArrayLabel = null;
+                }
+                if (Stack.Count > 0) Stack.Pop();
+                _runtimeValueInA = false;
+                _ushortInAX = false;
+                _immediateInA = null;
+                return;
+            }
+            else // scalar field
+            {
+                ushort addr = ClosureFieldAddresses[fieldName];
+                int value = Stack.Count > 0 ? Stack.Pop() : 0;
+                if (_runtimeValueInA)
+                {
+                    Emit(Opcode.STA, AddressMode.Absolute, addr);
+                    _runtimeValueInA = false;
+                }
+                else
+                {
+                    RemoveLastInstructions(1);
+                    Emit(Opcode.LDA, AddressMode.Immediate, (byte)(value & 0xFF));
+                    Emit(Opcode.STA, AddressMode.Absolute, addr);
+                }
+                _immediateInA = null;
+                return;
+            }
+        }
+
         // Check for struct array element access (from ldelema)
         if (_pendingStructElementType != null)
         {
@@ -212,6 +254,36 @@ partial class IL2NESWriter
     /// </summary>
     void HandleLdfld(string fieldName)
     {
+        // Handle closure struct field load (from ldarg.0 in closure methods
+        // or ldloca.s in main)
+        if ((_pendingClosureAccess || _pendingStructLocal != null)
+            && ClosureFieldTypes != null
+            && ClosureFieldTypes.ContainsKey(fieldName))
+        {
+            _pendingClosureAccess = false;
+            _pendingStructLocal = null;
+            int fieldSize = ClosureFieldTypes[fieldName];
+
+            if (fieldSize == -1) // byte[] field
+            {
+                if (ClosureFieldLabels.TryGetValue(fieldName, out var label))
+                {
+                    EmitWithLabel(Opcode.LDA, AddressMode.Immediate_LowByte, label);
+                    EmitWithLabel(Opcode.LDX, AddressMode.Immediate_HighByte, label);
+                    _ushortInAX = true;
+                }
+            }
+            else // scalar field
+            {
+                ushort addr = ClosureFieldAddresses[fieldName];
+                Emit(Opcode.LDA, AddressMode.Absolute, addr);
+            }
+            _runtimeValueInA = true;
+            _immediateInA = null;
+            Stack.Push(0);
+            return;
+        }
+
         // Check for struct array element access (from ldelema)
         if (_pendingStructElementType != null)
         {

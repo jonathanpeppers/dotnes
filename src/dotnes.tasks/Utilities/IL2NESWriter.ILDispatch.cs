@@ -257,6 +257,17 @@ partial class IL2NESWriter
             case ILOpCode.Ldarg_3:
                 {
                     int argIndex = instruction.OpCode - ILOpCode.Ldarg_0;
+                    if (IsClosureMethod)
+                    {
+                        if (argIndex == 0)
+                        {
+                            // In a closure method, arg 0 is the closure struct ref.
+                            // Set flag so the next ldfld/stfld accesses closure fields.
+                            _pendingClosureAccess = true;
+                            break;
+                        }
+                        argIndex--; // Shift real params down by 1
+                    }
                     WriteLdarg(argIndex);
                 }
                 break;
@@ -694,7 +705,19 @@ partial class IL2NESWriter
             case ILOpCode.Nop:
                 break;
             case ILOpCode.Ldarg_s:
-                WriteLdarg(operand);
+                {
+                    int argIndex = operand;
+                    if (IsClosureMethod)
+                    {
+                        if (argIndex == 0)
+                        {
+                            _pendingClosureAccess = true;
+                            break;
+                        }
+                        argIndex--;
+                    }
+                    WriteLdarg(argIndex);
+                }
                 break;
             case ILOpCode.Ldc_i4:
             case ILOpCode.Ldc_i4_s:
@@ -996,6 +1019,13 @@ partial class IL2NESWriter
                 break;
             case ILOpCode.Ldloca_s:
                 // Load address of local variable — used for struct field access
+                if (ClosureStructLocalIndex >= 0 && operand == ClosureStructLocalIndex
+                    && Instructions is not null && Index + 1 < Instructions.Length
+                    && Instructions[Index + 1].OpCode == ILOpCode.Call)
+                {
+                    // Closure struct ref before a call — skip (closure is implicit)
+                    break;
+                }
                 _pendingStructLocal = operand;
                 break;
             case ILOpCode.Ldelema:

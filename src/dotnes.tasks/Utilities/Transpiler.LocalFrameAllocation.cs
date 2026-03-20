@@ -51,7 +51,9 @@ partial class Transpiler
     static int EstimateMethodLocalBytes(
         ILInstruction[] instructions,
         HashSet<int> wordLocals,
-        Dictionary<string, List<(string Name, int Size)>>? structLayouts)
+        Dictionary<string, List<(string Name, int Size)>>? structLayouts,
+        int closureStructLocalIndex = -1,
+        Dictionary<string, int>? closureFieldTypes = null)
     {
         int totalBytes = 0;
 
@@ -122,11 +124,19 @@ partial class Transpiler
                     && !newarrStlocTargets.Contains(ldlocaIdx)
                     && !structLocalsCounted.Contains(ldlocaIdx))
                 {
+                    // Skip closure struct local — its fields are allocated separately
+                    if (ldlocaIdx == closureStructLocalIndex)
+                        continue;
+
                     for (int j = i + 1; j < instructions.Length && j <= i + 3; j++)
                     {
                         if (instructions[j].OpCode is ILOpCode.Stfld or ILOpCode.Ldfld
                             && instructions[j].String is string fieldName)
                         {
+                            // Skip closure fields — they are pre-allocated
+                            if (closureFieldTypes != null && closureFieldTypes.ContainsKey(fieldName))
+                                break;
+
                             int structSize = FindStructSizeByField(fieldName, structLayouts);
                             if (structSize > 0)
                             {
@@ -188,14 +198,17 @@ partial class Transpiler
         Dictionary<string, ILInstruction[]> userMethods,
         ReflectionCache? reflectionCache,
         int baseOffset,
-        Dictionary<string, List<(string Name, int Size)>>? structLayouts)
+        Dictionary<string, List<(string Name, int Size)>>? structLayouts,
+        int closureStructLocalIndex = -1,
+        Dictionary<string, int>? closureFieldTypes = null)
     {
         // Step 1: Estimate local byte counts for each method
         var localByteCounts = new Dictionary<string, int>(StringComparer.Ordinal);
         foreach (var kvp in userMethods)
         {
             var wordLocals = DetectWordLocals(kvp.Value, reflectionCache);
-            localByteCounts[kvp.Key] = EstimateMethodLocalBytes(kvp.Value, wordLocals, structLayouts);
+            localByteCounts[kvp.Key] = EstimateMethodLocalBytes(kvp.Value, wordLocals, structLayouts,
+                closureStructLocalIndex, closureFieldTypes);
         }
 
         // Step 2: Build call graph — which user methods does each method call?

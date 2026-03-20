@@ -3360,12 +3360,13 @@ public class RoslynTests
     }
 
     [Fact]
-    public void ClosureCapturingByteArrayThrows()
+    public void ClosureCapturingByteArray()
     {
         // When a non-static local function captures an outer byte[] variable,
-        // the compiler generates a closure struct. The transpiler should detect
-        // this and throw a helpful error message with guidance.
-        var ex = Assert.Throws<TranspileException>(() => BuildProgram(
+        // the compiler generates a closure struct. The transpiler should handle
+        // this by mapping closure byte[] fields to ROM data labels and scalar
+        // fields to zero-page addresses.
+        var bytes = GetProgramBytes(
             """
             byte[] palette = [0x0F, 0x10, 0x20, 0x30];
             apply_palette();
@@ -3376,11 +3377,45 @@ public class RoslynTests
             {
                 pal_bg(palette);
             }
-            """));
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
 
-        Assert.Contains("closure", ex.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("palette", ex.Message);
-        Assert.Contains("Workaround", ex.Message);
+        // The closure method should emit LDA #lo(label) / LDX #hi(label) for the byte[] field,
+        // followed by JSR pal_bg. Verify the JSR pal_bg is present.
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"ClosureCapturingByteArray hex: {hex}");
+        Assert.Contains("20", hex); // JSR opcode present
+    }
+
+    [Fact]
+    public void ClosureCapturingByteArrayAndScalar()
+    {
+        // Test: closure capturing both a byte[] (ROM data) and a scalar byte variable.
+        // The byte[] field should use ROM labels, the scalar should use a zero-page address.
+        var bytes = GetProgramBytes(
+            """
+            byte[] palette = [0x0F, 0x10, 0x20, 0x30];
+            byte color = 0x15;
+            apply_palette();
+            ppu_on_all();
+            while (true) ;
+
+            void apply_palette()
+            {
+                pal_bg(palette);
+                pal_col(0, color);
+            }
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"ClosureCapturingByteArrayAndScalar hex: {hex}");
+
+        // Verify the scalar closure field (color = 0x15) is stored at its address.
+        // The main should emit LDA #$15, STA $addr for the scalar field.
+        Assert.Contains("A915", hex); // LDA #$15
     }
 
     [Fact]

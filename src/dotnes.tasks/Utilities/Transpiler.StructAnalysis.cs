@@ -47,14 +47,16 @@ partial class Transpiler
             // Detect compiler-generated closure structs (display classes)
             if (typeName.Contains("DisplayClass"))
             {
-                var capturedFields = string.Join(", ",
-                    type.GetFields().Select(f => _reader.GetString(_reader.GetFieldDefinition(f).Name)));
-                throw new TranspileException(
-                    $"Closures are not supported. The compiler generated a closure struct '{typeName}' " +
-                    $"capturing variable(s): {capturedFields}. " +
-                    "This happens when local functions reference outer variables (like byte[] arrays). " +
-                    "Workaround: pass captured variables as parameters to the function instead, " +
-                    "or inline the local function code into the main body.");
+                // Catalog closure fields instead of throwing — closure support is handled
+                // by rewriting the IL patterns in BuildProgram6502.
+                foreach (var f in type.GetFields())
+                {
+                    var field = _reader.GetFieldDefinition(f);
+                    var fieldName = _reader.GetString(field.Name);
+                    int fieldSize = DecodeFieldSize(field);
+                    _closureFieldTypes[fieldName] = fieldSize;
+                }
+                continue;
             }
             // Skip other compiler-generated types
             if (typeName.StartsWith("<") || typeName.Contains("__"))
@@ -327,5 +329,95 @@ partial class Transpiler
             }
         }
         return (addresses, wordFields, offset, arrayFields);
+    }
+
+    /// <summary>
+    /// Scans main IL to find the local variable index that holds the closure struct instance.
+    /// Looks for the pattern: ldloca.s N ... stfld closureFieldName
+    /// </summary>
+    int DetectClosureStructLocal(ILInstruction[] instructions)
+    {
+        for (int i = 0; i < instructions.Length; i++)
+        {
+            if (instructions[i].OpCode is not (ILOpCode.Ldloca_s or ILOpCode.Ldloca))
+                continue;
+            int localIdx = instructions[i].Integer ?? 0;
+            // Look ahead for stfld/ldfld referencing a closure field
+            for (int j = i + 1; j < Math.Min(i + 12, instructions.Length); j++)
+            {
+                if (instructions[j].OpCode is ILOpCode.Stfld or ILOpCode.Ldfld
+                    && instructions[j].String is string fieldName
+                    && _closureFieldTypes.ContainsKey(fieldName))
+                {
+                    return localIdx;
+                }
+                // Another ldloca.s means the first one was consumed
+                if (instructions[j].OpCode is ILOpCode.Ldloca_s or ILOpCode.Ldloca)
+                    break;
+            }
+        }
+        return -1;
+    }
+
+    /// <summary>
+    /// Detects user methods that are closure-capturing functions by scanning their IL
+    /// for ldarg.0 + ldfld patterns that reference closure fields. Adjusts their metadata
+    /// to remove the implicit closure struct parameter.
+    /// </summary>
+    void DetectClosureMethods(ReflectionCache reflectionCache)
+    {
+        foreach (var kvp in UserMethods)
+        {
+            var methodName = kvp.Key;
+            var il = kvp.Value;
+
+            // Check if method accesses closure fields via ldarg.0 + ldfld
+            bool isClosure = false;
+            for (int i = 0; i < il.Length - 1; i++)
+            {
+                if (il[i].OpCode == ILOpCode.Ldarg_0
+                    && il[i + 1].OpCode == ILOpCode.Ldfld
+                    && il[i + 1].String is string fieldName
+                    && _closureFieldTypes.ContainsKey(fieldName))
+                {
+                    isClosure = true;
+                    break;
+                }
+            }
+
+            if (!isClosure)
+                continue;
+
+            _closureMethodNames.Add(methodName);
+
+            // Adjust metadata: remove the closure struct parameter (always first)
+            if (UserMethodMetadata.TryGetValue(methodName, out var meta))
+            {
+                int newParamCount = meta.argCount - 1;
+                bool[] newIsArrayParam = newParamCount > 0 && meta.isArrayParam.Length > 1
+                    ? meta.isArrayParam.Skip(1).ToArray()
+                    : Array.Empty<bool>();
+                UserMethodMetadata[methodName] = (newParamCount, meta.hasReturnValue, newIsArrayParam);
+                // Re-register with corrected param count
+                reflectionCache.RegisterUserMethod(methodName, newParamCount, meta.hasReturnValue);
+                _logger.WriteLine($"Closure method '{methodName}': adjusted params {meta.argCount} → {newParamCount}");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Pre-allocates zero-page addresses for scalar closure fields.
+    /// Byte[] fields don't need addresses (they use ROM data labels).
+    /// </summary>
+    void PreAllocateClosureFields(ref int staticFieldBytes)
+    {
+        foreach (var kvp in _closureFieldTypes.OrderBy(x => x.Key, StringComparer.Ordinal))
+        {
+            if (kvp.Value == -1) continue; // byte[] fields use ROM labels, not RAM
+            int size = Math.Min(kvp.Value, 2); // Cap at 2 bytes for NES
+            _closureFieldAddresses[kvp.Key] = (ushort)(NESConstants.LocalStackBase + staticFieldBytes);
+            staticFieldBytes += size;
+            _logger.WriteLine($"Closure field '{kvp.Key}' allocated at ${_closureFieldAddresses[kvp.Key]:X4} ({size} byte{(size > 1 ? "s" : "")})");
+        }
     }
 }

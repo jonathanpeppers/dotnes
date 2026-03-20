@@ -45,6 +45,34 @@ partial class Transpiler : IDisposable
     /// </summary>
     public Dictionary<string, (int argCount, bool hasReturnValue)> ExternMethods { get; } = new(StringComparer.Ordinal);
 
+    /// <summary>
+    /// Closure field types: field name → size (-1 for byte[], positive for scalars).
+    /// Populated by DetectStructLayouts() when compiler-generated DisplayClass types are found.
+    /// </summary>
+    readonly Dictionary<string, int> _closureFieldTypes = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// Closure field labels: field name → byte array label (for byte[] fields only).
+    /// Shared between main and user method writers. Populated during main transpilation.
+    /// </summary>
+    readonly Dictionary<string, string> _closureFieldLabels = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// Closure field addresses: field name → zero-page address (for scalar fields only).
+    /// Pre-allocated before transpilation and shared between all writers.
+    /// </summary>
+    readonly Dictionary<string, ushort> _closureFieldAddresses = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// Names of user methods that are closure-capturing (have a DisplayClass first parameter).
+    /// </summary>
+    readonly HashSet<string> _closureMethodNames = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// The local variable index in main that holds the closure struct instance (-1 if no closure).
+    /// </summary>
+    int _closureStructLocalIndex = -1;
+
     public Transpiler(Stream stream, IList<AssemblyReader> assemblyFiles, ILogger? logger = null, string mirroring = "Horizontal", int mapper = 0, int prgBanks = 2, int chrBanks = 1, bool battery = false)
     {
         _pe = new PEReader(stream);
@@ -216,6 +244,14 @@ partial class Transpiler : IDisposable
         // Pre-allocate user-defined static fields so all methods share the same addresses
         var (staticFields, wordStaticFields, staticFieldBytes, staticArrayFields) = PreAllocateStaticFields(instructions);
 
+        // Detect and set up closure struct support
+        if (_closureFieldTypes.Count > 0)
+        {
+            _closureStructLocalIndex = DetectClosureStructLocal(instructions);
+            DetectClosureMethods(reflectionCache);
+            PreAllocateClosureFields(ref staticFieldBytes);
+        }
+
         using var writer = new IL2NESWriter(new MemoryStream(), logger: _logger, reflectionCache: reflectionCache)
         {
             Instructions = instructions,
@@ -228,6 +264,10 @@ partial class Transpiler : IDisposable
             WordStaticFields = wordStaticFields,
             LocalCount = staticFieldBytes,
             StaticArrayFields = staticArrayFields,
+            ClosureFieldTypes = _closureFieldTypes.Count > 0 ? _closureFieldTypes : null,
+            ClosureFieldLabels = _closureFieldLabels,
+            ClosureFieldAddresses = _closureFieldAddresses,
+            ClosureStructLocalIndex = _closureStructLocalIndex,
         };
 
         writer.StartBlockBuffering();
@@ -287,7 +327,8 @@ partial class Transpiler : IDisposable
         // Transpile user-defined methods into separate blocks
         // Each method's locals must use unique addresses to prevent collisions in nested calls
         int mainLocalCount = writer.LocalCount;
-        var methodFrameOffsets = ComputeMethodFrameOffsets(UserMethods, reflectionCache, mainLocalCount, structLayouts);
+        var methodFrameOffsets = ComputeMethodFrameOffsets(UserMethods, reflectionCache, mainLocalCount, structLayouts,
+            _closureStructLocalIndex, _closureFieldTypes.Count > 0 ? _closureFieldTypes : null);
         int userMethodsTotalSize = 0;
         foreach (var kvp in UserMethods.OrderBy(x => x.Key, StringComparer.Ordinal))
         {
@@ -310,6 +351,10 @@ partial class Transpiler : IDisposable
                 LocalCount = methodFrameOffsets[methodName],
                 StaticFieldAddresses = staticFields,
                 WordStaticFields = wordStaticFields,
+                ClosureFieldTypes = _closureFieldTypes.Count > 0 ? _closureFieldTypes : null,
+                ClosureFieldLabels = _closureFieldLabels,
+                ClosureFieldAddresses = _closureFieldAddresses,
+                IsClosureMethod = _closureMethodNames.Contains(methodName),
             };
             methodWriter.StartBlockBuffering();
 
