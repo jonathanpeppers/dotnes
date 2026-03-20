@@ -3366,7 +3366,7 @@ public class RoslynTests
         // the compiler generates a closure struct. The transpiler should handle
         // this by mapping closure byte[] fields to ROM data labels and scalar
         // fields to zero-page addresses.
-        var bytes = GetProgramBytes(
+        var (program, transpiler) = BuildProgram(
             """
             byte[] palette = [0x0F, 0x10, 0x20, 0x30];
             apply_palette();
@@ -3378,14 +3378,20 @@ public class RoslynTests
                 pal_bg(palette);
             }
             """);
-        Assert.NotNull(bytes);
-        Assert.NotEmpty(bytes);
 
-        // The closure method should emit LDA #lo(label) / LDX #hi(label) for the byte[] field,
-        // followed by JSR pal_bg. Verify the JSR pal_bg is present.
-        var hex = Convert.ToHexString(bytes);
-        _logger.WriteLine($"ClosureCapturingByteArray hex: {hex}");
-        Assert.Contains("20", hex); // JSR opcode present
+        // The program should compile without errors
+        var mainBlock = program.GetMainBlock();
+        Assert.NotNull(mainBlock);
+        Assert.NotEmpty(mainBlock);
+
+        // Verify the closure method was detected
+        Assert.Contains("apply_palette", transpiler.UserMethods.Keys);
+
+        // The full ROM should contain the byte array data (0x0F, 0x10, 0x20, 0x30)
+        var fullBytes = program.ToBytes();
+        var fullHex = Convert.ToHexString(fullBytes);
+        _logger.WriteLine($"ClosureCapturingByteArray fullHex: {fullHex}");
+        Assert.Contains("0F102030", fullHex); // byte array ROM data
     }
 
     [Fact]
@@ -3414,8 +3420,11 @@ public class RoslynTests
         _logger.WriteLine($"ClosureCapturingByteArrayAndScalar hex: {hex}");
 
         // Verify the scalar closure field (color = 0x15) is stored at its address.
-        // The main should emit LDA #$15, STA $addr for the scalar field.
-        Assert.Contains("A915", hex); // LDA #$15
+        // The main should emit LDA #$15 (A915) followed by STA $addr (8D xx xx).
+        int ldaIdx = hex.IndexOf("A915");
+        Assert.True(ldaIdx >= 0, $"LDA #$15 not found. Hex: {hex}");
+        // Verify STA follows the LDA (8D = STA absolute)
+        Assert.Equal("8D", hex.Substring(ldaIdx + 4, 2));
     }
 
     [Fact]

@@ -414,7 +414,7 @@ partial class Transpiler
         foreach (var kvp in _closureFieldTypes.OrderBy(x => x.Key, StringComparer.Ordinal))
         {
             if (kvp.Value == -1) continue; // byte[] fields use ROM labels, not RAM
-            int size = Math.Min(kvp.Value, 2); // Cap at 2 bytes for NES
+            int size = Math.Min(kvp.Value, 2); // NES is 8-bit; 16-bit is max for address math
             _closureFieldAddresses[kvp.Key] = (ushort)(NESConstants.LocalStackBase + staticFieldBytes);
             staticFieldBytes += size;
             _logger.WriteLine($"Closure field '{kvp.Key}' allocated at ${_closureFieldAddresses[kvp.Key]:X4} ({size} byte{(size > 1 ? "s" : "")})");
