@@ -31,7 +31,7 @@ class Decompiler
         byte Limit,              // upper bound (N in i < N)
         int InitIndex,           // index of LDA #imm (first init instruction)
         int BodyStartIndex,      // index of first body instruction
-        int FooterStartIndex,    // index of LDA $local (footer start)
+        int FooterStartIndex,    // index of first footer instruction
         int AfterLoopIndex       // index of first instruction after BCC
     );
 
@@ -895,8 +895,15 @@ class Decompiler
                     ushort staInitAddr = (ushort)(staInit.Op1!.Value | (staInit.Op2!.Value << 8));
                     if (staInitAddr == localAddr)
                     {
-                        initIndex = bodyStartIndex - 2;
-                        initValue = ldaInit.Op1!.Value;
+                        byte candidateInit = ldaInit.Op1!.Value;
+                        // For fall-through init, only treat this as a for-loop initializer when
+                        // the initial value is strictly less than the loop limit, so that the
+                        // decompiled `for (...; var < limit; ...)` preserves semantics.
+                        if (candidateInit < limit)
+                        {
+                            initIndex = bodyStartIndex - 2;
+                            initValue = candidateInit;
+                        }
                     }
                 }
             }

@@ -532,13 +532,13 @@ public class DecompilerTests
 
         // Verify specific for-loop limits matching shoot2's constants:
         // MAX_BULLETS=4, MAX_ENEMIES=6, MAX_STARS=8, MAX_EXPLOSIONS=3
-        Assert.Contains("< 4;", code);  // MAX_BULLETS
-        Assert.Contains("< 6;", code);  // MAX_ENEMIES
-        Assert.Contains("< 8;", code);  // MAX_STARS
-        Assert.Contains("< 3;", code);  // MAX_EXPLOSIONS
+        Assert.Matches(@"for \(byte\s+var_\w+\s*=\s*0;\s*var_\w+\s*<\s*4;\s*var_\w+\+\+\)", code);  // MAX_BULLETS
+        Assert.Matches(@"for \(byte\s+var_\w+\s*=\s*0;\s*var_\w+\s*<\s*6;\s*var_\w+\+\+\)", code);  // MAX_ENEMIES
+        Assert.Matches(@"for \(byte\s+var_\w+\s*=\s*0;\s*var_\w+\s*<\s*8;\s*var_\w+\+\+\)", code);  // MAX_STARS
+        Assert.Matches(@"for \(byte\s+var_\w+\s*=\s*0;\s*var_\w+\s*<\s*3;\s*var_\w+\+\+\)", code);  // MAX_EXPLOSIONS
 
-        // Should have indented body inside for loops
-        Assert.Contains("    ", code);
+        // Should have indented body inside for loops: for header, then '{', then a line starting with 4 spaces
+        Assert.Matches(@"for\s*\([^)]*\)\s*\{\s*\r?\n {4}\S", code);
     }
 
     [Fact]
@@ -554,7 +554,7 @@ public class DecompilerTests
 
         // The for loops should declare their own counter variables
         // Verify that at least one for loop with proper structure exists
-        Assert.Matches(@"for \(byte var_\w+ = 0; var_\w+ < \d+; var_\w+\+\+\)", code);
+        Assert.Matches(@"for \(byte (var_\w+) = 0; \1 < \d+; \1\+\+\)", code);
     }
 
     [Fact]
