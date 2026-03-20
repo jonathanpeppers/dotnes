@@ -4212,10 +4212,12 @@ public class RoslynTests
     public void OamSpr_ConstantOnlyCompoundArg()
     {
         // Regression: oam_spr with constant-only compound expressions like
-        // (byte)(0x40 | 0x80) in the attr arg caused KeyNotFoundException or
+        // (byte)(0x41 | 0x43) in the attr arg caused KeyNotFoundException or
         // "Unsupported constant-only compound" because the backward scan
         // produced a compound arg with no source variable. The transpiler
         // should evaluate the expression at compile time.
+        // Uses overlapping bits: 0x41 | 0x43 = 0x43 (but 0x41 + 0x43 = 0x84),
+        // so the test distinguishes OR from accidental addition.
         var bytes = GetProgramBytes(
             """
             byte[] PALETTE = [
@@ -4231,8 +4233,8 @@ public class RoslynTests
             ];
 
             pal_all(PALETTE);
-            // attr arg is a constant-only compound: (0x40 | 0x80) = 0xC0
-            oam_spr(40, 50, 0x10, (byte)(0x40 | 0x80), 0);
+            // attr arg is a constant-only compound: (0x41 | 0x43) = 0x43
+            oam_spr(40, 50, 0x10, (byte)(0x41 | 0x43), 0);
             ppu_on_all();
             while (true) ;
             """);
@@ -4240,9 +4242,11 @@ public class RoslynTests
         Assert.NotNull(bytes);
         var hex = Convert.ToHexString(bytes);
 
-        // The attr byte should be 0xC0 (0x40 | 0x80 evaluated at compile time)
-        // In the decsp4 sequence: LDA #C0 / DEY / STA ($22),Y
-        Assert.Contains("A9C0", hex);
+        // The attr byte should be 0x43 (0x41 | 0x43 evaluated at compile time)
+        // NOT 0x84 which would result from incorrect addition
+        // In the decsp4 sequence: LDA #43 / DEY / STA ($22),Y
+        Assert.Contains("A943", hex);
+        Assert.DoesNotContain("A984", hex);
     }
 
     [Fact]
