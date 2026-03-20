@@ -294,8 +294,18 @@ class Decompiler
             if (_rom.PrgRom[offset] == 0x20) // JSR
             {
                 ushort target = (ushort)(_rom.PrgRom[offset + 1] | (_rom.PrgRom[offset + 2] << 8));
-                if (!_symbolTable.ContainsKey(target) && target >= _mainEnd)
-                    candidates.Add(target);
+                if (target < 0x8000)
+                {
+                    // Skip JSR into RAM — not a PRG ROM subroutine
+                }
+                else if (!_symbolTable.ContainsKey(target) && target >= _mainEnd)
+                {
+                    int targetOffset = target - 0x8000;
+                    if (_rom.PrgRom.Length == 0x4000)
+                        targetOffset %= 0x4000;
+                    if (targetOffset >= 0 && targetOffset < _rom.PrgRom.Length)
+                        candidates.Add(target);
+                }
             }
             int size = GetInstructionSize(_rom.PrgRom[offset]);
             offset += size;
@@ -340,6 +350,9 @@ class Decompiler
         // Collect instructions from start to RTS
         var instructions = new List<(ushort Address, byte Opcode, byte? Op1, byte? Op2)>();
         int offset = startAddress - 0x8000;
+        // NROM-128 (16KB PRG): $C000-$FFFF mirrors $8000-$BFFF
+        if (_rom.PrgRom.Length == 0x4000)
+            offset %= 0x4000;
         ushort addr = startAddress;
 
         while (offset < _rom.PrgRom.Length)
@@ -1199,14 +1212,12 @@ class Decompiler
         $"peek({FormatAddress(addr)});";
 
     /// <summary>
-    /// Format a call to a user-defined function with detected arguments.
+    /// Format a call to a user-defined function.
+    /// Parameter inference is not yet implemented, so all calls are emitted
+    /// as zero-argument to match the generated function declarations.
     /// </summary>
     static string FormatUserFunctionCall(string name, byte? aValue, byte? pushedArg)
     {
-        if (pushedArg.HasValue && aValue.HasValue)
-            return $"{name}({pushedArg.Value}, {aValue.Value});";
-        if (aValue.HasValue)
-            return $"{name}({aValue.Value});";
         return $"{name}();";
     }
     /// <summary>
