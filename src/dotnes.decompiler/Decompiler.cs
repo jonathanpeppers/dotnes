@@ -15,10 +15,13 @@ class Decompiler
     readonly Dictionary<ushort, string> _symbolTable = new();
     readonly List<(ushort Address, int Size)> _arrayDeclarations = new();
     readonly Dictionary<ushort, string> _localVariables = new();
+    readonly List<(ushort PpuAddress, byte[] Data)> _chrRamTileData = new();
 
     ushort _mainAddress;
     ushort _mainEnd;
     int _dataCounter;
+    ushort? _lastVramAdrTarget;
+    byte? _ppuAddrHigh; // Tracks first byte written to PPU_ADDR ($2006) for CHR RAM detection
 
     public Decompiler(NESRomReader rom, ILogger? logger = null)
     {
@@ -496,6 +499,7 @@ class Decompiler
                     if (!_symbolTable.ContainsKey(addr))
                     {
                         FlushUnknownInstructions(unknownInstructions, statements);
+                        TrackPpuAddrWrite(addr, op1.Value);
                         statements.Add(FormatPoke(addr, op1.Value));
                         lastImmediateA = op1.Value;
                         i++; // skip the STA
@@ -511,6 +515,7 @@ class Decompiler
                 if (!_symbolTable.ContainsKey(addr))
                 {
                     FlushUnknownInstructions(unknownInstructions, statements);
+                    TrackPpuAddrWrite(addr, lastImmediateA.Value);
                     statements.Add(FormatPoke(addr, lastImmediateA.Value));
                     continue;
                 }
@@ -688,8 +693,15 @@ class Decompiler
     /// Decompile a call where A contains a value (the last argument),
     /// and optionally a pushed value was the first argument.
     /// </summary>
-    static string? DecompileCall(string name, byte? aValue, byte? pushedArg = null)
+    string? DecompileCall(string name, byte? aValue, byte? pushedArg = null)
     {
+        // Track single-byte vram_adr calls (transpiler omits LDX #$00 for zero addresses)
+        if (name == "vram_adr" && aValue.HasValue)
+        {
+            _lastVramAdrTarget = aValue.Value;
+            return $"vram_adr(0x{aValue.Value:X4});";
+        }
+
         return name switch
         {
             "pal_col" => $"pal_col({pushedArg?.ToString() ?? "0"}, 0x{aValue ?? 0:X2});",
@@ -733,6 +745,12 @@ class Decompiler
     List<string> DecompileCallXA(string name, byte xValue, byte aValue, ushort? pushedPtr, byte? pushedByte = null)
     {
         ushort value16 = (ushort)((xValue << 8) | aValue);
+
+        // Track vram_adr targets for CHR RAM tile extraction
+        if (name == "vram_adr")
+            _lastVramAdrTarget = value16;
+        else if (name == "vram_write")
+            TrackChrRamUpload(value16, pushedPtr);
 
         return name switch
         {
@@ -807,6 +825,64 @@ class Decompiler
             return $"vram_adr(NTADR_A({x}, {y}));";
         }
         return $"vram_adr(0x{addr:X4});";
+    }
+
+    /// <summary>
+    /// Track vram_write calls that upload tile data to CHR RAM pattern tables ($0000-$1FFF).
+    /// Called before FormatVramWrite to record data for .s file extraction.
+    /// </summary>
+    void TrackChrRamUpload(ushort length, ushort? dataPointer)
+    {
+        if (_rom.ChrBanks > 0 || !_lastVramAdrTarget.HasValue || !dataPointer.HasValue || length == 0)
+            return;
+
+        ushort ppuAddr = _lastVramAdrTarget.Value;
+        _lastVramAdrTarget = null;
+
+        // Only track writes to CHR pattern tables ($0000-$1FFF)
+        if (ppuAddr >= 0x2000)
+            return;
+
+        int offset = dataPointer.Value - 0x8000;
+        // NROM-128 (16KB PRG): $C000-$FFFF mirrors $8000-$BFFF
+        if (_rom.PrgRom.Length == 0x4000)
+            offset %= 0x4000;
+        if (offset >= 0 && offset + length <= _rom.PrgRom.Length)
+        {
+            var data = new byte[length];
+            Array.Copy(_rom.PrgRom, offset, data, 0, length);
+            _chrRamTileData.Add((ppuAddr, data));
+            _logger.WriteLine($"CHR RAM upload: {length} bytes to PPU ${ppuAddr:X4} from PRG ${dataPointer.Value:X4}");
+        }
+    }
+
+    /// <summary>
+    /// Returns tile data extracted from vram_write calls to CHR RAM pattern tables.
+    /// Each entry contains the PPU target address and the raw tile data.
+    /// </summary>
+    public IReadOnlyList<(ushort PpuAddress, byte[] Data)> GetChrRamTileData() => _chrRamTileData;
+
+    /// <summary>
+    /// Track poke() writes to PPU_ADDR ($2006) for CHR RAM detection.
+    /// Two consecutive writes set the full 16-bit PPU address (high byte first).
+    /// </summary>
+    void TrackPpuAddrWrite(ushort addr, byte value)
+    {
+        if (addr != NESLib.PPU_ADDR)
+        {
+            _ppuAddrHigh = null;
+            return;
+        }
+
+        if (!_ppuAddrHigh.HasValue)
+        {
+            _ppuAddrHigh = value; // First write = high byte
+        }
+        else
+        {
+            _lastVramAdrTarget = (ushort)((_ppuAddrHigh.Value << 8) | value);
+            _ppuAddrHigh = null;
+        }
     }
 
     /// <summary>
