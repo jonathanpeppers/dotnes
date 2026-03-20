@@ -321,10 +321,20 @@ class Decompiler
         var pushedBytes = new Stack<byte>();   // Track values pushed via pusha (8-bit)
         var pushedWords = new Stack<ushort>(); // Track values pushed via pushax (16-bit)
         byte? lastImmediateA = null;           // Track last LDA #imm value for consecutive poke detection
+        string? lastLoadedVarName = null;      // Track name of last local variable loaded into A
+        byte? lastCmpValue = null;             // Track value from last CMP #imm instruction
+        var pendingCloseBraces = new Stack<ushort>(); // Target addresses where if-blocks end
 
         for (int i = 0; i < instructions.Count; i++)
         {
             var (instrAddr, opcode, op1, op2) = instructions[i];
+
+            // Emit closing braces for any if-blocks that end at this address
+            while (pendingCloseBraces.Count > 0 && pendingCloseBraces.Peek() == instrAddr)
+            {
+                pendingCloseBraces.Pop();
+                statements.Add("}");
+            }
 
             // Pattern: JMP to self = while (true) ;
             if (opcode == 0x4C && op1.HasValue && op2.HasValue)
@@ -351,6 +361,8 @@ class Decompiler
                 {
                     pushedBytes.Push(op1.Value);
                     lastImmediateA = null; // JSR modifies A
+                    lastLoadedVarName = null;
+                    lastCmpValue = null;
                     i++; // skip the JSR pusha
                     continue;
                 }
@@ -373,6 +385,8 @@ class Decompiler
                             ushort value16 = (ushort)(op1.Value | (nextLdx.Op1.Value << 8));
                             pushedWords.Push(value16);
                             lastImmediateA = null; // JSR modifies A
+                            lastLoadedVarName = null;
+                            lastCmpValue = null;
                             i += 2; // skip LDX and JSR pushax
                             continue;
                         }
@@ -385,6 +399,8 @@ class Decompiler
                             var stmts = DecompileCallXA(targetName, xVal, aVal, null, null);
                             statements.AddRange(stmts);
                             lastImmediateA = null; // JSR modifies A
+                            lastLoadedVarName = null;
+                            lastCmpValue = null;
                             i += 2;
                             continue;
                         }
@@ -410,6 +426,8 @@ class Decompiler
                         var stmts = DecompileCallXA(name, xVal, aVal, pw, pb);
                         statements.AddRange(stmts);
                         lastImmediateA = null; // JSR modifies A
+                        lastLoadedVarName = null;
+                        lastCmpValue = null;
                         i += 2; // skip LDA and JSR
                         continue;
                     }
@@ -429,6 +447,8 @@ class Decompiler
                         var stmt = DecompileCall(name, op1.Value, pushedArg);
                         if (stmt != null) statements.Add(stmt);
                         lastImmediateA = null; // JSR modifies A
+                        lastLoadedVarName = null;
+                        lastCmpValue = null;
                         i++; // skip the JSR
                         continue;
                     }
@@ -446,6 +466,8 @@ class Decompiler
                     {
                         statements.Add($"{varName} = 0x{op1.Value:X2};");
                         lastImmediateA = op1.Value;
+                        lastLoadedVarName = null;
+                        lastCmpValue = null;
                         i++; // skip the STA
                         continue;
                     }
@@ -463,14 +485,16 @@ class Decompiler
                 }
             }
 
-            // Pattern: LDA $local → load local variable into A (track for use in subsequent calls)
+            // Pattern: LDA $local → load local variable into A (track for use in subsequent calls/branches)
             if (opcode == 0xAD && op1.HasValue && op2.HasValue)
             {
                 ushort addr = (ushort)(op1.Value | (op2.Value << 8));
-                if (_localVariables.ContainsKey(addr))
+                if (_localVariables.TryGetValue(addr, out var loadedName))
                 {
-                    // Don't emit a statement — the value in A will be consumed by the next JSR or STA
+                    // Don't emit a statement — the value in A will be consumed by the next JSR, STA, or branch
+                    lastLoadedVarName = loadedName;
                     lastImmediateA = null;
+                    lastCmpValue = null;
                     continue;
                 }
             }
@@ -511,6 +535,58 @@ class Decompiler
                 {
                     statements.Add(FormatPeek(addr));
                     lastImmediateA = null; // A now holds peek result, not an immediate
+                    lastLoadedVarName = null;
+                    lastCmpValue = null;
+                    continue;
+                }
+            }
+
+            // Pattern: CMP #imm → track comparison value for subsequent branch
+            if (opcode == 0xC9 && op1.HasValue)
+            {
+                lastCmpValue = op1.Value;
+                continue;
+            }
+
+            // Pattern: forward BEQ/BNE/BCS/BCC → if block
+            if (opcode is 0xF0 or 0xD0 or 0xB0 or 0x90 && op1.HasValue && lastLoadedVarName != null)
+            {
+                sbyte branchOffset = (sbyte)op1.Value;
+                ushort target = (ushort)(instrAddr + 2 + branchOffset);
+
+                if (branchOffset > 0) // Forward branch = skip body when condition is met
+                {
+                    string condition;
+                    if (lastCmpValue.HasValue)
+                    {
+                        // After CMP #N: flags reflect A - N
+                        condition = opcode switch
+                        {
+                            0xF0 => $"{lastLoadedVarName} != {lastCmpValue.Value}",  // BEQ skip → body runs when not equal
+                            0xD0 => $"{lastLoadedVarName} == {lastCmpValue.Value}",  // BNE skip → body runs when equal
+                            0xB0 => $"{lastLoadedVarName} < {lastCmpValue.Value}",   // BCS skip → body runs when < N
+                            0x90 => $"{lastLoadedVarName} >= {lastCmpValue.Value}",  // BCC skip → body runs when >= N
+                            _ => "/* unknown */"
+                        };
+                    }
+                    else
+                    {
+                        // After LDA: flags reflect loaded value
+                        condition = opcode switch
+                        {
+                            0xF0 => $"{lastLoadedVarName} != 0",  // BEQ skip → body runs when not zero
+                            0xD0 => $"{lastLoadedVarName} == 0",  // BNE skip → body runs when zero
+                            _ => "/* unknown */"
+                        };
+                    }
+
+                    statements.Add($"if ({condition})");
+                    statements.Add("{");
+                    pendingCloseBraces.Push(target);
+
+                    lastLoadedVarName = null;
+                    lastCmpValue = null;
+                    lastImmediateA = null;
                     continue;
                 }
             }
@@ -525,11 +601,22 @@ class Decompiler
                     if (stmt != null) statements.Add(stmt);
                 }
                 lastImmediateA = null; // JSR may modify A
+                lastLoadedVarName = null;
+                lastCmpValue = null;
                 continue;
             }
 
             // Unrecognized instruction — clear A tracking for safety
             lastImmediateA = null;
+            lastLoadedVarName = null;
+            lastCmpValue = null;
+        }
+
+        // Close any remaining open if-blocks
+        while (pendingCloseBraces.Count > 0)
+        {
+            pendingCloseBraces.Pop();
+            statements.Add("}");
         }
 
         // NES programs must end with an infinite loop; ensure one is present
@@ -929,9 +1016,17 @@ class Decompiler
             sb.AppendLine();
         }
 
+        int indent = 0;
         foreach (var statement in statements)
         {
-            sb.AppendLine(statement);
+            if (statement == "}")
+                indent = Math.Max(0, indent - 1);
+
+            string prefix = indent > 0 ? new string(' ', indent * 4) : "";
+            sb.AppendLine(prefix + statement);
+
+            if (statement == "{")
+                indent++;
         }
 
         return sb.ToString();
