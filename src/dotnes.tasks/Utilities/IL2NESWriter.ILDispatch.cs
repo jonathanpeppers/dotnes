@@ -257,6 +257,17 @@ partial class IL2NESWriter
             case ILOpCode.Ldarg_3:
                 {
                     int argIndex = instruction.OpCode - ILOpCode.Ldarg_0;
+                    if (IsClosureMethod)
+                    {
+                        if (argIndex == ClosureArgIndex)
+                        {
+                            // This arg is the closure struct ref (always last param).
+                            // Set flag so the next ldfld/stfld accesses closure fields.
+                            _pendingClosureAccess = true;
+                            break;
+                        }
+                        // Real params keep their original indices — no shifting needed
+                    }
                     WriteLdarg(argIndex);
                 }
                 break;
@@ -694,7 +705,19 @@ partial class IL2NESWriter
             case ILOpCode.Nop:
                 break;
             case ILOpCode.Ldarg_s:
-                WriteLdarg(operand);
+                {
+                    int argIndex = operand;
+                    if (IsClosureMethod)
+                    {
+                        if (argIndex == ClosureArgIndex)
+                        {
+                            _pendingClosureAccess = true;
+                            break;
+                        }
+                        // Real params keep their original indices — no shifting needed
+                    }
+                    WriteLdarg(argIndex);
+                }
                 break;
             case ILOpCode.Ldc_i4:
             case ILOpCode.Ldc_i4_s:
@@ -996,6 +1019,29 @@ partial class IL2NESWriter
                 break;
             case ILOpCode.Ldloca_s:
                 // Load address of local variable — used for struct field access
+                if (ClosureStructLocalIndex >= 0 && operand == ClosureStructLocalIndex
+                    && Instructions is not null && ClosureFieldTypes != null)
+                {
+                    // Determine if this ldloca.s is for closure field init (stfld) or
+                    // a method call. Scan forward: if we hit stfld/ldfld for a closure
+                    // field first, it's initialization. If we hit call first, it's a
+                    // method invocation — skip (closure ref is implicit).
+                    bool isInit = false;
+                    for (int k = Index + 1; k < Math.Min(Index + 12, Instructions.Length); k++)
+                    {
+                        if (Instructions[k].OpCode is ILOpCode.Stfld or ILOpCode.Ldfld
+                            && Instructions[k].String is string fn
+                            && ClosureFieldTypes.ContainsKey(fn))
+                        {
+                            isInit = true;
+                            break;
+                        }
+                        if (Instructions[k].OpCode == ILOpCode.Call)
+                            break;
+                    }
+                    if (!isInit)
+                        break; // Skip — closure ref before a call
+                }
                 _pendingStructLocal = operand;
                 break;
             case ILOpCode.Ldelema:
@@ -2050,6 +2096,27 @@ partial class IL2NESWriter
                         Emit(Opcode.LDA, AddressMode.Immediate, (byte)_immediateInA);
                         Emit(Opcode.STA, AddressMode.ZeroPage, (byte)NESConstants.OAM_OFF);
                     }
+                    _runtimeValueInA = false;
+                    _immediateInA = null;
+                }
+                else if (previous == ILOpCode.Newarr)
+                {
+                    // newarr → stsfld in Main(): allocate RAM array at static field address
+                    int arraySize = Stack.Count > 0 ? Stack.Pop() : 0;
+                    ushort arrayAddr = (ushort)(local + LocalCount);
+                    LocalCount += arraySize;
+                    _staticFieldArrayLocals[operand] = new Local(arraySize, arrayAddr, ArraySize: arraySize);
+                    GetOrAllocateStaticField(operand);
+                    _runtimeValueInA = false;
+                    _immediateInA = null;
+                }
+                else if (previous == ILOpCode.Ldtoken && _lastByteArrayLabel != null)
+                {
+                    // ldtoken → stsfld: ROM byte array stored to static field
+                    _staticFieldArrayLocals[operand] = new Local(_lastByteArraySize, LabelName: _lastByteArrayLabel);
+                    _lastByteArrayLabel = null;
+                    if (Stack.Count > 0) Stack.Pop();
+                    GetOrAllocateStaticField(operand);
                     _runtimeValueInA = false;
                     _immediateInA = null;
                 }

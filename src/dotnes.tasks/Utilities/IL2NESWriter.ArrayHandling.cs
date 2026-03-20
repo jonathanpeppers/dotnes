@@ -291,10 +291,8 @@ partial class IL2NESWriter
                 EmitMultiplyA(structSize);
                 Emit(Opcode.TAX, AddressMode.Implied);
 
-                _pendingStructArrayRuntimeIndex = true;
+                _pendingStructElement = new PendingStructElement(structType, ConstantBase: null, RuntimeIndex: true);
                 _structArrayBaseForRuntimeIndex = arrayBase;
-                _pendingStructElementType = structType;
-                _pendingStructElementBase = null;
             }
             else
             {
@@ -305,9 +303,7 @@ partial class IL2NESWriter
         {
             // Constant index: compute element base at compile time
             ushort elementBase = (ushort)(arrayBase + index * structSize);
-            _pendingStructElementBase = elementBase;
-            _pendingStructElementType = structType;
-            _pendingStructArrayRuntimeIndex = false;
+            _pendingStructElement = new PendingStructElement(structType, elementBase, RuntimeIndex: false);
         }
 
         _runtimeValueInA = false;
@@ -353,6 +349,10 @@ partial class IL2NESWriter
 
         int? indexLocalIdx = GetLdlocIndex(indexInstr);
         int? arrayLocalIdx = GetLdlocIndex(arrayInstr);
+        // Also try static field arrays (ldsfld pattern)
+        Local? arrayLocalFromField = null;
+        if (arrayLocalIdx == null)
+            arrayLocalFromField = TryResolveArrayLocal(arrayInstr);
 
         // Handle constant index (Ldc_i4_* or Ldc_i4_s)
         int? constantIndex = null;
@@ -361,18 +361,27 @@ partial class IL2NESWriter
             constantIndex = GetLdcValue(indexInstr);
         }
 
+        // Also try static field for index
+        int? indexLocalFromField = null;
+        if (indexLocalIdx == null && constantIndex == null && indexInstr.OpCode == ILOpCode.Ldsfld && indexInstr.String != null)
+        {
+            var sfLocal = TryResolveArrayLocal(indexInstr);
+            if (sfLocal?.Address != null)
+                indexLocalFromField = sfLocal.Address;
+        }
+
         // Complex index expression: the index was computed by preceding arithmetic
         // operations (shr, shl, add, sub, and, or, etc.). The result is already in A.
-        if (indexLocalIdx == null && constantIndex == null)
+        if (indexLocalIdx == null && constantIndex == null && indexLocalFromField == null)
         {
             HandleLdelemU1ComplexIndex();
             return;
         }
-        if (arrayLocalIdx == null)
+        if (arrayLocalIdx == null && arrayLocalFromField == null)
             throw new TranspileException("Array element access requires the array to be stored in a local variable.", MethodName);
 
         Local? indexLocal = indexLocalIdx != null ? Locals[indexLocalIdx.Value] : null;
-        var arrayLocal = Locals[arrayLocalIdx.Value];
+        var arrayLocal = arrayLocalIdx != null ? Locals[arrayLocalIdx.Value] : arrayLocalFromField!;
 
         // Remove the previously emitted instructions from WriteLdloc/WriteLdc calls
         int arrayILOffset = arrayInstr.Offset;
@@ -453,6 +462,10 @@ partial class IL2NESWriter
         {
             Emit(Opcode.LDX, AddressMode.Absolute, (ushort)indexLocal.Address);
         }
+        else if (indexLocalFromField != null)
+        {
+            Emit(Opcode.LDX, AddressMode.Absolute, (ushort)indexLocalFromField);
+        }
 
         if (arrayLocal.ArraySize > 0 && arrayLocal.Address is not null)
         {
@@ -526,10 +539,18 @@ partial class IL2NESWriter
 
         var arrayInstr = Instructions![arrayILIndex.Value];
         int? arrayLocalIdx = GetLdlocIndex(arrayInstr);
-        if (arrayLocalIdx == null)
-            throw new TranspileException("Array element access requires the array to be stored in a local variable.", MethodName);
-
-        var arrayLocal = Locals[arrayLocalIdx.Value];
+        Local? arrayLocal;
+        if (arrayLocalIdx != null)
+        {
+            arrayLocal = Locals[arrayLocalIdx.Value];
+        }
+        else
+        {
+            // Try static field array (ldsfld pattern)
+            arrayLocal = TryResolveArrayLocal(arrayInstr);
+            if (arrayLocal == null)
+                throw new TranspileException("Array element access requires the array to be stored in a local variable or static field.", MethodName);
+        }
 
         // Remove the array-load instructions from the block buffer.
         // The block count at the array IL offset tells us where the array-load instructions
@@ -638,11 +659,20 @@ partial class IL2NESWriter
         // - The target array and index (from the first two ldlocs in the stelem sequence)
         // - The value expression type
         int targetArrayLocalIdx = -1;
+        Local? targetArrayFromField = null; // For ldsfld array sources
         int targetIndexLocalIdx = -1;
+        ushort? targetIndexFromField = null; // For ldsfld index sources
         int constantIndex = -1; // For constant-index stores like actor_dx[0] = 254
         int indexAddend = 0;    // For index arithmetic like buf[col + 1]
         int indexLocalAddend = -1; // For index arithmetic like buf[offset + j]
         int targetArrayILOffset = -1;
+
+        // Array-element index: buf[arr2[j] * N + M] = value
+        int indexArrayLocalIdx = -1;  // The array used in the index expression (arr2)
+        int indexSubLocalIdx = -1;    // The sub-index into that array (j) — local variable
+        int indexSubConstant = -1;    // The sub-index as a constant (when compiler folds j)
+        int indexArrayMul = 0;        // Multiplier (N)
+        int indexArrayAdd = 0;        // Addend (M)
 
         // Collect the value expression info
 
@@ -668,6 +698,7 @@ partial class IL2NESWriter
             {
                 case ILOpCode.Ldloc_0: case ILOpCode.Ldloc_1: case ILOpCode.Ldloc_2: case ILOpCode.Ldloc_3:
                 case ILOpCode.Ldloc_s:
+                case ILOpCode.Ldsfld:
                 case ILOpCode.Ldc_i4_m1:
                 case ILOpCode.Ldc_i4_0: case ILOpCode.Ldc_i4_1: case ILOpCode.Ldc_i4_2: case ILOpCode.Ldc_i4_3:
                 case ILOpCode.Ldc_i4_4: case ILOpCode.Ldc_i4_5: case ILOpCode.Ldc_i4_6: case ILOpCode.Ldc_i4_7:
@@ -698,14 +729,24 @@ partial class IL2NESWriter
             // (arr push=1, idx push=1, value push=1, = 3 total pushes for stelem's 3 pops)
             if (depth >= 3)
             {
-                // This instruction is the array ldloc (first push)
+                // This instruction is the array ldloc or ldsfld (first push)
                 var locIdx = GetLdlocIndex(il);
                 if (locIdx != null)
                 {
                     targetArrayLocalIdx = locIdx.Value;
+                }
+                else
+                {
+                    targetArrayFromField = TryResolveArrayLocal(il);
+                }
+
+                if (locIdx != null || targetArrayFromField != null)
+                {
+                    if (locIdx != null)
+                        targetArrayLocalIdx = locIdx.Value;
                     targetArrayILOffset = il.Offset;
                     
-                    // The next instruction should be the index (ldloc or constant)
+                    // The next instruction should be the index (ldloc, ldsfld, or constant)
                     if (i + 1 < Index)
                     {
                         var nextIl = Instructions[i + 1];
@@ -714,9 +755,68 @@ partial class IL2NESWriter
                         {
                             targetIndexLocalIdx = nextLocIdx.Value;
                             valueStart = i + 2;
+
+                            // Check if the "index" local is actually an array.
+                            // Pattern: buf[arr2[j] * N + M] = value
+                            // IL: ldloc arr2, ldloc j, ldelem.u1, [ldc N, mul], [ldc M, add], [conv]
+                            if (Locals.TryGetValue(targetIndexLocalIdx, out var indexAsArray) && indexAsArray.ArraySize > 0)
+                            {
+                                indexArrayLocalIdx = targetIndexLocalIdx;
+                                targetIndexLocalIdx = -1; // not a simple scalar index
+
+                                int scan = valueStart;
+                                // ldloc j (the sub-index) — or ldc N if compiler constant-folded
+                                if (scan < Index)
+                                {
+                                    var subIdx = GetLdlocIndex(Instructions[scan]);
+                                    if (subIdx != null)
+                                    {
+                                        indexSubLocalIdx = subIdx.Value;
+                                        scan++;
+                                    }
+                                    else
+                                    {
+                                        int? subConst = GetLdcValue(Instructions[scan]);
+                                        if (subConst != null)
+                                        {
+                                            indexSubConstant = subConst.Value;
+                                            scan++;
+                                        }
+                                    }
+                                }
+                                // ldelem.u1
+                                if (scan < Index && Instructions[scan].OpCode == ILOpCode.Ldelem_u1)
+                                    scan++;
+                                // [ldc N, mul]
+                                if (scan + 1 < Index)
+                                {
+                                    int? mulConst = GetLdcValue(Instructions[scan]);
+                                    if (mulConst != null && Instructions[scan + 1].OpCode == ILOpCode.Mul)
+                                    {
+                                        indexArrayMul = mulConst.Value;
+                                        scan += 2;
+                                    }
+                                }
+                                // [ldc M, add]
+                                if (scan + 1 < Index)
+                                {
+                                    int? addConst = GetLdcValue(Instructions[scan]);
+                                    if (addConst != null && Instructions[scan + 1].OpCode == ILOpCode.Add)
+                                    {
+                                        indexArrayAdd = addConst.Value;
+                                        scan += 2;
+                                    }
+                                }
+                                // [conv.u1/conv.u2/conv.i1]
+                                if (scan < Index && Instructions[scan].OpCode
+                                    is ILOpCode.Conv_u1 or ILOpCode.Conv_u2 or ILOpCode.Conv_i1)
+                                    scan++;
+
+                                valueStart = scan;
+                            }
                             // Check for index arithmetic: ldloc idx, ldc N, add, [conv]
                             // Pattern: buf[(byte)(col + 1)] → ldloc col, ldc 1, add, conv.u1
-                            if (valueStart + 1 < Index)
+                            else if (valueStart + 1 < Index)
                             {
                                 int? addend = GetLdcValue(Instructions[valueStart]);
                                 if (addend != null && Instructions[valueStart + 1].OpCode == ILOpCode.Add)
@@ -748,7 +848,16 @@ partial class IL2NESWriter
                             // Check for constant index (ldc_i4_0, ldc_i4_1, etc.)
                             int? constIdx = GetLdcValue(nextIl);
                             if (constIdx != null)
+                            {
                                 constantIndex = constIdx.Value;
+                            }
+                            else if (nextIl.OpCode == ILOpCode.Ldsfld && nextIl.String != null)
+                            {
+                                // Static field index (e.g., G.i)
+                                var sfLoc = TryResolveArrayLocal(nextIl);
+                                if (sfLoc?.Address != null)
+                                    targetIndexFromField = (ushort)sfLoc.Address;
+                            }
                             valueStart = i + 2;
                         }
                     }
@@ -761,7 +870,7 @@ partial class IL2NESWriter
             }
         }
 
-        if (targetArrayLocalIdx < 0)
+        if (targetArrayLocalIdx < 0 && targetArrayFromField == null)
         {
             // Can't identify target array at all
             _runtimeValueInA = false;
@@ -770,11 +879,117 @@ partial class IL2NESWriter
             return;
         }
 
+        // Resolve the target array Local from either local variable or static field
+        Local resolvedTargetArray = targetArrayLocalIdx >= 0 ? Locals[targetArrayLocalIdx] : targetArrayFromField!;
+
+        // Handle array-element index: buf[arr2[j] * N + M] = value
+        // Pattern: floor_objpos[f] * 2, floor_objpos[f] * 2 + 1, etc.
+        if (indexArrayLocalIdx >= 0 && resolvedTargetArray.Address is not null)
+        {
+            var indexArray = Locals[indexArrayLocalIdx];
+            if (indexArray.Address is null || (indexSubLocalIdx < 0 && indexSubConstant < 0))
+            {
+                _runtimeValueInA = false;
+                _savedRuntimeToTemp = false;
+                _lastLoadedLocalIndex = null;
+                return;
+            }
+
+            // Remove previously emitted instructions
+            if (_blockCountAtILOffset.TryGetValue(targetArrayILOffset, out int blockCountArr))
+            {
+                int instrToRemove = GetBufferedBlockCount() - blockCountArr;
+                if (instrToRemove > 0)
+                    RemoveLastInstructions(instrToRemove);
+            }
+
+            // Analyze the value expression to determine what to store
+            int? valueConst = null;
+            int valueLocIdx = -1;
+            bool valHasAdd = false;
+            int valAddValue = 0;
+            for (int i = valueStart; i < Index; i++)
+            {
+                var il = Instructions[i];
+                int? val = GetLdcValue(il);
+                if (val != null)
+                {
+                    if (i + 1 < Index && Instructions[i + 1].OpCode == ILOpCode.Add)
+                        valAddValue = val.Value;
+                    else
+                        valueConst = val;
+                }
+                if (il.OpCode == ILOpCode.Add)
+                    valHasAdd = true;
+                var locIdx = GetLdlocIndex(il);
+                if (locIdx != null)
+                {
+                    // Check it's not part of an array ldelem pattern
+                    bool isLdelemPart = i + 1 < Index && Instructions[i + 1].OpCode == ILOpCode.Ldelem_u1;
+                    if (!isLdelemPart)
+                        valueLocIdx = locIdx.Value;
+                }
+            }
+
+            // Compute the index: arr2[j] * N + M
+            if (indexSubLocalIdx >= 0)
+            {
+                var subLocal = Locals[indexSubLocalIdx];
+                Emit(Opcode.LDX, AddressMode.Absolute, (ushort)subLocal.Address!);
+                Emit(Opcode.LDA, AddressMode.AbsoluteX, (ushort)indexArray.Address!);
+            }
+            else
+            {
+                // Constant sub-index: load directly from arr2[constant]
+                Emit(Opcode.LDA, AddressMode.Absolute, (ushort)(indexArray.Address! + indexSubConstant));
+            }
+            Emit(Opcode.LDA, AddressMode.AbsoluteX, (ushort)indexArray.Address!);
+            if (indexArrayMul > 0)
+            {
+                int shifts = 0;
+                for (int v = indexArrayMul; v > 1; v >>= 1) shifts++;
+                for (int s = 0; s < shifts; s++)
+                    Emit(Opcode.ASL, AddressMode.Accumulator);
+            }
+            if (indexArrayAdd != 0)
+            {
+                Emit(Opcode.CLC, AddressMode.Implied);
+                Emit(Opcode.ADC, AddressMode.Immediate, checked((byte)indexArrayAdd));
+            }
+            Emit(Opcode.STA, AddressMode.ZeroPage, TEMP);
+
+            // Load the value to store
+            if (valueLocIdx >= 0)
+            {
+                var valueLoc = Locals[valueLocIdx];
+                Emit(Opcode.LDA, AddressMode.Absolute, (ushort)valueLoc.Address!);
+                if (valHasAdd && valAddValue != 0)
+                {
+                    Emit(Opcode.CLC, AddressMode.Implied);
+                    Emit(Opcode.ADC, AddressMode.Immediate, checked((byte)valAddValue));
+                }
+            }
+            else if (valueConst != null)
+            {
+                Emit(Opcode.LDA, AddressMode.Immediate, checked((byte)valueConst.Value));
+            }
+
+            // Store: LDX TEMP; STA buf,X
+            Emit(Opcode.LDX, AddressMode.ZeroPage, TEMP);
+            Emit(Opcode.STA, AddressMode.AbsoluteX, (ushort)resolvedTargetArray.Address);
+
+            _immediateInA = null;
+            _lastLoadedLocalIndex = null;
+            _runtimeValueInA = false;
+            _savedRuntimeToTemp = false;
+            return;
+        }
+
         // Handle expression-based index: buf[expr] = constValue
         // Pattern: call+and, call, etc. as index expression
-        if (targetIndexLocalIdx < 0 && constantIndex < 0)
+        if (targetIndexLocalIdx < 0 && constantIndex < 0 && targetIndexFromField == null)
         {
-            var targetArray2 = Locals[targetArrayLocalIdx];
+            var targetArray2 = resolvedTargetArray;
             if (targetArray2.Address is null)
             {
                 _runtimeValueInA = false;
@@ -852,7 +1067,7 @@ partial class IL2NESWriter
             return;
         }
 
-        var targetArray = Locals[targetArrayLocalIdx];
+        var targetArray = resolvedTargetArray;
 
         // Handle constant-index stores (e.g., actor_dx[0] = 254)
         if (constantIndex >= 0)
@@ -958,10 +1173,22 @@ partial class IL2NESWriter
             return;
         }
 
-        var targetIndex = Locals[targetIndexLocalIdx];
-
-        if (targetIndex.Address is null)
-            throw new InvalidOperationException("Stelem_i1: index local has no address");
+        ushort targetIndexAddr;
+        if (targetIndexLocalIdx >= 0)
+        {
+            var targetIndex = Locals[targetIndexLocalIdx];
+            if (targetIndex.Address is null)
+                throw new InvalidOperationException("Stelem_i1: index local has no address");
+            targetIndexAddr = (ushort)targetIndex.Address;
+        }
+        else if (targetIndexFromField != null)
+        {
+            targetIndexAddr = targetIndexFromField.Value;
+        }
+        else
+        {
+            throw new InvalidOperationException("Stelem_i1: no index local or static field address");
+        }
 
         // Remove ALL previously emitted instructions for this stelem sequence
         if (_blockCountAtILOffset.TryGetValue(targetArrayILOffset, out int blockCountAtTarget))
@@ -991,6 +1218,7 @@ partial class IL2NESWriter
         int sourceIndex1Idx = -1;
         int sourceArray2Idx = -1;
         int valueLocalIdx = -1;
+        int valueLocalIdx2 = -1; // second local for ldloc+ldloc+add pattern
 
         for (int i = valueStart; i < Index; i++)
         {
@@ -1068,7 +1296,12 @@ partial class IL2NESWriter
                         {
                             var locIdx = GetLdlocIndex(il);
                             if (locIdx != null)
-                                valueLocalIdx = locIdx.Value;
+                            {
+                                if (valueLocalIdx < 0)
+                                    valueLocalIdx = locIdx.Value;
+                                else if (valueLocalIdx2 < 0)
+                                    valueLocalIdx2 = locIdx.Value; // track second local
+                            }
                         }
                     }
                     break;
@@ -1136,11 +1369,11 @@ partial class IL2NESWriter
             var src1 = Locals[sourceArray1Idx];
             var src2 = Locals[sourceArray2Idx >= 0 ? sourceArray2Idx : sourceArray1Idx];
             
-            Emit(Opcode.LDX, AddressMode.Absolute, (ushort)targetIndex.Address!);
+            Emit(Opcode.LDX, AddressMode.Absolute, targetIndexAddr);
             if (indexAddend != 0 || indexLocalAddend >= 0)
             {
                 RemoveLastInstructions(1); // remove the LDX
-                Emit(Opcode.LDA, AddressMode.Absolute, (ushort)targetIndex.Address!);
+                Emit(Opcode.LDA, AddressMode.Absolute, targetIndexAddr);
                 Emit(Opcode.CLC, AddressMode.Implied);
                 if (indexAddend != 0)
                     Emit(Opcode.ADC, AddressMode.Immediate, checked((byte)indexAddend));
@@ -1220,7 +1453,7 @@ partial class IL2NESWriter
         {
             // Pattern: arr[i] = arr[i] ± N or arr[i] = arr[i] & N (self-referencing update)
             // ldloc arr, ldloc idx, ldloc arr, ldloc idx, ldelem_u1, ldc N, sub/add/and, conv_u1, stelem_i1
-            Emit(Opcode.LDX, AddressMode.Absolute, (ushort)targetIndex.Address!);
+            Emit(Opcode.LDX, AddressMode.Absolute, targetIndexAddr);
             Emit(Opcode.LDA, AddressMode.AbsoluteX, (ushort)targetArray.Address!);
             if (hasAnd)
                 Emit(Opcode.AND, AddressMode.Immediate, checked((byte)andMask));
@@ -1264,6 +1497,23 @@ partial class IL2NESWriter
             {
                 Emit(Opcode.SEC, AddressMode.Implied);
                 Emit(Opcode.SBC, AddressMode.Immediate, checked((byte)subValue));
+            }
+        }
+        else if (valueLocalIdx >= 0 && valueLocalIdx2 >= 0 && (hasAdd != hasSub))
+        {
+            // Pattern: arr[i] = (byte)(local1 + local2) or arr[i] = (byte)(local1 - local2)
+            var loc1 = Locals[valueLocalIdx];
+            var loc2 = Locals[valueLocalIdx2];
+            Emit(Opcode.LDA, AddressMode.Absolute, (ushort)loc1.Address!);
+            if (hasAdd)
+            {
+                Emit(Opcode.CLC, AddressMode.Implied);
+                Emit(Opcode.ADC, AddressMode.Absolute, (ushort)loc2.Address!);
+            }
+            else
+            {
+                Emit(Opcode.SEC, AddressMode.Implied);
+                Emit(Opcode.SBC, AddressMode.Absolute, (ushort)loc2.Address!);
             }
         }
         else if (valueLocalIdx >= 0)
@@ -1321,7 +1571,7 @@ partial class IL2NESWriter
             if (indexAddend != 0 || indexLocalAddend >= 0)
             {
                 Emit(Opcode.STA, AddressMode.ZeroPage, TEMP); // save value
-                Emit(Opcode.LDA, AddressMode.Absolute, (ushort)targetIndex.Address!);
+                Emit(Opcode.LDA, AddressMode.Absolute, targetIndexAddr);
                 Emit(Opcode.CLC, AddressMode.Implied);
                 if (indexAddend != 0)
                     Emit(Opcode.ADC, AddressMode.Immediate, checked((byte)indexAddend));
@@ -1332,7 +1582,7 @@ partial class IL2NESWriter
             }
             else
             {
-                Emit(Opcode.LDX, AddressMode.Absolute, (ushort)targetIndex.Address!);
+                Emit(Opcode.LDX, AddressMode.Absolute, targetIndexAddr);
             }
         }
         

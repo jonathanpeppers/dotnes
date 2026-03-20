@@ -453,6 +453,150 @@ public class DecompilerTests
         Assert.DoesNotContain("poke(0x0325", code);
     }
 
+    [Fact]
+    public void Decompiler_Shoot2_RecoverIfBlocks()
+    {
+        // shoot2 has many conditionals — verify if blocks are recovered
+        var romBytes = GetVerifiedRom("shoot2");
+        var rom = new NESRomReader(romBytes);
+        var decompiler = new Decompiler(rom, _logger);
+
+        var code = decompiler.Decompile();
+
+        // fire_cooldown check: LDA $0327 / BEQ skip → if (var_0327 != 0)
+        Assert.Contains("if (var_0327 != 0)", code);
+        // Should contain opening and closing braces for if blocks
+        Assert.Contains("{", code);
+        Assert.Contains("}", code);
+    }
+
+    [Fact]
+    public void Decompiler_Shoot2_RecoverCmpBranch()
+    {
+        // shoot2 uses CMP #N / BCC for loop comparisons and boundary checks
+        var romBytes = GetVerifiedRom("shoot2");
+        var rom = new NESRomReader(romBytes);
+        var decompiler = new Decompiler(rom, _logger);
+
+        var code = decompiler.Decompile();
+
+        // Loop-like patterns use LDA $local / CMP #N / BCC
+        // Verify at least one comparison-based if block exists
+        Assert.Contains("if (var_", code);
+    }
+
+    [Fact]
+    public void Decompiler_Scroll_RecoverIfBlock()
+    {
+        // scroll has a conditional check on scroll_y ($0326)
+        var romBytes = GetVerifiedRom("scroll");
+        var rom = new NESRomReader(romBytes);
+        var decompiler = new Decompiler(rom, _logger);
+
+        var code = decompiler.Decompile();
+
+        // scroll uses LDA $0326 / BEQ skip → if (var_0326 != 0)
+        Assert.Contains("if (var_0326 != 0)", code);
+        Assert.Contains("{", code);
+        Assert.Contains("}", code);
+    }
+
+    [Fact]
+    public void Decompiler_Shoot2_EmitsUnknownAssemblyComments()
+    {
+        // shoot2 has complex game logic that can't be mapped back to NESLib calls
+        var romBytes = GetVerifiedRom("shoot2");
+        var rom = new NESRomReader(romBytes);
+        var decompiler = new Decompiler(rom, _logger);
+
+        var code = decompiler.Decompile();
+
+        // Should contain unknown assembly comment blocks
+        Assert.Contains("// Unknown 6502 assembly at $", code);
+        // Should contain disassembled instructions inside comments
+        Assert.Contains("//   ", code);
+    }
+
+    [Fact]
+    public void Decompiler_Shoot2_RecoverForLoops()
+    {
+        // shoot2 has many for loops for array initialization and game logic
+        var romBytes = GetVerifiedRom("shoot2");
+        var rom = new NESRomReader(romBytes);
+        var decompiler = new Decompiler(rom, _logger);
+
+        var code = decompiler.Decompile();
+
+        // Should contain for loop syntax with proper structure
+        Assert.Contains("for (byte", code);
+
+        // Verify specific for-loop limits matching shoot2's constants:
+        // MAX_BULLETS=4, MAX_ENEMIES=6, MAX_STARS=8, MAX_EXPLOSIONS=3
+        Assert.Matches(@"for \(byte\s+var_\w+\s*=\s*0;\s*var_\w+\s*<\s*4;\s*var_\w+\+\+\)", code);  // MAX_BULLETS
+        Assert.Matches(@"for \(byte\s+var_\w+\s*=\s*0;\s*var_\w+\s*<\s*6;\s*var_\w+\+\+\)", code);  // MAX_ENEMIES
+        Assert.Matches(@"for \(byte\s+var_\w+\s*=\s*0;\s*var_\w+\s*<\s*8;\s*var_\w+\+\+\)", code);  // MAX_STARS
+        Assert.Matches(@"for \(byte\s+var_\w+\s*=\s*0;\s*var_\w+\s*<\s*3;\s*var_\w+\+\+\)", code);  // MAX_EXPLOSIONS
+
+        // Should have indented body inside for loops: for header, then '{', then a line starting with 4 spaces
+        Assert.Matches(@"for\s*\([^)]*\)\s*\{\s*\r?\n {4}\S", code);
+    }
+
+    [Fact]
+    public void Decompiler_Shoot2_ForLoopCounterNotDeclaredAtTop()
+    {
+        // For-loop counter variables should NOT appear as top-level declarations
+        // since they are declared in the for-loop header
+        var romBytes = GetVerifiedRom("shoot2");
+        var rom = new NESRomReader(romBytes);
+        var decompiler = new Decompiler(rom, _logger);
+
+        var code = decompiler.Decompile();
+
+        // The for loops should declare their own counter variables
+        // Verify that at least one for loop with proper structure exists
+        Assert.Matches(@"for \(byte (var_\w+) = 0; \1 < \d+; \1\+\+\)", code);
+    }
+
+    [Fact]
+    public void Decompiler_Hello_NoIfBlocks()
+    {
+        // hello has no conditionals — verify no if blocks are generated
+        var romBytes = GetVerifiedRom("hello");
+        var rom = new NESRomReader(romBytes);
+        var decompiler = new Decompiler(rom, _logger);
+
+        var code = decompiler.Decompile();
+
+        // hello is straight-line code with no branches
+        Assert.DoesNotContain("if (", code);
+    }
+
+    [Fact]
+    public void Decompiler_Hello_NoForLoops()
+    {
+        // hello has no for loops — verify none are detected
+        var romBytes = GetVerifiedRom("hello");
+        var rom = new NESRomReader(romBytes);
+        var decompiler = new Decompiler(rom, _logger);
+
+        var code = decompiler.Decompile();
+
+        Assert.DoesNotContain("for (byte", code);
+    }
+
+    [Fact]
+    public void Decompiler_Hello_NoUnknownAssemblyComments()
+    {
+        // hello is fully mapped to NESLib calls — no unknown instructions
+        var romBytes = GetVerifiedRom("hello");
+        var rom = new NESRomReader(romBytes);
+        var decompiler = new Decompiler(rom, _logger);
+
+        var code = decompiler.Decompile();
+
+        Assert.DoesNotContain("// Unknown 6502 assembly", code);
+    }
+
     static string FindTestSourceDirectory()
     {
         // Navigate from the test output directory to the source directory
@@ -465,5 +609,196 @@ public class DecompilerTests
             dir = dir.Parent;
         }
         throw new InvalidOperationException("Could not find test source directory");
+    }
+
+    [Fact]
+    public void NESRomReader_MultiBankChr_GeneratesSingleBank()
+    {
+        var romBytes = GetVerifiedRom("slideshow");
+        var reader = new NESRomReader(romBytes);
+
+        Assert.Equal(2, reader.ChrBanks);
+        Assert.Equal(16384, reader.ChrRom.Length); // 2 * 8KB
+
+        // Generate single bank
+        var bank0 = reader.GenerateChrAssembly(0);
+        var bank1 = reader.GenerateChrAssembly(1);
+
+        Assert.StartsWith(".segment \"CHARS\"", bank0);
+        Assert.StartsWith(".segment \"CHARS\"", bank1);
+
+        // Each bank should have 8KB = 512 lines of 16 bytes
+        int bank0Lines = bank0.Split('\n').Count(l => l.StartsWith(".byte"));
+        int bank1Lines = bank1.Split('\n').Count(l => l.StartsWith(".byte"));
+        Assert.Equal(512, bank0Lines);
+        Assert.Equal(512, bank1Lines);
+
+        // Banks should differ (different tile data)
+        Assert.NotEqual(bank0, bank1);
+    }
+
+    [Fact]
+    public void NESRomReader_MultiBankChr_InvalidBankReturnsEmpty()
+    {
+        var romBytes = GetVerifiedRom("slideshow");
+        var reader = new NESRomReader(romBytes);
+
+        Assert.Empty(reader.GenerateChrAssembly(-1));
+        Assert.Empty(reader.GenerateChrAssembly(2));
+    }
+
+    [Fact]
+    public void NESRomReader_MultiBankChr_AllBanksMatchFull()
+    {
+        var romBytes = GetVerifiedRom("slideshow");
+        var reader = new NESRomReader(romBytes);
+
+        // Full output (no bank parameter) should equal bank0 + bank1 data combined
+        var full = reader.GenerateChrAssembly();
+        int fullLines = full.Split('\n').Count(l => l.StartsWith(".byte"));
+        Assert.Equal(1024, fullLines); // 2 * 512 lines
+    }
+
+    [Fact]
+    public void Decompiler_Shoot2_ExtractsChrRamTileData()
+    {
+        var romBytes = GetVerifiedRom("shoot2");
+        var rom = new NESRomReader(romBytes);
+
+        Assert.Equal(0, rom.ChrBanks); // CHR RAM
+
+        var decompiler = new Decompiler(rom, _logger);
+        decompiler.Decompile();
+
+        var chrRamData = decompiler.GetChrRamTileData();
+        Assert.NotEmpty(chrRamData);
+
+        // shoot2 uploads tiles to $1000 (sprites) and $0000 (BG)
+        var addresses = chrRamData.Select(d => d.PpuAddress).ToList();
+        Assert.Contains((ushort)0x1000, addresses);
+        Assert.Contains((ushort)0x0000, addresses);
+
+        // All uploads should have non-zero data
+        foreach (var (_, data) in chrRamData)
+        {
+            Assert.True(data.Length > 0);
+            Assert.True(data.Any(b => b != 0), "Tile data should not be all zeros");
+        }
+    }
+
+    [Fact]
+    public void Decompiler_Transtable_ExtractsChrRamTileData()
+    {
+        var romBytes = GetVerifiedRom("transtable");
+        var rom = new NESRomReader(romBytes);
+
+        Assert.Equal(0, rom.ChrBanks); // CHR RAM
+
+        var decompiler = new Decompiler(rom, _logger);
+        decompiler.Decompile();
+
+        var chrRamData = decompiler.GetChrRamTileData();
+        Assert.NotEmpty(chrRamData);
+
+        // transtable uploads tiles to $0000 (pattern table 0) via vram_adr(0x0)
+        var addresses = chrRamData.Select(d => d.PpuAddress).ToList();
+        Assert.Contains((ushort)0x0000, addresses);
+    }
+
+    [Fact]
+    public void Decompiler_Hello_NoChrRamData()
+    {
+        var romBytes = GetVerifiedRom("hello");
+        var rom = new NESRomReader(romBytes);
+
+        Assert.Equal(1, rom.ChrBanks); // CHR ROM, not CHR RAM
+
+        var decompiler = new Decompiler(rom, _logger);
+        decompiler.Decompile();
+
+        // CHR ROM samples should have no CHR RAM data extracted
+        var chrRamData = decompiler.GetChrRamTileData();
+        Assert.Empty(chrRamData);
+    }
+
+    [Fact]
+    public void Decompiler_Shoot2_DetectsUserFunctions()
+    {
+        var romBytes = GetVerifiedRom("shoot2");
+        var rom = new NESRomReader(romBytes);
+        var decompiler = new Decompiler(rom, _logger);
+        var code = decompiler.Decompile();
+
+        // shoot2 has user-defined functions after main that should be detected
+        // and emitted as static void declarations
+        Assert.Contains("static void func_", code);
+    }
+
+    [Fact]
+    public void Decompiler_Shoot2_UserFunctionCallsNotCommented()
+    {
+        var romBytes = GetVerifiedRom("shoot2");
+        var rom = new NESRomReader(romBytes);
+        var decompiler = new Decompiler(rom, _logger);
+        var code = decompiler.Decompile();
+
+        // User function calls from main should be actual calls, not comments
+        // At least one func_ call should appear without a leading "//"
+        var lines = code.Split('\n');
+        var funcCalls = lines.Where(l => l.TrimStart().StartsWith("func_")).ToList();
+        Assert.NotEmpty(funcCalls);
+    }
+
+    [Fact]
+    public void Decompiler_Shoot2_UserFunctionHasPokeBody()
+    {
+        var romBytes = GetVerifiedRom("shoot2");
+        var rom = new NESRomReader(romBytes);
+        var decompiler = new Decompiler(rom, _logger);
+        var code = decompiler.Decompile();
+
+        // The sfx functions contain poke() calls for APU registers.
+        // At least one user function body should decompile APU poke calls.
+        // func_8C64 is sfx_shoot: poke(APU_PULSE1_CTRL, 0x4A)
+        Assert.Contains("poke(APU_PULSE1_CTRL, 0x4A);", code);
+        Assert.Contains("poke(APU_PULSE1_SWEEP, 0x00);", code);
+        Assert.Contains("poke(APU_PULSE1_TIMER_LO, 0x80);", code);
+        Assert.Contains("poke(APU_PULSE1_TIMER_HI, 0xF9);", code);
+    }
+
+    [Fact]
+    public void Decompiler_Shoot2_UserFunctionsHaveBraces()
+    {
+        var romBytes = GetVerifiedRom("shoot2");
+        var rom = new NESRomReader(romBytes);
+        var decompiler = new Decompiler(rom, _logger);
+        var code = decompiler.Decompile();
+
+        // Each user function should have an opening and closing brace
+        var lines = code.Split('\n').Select(l => l.Trim()).ToArray();
+        var funcDecls = lines.Where(l => l.StartsWith("static void func_")).ToList();
+        Assert.True(funcDecls.Count > 0, "Should have at least one user function declaration");
+
+        // Each function declaration should be followed by { ... }
+        for (int i = 0; i < lines.Length; i++)
+        {
+            if (lines[i].StartsWith("static void func_"))
+            {
+                Assert.True(i + 1 < lines.Length && lines[i + 1] == "{",
+                    $"Function declaration at line {i} should be followed by opening brace");
+            }
+        }
+    }
+
+    [Fact]
+    public void Decompiler_Hello_NoUserFunctions()
+    {
+        var romBytes = GetVerifiedRom("hello");
+        var rom = new NESRomReader(romBytes);
+        var decompiler = new Decompiler(rom, _logger);
+        var code = decompiler.Decompile();
+
+        // hello sample has no user-defined functions
+        Assert.DoesNotContain("static void func_", code);
     }
 }

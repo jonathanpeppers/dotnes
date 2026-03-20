@@ -207,7 +207,18 @@ gh pr checks <number> --repo <owner>/<repo>
 
 Once all checks pass:
 
-1. **Capture a screenshot or GIF** if the PR adds or modifies a sample. Build the
+1. **Re-request a review from @copilot** so the Copilot code review bot validates
+   the final state of the PR:
+
+   ```bash
+   gh pr edit <number> --repo <owner>/<repo> --add-reviewer "@copilot"
+   ```
+
+   Wait for the Copilot review to appear (poll with `gh api repos/<owner>/<repo>/pulls/<number>/reviews`).
+   If Copilot leaves suggestions or requests changes, address them the same way
+   as human review feedback (step 8) and re-request once fixed.
+
+2. **Capture a screenshot or GIF** if the PR adds or modifies a sample. Build the
    solution first (`dotnet build` from the repo root), then use the screenshot or
    record script:
 
@@ -222,7 +233,7 @@ Once all checks pass:
    Upload the image to the PR comment so reviewers can see the result without
    running it locally.
 
-2. **Post a final comment** with the screenshot/GIF attached:
+3. **Post a final comment** with the screenshot/GIF attached:
 
    ```powershell
    # Upload the image and include it in the comment

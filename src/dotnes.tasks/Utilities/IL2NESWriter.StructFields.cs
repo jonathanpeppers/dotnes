@@ -125,16 +125,82 @@ partial class IL2NESWriter
     /// </summary>
     void HandleStfld(string fieldName)
     {
-        // Check for struct array element access (from ldelema)
-        if (_pendingStructElementType != null)
+        // Handle closure struct field store
+        if (_pendingStructLocal != null
+            && ClosureFieldTypes != null
+            && ClosureFieldTypes.ContainsKey(fieldName))
         {
-            string structType = _pendingStructElementType;
+            _pendingStructLocal = null;
+            int fieldSize = ClosureFieldTypes[fieldName];
+
+            if (fieldSize == -1) // byte[] field
+            {
+                // Associate the byte array label from the preceding ldtoken
+                if (_lastByteArrayLabel != null)
+                {
+                    ClosureFieldLabels[fieldName] = _lastByteArrayLabel;
+                    _lastByteArrayLabel = null;
+                }
+                if (Stack.Count > 0) Stack.Pop();
+                _runtimeValueInA = false;
+                _ushortInAX = false;
+                _immediateInA = null;
+                return;
+            }
+            else // scalar field (byte, ushort, short, int captured in closure)
+            {
+                ushort addr = ClosureFieldAddresses[fieldName];
+                int value = Stack.Count > 0 ? Stack.Pop() : 0;
+
+                if (fieldSize == 1)
+                {
+                    if (_runtimeValueInA)
+                    {
+                        Emit(Opcode.STA, AddressMode.Absolute, addr);
+                        _runtimeValueInA = false;
+                    }
+                    else
+                    {
+                        RemoveLastInstructions(1);
+                        Emit(Opcode.LDA, AddressMode.Immediate, (byte)(value & 0xFF));
+                        Emit(Opcode.STA, AddressMode.Absolute, addr);
+                    }
+                }
+                else
+                {
+                    // Multi-byte scalar (16-bit word: low/high bytes)
+                    if (_runtimeValueInA && _ushortInAX)
+                    {
+                        Emit(Opcode.STA, AddressMode.Absolute, addr);
+                        Emit(Opcode.STX, AddressMode.Absolute, (ushort)(addr + 1));
+                    }
+                    else
+                    {
+                        byte low = (byte)(value & 0xFF);
+                        byte high = (byte)((value >> 8) & 0xFF);
+                        Emit(Opcode.LDA, AddressMode.Immediate, low);
+                        Emit(Opcode.STA, AddressMode.Absolute, addr);
+                        Emit(Opcode.LDA, AddressMode.Immediate, high);
+                        Emit(Opcode.STA, AddressMode.Absolute, (ushort)(addr + 1));
+                    }
+                    _runtimeValueInA = false;
+                    _ushortInAX = false;
+                }
+                _immediateInA = null;
+                return;
+            }
+        }
+
+        // Check for struct array element access (from ldelema)
+        if (_pendingStructElement is PendingStructElement stfldElement)
+        {
+            string structType = stfldElement.Type;
             int fieldOffset = GetFieldOffset(structType, fieldName);
 
             // The value to store was pushed by ldc before stfld
             int value = Stack.Count > 0 ? Stack.Pop() : 0;
 
-            if (_pendingStructArrayRuntimeIndex)
+            if (stfldElement.RuntimeIndex)
             {
                 // Variable index: X holds element offset, use AbsoluteX
                 ushort fieldAddr = (ushort)(_structArrayBaseForRuntimeIndex + fieldOffset);
@@ -152,8 +218,8 @@ partial class IL2NESWriter
             }
             else
             {
-                // Constant index: _pendingStructElementBase has the element base
-                ushort fieldAddr = (ushort)(_pendingStructElementBase!.Value + fieldOffset);
+                // Constant index: ConstantBase has the element base
+                ushort fieldAddr = (ushort)(stfldElement.ConstantBase!.Value + fieldOffset);
                 if (_runtimeValueInA)
                 {
                     Emit(Opcode.STA, AddressMode.Absolute, fieldAddr);
@@ -167,9 +233,7 @@ partial class IL2NESWriter
                 }
             }
 
-            _pendingStructElementType = null;
-            _pendingStructElementBase = null;
-            _pendingStructArrayRuntimeIndex = false;
+            _pendingStructElement = null;
             _immediateInA = null;
             return;
         }
@@ -212,13 +276,54 @@ partial class IL2NESWriter
     /// </summary>
     void HandleLdfld(string fieldName)
     {
-        // Check for struct array element access (from ldelema)
-        if (_pendingStructElementType != null)
+        // Handle closure struct field load (from ldarg.0 in closure methods
+        // or ldloca.s in main)
+        if ((_pendingClosureAccess || _pendingStructLocal != null)
+            && ClosureFieldTypes != null
+            && ClosureFieldTypes.ContainsKey(fieldName))
         {
-            string structType = _pendingStructElementType;
+            _pendingClosureAccess = false;
+            _pendingStructLocal = null;
+            int fieldSize = ClosureFieldTypes[fieldName];
+
+            if (fieldSize == -1) // byte[] field
+            {
+                if (ClosureFieldLabels.TryGetValue(fieldName, out var label))
+                {
+                    EmitWithLabel(Opcode.LDA, AddressMode.Immediate_LowByte, label);
+                    EmitWithLabel(Opcode.LDX, AddressMode.Immediate_HighByte, label);
+                    _ushortInAX = true;
+                }
+                else
+                {
+                    throw new TranspileException(
+                        $"Closure byte[] field '{fieldName}' has no ROM data label. " +
+                        "Ensure the array is initialized before it is used in a closure method.");
+                }
+            }
+            else // scalar field
+            {
+                ushort addr = ClosureFieldAddresses[fieldName];
+                Emit(Opcode.LDA, AddressMode.Absolute, addr);
+                if (fieldSize > 1)
+                {
+                    Emit(Opcode.LDX, AddressMode.Absolute, (ushort)(addr + 1));
+                    _ushortInAX = true;
+                }
+            }
+            _runtimeValueInA = true;
+            _immediateInA = null;
+            Stack.Push(0);
+            return;
+        }
+
+        // Check for struct array element access (from ldelema)
+        if (_pendingStructElement is PendingStructElement ldfldElement)
+        {
+            string structType = ldfldElement.Type;
             int fieldOffset = GetFieldOffset(structType, fieldName);
 
-            if (_pendingStructArrayRuntimeIndex)
+            if (ldfldElement.RuntimeIndex)
             {
                 // Variable index: X holds element offset, use AbsoluteX
                 ushort fieldAddr = (ushort)(_structArrayBaseForRuntimeIndex + fieldOffset);
@@ -226,14 +331,12 @@ partial class IL2NESWriter
             }
             else
             {
-                // Constant index: _pendingStructElementBase has the element base
-                ushort fieldAddr = (ushort)(_pendingStructElementBase!.Value + fieldOffset);
+                // Constant index: ConstantBase has the element base
+                ushort fieldAddr = (ushort)(ldfldElement.ConstantBase!.Value + fieldOffset);
                 Emit(Opcode.LDA, AddressMode.Absolute, fieldAddr);
             }
 
-            _pendingStructElementType = null;
-            _pendingStructElementBase = null;
-            _pendingStructArrayRuntimeIndex = false;
+            _pendingStructElement = null;
             _runtimeValueInA = true;
             _immediateInA = null;
             Stack.Push(0);
