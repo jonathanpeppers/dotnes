@@ -15,7 +15,7 @@ class Decompiler
     readonly Dictionary<ushort, string> _symbolTable = new();
     readonly List<(ushort Address, int Size)> _arrayDeclarations = new();
     readonly Dictionary<ushort, string> _localVariables = new();
-    readonly HashSet<ushort> _padVariables = new(); // Locals that store pad_poll/pad_trigger results (typed as PAD)
+    readonly HashSet<ushort> _padVariables = new(); // Locals that store pad_poll results (typed as PAD)
     readonly List<(ushort PpuAddress, byte[] Data)> _chrRamTileData = new();
 
     ushort _mainAddress;
@@ -463,7 +463,7 @@ class Decompiler
                         {
                             var callExpr = FormatCallExpression(name, op1.Value);
                             statements.Add($"{varName} = {callExpr};");
-                            if (name is "pad_poll" or "pad_trigger")
+                            if (name == "pad_poll")
                                 _padVariables.Add(stAddr);
                             lastImmediateA = null;
                             lastLoadedVarName = null;
@@ -709,7 +709,7 @@ class Decompiler
     /// that callers typically store to a local variable.
     /// </summary>
     static bool IsReturningFunction(string name) =>
-        name is "pad_poll" or "pad_trigger" or "rand8" or "rand";
+        name is "pad_poll" or "rand8" or "rand";
 
     /// <summary>
     /// Format a call expression (without trailing semicolon) for a returning function.
@@ -717,7 +717,6 @@ class Decompiler
     static string FormatCallExpression(string name, byte? aValue) => name switch
     {
         "pad_poll" => $"pad_poll({aValue?.ToString() ?? "0"})",
-        "pad_trigger" => $"pad_trigger({aValue?.ToString() ?? "0"})",
         "rand8" or "rand" => "rand8()",
         _ => $"{name}({(aValue.HasValue ? $"0x{aValue:X2}" : "")})"
     };
