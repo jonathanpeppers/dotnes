@@ -502,6 +502,22 @@ public class DecompilerTests
     }
 
     [Fact]
+    public void Decompiler_Shoot2_EmitsUnknownAssemblyComments()
+    {
+        // shoot2 has complex game logic that can't be mapped back to NESLib calls
+        var romBytes = GetVerifiedRom("shoot2");
+        var rom = new NESRomReader(romBytes);
+        var decompiler = new Decompiler(rom, _logger);
+
+        var code = decompiler.Decompile();
+
+        // Should contain unknown assembly comment blocks
+        Assert.Contains("// Unknown 6502 assembly at $", code);
+        // Should contain disassembled instructions inside comments
+        Assert.Contains("//   ", code);
+    }
+
+    [Fact]
     public void Decompiler_Hello_NoIfBlocks()
     {
         // hello has no conditionals — verify no if blocks are generated
@@ -513,6 +529,19 @@ public class DecompilerTests
 
         // hello is straight-line code with no branches
         Assert.DoesNotContain("if (", code);
+    }
+
+    [Fact]
+    public void Decompiler_Hello_NoUnknownAssemblyComments()
+    {
+        // hello is fully mapped to NESLib calls — no unknown instructions
+        var romBytes = GetVerifiedRom("hello");
+        var rom = new NESRomReader(romBytes);
+        var decompiler = new Decompiler(rom, _logger);
+
+        var code = decompiler.Decompile();
+
+        Assert.DoesNotContain("// Unknown 6502 assembly", code);
     }
 
     static string FindTestSourceDirectory()
