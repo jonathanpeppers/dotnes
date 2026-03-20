@@ -488,20 +488,17 @@ public class DecompilerTests
     [Fact]
     public void Decompiler_Scroll_RecoverIfBlock()
     {
-        // scroll has a conditional check on a local variable
+        // scroll has a conditional check on scroll_y ($0326)
         var romBytes = GetVerifiedRom("scroll");
         var rom = new NESRomReader(romBytes);
         var decompiler = new Decompiler(rom, _logger);
 
         var code = decompiler.Decompile();
 
-        // scroll uses LDA $local / BEQ or BNE for conditional logic
-        // The if block should be recovered with proper braces
-        if (code.Contains("if ("))
-        {
-            Assert.Contains("{", code);
-            Assert.Contains("}", code);
-        }
+        // scroll uses LDA $0326 / BEQ skip → if (var_0326 != 0)
+        Assert.Contains("if (var_0326 != 0)", code);
+        Assert.Contains("{", code);
+        Assert.Contains("}", code);
     }
 
     [Fact]

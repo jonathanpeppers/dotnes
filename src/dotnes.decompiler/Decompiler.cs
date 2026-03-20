@@ -612,10 +612,11 @@ class Decompiler
             lastCmpValue = null;
         }
 
-        // Close any remaining open if-blocks
+        // Close any remaining open if-blocks (may happen when branch target is past the end of main)
         while (pendingCloseBraces.Count > 0)
         {
-            pendingCloseBraces.Pop();
+            var addr = pendingCloseBraces.Pop();
+            _logger.WriteLine($"  Warning: unclosed if-block at ${addr:X4} — target may be outside main");
             statements.Add("}");
         }
 
