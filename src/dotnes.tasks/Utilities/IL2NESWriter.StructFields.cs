@@ -272,6 +272,12 @@ partial class IL2NESWriter
                     EmitWithLabel(Opcode.LDX, AddressMode.Immediate_HighByte, label);
                     _ushortInAX = true;
                 }
+                else
+                {
+                    throw new TranspileException(
+                        $"Closure byte[] field '{fieldName}' has no ROM data label. " +
+                        "Ensure the array is initialized before it is used in a closure method.");
+                }
             }
             else // scalar field
             {

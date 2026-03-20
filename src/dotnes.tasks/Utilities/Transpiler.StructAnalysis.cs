@@ -361,8 +361,9 @@ partial class Transpiler
 
     /// <summary>
     /// Detects user methods that are closure-capturing functions by scanning their IL
-    /// for ldarg.0 + ldfld patterns that reference closure fields. Adjusts their metadata
-    /// to remove the implicit closure struct parameter.
+    /// for ldarg + ldfld patterns that reference closure fields.
+    /// Roslyn places the closure struct ref as the LAST parameter, so for a method
+    /// with N real params, arg N is the closure ref.
     /// </summary>
     void DetectClosureMethods(ReflectionCache reflectionCache)
     {
@@ -371,36 +372,44 @@ partial class Transpiler
             var methodName = kvp.Key;
             var il = kvp.Value;
 
-            // Check if method accesses closure fields via ldarg.0 + ldfld
-            bool isClosure = false;
+            // Check if method accesses closure fields via ldarg + ldfld
+            int closureArgIndex = -1;
             for (int i = 0; i < il.Length - 1; i++)
             {
-                if (il[i].OpCode == ILOpCode.Ldarg_0
+                // Match any ldarg variant followed by ldfld of a closure field
+                int argIdx = -1;
+                if (il[i].OpCode >= ILOpCode.Ldarg_0 && il[i].OpCode <= ILOpCode.Ldarg_3)
+                    argIdx = il[i].OpCode - ILOpCode.Ldarg_0;
+                else if (il[i].OpCode == ILOpCode.Ldarg_s)
+                    argIdx = il[i].Integer ?? 0;
+
+                if (argIdx >= 0
                     && il[i + 1].OpCode == ILOpCode.Ldfld
                     && il[i + 1].String is string fieldName
                     && _closureFieldTypes.ContainsKey(fieldName))
                 {
-                    isClosure = true;
+                    closureArgIndex = argIdx;
                     break;
                 }
             }
 
-            if (!isClosure)
+            if (closureArgIndex < 0)
                 continue;
 
-            _closureMethodNames.Add(methodName);
+            _closureMethodArgIndex[methodName] = closureArgIndex;
 
-            // Adjust metadata: remove the closure struct parameter (always first)
+            // Adjust metadata: remove the closure struct parameter (always last)
             if (UserMethodMetadata.TryGetValue(methodName, out var meta))
             {
                 int newParamCount = meta.argCount - 1;
-                bool[] newIsArrayParam = newParamCount > 0 && meta.isArrayParam.Length > 1
-                    ? meta.isArrayParam.Skip(1).ToArray()
+                // Remove the last element from isArrayParam (the closure ref)
+                bool[] newIsArrayParam = newParamCount > 0
+                    ? meta.isArrayParam.Take(newParamCount).ToArray()
                     : Array.Empty<bool>();
                 UserMethodMetadata[methodName] = (newParamCount, meta.hasReturnValue, newIsArrayParam);
                 // Re-register with corrected param count
                 reflectionCache.RegisterUserMethod(methodName, newParamCount, meta.hasReturnValue);
-                _logger.WriteLine($"Closure method '{methodName}': adjusted params {meta.argCount} → {newParamCount}");
+                _logger.WriteLine($"Closure method '{methodName}': adjusted params {meta.argCount} → {newParamCount} (closure at arg {closureArgIndex})");
             }
         }
     }

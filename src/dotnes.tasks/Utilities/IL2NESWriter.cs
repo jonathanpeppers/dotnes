@@ -325,9 +325,16 @@ partial class IL2NESWriter : NESWriter
     public Dictionary<string, ushort> ClosureFieldAddresses { get; init; } = new(StringComparer.Ordinal);
 
     /// <summary>
-    /// True when transpiling a closure-capturing user method (first param is the closure struct ref).
+    /// The IL argument index of the closure struct ref in a closure method (-1 if not a closure method).
+    /// Roslyn places the closure ref as the LAST parameter, so for a method with N real params,
+    /// this is N. For 0-param closures it's 0.
     /// </summary>
-    public bool IsClosureMethod { get; init; }
+    public int ClosureArgIndex { get; init; } = -1;
+
+    /// <summary>
+    /// True when this writer is transpiling a closure-capturing user method.
+    /// </summary>
+    public bool IsClosureMethod => ClosureArgIndex >= 0;
 
     /// <summary>
     /// The local variable index in main that holds the closure struct instance (-1 if no closure).

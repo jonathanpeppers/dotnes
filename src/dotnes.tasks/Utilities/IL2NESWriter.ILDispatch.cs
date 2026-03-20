@@ -259,14 +259,14 @@ partial class IL2NESWriter
                     int argIndex = instruction.OpCode - ILOpCode.Ldarg_0;
                     if (IsClosureMethod)
                     {
-                        if (argIndex == 0)
+                        if (argIndex == ClosureArgIndex)
                         {
-                            // In a closure method, arg 0 is the closure struct ref.
+                            // This arg is the closure struct ref (always last param).
                             // Set flag so the next ldfld/stfld accesses closure fields.
                             _pendingClosureAccess = true;
                             break;
                         }
-                        argIndex--; // Shift real params down by 1
+                        // Real params keep their original indices — no shifting needed
                     }
                     WriteLdarg(argIndex);
                 }
@@ -709,12 +709,12 @@ partial class IL2NESWriter
                     int argIndex = operand;
                     if (IsClosureMethod)
                     {
-                        if (argIndex == 0)
+                        if (argIndex == ClosureArgIndex)
                         {
                             _pendingClosureAccess = true;
                             break;
                         }
-                        argIndex--;
+                        // Real params keep their original indices — no shifting needed
                     }
                     WriteLdarg(argIndex);
                 }
@@ -1020,11 +1020,27 @@ partial class IL2NESWriter
             case ILOpCode.Ldloca_s:
                 // Load address of local variable — used for struct field access
                 if (ClosureStructLocalIndex >= 0 && operand == ClosureStructLocalIndex
-                    && Instructions is not null && Index + 1 < Instructions.Length
-                    && Instructions[Index + 1].OpCode == ILOpCode.Call)
+                    && Instructions is not null && ClosureFieldTypes != null)
                 {
-                    // Closure struct ref before a call — skip (closure is implicit)
-                    break;
+                    // Determine if this ldloca.s is for closure field init (stfld) or
+                    // a method call. Scan forward: if we hit stfld/ldfld for a closure
+                    // field first, it's initialization. If we hit call first, it's a
+                    // method invocation — skip (closure ref is implicit).
+                    bool isInit = false;
+                    for (int k = Index + 1; k < Math.Min(Index + 12, Instructions.Length); k++)
+                    {
+                        if (Instructions[k].OpCode is ILOpCode.Stfld or ILOpCode.Ldfld
+                            && Instructions[k].String is string fn
+                            && ClosureFieldTypes.ContainsKey(fn))
+                        {
+                            isInit = true;
+                            break;
+                        }
+                        if (Instructions[k].OpCode == ILOpCode.Call)
+                            break;
+                    }
+                    if (!isInit)
+                        break; // Skip — closure ref before a call
                 }
                 _pendingStructLocal = operand;
                 break;

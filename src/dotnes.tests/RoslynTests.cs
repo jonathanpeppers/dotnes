@@ -3428,6 +3428,39 @@ public class RoslynTests
     }
 
     [Fact]
+    public void ClosureMethodWithRealParams()
+    {
+        // Test: closure method that has real parameters in addition to
+        // the implicit closure struct ref. Roslyn places the closure ref
+        // as the LAST parameter, not the first.
+        var (program, _) = BuildProgram(
+            """
+            byte[] palette = [0x0F, 0x10, 0x20, 0x30];
+            byte color = 0x15;
+            apply_at(3, color);
+            ppu_on_all();
+            while (true) ;
+
+            void apply_at(byte index, byte c)
+            {
+                pal_col(index, c);
+                pal_bg(palette);
+            }
+            """);
+
+        var mainBlock = program.GetMainBlock();
+        Assert.NotNull(mainBlock);
+        Assert.NotEmpty(mainBlock);
+
+        var fullBytes = program.ToBytes();
+        var fullHex = Convert.ToHexString(fullBytes);
+        _logger.WriteLine($"ClosureMethodWithRealParams hex: {fullHex}");
+
+        // Verify palette data is in the full ROM
+        Assert.Contains("0F102030", fullHex);
+    }
+
+    [Fact]
     public void MultiParamUserFunction_LocalVarArgs()
     {
         // Test: calling a user-defined function with a runtime local + constant.

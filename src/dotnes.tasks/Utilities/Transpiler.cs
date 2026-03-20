@@ -64,9 +64,10 @@ partial class Transpiler : IDisposable
     readonly Dictionary<string, ushort> _closureFieldAddresses = new(StringComparer.Ordinal);
 
     /// <summary>
-    /// Names of user methods that are closure-capturing (have a DisplayClass first parameter).
+    /// Closure method info: method name → IL arg index of the closure struct ref parameter.
+    /// Roslyn places the closure struct ref as the LAST parameter.
     /// </summary>
-    readonly HashSet<string> _closureMethodNames = new(StringComparer.Ordinal);
+    readonly Dictionary<string, int> _closureMethodArgIndex = new(StringComparer.Ordinal);
 
     /// <summary>
     /// The local variable index in main that holds the closure struct instance (-1 if no closure).
@@ -354,7 +355,7 @@ partial class Transpiler : IDisposable
                 ClosureFieldTypes = _closureFieldTypes.Count > 0 ? _closureFieldTypes : null,
                 ClosureFieldLabels = _closureFieldLabels,
                 ClosureFieldAddresses = _closureFieldAddresses,
-                IsClosureMethod = _closureMethodNames.Contains(methodName),
+                ClosureArgIndex = _closureMethodArgIndex.TryGetValue(methodName, out var cai) ? cai : -1,
             };
             methodWriter.StartBlockBuffering();
 
