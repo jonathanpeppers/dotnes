@@ -1024,7 +1024,8 @@ class Decompiler
 
     /// <summary>
     /// Flush accumulated unknown instructions as comment lines in the output.
-    /// Groups consecutive unknowns into a single block with address range and disassembly.
+    /// Splits into separate blocks when addresses are not contiguous (i.e., a recognized-
+    /// but-not-emitted instruction was between two unknowns).
     /// </summary>
     static void FlushUnknownInstructions(
         List<(ushort Address, byte Opcode, byte? Op1, byte? Op2)> unknowns,
@@ -1033,8 +1034,32 @@ class Decompiler
         if (unknowns.Count == 0)
             return;
 
-        ushort startAddr = unknowns[0].Address;
-        var last = unknowns[^1];
+        int groupStart = 0;
+        for (int i = 1; i <= unknowns.Count; i++)
+        {
+            // Split when the next unknown isn't contiguous with the previous one
+            if (i < unknowns.Count)
+            {
+                var prev = unknowns[i - 1];
+                ushort expectedNext = (ushort)(prev.Address + GetInstructionSize(prev.Opcode));
+                if (unknowns[i].Address != expectedNext)
+                {
+                    EmitUnknownBlock(unknowns, groupStart, i, statements);
+                    groupStart = i;
+                }
+            }
+        }
+
+        EmitUnknownBlock(unknowns, groupStart, unknowns.Count, statements);
+        unknowns.Clear();
+    }
+
+    static void EmitUnknownBlock(
+        List<(ushort Address, byte Opcode, byte? Op1, byte? Op2)> unknowns,
+        int start, int end, List<string> statements)
+    {
+        ushort startAddr = unknowns[start].Address;
+        var last = unknowns[end - 1];
         ushort endAddr = (ushort)(last.Address + GetInstructionSize(last.Opcode) - 1);
 
         if (startAddr == endAddr)
@@ -1042,12 +1067,11 @@ class Decompiler
         else
             statements.Add($"// Unknown 6502 assembly at ${startAddr:X4}-${endAddr:X4}:");
 
-        foreach (var (addr, opcode, op1, op2) in unknowns)
+        for (int i = start; i < end; i++)
         {
+            var (addr, opcode, op1, op2) = unknowns[i];
             statements.Add($"//   {FormatDisassembly(addr, opcode, op1, op2)}");
         }
-
-        unknowns.Clear();
     }
 
     /// <summary>
