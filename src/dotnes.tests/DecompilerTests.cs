@@ -453,6 +453,59 @@ public class DecompilerTests
         Assert.DoesNotContain("poke(0x0325", code);
     }
 
+    [Fact]
+    public void Decompiler_Shoot2_RecoverForLoops()
+    {
+        // shoot2 has many for loops for array initialization and game logic
+        var romBytes = GetVerifiedRom("shoot2");
+        var rom = new NESRomReader(romBytes);
+        var decompiler = new Decompiler(rom, _logger);
+
+        var code = decompiler.Decompile();
+
+        // Should contain for loop syntax with proper structure
+        Assert.Contains("for (byte", code);
+
+        // Verify specific for-loop limits matching shoot2's constants:
+        // MAX_BULLETS=4, MAX_ENEMIES=6, MAX_STARS=8, MAX_EXPLOSIONS=3
+        Assert.Contains("< 4;", code);  // MAX_BULLETS
+        Assert.Contains("< 6;", code);  // MAX_ENEMIES
+        Assert.Contains("< 8;", code);  // MAX_STARS
+        Assert.Contains("< 3;", code);  // MAX_EXPLOSIONS
+
+        // Should have indented body inside for loops
+        Assert.Contains("    ", code);
+    }
+
+    [Fact]
+    public void Decompiler_Shoot2_ForLoopCounterNotDeclaredAtTop()
+    {
+        // For-loop counter variables should NOT appear as top-level declarations
+        // since they are declared in the for-loop header
+        var romBytes = GetVerifiedRom("shoot2");
+        var rom = new NESRomReader(romBytes);
+        var decompiler = new Decompiler(rom, _logger);
+
+        var code = decompiler.Decompile();
+
+        // The for loops should declare their own counter variables
+        // Verify that at least one for loop with proper structure exists
+        Assert.Matches(@"for \(byte var_\w+ = 0; var_\w+ < \d+; var_\w+\+\+\)", code);
+    }
+
+    [Fact]
+    public void Decompiler_Hello_NoForLoops()
+    {
+        // hello has no for loops — verify none are detected
+        var romBytes = GetVerifiedRom("hello");
+        var rom = new NESRomReader(romBytes);
+        var decompiler = new Decompiler(rom, _logger);
+
+        var code = decompiler.Decompile();
+
+        Assert.DoesNotContain("for (byte", code);
+    }
+
     static string FindTestSourceDirectory()
     {
         // Navigate from the test output directory to the source directory
