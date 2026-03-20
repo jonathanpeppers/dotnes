@@ -4255,4 +4255,53 @@ public class RoslynTests
         Assert.Contains("A92A", hex);    // LDA #42 — load value
         Assert.Contains("9D2603", hex);  // STA $0326,X — store to G.arr[X]
     }
+
+    [Fact]
+    public void StelemI1_ArrayElementIndex()
+    {
+        // Regression: In the climber sample, the pattern:
+        //   buf[(byte)(arr2[f] * 2)] = value;
+        //   buf[(byte)(arr2[f] * 2 + 1)] = value2;
+        // The transpiler treated arr2 as a scalar index variable, emitting
+        // LDX arr2_addr (loading arr2[0]) instead of LDX f; LDA arr2,X.
+        // The * 2 and + 1 arithmetic were also lost. Both tiles of each pair
+        // wrote to the same position (arr2[0]), making items appear at the
+        // wrong location.
+        var bytes = GetProgramBytes(
+            """
+            byte[] buf = new byte[30];
+            byte[] positions = new byte[4];
+            positions[0] = 3;
+            positions[1] = 5;
+            positions[2] = 7;
+            positions[3] = 9;
+            for (byte f = 0; f < 4; f++)
+            {
+                buf[(byte)(positions[f] * 2)] = (byte)(f + 1);
+                buf[(byte)(positions[f] * 2 + 1)] = (byte)(f + 3);
+            }
+            vram_adr(0x2000);
+            vram_write(buf);
+            ppu_on_all();
+            while (true) ;
+            """);
+
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"StelemI1_ArrayElementIndex hex: {hex}");
+
+        // STA $17 (85 17) — save computed index to TEMP
+        Assert.Contains("8517", hex);
+
+        // LDX $17 (A6 17) — reload index from TEMP
+        Assert.Contains("A617", hex);
+
+        // ASL + STA TEMP (first index: positions[f] * 2, no add)
+        Assert.Contains("0A8517", hex);
+
+        // ASL + CLC + ADC #1 (second index: positions[f] * 2 + 1)
+        Assert.Contains("0A186901", hex);
+    }
 }
