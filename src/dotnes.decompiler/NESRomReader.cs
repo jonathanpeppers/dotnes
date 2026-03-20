@@ -81,24 +81,50 @@ class NESRomReader
 
     /// <summary>
     /// Generates a ca65-format .s file for the CHR ROM data.
+    /// When bank is specified, only that 8KB bank is emitted.
     /// </summary>
-    public string GenerateChrAssembly()
+    public string GenerateChrAssembly(int? bank = null)
     {
         if (ChrRom.Length == 0)
+            return string.Empty;
+
+        int start, length;
+        if (bank.HasValue)
+        {
+            if (bank.Value < 0 || bank.Value >= ChrBanks)
+                return string.Empty;
+            start = bank.Value * ChrBankSize;
+            length = Math.Min(ChrBankSize, ChrRom.Length - start);
+        }
+        else
+        {
+            start = 0;
+            length = ChrRom.Length;
+        }
+
+        return GenerateChrAssemblyFromData(ChrRom, start, length);
+    }
+
+    /// <summary>
+    /// Generates a ca65-format .s file from arbitrary tile data bytes.
+    /// </summary>
+    public static string GenerateChrAssemblyFromData(byte[] data, int start, int length)
+    {
+        if (length == 0)
             return string.Empty;
 
         var sb = new StringBuilder();
         sb.AppendLine(".segment \"CHARS\"");
 
-        // Output CHR ROM as .byte directives, 16 bytes per line (one tile row)
-        for (int i = 0; i < ChrRom.Length; i += 16)
+        // Output as .byte directives, 16 bytes per line (one tile row)
+        for (int i = 0; i < length; i += 16)
         {
             sb.Append(".byte ");
-            int count = Math.Min(16, ChrRom.Length - i);
+            int count = Math.Min(16, length - i);
             for (int j = 0; j < count; j++)
             {
                 if (j > 0) sb.Append(',');
-                sb.Append($"${ChrRom[i + j]:X2}");
+                sb.Append($"${data[start + i + j]:X2}");
             }
             sb.AppendLine();
         }

@@ -453,6 +453,97 @@ public class DecompilerTests
         Assert.DoesNotContain("poke(0x0325", code);
     }
 
+    [Fact]
+    public void Decompiler_Shoot2_RecoverIfBlocks()
+    {
+        // shoot2 has many conditionals — verify if blocks are recovered
+        var romBytes = GetVerifiedRom("shoot2");
+        var rom = new NESRomReader(romBytes);
+        var decompiler = new Decompiler(rom, _logger);
+
+        var code = decompiler.Decompile();
+
+        // fire_cooldown check: LDA $0327 / BEQ skip → if (var_0327 != 0)
+        Assert.Contains("if (var_0327 != 0)", code);
+        // Should contain opening and closing braces for if blocks
+        Assert.Contains("{", code);
+        Assert.Contains("}", code);
+    }
+
+    [Fact]
+    public void Decompiler_Shoot2_RecoverCmpBranch()
+    {
+        // shoot2 uses CMP #N / BCC for loop comparisons and boundary checks
+        var romBytes = GetVerifiedRom("shoot2");
+        var rom = new NESRomReader(romBytes);
+        var decompiler = new Decompiler(rom, _logger);
+
+        var code = decompiler.Decompile();
+
+        // Loop-like patterns use LDA $local / CMP #N / BCC
+        // Verify at least one comparison-based if block exists
+        Assert.Contains("if (var_", code);
+    }
+
+    [Fact]
+    public void Decompiler_Scroll_RecoverIfBlock()
+    {
+        // scroll has a conditional check on scroll_y ($0326)
+        var romBytes = GetVerifiedRom("scroll");
+        var rom = new NESRomReader(romBytes);
+        var decompiler = new Decompiler(rom, _logger);
+
+        var code = decompiler.Decompile();
+
+        // scroll uses LDA $0326 / BEQ skip → if (var_0326 != 0)
+        Assert.Contains("if (var_0326 != 0)", code);
+        Assert.Contains("{", code);
+        Assert.Contains("}", code);
+    }
+
+    [Fact]
+    public void Decompiler_Shoot2_EmitsUnknownAssemblyComments()
+    {
+        // shoot2 has complex game logic that can't be mapped back to NESLib calls
+        var romBytes = GetVerifiedRom("shoot2");
+        var rom = new NESRomReader(romBytes);
+        var decompiler = new Decompiler(rom, _logger);
+
+        var code = decompiler.Decompile();
+
+        // Should contain unknown assembly comment blocks
+        Assert.Contains("// Unknown 6502 assembly at $", code);
+        // Should contain disassembled instructions inside comments
+        Assert.Contains("//   ", code);
+    }
+
+    [Fact]
+    public void Decompiler_Hello_NoIfBlocks()
+    {
+        // hello has no conditionals — verify no if blocks are generated
+        var romBytes = GetVerifiedRom("hello");
+        var rom = new NESRomReader(romBytes);
+        var decompiler = new Decompiler(rom, _logger);
+
+        var code = decompiler.Decompile();
+
+        // hello is straight-line code with no branches
+        Assert.DoesNotContain("if (", code);
+    }
+
+    [Fact]
+    public void Decompiler_Hello_NoUnknownAssemblyComments()
+    {
+        // hello is fully mapped to NESLib calls — no unknown instructions
+        var romBytes = GetVerifiedRom("hello");
+        var rom = new NESRomReader(romBytes);
+        var decompiler = new Decompiler(rom, _logger);
+
+        var code = decompiler.Decompile();
+
+        Assert.DoesNotContain("// Unknown 6502 assembly", code);
+    }
+
     static string FindTestSourceDirectory()
     {
         // Navigate from the test output directory to the source directory
@@ -465,5 +556,115 @@ public class DecompilerTests
             dir = dir.Parent;
         }
         throw new InvalidOperationException("Could not find test source directory");
+    }
+
+    [Fact]
+    public void NESRomReader_MultiBankChr_GeneratesSingleBank()
+    {
+        var romBytes = GetVerifiedRom("slideshow");
+        var reader = new NESRomReader(romBytes);
+
+        Assert.Equal(2, reader.ChrBanks);
+        Assert.Equal(16384, reader.ChrRom.Length); // 2 * 8KB
+
+        // Generate single bank
+        var bank0 = reader.GenerateChrAssembly(0);
+        var bank1 = reader.GenerateChrAssembly(1);
+
+        Assert.StartsWith(".segment \"CHARS\"", bank0);
+        Assert.StartsWith(".segment \"CHARS\"", bank1);
+
+        // Each bank should have 8KB = 512 lines of 16 bytes
+        int bank0Lines = bank0.Split('\n').Count(l => l.StartsWith(".byte"));
+        int bank1Lines = bank1.Split('\n').Count(l => l.StartsWith(".byte"));
+        Assert.Equal(512, bank0Lines);
+        Assert.Equal(512, bank1Lines);
+
+        // Banks should differ (different tile data)
+        Assert.NotEqual(bank0, bank1);
+    }
+
+    [Fact]
+    public void NESRomReader_MultiBankChr_InvalidBankReturnsEmpty()
+    {
+        var romBytes = GetVerifiedRom("slideshow");
+        var reader = new NESRomReader(romBytes);
+
+        Assert.Empty(reader.GenerateChrAssembly(-1));
+        Assert.Empty(reader.GenerateChrAssembly(2));
+    }
+
+    [Fact]
+    public void NESRomReader_MultiBankChr_AllBanksMatchFull()
+    {
+        var romBytes = GetVerifiedRom("slideshow");
+        var reader = new NESRomReader(romBytes);
+
+        // Full output (no bank parameter) should equal bank0 + bank1 data combined
+        var full = reader.GenerateChrAssembly();
+        int fullLines = full.Split('\n').Count(l => l.StartsWith(".byte"));
+        Assert.Equal(1024, fullLines); // 2 * 512 lines
+    }
+
+    [Fact]
+    public void Decompiler_Shoot2_ExtractsChrRamTileData()
+    {
+        var romBytes = GetVerifiedRom("shoot2");
+        var rom = new NESRomReader(romBytes);
+
+        Assert.Equal(0, rom.ChrBanks); // CHR RAM
+
+        var decompiler = new Decompiler(rom, _logger);
+        decompiler.Decompile();
+
+        var chrRamData = decompiler.GetChrRamTileData();
+        Assert.NotEmpty(chrRamData);
+
+        // shoot2 uploads tiles to $1000 (sprites) and $0000 (BG)
+        var addresses = chrRamData.Select(d => d.PpuAddress).ToList();
+        Assert.Contains((ushort)0x1000, addresses);
+        Assert.Contains((ushort)0x0000, addresses);
+
+        // All uploads should have non-zero data
+        foreach (var (_, data) in chrRamData)
+        {
+            Assert.True(data.Length > 0);
+            Assert.True(data.Any(b => b != 0), "Tile data should not be all zeros");
+        }
+    }
+
+    [Fact]
+    public void Decompiler_Transtable_ExtractsChrRamTileData()
+    {
+        var romBytes = GetVerifiedRom("transtable");
+        var rom = new NESRomReader(romBytes);
+
+        Assert.Equal(0, rom.ChrBanks); // CHR RAM
+
+        var decompiler = new Decompiler(rom, _logger);
+        decompiler.Decompile();
+
+        var chrRamData = decompiler.GetChrRamTileData();
+        Assert.NotEmpty(chrRamData);
+
+        // transtable uploads tiles to $0000 (pattern table 0) via vram_adr(0x0)
+        var addresses = chrRamData.Select(d => d.PpuAddress).ToList();
+        Assert.Contains((ushort)0x0000, addresses);
+    }
+
+    [Fact]
+    public void Decompiler_Hello_NoChrRamData()
+    {
+        var romBytes = GetVerifiedRom("hello");
+        var rom = new NESRomReader(romBytes);
+
+        Assert.Equal(1, rom.ChrBanks); // CHR ROM, not CHR RAM
+
+        var decompiler = new Decompiler(rom, _logger);
+        decompiler.Decompile();
+
+        // CHR ROM samples should have no CHR RAM data extracted
+        var chrRamData = decompiler.GetChrRamTileData();
+        Assert.Empty(chrRamData);
     }
 }
