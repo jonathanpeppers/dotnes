@@ -536,6 +536,52 @@ public class DecompilerTests
     }
 
     [Fact]
+    public void Decompiler_Shoot2_RecognizesOamSpr()
+    {
+        // shoot2 has oam_spr calls with local variables, immediates, and array indexing
+        // Pattern: JSR decsp4 / (LDA val / STA ($22),Y) × 4 / LDA val / JSR oam_spr
+        var romBytes = GetVerifiedRom("shoot2");
+        var rom = new NESRomReader(romBytes);
+        var decompiler = new Decompiler(rom, _logger);
+
+        var code = decompiler.Decompile();
+
+        // Verify oam_spr calls are recovered with 5 arguments and assignment
+        Assert.Contains("oam_spr(", code);
+        // Should NOT have oam_spr as an unknown comment
+        Assert.DoesNotContain("// oam_spr(", code);
+        // First oam_spr call uses local vars + immediates and assigns result back
+        // oam_off = oam_spr(player_x, player_y, SPR_PLAYER, 0, oam_off)
+        Assert.Contains("= oam_spr(var_", code);
+        // All oam_spr calls should have exactly 5 comma-separated arguments
+        foreach (var line in code.Split('\n'))
+        {
+            if (!line.Contains("oam_spr(")) continue;
+            var argsStr = line.Substring(line.IndexOf("oam_spr(") + 8);
+            argsStr = argsStr.Substring(0, argsStr.IndexOf(')'));
+            var args = argsStr.Split(',');
+            Assert.Equal(5, args.Length);
+
+            // For any array-indexed argument, ensure it uses the array_XXXX identifier
+            // (matching GenerateCSharp declarations) and has a resolved index variable
+            foreach (var rawArg in args)
+            {
+                var arg = rawArg.Trim();
+                var openBracket = arg.IndexOf('[');
+                var closeBracket = arg.IndexOf(']');
+                if (openBracket < 0 || closeBracket <= openBracket)
+                    continue;
+
+                var baseIdentifier = arg.Substring(0, openBracket).Trim();
+                var indexExpression = arg.Substring(openBracket + 1, closeBracket - openBracket - 1);
+
+                Assert.StartsWith("array_", baseIdentifier);
+                Assert.False(string.IsNullOrWhiteSpace(indexExpression));
+            }
+        }
+    }
+
+    [Fact]
     public void Decompiler_Shoot2_EmitsUnknownAssemblyComments()
     {
         // shoot2 has complex game logic that can't be mapped back to NESLib calls
@@ -768,5 +814,86 @@ public class DecompilerTests
         // CHR ROM samples should have no CHR RAM data extracted
         var chrRamData = decompiler.GetChrRamTileData();
         Assert.Empty(chrRamData);
+    }
+
+    [Fact]
+    public void Decompiler_Shoot2_DetectsUserFunctions()
+    {
+        var romBytes = GetVerifiedRom("shoot2");
+        var rom = new NESRomReader(romBytes);
+        var decompiler = new Decompiler(rom, _logger);
+        var code = decompiler.Decompile();
+
+        // shoot2 has user-defined functions after main that should be detected
+        // and emitted as static void declarations
+        Assert.Contains("static void func_", code);
+    }
+
+    [Fact]
+    public void Decompiler_Shoot2_UserFunctionCallsNotCommented()
+    {
+        var romBytes = GetVerifiedRom("shoot2");
+        var rom = new NESRomReader(romBytes);
+        var decompiler = new Decompiler(rom, _logger);
+        var code = decompiler.Decompile();
+
+        // User function calls from main should be actual calls, not comments
+        // At least one func_ call should appear without a leading "//"
+        var lines = code.Split('\n');
+        var funcCalls = lines.Where(l => l.TrimStart().StartsWith("func_")).ToList();
+        Assert.NotEmpty(funcCalls);
+    }
+
+    [Fact]
+    public void Decompiler_Shoot2_UserFunctionHasPokeBody()
+    {
+        var romBytes = GetVerifiedRom("shoot2");
+        var rom = new NESRomReader(romBytes);
+        var decompiler = new Decompiler(rom, _logger);
+        var code = decompiler.Decompile();
+
+        // The sfx functions contain poke() calls for APU registers.
+        // At least one user function body should decompile APU poke calls.
+        // func_8C64 is sfx_shoot: poke(APU_PULSE1_CTRL, 0x4A)
+        Assert.Contains("poke(APU_PULSE1_CTRL, 0x4A);", code);
+        Assert.Contains("poke(APU_PULSE1_SWEEP, 0x00);", code);
+        Assert.Contains("poke(APU_PULSE1_TIMER_LO, 0x80);", code);
+        Assert.Contains("poke(APU_PULSE1_TIMER_HI, 0xF9);", code);
+    }
+
+    [Fact]
+    public void Decompiler_Shoot2_UserFunctionsHaveBraces()
+    {
+        var romBytes = GetVerifiedRom("shoot2");
+        var rom = new NESRomReader(romBytes);
+        var decompiler = new Decompiler(rom, _logger);
+        var code = decompiler.Decompile();
+
+        // Each user function should have an opening and closing brace
+        var lines = code.Split('\n').Select(l => l.Trim()).ToArray();
+        var funcDecls = lines.Where(l => l.StartsWith("static void func_")).ToList();
+        Assert.True(funcDecls.Count > 0, "Should have at least one user function declaration");
+
+        // Each function declaration should be followed by { ... }
+        for (int i = 0; i < lines.Length; i++)
+        {
+            if (lines[i].StartsWith("static void func_"))
+            {
+                Assert.True(i + 1 < lines.Length && lines[i + 1] == "{",
+                    $"Function declaration at line {i} should be followed by opening brace");
+            }
+        }
+    }
+
+    [Fact]
+    public void Decompiler_Hello_NoUserFunctions()
+    {
+        var romBytes = GetVerifiedRom("hello");
+        var rom = new NESRomReader(romBytes);
+        var decompiler = new Decompiler(rom, _logger);
+        var code = decompiler.Decompile();
+
+        // hello sample has no user-defined functions
+        Assert.DoesNotContain("static void func_", code);
     }
 }

@@ -291,10 +291,8 @@ partial class IL2NESWriter
                 EmitMultiplyA(structSize);
                 Emit(Opcode.TAX, AddressMode.Implied);
 
-                _pendingStructArrayRuntimeIndex = true;
+                _pendingStructElement = new PendingStructElement(structType, ConstantBase: null, RuntimeIndex: true);
                 _structArrayBaseForRuntimeIndex = arrayBase;
-                _pendingStructElementType = structType;
-                _pendingStructElementBase = null;
             }
             else
             {
@@ -305,9 +303,7 @@ partial class IL2NESWriter
         {
             // Constant index: compute element base at compile time
             ushort elementBase = (ushort)(arrayBase + index * structSize);
-            _pendingStructElementBase = elementBase;
-            _pendingStructElementType = structType;
-            _pendingStructArrayRuntimeIndex = false;
+            _pendingStructElement = new PendingStructElement(structType, elementBase, RuntimeIndex: false);
         }
 
         _runtimeValueInA = false;
@@ -1222,6 +1218,7 @@ partial class IL2NESWriter
         int sourceIndex1Idx = -1;
         int sourceArray2Idx = -1;
         int valueLocalIdx = -1;
+        int valueLocalIdx2 = -1; // second local for ldloc+ldloc+add pattern
 
         for (int i = valueStart; i < Index; i++)
         {
@@ -1299,7 +1296,12 @@ partial class IL2NESWriter
                         {
                             var locIdx = GetLdlocIndex(il);
                             if (locIdx != null)
-                                valueLocalIdx = locIdx.Value;
+                            {
+                                if (valueLocalIdx < 0)
+                                    valueLocalIdx = locIdx.Value;
+                                else if (valueLocalIdx2 < 0)
+                                    valueLocalIdx2 = locIdx.Value; // track second local
+                            }
                         }
                     }
                     break;
@@ -1495,6 +1497,23 @@ partial class IL2NESWriter
             {
                 Emit(Opcode.SEC, AddressMode.Implied);
                 Emit(Opcode.SBC, AddressMode.Immediate, checked((byte)subValue));
+            }
+        }
+        else if (valueLocalIdx >= 0 && valueLocalIdx2 >= 0 && (hasAdd != hasSub))
+        {
+            // Pattern: arr[i] = (byte)(local1 + local2) or arr[i] = (byte)(local1 - local2)
+            var loc1 = Locals[valueLocalIdx];
+            var loc2 = Locals[valueLocalIdx2];
+            Emit(Opcode.LDA, AddressMode.Absolute, (ushort)loc1.Address!);
+            if (hasAdd)
+            {
+                Emit(Opcode.CLC, AddressMode.Implied);
+                Emit(Opcode.ADC, AddressMode.Absolute, (ushort)loc2.Address!);
+            }
+            else
+            {
+                Emit(Opcode.SEC, AddressMode.Implied);
+                Emit(Opcode.SBC, AddressMode.Absolute, (ushort)loc2.Address!);
             }
         }
         else if (valueLocalIdx >= 0)
