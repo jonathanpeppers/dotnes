@@ -321,6 +321,7 @@ class Decompiler
         var pushedBytes = new Stack<byte>();   // Track values pushed via pusha (8-bit)
         var pushedWords = new Stack<ushort>(); // Track values pushed via pushax (16-bit)
         byte? lastImmediateA = null;           // Track last LDA #imm value for consecutive poke detection
+        var unknownInstructions = new List<(ushort Address, byte Opcode, byte? Op1, byte? Op2)>();
 
         for (int i = 0; i < instructions.Count; i++)
         {
@@ -332,12 +333,14 @@ class Decompiler
                 ushort target = (ushort)(op1.Value | (op2.Value << 8));
                 if (target == instrAddr)
                 {
+                    FlushUnknownInstructions(unknownInstructions, statements);
                     statements.Add("while (true) ;");
                     break;
                 }
                 // Last instruction is a backward JMP within main = while (true) { body } game loop
                 if (i == instructions.Count - 1 && target >= _mainAddress && target < instrAddr)
                 {
+                    FlushUnknownInstructions(unknownInstructions, statements);
                     statements.Add("while (true) ;");
                     break;
                 }
@@ -383,6 +386,7 @@ class Decompiler
                             byte aVal = op1.Value;
                             byte xVal = nextLdx.Op1.Value;
                             var stmts = DecompileCallXA(targetName, xVal, aVal, null, null);
+                            FlushUnknownInstructions(unknownInstructions, statements);
                             statements.AddRange(stmts);
                             lastImmediateA = null; // JSR modifies A
                             i += 2;
@@ -408,6 +412,7 @@ class Decompiler
                         ushort? pw = pushedWords.Count > 0 ? pushedWords.Pop() : null;
                         byte? pb = pushedBytes.Count > 0 ? pushedBytes.Pop() : null;
                         var stmts = DecompileCallXA(name, xVal, aVal, pw, pb);
+                        FlushUnknownInstructions(unknownInstructions, statements);
                         statements.AddRange(stmts);
                         lastImmediateA = null; // JSR modifies A
                         i += 2; // skip LDA and JSR
@@ -427,7 +432,11 @@ class Decompiler
                     {
                         byte? pushedArg = pushedBytes.Count > 0 ? pushedBytes.Pop() : null;
                         var stmt = DecompileCall(name, op1.Value, pushedArg);
-                        if (stmt != null) statements.Add(stmt);
+                        if (stmt != null)
+                        {
+                            FlushUnknownInstructions(unknownInstructions, statements);
+                            statements.Add(stmt);
+                        }
                         lastImmediateA = null; // JSR modifies A
                         i++; // skip the JSR
                         continue;
@@ -444,6 +453,7 @@ class Decompiler
                     ushort addr = (ushort)(next.Op1.Value | (next.Op2.Value << 8));
                     if (_localVariables.TryGetValue(addr, out var varName))
                     {
+                        FlushUnknownInstructions(unknownInstructions, statements);
                         statements.Add($"{varName} = 0x{op1.Value:X2};");
                         lastImmediateA = op1.Value;
                         i++; // skip the STA
@@ -458,6 +468,7 @@ class Decompiler
                 ushort addr = (ushort)(op1.Value | (op2.Value << 8));
                 if (_localVariables.TryGetValue(addr, out var varName))
                 {
+                    FlushUnknownInstructions(unknownInstructions, statements);
                     statements.Add($"{varName} = 0x{lastImmediateA.Value:X2};");
                     continue;
                 }
@@ -484,6 +495,7 @@ class Decompiler
                     ushort addr = (ushort)(next.Op1.Value | (next.Op2.Value << 8));
                     if (!_symbolTable.ContainsKey(addr))
                     {
+                        FlushUnknownInstructions(unknownInstructions, statements);
                         statements.Add(FormatPoke(addr, op1.Value));
                         lastImmediateA = op1.Value;
                         i++; // skip the STA
@@ -498,6 +510,7 @@ class Decompiler
                 ushort addr = (ushort)(op1.Value | (op2.Value << 8));
                 if (!_symbolTable.ContainsKey(addr))
                 {
+                    FlushUnknownInstructions(unknownInstructions, statements);
                     statements.Add(FormatPoke(addr, lastImmediateA.Value));
                     continue;
                 }
@@ -509,6 +522,7 @@ class Decompiler
                 ushort addr = (ushort)(op1.Value | (op2.Value << 8));
                 if (!_symbolTable.ContainsKey(addr))
                 {
+                    FlushUnknownInstructions(unknownInstructions, statements);
                     statements.Add(FormatPeek(addr));
                     lastImmediateA = null; // A now holds peek result, not an immediate
                     continue;
@@ -522,15 +536,23 @@ class Decompiler
                 if (_symbolTable.TryGetValue(jsrTarget, out var name))
                 {
                     var stmt = DecompileCall(name, null, null);
-                    if (stmt != null) statements.Add(stmt);
+                    if (stmt != null)
+                    {
+                        FlushUnknownInstructions(unknownInstructions, statements);
+                        statements.Add(stmt);
+                    }
                 }
                 lastImmediateA = null; // JSR may modify A
                 continue;
             }
 
-            // Unrecognized instruction — clear A tracking for safety
+            // Unrecognized instruction — accumulate for comment emission
+            unknownInstructions.Add((instrAddr, opcode, op1, op2));
             lastImmediateA = null;
         }
+
+        // Flush any remaining unknown instructions before the final while(true)
+        FlushUnknownInstructions(unknownInstructions, statements);
 
         // NES programs must end with an infinite loop; ensure one is present
         if (statements.Count == 0 || statements[^1] != "while (true) ;")
@@ -999,4 +1021,145 @@ class Decompiler
         // All other valid opcodes are 2 bytes (immediate, zero page, relative, indexed indirect, indirect indexed)
         return 2;
     }
+
+    /// <summary>
+    /// Flush accumulated unknown instructions as comment lines in the output.
+    /// Groups consecutive unknowns into a single block with address range and disassembly.
+    /// </summary>
+    static void FlushUnknownInstructions(
+        List<(ushort Address, byte Opcode, byte? Op1, byte? Op2)> unknowns,
+        List<string> statements)
+    {
+        if (unknowns.Count == 0)
+            return;
+
+        ushort startAddr = unknowns[0].Address;
+        var last = unknowns[^1];
+        ushort endAddr = (ushort)(last.Address + GetInstructionSize(last.Opcode) - 1);
+
+        if (startAddr == endAddr)
+            statements.Add($"// Unknown 6502 assembly at ${startAddr:X4}:");
+        else
+            statements.Add($"// Unknown 6502 assembly at ${startAddr:X4}-${endAddr:X4}:");
+
+        foreach (var (addr, opcode, op1, op2) in unknowns)
+        {
+            statements.Add($"//   {FormatDisassembly(addr, opcode, op1, op2)}");
+        }
+
+        unknowns.Clear();
+    }
+
+    /// <summary>
+    /// Format a single 6502 instruction as a disassembly string (e.g., "LDA #$01", "STA $2005").
+    /// </summary>
+    static string FormatDisassembly(ushort address, byte opcode, byte? op1, byte? op2)
+    {
+        string mnemonic = GetMnemonic(opcode);
+        int size = GetInstructionSize(opcode);
+
+        if (size == 1)
+            return mnemonic;
+
+        if (size == 2 && op1.HasValue)
+        {
+            // Determine addressing mode from opcode
+            return opcode switch
+            {
+                // Immediate: #$xx
+                0x09 or 0x29 or 0x49 or 0x69 or 0xA0 or 0xA2 or 0xA9
+                    or 0xC0 or 0xC9 or 0xE0 or 0xE9
+                    => $"{mnemonic} #${op1.Value:X2}",
+
+                // Relative: branch instructions
+                0x10 or 0x30 or 0x50 or 0x70 or 0x90 or 0xB0 or 0xD0 or 0xF0
+                    => $"{mnemonic} ${(ushort)(address + 2 + (sbyte)op1.Value):X4}",
+
+                // Zero Page,X
+                0x15 or 0x16 or 0x35 or 0x36 or 0x55 or 0x56 or 0x75 or 0x76
+                    or 0x94 or 0x95 or 0xB4 or 0xB5 or 0xD5 or 0xD6 or 0xF5 or 0xF6
+                    => $"{mnemonic} ${op1.Value:X2},X",
+
+                // Zero Page,Y
+                0x96 or 0xB6
+                    => $"{mnemonic} ${op1.Value:X2},Y",
+
+                // Indexed Indirect (X)
+                0x01 or 0x21 or 0x41 or 0x61 or 0x81 or 0xA1 or 0xC1 or 0xE1
+                    => $"{mnemonic} (${op1.Value:X2},X)",
+
+                // Indirect Indexed (Y)
+                0x11 or 0x31 or 0x51 or 0x71 or 0x91 or 0xB1 or 0xD1 or 0xF1
+                    => $"{mnemonic} (${op1.Value:X2}),Y",
+
+                // Default: Zero Page
+                _ => $"{mnemonic} ${op1.Value:X2}",
+            };
+        }
+
+        if (size == 3 && op1.HasValue && op2.HasValue)
+        {
+            ushort addr = (ushort)(op1.Value | (op2.Value << 8));
+
+            return opcode switch
+            {
+                // Indirect (JMP only)
+                0x6C => $"{mnemonic} (${addr:X4})",
+
+                // Absolute,X
+                0x1D or 0x1E or 0x3D or 0x3E or 0x5D or 0x5E or 0x7D or 0x7E
+                    or 0x9D or 0xBC or 0xBD or 0xDD or 0xDE or 0xFD or 0xFE
+                    => $"{mnemonic} ${addr:X4},X",
+
+                // Absolute,Y
+                0x19 or 0x39 or 0x59 or 0x79 or 0x99 or 0xB9 or 0xBE or 0xD9 or 0xF9
+                    => $"{mnemonic} ${addr:X4},Y",
+
+                // Default: Absolute
+                _ => $"{mnemonic} ${addr:X4}",
+            };
+        }
+
+        return mnemonic;
+    }
+
+    /// <summary>
+    /// Get the mnemonic name for a 6502 opcode byte.
+    /// </summary>
+    static string GetMnemonic(byte opcode) => opcode switch
+    {
+        0x00 => "BRK", 0x01 => "ORA", 0x05 => "ORA", 0x06 => "ASL", 0x08 => "PHP", 0x09 => "ORA", 0x0A => "ASL",
+        0x0D => "ORA", 0x0E => "ASL",
+        0x10 => "BPL", 0x11 => "ORA", 0x15 => "ORA", 0x16 => "ASL", 0x18 => "CLC", 0x19 => "ORA", 0x1D => "ORA",
+        0x1E => "ASL",
+        0x20 => "JSR", 0x21 => "AND", 0x24 => "BIT", 0x25 => "AND", 0x26 => "ROL", 0x28 => "PLP", 0x29 => "AND",
+        0x2A => "ROL", 0x2C => "BIT", 0x2D => "AND", 0x2E => "ROL",
+        0x30 => "BMI", 0x31 => "AND", 0x35 => "AND", 0x36 => "ROL", 0x38 => "SEC", 0x39 => "AND", 0x3D => "AND",
+        0x3E => "ROL",
+        0x40 => "RTI", 0x41 => "EOR", 0x45 => "EOR", 0x46 => "LSR", 0x48 => "PHA", 0x49 => "EOR", 0x4A => "LSR",
+        0x4C => "JMP", 0x4D => "EOR", 0x4E => "LSR",
+        0x50 => "BVC", 0x51 => "EOR", 0x55 => "EOR", 0x56 => "LSR", 0x58 => "CLI", 0x59 => "EOR", 0x5D => "EOR",
+        0x5E => "LSR",
+        0x60 => "RTS", 0x61 => "ADC", 0x65 => "ADC", 0x66 => "ROR", 0x68 => "PLA", 0x69 => "ADC", 0x6A => "ROR",
+        0x6C => "JMP", 0x6D => "ADC", 0x6E => "ROR",
+        0x70 => "BVS", 0x71 => "ADC", 0x75 => "ADC", 0x76 => "ROR", 0x78 => "SEI", 0x79 => "ADC", 0x7D => "ADC",
+        0x7E => "ROR",
+        0x81 => "STA", 0x84 => "STY", 0x85 => "STA", 0x86 => "STX", 0x88 => "DEY", 0x8A => "TXA", 0x8C => "STY",
+        0x8D => "STA", 0x8E => "STX",
+        0x90 => "BCC", 0x91 => "STA", 0x94 => "STY", 0x95 => "STA", 0x96 => "STX", 0x98 => "TYA", 0x99 => "STA",
+        0x9A => "TXS", 0x9D => "STA",
+        0xA0 => "LDY", 0xA1 => "LDA", 0xA2 => "LDX", 0xA4 => "LDY", 0xA5 => "LDA", 0xA6 => "LDX", 0xA8 => "TAY",
+        0xA9 => "LDA", 0xAA => "TAX", 0xAC => "LDY", 0xAD => "LDA", 0xAE => "LDX",
+        0xB0 => "BCS", 0xB1 => "LDA", 0xB4 => "LDY", 0xB5 => "LDA", 0xB6 => "LDX", 0xB8 => "CLV", 0xB9 => "LDA",
+        0xBA => "TSX", 0xBC => "LDY", 0xBD => "LDA", 0xBE => "LDX",
+        0xC0 => "CPY", 0xC1 => "CMP", 0xC4 => "CPY", 0xC5 => "CMP", 0xC6 => "DEC", 0xC8 => "INY", 0xC9 => "CMP",
+        0xCA => "DEX", 0xCC => "CPY", 0xCD => "CMP", 0xCE => "DEC",
+        0xD0 => "BNE", 0xD1 => "CMP", 0xD5 => "CMP", 0xD6 => "DEC", 0xD8 => "CLD", 0xD9 => "CMP", 0xDD => "CMP",
+        0xDE => "DEC",
+        0xE0 => "CPX", 0xE1 => "SBC", 0xE4 => "CPX", 0xE5 => "SBC", 0xE6 => "INC", 0xE8 => "INX", 0xE9 => "SBC",
+        0xEA => "NOP", 0xEC => "CPX", 0xED => "SBC", 0xEE => "INC",
+        0xF0 => "BEQ", 0xF1 => "SBC", 0xF5 => "SBC", 0xF6 => "INC", 0xF8 => "SED", 0xF9 => "SBC", 0xFD => "SBC",
+        0xFE => "INC",
+        _ => $"???({opcode:X2})",
+    };
 }
