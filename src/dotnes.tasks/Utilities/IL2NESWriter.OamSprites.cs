@@ -310,7 +310,14 @@ partial class IL2NESWriter
                 else
                 {
                     // No source variable — this is a constant-only compound expression.
-                    // Evaluate at compile time: addConst + (0 BINOP binOpConst) → just emit the constant.
+                    // Only safe for pure add-constant case; if a binary op is present,
+                    // we can't evaluate it at compile time without the source operand.
+                    if (arg.compoundBinOp != 0)
+                    {
+                        throw new TranspileException(
+                            $"Unsupported constant-only compound oam_spr argument with binary op '{arg.compoundBinOp}'.",
+                            MethodName);
+                    }
                     int constResult = arg.compoundAddConst;
                     Emit(Opcode.LDA, AddressMode.Immediate, (byte)(constResult & 0xFF));
                     goto emitDecspStore;
