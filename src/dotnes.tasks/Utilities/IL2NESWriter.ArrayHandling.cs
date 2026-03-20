@@ -1053,6 +1053,7 @@ partial class IL2NESWriter
         int sourceIndex1Idx = -1;
         int sourceArray2Idx = -1;
         int valueLocalIdx = -1;
+        int valueLocalIdx2 = -1; // second local for ldloc+ldloc+add pattern
 
         for (int i = valueStart; i < Index; i++)
         {
@@ -1130,7 +1131,12 @@ partial class IL2NESWriter
                         {
                             var locIdx = GetLdlocIndex(il);
                             if (locIdx != null)
-                                valueLocalIdx = locIdx.Value;
+                            {
+                                if (valueLocalIdx >= 0)
+                                    valueLocalIdx2 = locIdx.Value; // track second local
+                                else
+                                    valueLocalIdx = locIdx.Value;
+                            }
                         }
                     }
                     break;
@@ -1326,6 +1332,23 @@ partial class IL2NESWriter
             {
                 Emit(Opcode.SEC, AddressMode.Implied);
                 Emit(Opcode.SBC, AddressMode.Immediate, checked((byte)subValue));
+            }
+        }
+        else if (valueLocalIdx >= 0 && valueLocalIdx2 >= 0 && (hasAdd || hasSub))
+        {
+            // Pattern: arr[i] = (byte)(local1 + local2) or arr[i] = (byte)(local1 - local2)
+            var loc1 = Locals[valueLocalIdx];
+            var loc2 = Locals[valueLocalIdx2];
+            Emit(Opcode.LDA, AddressMode.Absolute, (ushort)loc1.Address!);
+            if (hasAdd)
+            {
+                Emit(Opcode.CLC, AddressMode.Implied);
+                Emit(Opcode.ADC, AddressMode.Absolute, (ushort)loc2.Address!);
+            }
+            if (hasSub)
+            {
+                Emit(Opcode.SEC, AddressMode.Implied);
+                Emit(Opcode.SBC, AddressMode.Absolute, (ushort)loc2.Address!);
             }
         }
         else if (valueLocalIdx >= 0)
