@@ -663,6 +663,7 @@ class Decompiler
             if (opcode == 0xC9 && op1.HasValue)
             {
                 lastCmpValue = op1.Value;
+                lastAndMask = null; // CMP sets flags — branch is based on CMP, not prior AND
                 continue;
             }
 
