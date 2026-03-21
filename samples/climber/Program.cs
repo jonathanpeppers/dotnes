@@ -633,29 +633,126 @@ while (true)
                 }
             }
 
-            // Pickup object — only if player was standing/walking at start of frame
+            // Pickup object — split into two phases to prevent stelem backward scan
+            // from consuming the item type comparison and score/sfx code.
+            // Phase 1: detect item type
+            byte pickup_type = 0;
             if (ps <= WALKING && floor_objtype[pf] != 0)
             {
                 byte objx = (byte)(floor_objpos[pf] * 16);
-                if (actor_x[pi] >= objx && actor_x[pi] < (byte)(objx + 16))
+                byte objx_end = (byte)(objx + 16);
+                if (actor_x[pi] >= objx && actor_x[pi] < objx_end)
                 {
-                    byte ot = floor_objtype[pf];
-                    floor_objtype[pf] = 0;
-                    if (ot == 1)
+                    pickup_type = floor_objtype[pf];
+                }
+            }
+            // Phase 2: act on pickup (mine = fall, others = score)
+            if (pickup_type == 1)
+            {
+                floor_objtype[pf] = 0;
+                if (pf > 0) actor_floor[pi] = (byte)(pf - 1);
+                actor_state[pi] = FALLING;
+                actor_xvel[pi] = 0;
+                actor_yvel[pi] = 0;
+                sfx_play(SND_HIT, 0);
+                vbright = 8;
+            }
+            if (pickup_type >= 2)
+            {
+                // Simple score increment (non-BCD, displays as hex digits)
+                score = (byte)(score + 1);
+                sfx_play(SND_COIN, 0);
+                // Clear item from floor data after all other work
+                floor_objtype[pf] = 0;
+            }
+            // Redraw item floor rows after pickup to clear tiles visually.
+            // Reuses the same inline draw_floor_line pattern that the scroll
+            // redraw uses (which the transpiler handles correctly).
+            if (pickup_type != 0)
+            {
+                byte refresh_rh = (byte)(floor_ypos[pf] + 2);
+                Array.Fill(buf, (byte)0);
+                for (byte df = 0; df < MAX_FLOORS; df++)
+                {
+                    byte ddy = (byte)(refresh_rh - floor_ypos[df]);
+                    if (ddy >= 253) ddy = 0;
+                    if (ddy < floor_height[df])
                     {
-                        if (pf > 0) actor_floor[pi] = (byte)(pf - 1);
-                        actor_state[pi] = FALLING;
-                        actor_xvel[pi] = 0;
-                        actor_yvel[pi] = 0;
-                        sfx_play(SND_HIT, 0);
-                        vbright = 8;
-                    }
-                    else
-                    {
-                        score = (byte)bcd_add(score, 1);
-                        sfx_play(SND_COIN, 0);
+                        if (ddy <= 1)
+                        {
+                            for (byte dcol = 0; dcol < COLS; dcol += 2)
+                            {
+                                if (ddy != 0) { buf[dcol] = CH_FLOOR; buf[(byte)(dcol + 1)] = (byte)(CH_FLOOR + 2); }
+                                else { buf[dcol] = (byte)(CH_FLOOR + 1); buf[(byte)(dcol + 1)] = (byte)(CH_FLOOR + 3); }
+                            }
+                            if (floor_gap[df] != 0)
+                            {
+                                byte dgstart = (byte)(floor_gap[df] * 2);
+                                for (byte dg = 0; dg < GAPSIZE; dg++) buf[(byte)(dgstart + dg)] = 0;
+                            }
+                        }
+                        else
+                        {
+                            if (df < MAX_FLOORS - 1) { buf[0] = (byte)(CH_FLOOR + 1); buf[COLS - 1] = CH_FLOOR; }
+                            if (floor_ladder1[df] != 0) { byte dlc = (byte)(floor_ladder1[df] * 2); buf[dlc] = CH_LADDER; buf[(byte)(dlc + 1)] = (byte)(CH_LADDER + 1); }
+                            if (floor_ladder2[df] != 0) { byte dlc = (byte)(floor_ladder2[df] * 2); buf[dlc] = CH_LADDER; buf[(byte)(dlc + 1)] = (byte)(CH_LADDER + 1); }
+                        }
+                        if (floor_objtype[df] != 0)
+                        {
+                            byte dch = (byte)(floor_objtype[df] * 4 + CH_ITEM);
+                            if (ddy == 2) { buf[(byte)(floor_objpos[df] * 2)] = (byte)(dch + 1); buf[(byte)(floor_objpos[df] * 2 + 1)] = (byte)(dch + 3); }
+                            if (ddy == 3) { buf[(byte)(floor_objpos[df] * 2)] = dch; buf[(byte)(floor_objpos[df] * 2 + 1)] = (byte)(dch + 2); }
+                        }
+                        break;
                     }
                 }
+                byte drowy2 = (byte)((byte)(ROWS - 1) - (byte)(refresh_rh % ROWS));
+                ushort daddr2;
+                if (drowy2 < 30) daddr2 = NTADR_A(1, drowy2); else daddr2 = NTADR_C(1, (byte)(drowy2 - 30));
+                vrambuf_put(daddr2, buf, COLS);
+                vrambuf_flush();
+
+                // Second row (dy=3)
+                refresh_rh = (byte)(floor_ypos[pf] + 3);
+                Array.Fill(buf, (byte)0);
+                for (byte df = 0; df < MAX_FLOORS; df++)
+                {
+                    byte ddy = (byte)(refresh_rh - floor_ypos[df]);
+                    if (ddy >= 253) ddy = 0;
+                    if (ddy < floor_height[df])
+                    {
+                        if (ddy <= 1)
+                        {
+                            for (byte dcol = 0; dcol < COLS; dcol += 2)
+                            {
+                                if (ddy != 0) { buf[dcol] = CH_FLOOR; buf[(byte)(dcol + 1)] = (byte)(CH_FLOOR + 2); }
+                                else { buf[dcol] = (byte)(CH_FLOOR + 1); buf[(byte)(dcol + 1)] = (byte)(CH_FLOOR + 3); }
+                            }
+                            if (floor_gap[df] != 0)
+                            {
+                                byte dgstart = (byte)(floor_gap[df] * 2);
+                                for (byte dg = 0; dg < GAPSIZE; dg++) buf[(byte)(dgstart + dg)] = 0;
+                            }
+                        }
+                        else
+                        {
+                            if (df < MAX_FLOORS - 1) { buf[0] = (byte)(CH_FLOOR + 1); buf[COLS - 1] = CH_FLOOR; }
+                            if (floor_ladder1[df] != 0) { byte dlc = (byte)(floor_ladder1[df] * 2); buf[dlc] = CH_LADDER; buf[(byte)(dlc + 1)] = (byte)(CH_LADDER + 1); }
+                            if (floor_ladder2[df] != 0) { byte dlc = (byte)(floor_ladder2[df] * 2); buf[dlc] = CH_LADDER; buf[(byte)(dlc + 1)] = (byte)(CH_LADDER + 1); }
+                        }
+                        if (floor_objtype[df] != 0)
+                        {
+                            byte dch = (byte)(floor_objtype[df] * 4 + CH_ITEM);
+                            if (ddy == 2) { buf[(byte)(floor_objpos[df] * 2)] = (byte)(dch + 1); buf[(byte)(floor_objpos[df] * 2 + 1)] = (byte)(dch + 3); }
+                            if (ddy == 3) { buf[(byte)(floor_objpos[df] * 2)] = dch; buf[(byte)(floor_objpos[df] * 2 + 1)] = (byte)(dch + 2); }
+                        }
+                        break;
+                    }
+                }
+                byte drowy3 = (byte)((byte)(ROWS - 1) - (byte)(refresh_rh % ROWS));
+                ushort daddr3;
+                if (drowy3 < 30) daddr3 = NTADR_A(1, drowy3); else daddr3 = NTADR_C(1, (byte)(drowy3 - 30));
+                vrambuf_put(daddr3, buf, COLS);
             }
 
             // Scroll check — update scroll and redraw offscreen rows on tile boundaries
