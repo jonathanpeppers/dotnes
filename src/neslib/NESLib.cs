@@ -535,9 +535,9 @@ public static class NESLib
     /// <summary>
     /// Set an MMC3 CHR bank register to the specified bank number.
     /// Writes reg to $8000 (bank select) and bank to $8001 (bank data).
-    /// R0/R1 (reg 0-1): 2KB banks at PPU $0000-$07FF / $0800-$0FFF
-    /// R2-R5 (reg 2-5): 1KB banks at PPU $1000-$13FF / $1400-$17FF / $1800-$1BFF / $1C00-$1FFF
-    /// Reg 6-7 select PRG banks.
+    /// R0/R1 (reg 0-1): 2KB CHR banks at PPU $0000-$07FF / $0800-$0FFF
+    /// R2-R5 (reg 2-5): 1KB CHR banks at PPU $1000-$13FF / $1400-$17FF / $1800-$1BFF / $1C00-$1FFF
+    /// Note: reg values 6-7 select PRG banks, not CHR banks.
     /// </summary>
     public static void mmc3_set_chr_bank(byte reg, byte bank) => throw null!;
 
