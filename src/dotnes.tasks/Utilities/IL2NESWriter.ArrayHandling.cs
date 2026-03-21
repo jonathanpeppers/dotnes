@@ -715,7 +715,7 @@ partial class IL2NESWriter
                 case ILOpCode.Conv_i1: case ILOpCode.Conv_i2: case ILOpCode.Conv_i4:
                     break; // no net change
                 case ILOpCode.Stloc_0: case ILOpCode.Stloc_1: case ILOpCode.Stloc_2: case ILOpCode.Stloc_3:
-                case ILOpCode.Stloc_s:
+                case ILOpCode.Stloc_s: case ILOpCode.Stloc:
                 case ILOpCode.Pop:
                     pop = 1; break;
                 case ILOpCode.Bne_un_s: case ILOpCode.Bne_un:

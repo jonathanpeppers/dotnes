@@ -1888,43 +1888,69 @@ partial class IL2NESWriter
                     case nameof(NESLib.bcd_add):
                         // bcd_add(ushort a, ushort b) — first arg on cc65 stack via pushax,
                         // second arg in A:X. Both args are 16-bit, so when the source value
-                        // is a byte constant, X (the upper byte of the 16-bit value) must
-                        // be cleared to 0.
+                        // is a byte constant, X must be cleared to 0.
                         {
                             var block = CurrentBlock!;
                             var lastInstr = block[block.Count - 1];
 
-                            // Second arg is LDA (byte constant or local)
-                            var ldaInstr = lastInstr;
-                            var prevInstr = block[block.Count - 2];
-                            bool alreadyPushax = prevInstr.Opcode == Opcode.JSR
-                                && prevInstr.Operand is LabelOperand bcdLbl && bcdLbl.Label == "pushax";
-                            bool hasPusha = prevInstr.Opcode == Opcode.JSR
-                                && prevInstr.Operand is LabelOperand bcdLbl2 && bcdLbl2.Label == "pusha";
+                            // Detect if second arg is ushort (LDX before/after LDA).
+                            bool secondIsUshort = lastInstr.Opcode == Opcode.LDX
+                                || (block.Count >= 2 && block[block.Count - 2].Opcode == Opcode.LDX
+                                    && block[block.Count - 2].Mode == AddressMode.Immediate);
+                            int secondArgSize = secondIsUshort ? 2 : 1;
+                            int secondArgStart = block.Count - secondArgSize;
+
+                            // Save second arg instructions before modifying the block
+                            var savedSecond = new Instruction[secondArgSize];
+                            for (int si = 0; si < secondArgSize; si++)
+                                savedSecond[si] = block[secondArgStart + si];
+
+                            // Check what pushed the first arg
+                            int pushIdx = secondArgStart - 1;
+                            bool alreadyPushax = pushIdx >= 0
+                                && block[pushIdx].Opcode == Opcode.JSR
+                                && block[pushIdx].Operand is LabelOperand bcdLbl && bcdLbl.Label == "pushax";
+                            bool hasPusha = pushIdx >= 0
+                                && block[pushIdx].Opcode == Opcode.JSR
+                                && block[pushIdx].Operand is LabelOperand bcdLbl2 && bcdLbl2.Label == "pusha";
+
                             if (alreadyPushax)
                             {
-                                // Ushort arg already pushed correctly via pushax
-                                RemoveLastInstructions(1); // Remove just LDA (second arg)
-                                // Clear X for byte-sized second arg (pushax preserves X from first arg)
-                                if (ldaInstr.Mode == AddressMode.Immediate)
+                                // First arg already pushed correctly via pushax.
+                                // For byte-sized second args, clear X.
+                                RemoveLastInstructions(secondArgSize);
+                                if (!secondIsUshort)
                                     Emit(Opcode.LDX, AddressMode.Immediate, 0x00);
-                                block.Emit(ldaInstr); // Re-emit LDA for second arg
+                                foreach (var si in savedSecond)
+                                    block.Emit(si);
                             }
                             else if (hasPusha)
                             {
-                                // Byte value: replace pusha with LDX #$00 + pushax
-                                RemoveLastInstructions(2); // Remove JSR pusha + LDA
+                                // First arg was byte-sized (pusha). Replace with LDX #$00 + pushax.
+                                RemoveLastInstructions(secondArgSize + 1); // remove pusha + second arg
                                 Emit(Opcode.LDX, AddressMode.Immediate, 0x00);
                                 EmitJSR("pushax");
-                                block.Emit(ldaInstr); // Re-emit LDA for second arg
+                                if (!secondIsUshort)
+                                    Emit(Opcode.LDX, AddressMode.Immediate, 0x00);
+                                foreach (var si in savedSecond)
+                                    block.Emit(si);
                             }
                             else
                             {
-                                // Local var or runtime value: A has the value, push with X=0
-                                RemoveLastInstructions(1); // Remove only the second arg's LDA
-                                Emit(Opcode.LDX, AddressMode.Immediate, 0x00);
+                                // No push found — first arg is in registers.
+                                // If preceding instruction is LDX absolute, first arg is ushort
+                                // (A:X already set). Otherwise byte (X undefined, needs clearing).
+                                bool firstIsUshort = pushIdx >= 0
+                                    && block[pushIdx].Opcode == Opcode.LDX
+                                    && block[pushIdx].Mode == AddressMode.Absolute;
+                                RemoveLastInstructions(secondArgSize);
+                                if (!firstIsUshort)
+                                    Emit(Opcode.LDX, AddressMode.Immediate, 0x00);
                                 EmitJSR("pushax");
-                                block.Emit(ldaInstr); // Re-emit second arg LDA
+                                if (!secondIsUshort)
+                                    Emit(Opcode.LDX, AddressMode.Immediate, 0x00);
+                                foreach (var si in savedSecond)
+                                    block.Emit(si);
                             }
                             EmitWithLabel(Opcode.JSR, AddressMode.Absolute, operand);
                             UsedMethods?.Add("pushax");

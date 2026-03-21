@@ -4513,13 +4513,18 @@ public class RoslynTests
 
         var hex = Convert.ToHexString(bytes);
         _logger.WriteLine($"NtadrTwoLocals hex: {hex}");
-        // Must contain JSR nametable_a (20 xx xx) for runtime NTADR
         // Must contain STA $17 (8517) to save x into TEMP
         Assert.Contains("8517", hex); // STA TEMP (x)
         // Must contain STA $19 (8519) from NTADR result lo byte
         Assert.Contains("8519", hex); // STA TEMP2
-        // Must NOT contain JSR popa — both locals should be loaded directly
-        // The subroutine nametable_a takes x in TEMP, y in A
+
+        // Verify JSR (opcode 0x20) appears between TEMP and TEMP2 stores (runtime nametable_a),
+        // and at least one JSR after TEMP2 (vram_adr).
+        int tempIdx = hex.IndexOf("8517");
+        int temp2Idx = hex.IndexOf("8519");
+        Assert.True(temp2Idx > tempIdx, "TEMP2 store should occur after TEMP store.");
+        string between = hex.Substring(tempIdx, temp2Idx - tempIdx);
+        Assert.Contains("20", between); // JSR nametable_a between TEMP stores
     }
 
     [Fact]
@@ -4540,10 +4545,24 @@ public class RoslynTests
 
         var hex = Convert.ToHexString(bytes);
         _logger.WriteLine($"BcdAddRuntime hex: {hex}");
-        // Must contain JSR pushax (20 xx xx) to push the ushort score
-        // followed by LDX #$00 (A200) and LDA #$01 (A901) for the constant arg
-        Assert.Contains("A200", hex); // LDX #$00 (clear X for second arg)
+        // Must contain LDX #$00 (A200) and LDA #$01 (A901) for the constant arg
+        Assert.Contains("A200", hex); // LDX #$00 (clear X)
         Assert.Contains("A901", hex); // LDA #$01 (second arg)
+
+        // Verify the sequence for second arg: LDX #$00 then LDA #$01 then JSR bcd_add
+        // A2 00 A9 01 20 ?? ??
+        bool patternFound = false;
+        for (int i = 0; i + 6 < bytes!.Length; i++)
+        {
+            if (bytes[i] == 0xA2 && bytes[i + 1] == 0x00      // LDX #$00
+                && bytes[i + 2] == 0xA9 && bytes[i + 3] == 0x01 // LDA #$01
+                && bytes[i + 4] == 0x20)                        // JSR bcd_add
+            {
+                patternFound = true;
+                break;
+            }
+        }
+        Assert.True(patternFound, "Expected LDX #$00; LDA #$01; JSR bcd_add pattern not found.");
     }
 
     [Fact]
