@@ -4492,4 +4492,97 @@ public class RoslynTests
         // Should contain JMP (4C) for the always-true branch, not CMP #$00 (overflow)
         Assert.Contains("4C", hex);
     }
+
+    [Fact]
+    public void NtadrWithTwoLocalVarArgs()
+    {
+        // Bug: NTADR_A(localVar, localVar) crashed because the handler's
+        // "both runtime" path removed the JSR pusha then called JSR popa,
+        // finding nothing on the cc65 stack. Fix: use direct loads instead
+        // of pusha/popa for consecutive local loads.
+        var bytes = GetProgramBytes(
+            """
+            byte x = 1;
+            byte y = 2;
+            ushort addr = NTADR_A(x, y);
+            vram_adr(addr);
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"NtadrTwoLocals hex: {hex}");
+        // Must contain JSR nametable_a (20 xx xx) for runtime NTADR
+        // Must contain STA $17 (8517) to save x into TEMP
+        Assert.Contains("8517", hex); // STA TEMP (x)
+        // Must contain STA $19 (8519) from NTADR result lo byte
+        Assert.Contains("8519", hex); // STA TEMP2
+        // Must NOT contain JSR popa — both locals should be loaded directly
+        // The subroutine nametable_a takes x in TEMP, y in A
+    }
+
+    [Fact]
+    public void BcdAddWithRuntimeFirstArg()
+    {
+        // Bug: bcd_add(score, 1) where score is ushort — the first argument
+        // needs pushax (16-bit push), and the second argument needs X=0.
+        // Without the fix, pusha (1-byte) is used or X is garbage.
+        var bytes = GetProgramBytes(
+            """
+            ushort score = 0;
+            score = bcd_add(score, 1);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"BcdAddRuntime hex: {hex}");
+        // Must contain JSR pushax (20 xx xx) to push the ushort score
+        // followed by LDX #$00 (A200) and LDA #$01 (A901) for the constant arg
+        Assert.Contains("A200", hex); // LDX #$00 (clear X for second arg)
+        Assert.Contains("A901", hex); // LDA #$01 (second arg)
+    }
+
+    [Fact]
+    public void StelemDoesNotConsumeIfElseBranches()
+    {
+        // Bug: HandleStelemI1's backward IL scan walked past if/else branches,
+        // and the _blockCountAtILOffset removal consumed the entire branch code.
+        // Pattern: ldelem + if/else + stelem in the same scope.
+        // Use a loop to force Roslyn to store the array in a local variable.
+        var bytes = GetProgramBytes(
+            """
+            byte[] types = new byte[8];
+            types[0] = 1;
+            types[1] = 2;
+            for (byte pf = 0; pf < 2; pf++)
+            {
+                byte ot = types[pf];
+                if (ot == 1)
+                {
+                    oam_clear();
+                }
+                else
+                {
+                    pal_col(0, 0x30);
+                }
+                types[pf] = 0;
+            }
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"StelemBranch hex: {hex}");
+        // Must contain CMP #$01 (C901) for the if (ot == 1) comparison
+        Assert.Contains("C901", hex);
+        // Must contain LDA #$30 (A930) for the pal_col color argument in else branch
+        Assert.Contains("A930", hex);
+        // Must contain LDA #$00 (A900) for stelem value 0
+        Assert.Contains("A900", hex);
+    }
 }

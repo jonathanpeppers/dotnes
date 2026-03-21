@@ -1271,13 +1271,11 @@ partial class IL2NESWriter
                                         else if (xLoadInstr.Mode == AddressMode.Absolute
                                             && xLoadInstr.Opcode == Opcode.LDA)
                                         {
-                                            // Both runtime: x pusha'd to cc65 stack, y in absolute LDA
+                                            // Both runtime: directly load x and y without pusha/popa
                                             RemoveLastInstructions(3);
-                                            block.Emit(lastInstr); // re-emit LDA $y_addr → A = y
-                                            Emit(Opcode.STA, AddressMode.ZeroPage, TEMP2);
-                                            EmitJSR("popa"); // A = x (from cc65 stack)
+                                            block.Emit(xLoadInstr); // re-emit LDA $x_addr → A = x
                                             Emit(Opcode.STA, AddressMode.ZeroPage, TEMP); // TEMP = x
-                                            Emit(Opcode.LDA, AddressMode.ZeroPage, TEMP2); // A = y
+                                            block.Emit(lastInstr); // re-emit LDA $y_addr → A = y
                                         }
                                         else
                                         {
@@ -1288,21 +1286,76 @@ partial class IL2NESWriter
                                     }
                                     else if (block.Count >= 2)
                                     {
-                                        // No pusha between: direct consecutive LDA $x, LDA $y
-                                        var prevInstr = block[block.Count - 2];
-                                        if (prevInstr.Mode == AddressMode.Absolute
-                                            && prevInstr.Opcode == Opcode.LDA)
+                                        // Scan backwards for JSR pusha or an LDA that represents x
+                                        // Block may contain intervening STA/LDA from stloc between x push and y load
+                                        int pushaIdx2 = -1;
+                                        int xLdaIdx = -1;
+                                        for (int bi = block.Count - 2; bi >= 0; bi--)
                                         {
-                                            RemoveLastInstructions(2);
-                                            block.Emit(prevInstr); // re-emit LDA $x_addr
-                                            Emit(Opcode.STA, AddressMode.ZeroPage, TEMP); // TEMP = x
-                                            block.Emit(lastInstr); // re-emit LDA $y_addr → A = y
+                                            if (block[bi].Opcode == Opcode.JSR
+                                                && block[bi].Operand is LabelOperand staPushaLbl
+                                                && staPushaLbl.Label == "pusha")
+                                            {
+                                                pushaIdx2 = bi;
+                                                break;
+                                            }
+                                        }
+
+                                        if (pushaIdx2 >= 0 && pushaIdx2 > 0)
+                                        {
+                                            // Found pusha with intervening stloc instructions
+                                            var xLoadInstr2 = block[pushaIdx2 - 1];
+                                            int instrToRemove2 = block.Count - (pushaIdx2 - 1);
+                                            if (xLoadInstr2.Operand is ImmediateOperand immX2)
+                                            {
+                                                RemoveLastInstructions(instrToRemove2);
+                                                Emit(Opcode.LDA, AddressMode.Immediate, immX2.Value);
+                                                Emit(Opcode.STA, AddressMode.ZeroPage, TEMP);
+                                                block.Emit(lastInstr);
+                                            }
+                                            else if (xLoadInstr2.Mode == AddressMode.Absolute
+                                                && xLoadInstr2.Opcode == Opcode.LDA)
+                                            {
+                                                RemoveLastInstructions(instrToRemove2);
+                                                block.Emit(xLoadInstr2);
+                                                Emit(Opcode.STA, AddressMode.ZeroPage, TEMP);
+                                                block.Emit(lastInstr);
+                                            }
+                                            else
+                                            {
+                                                throw new TranspileException(
+                                                    $"Unsupported NTADR x argument pattern: {xLoadInstr2.Operand?.GetType().Name}",
+                                                    MethodName);
+                                            }
                                         }
                                         else
                                         {
-                                            throw new TranspileException(
-                                                $"Unsupported NTADR pattern: expected LDA absolute at block[-2], got {prevInstr.Opcode} {prevInstr.Mode}",
-                                                MethodName);
+                                            // No pusha found. Look for direct LDA (x) before the y load.
+                                            // Scan backwards past STA/LDA pairs from stloc
+                                            for (int bi = block.Count - 2; bi >= 0; bi--)
+                                            {
+                                                if (block[bi].Mode == AddressMode.Absolute
+                                                    && block[bi].Opcode == Opcode.LDA)
+                                                {
+                                                    xLdaIdx = bi;
+                                                    break;
+                                                }
+                                            }
+                                            if (xLdaIdx >= 0)
+                                            {
+                                                var prevInstr = block[xLdaIdx];
+                                                int instrToRemove2 = block.Count - xLdaIdx;
+                                                RemoveLastInstructions(instrToRemove2);
+                                                block.Emit(prevInstr); // re-emit LDA $x_addr
+                                                Emit(Opcode.STA, AddressMode.ZeroPage, TEMP);
+                                                block.Emit(lastInstr); // re-emit LDA $y_addr
+                                            }
+                                            else
+                                            {
+                                                throw new TranspileException(
+                                                    $"Unsupported NTADR pattern: could not find x argument in block",
+                                                    MethodName);
+                                            }
                                         }
                                     }
                                     else
@@ -1769,7 +1822,10 @@ partial class IL2NESWriter
                         break;
                     case "split":
                     case "scroll":
-                        // scroll()/split() takes unsigned int params, which use popax (2-byte pop).
+                    case nameof(NESLib.bcd_add):
+                        // These functions take unsigned int/ushort params via popax (2-byte pop).
+                        // First arg must be pushed via pushax (not pusha).
+                        // Second arg should be in A:X (X=0 for byte-sized values).
                         // Patterns for the second arg (Y):
                         // 1. Byte constant: last instr = LDA #yy
                         // 2. Byte local: last instr = LDA $addr
@@ -1808,6 +1864,9 @@ partial class IL2NESWriter
                                 {
                                     // Ushort arg already pushed correctly via pushax
                                     RemoveLastInstructions(1); // Remove just LDA (second arg)
+                                    // Second arg is a byte constant — clear X for 16-bit convention
+                                    if (ldaInstr.Mode == AddressMode.Immediate)
+                                        Emit(Opcode.LDX, AddressMode.Immediate, 0x00);
                                     block.Emit(ldaInstr); // Re-emit LDA for second arg
                                 }
                                 else if (hasPusha)
@@ -1828,6 +1887,7 @@ partial class IL2NESWriter
                                 }
                             }
                             EmitWithLabel(Opcode.JSR, AddressMode.Absolute, operand);
+                            UsedMethods?.Add("pushax");
                             _immediateInA = null;
                         }
                         break;
