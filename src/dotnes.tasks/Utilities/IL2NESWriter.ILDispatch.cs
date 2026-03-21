@@ -1286,8 +1286,9 @@ partial class IL2NESWriter
                                     }
                                     else if (block.Count >= 2)
                                     {
-                                        // Scan backwards for JSR pusha or an LDA that represents x
-                                        // Block may contain intervening STA/LDA from stloc between x push and y load
+                                        // Scan backwards for JSR pusha or an LDA that represents x.
+                                        // Block may have intervening STA/LDA from stloc (store-local)
+                                        // when Roslyn inserts temp variables between the NTADR args.
                                         int pushaIdx2 = -1;
                                         int xLdaIdx = -1;
                                         for (int bi = block.Count - 2; bi >= 0; bi--)
@@ -1886,7 +1887,9 @@ partial class IL2NESWriter
                         break;
                     case nameof(NESLib.bcd_add):
                         // bcd_add(ushort a, ushort b) — first arg on cc65 stack via pushax,
-                        // second arg in A:X. Both args are 16-bit, so X must be 0 for byte values.
+                        // second arg in A:X. Both args are 16-bit, so when the source value
+                        // is a byte constant, X (the upper byte of the 16-bit value) must
+                        // be cleared to 0.
                         {
                             var block = CurrentBlock!;
                             var lastInstr = block[block.Count - 1];

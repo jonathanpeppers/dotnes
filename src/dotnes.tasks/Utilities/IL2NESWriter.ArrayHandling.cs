@@ -724,7 +724,7 @@ partial class IL2NESWriter
                 case ILOpCode.Bgt_s: case ILOpCode.Bgt: case ILOpCode.Bgt_un_s: case ILOpCode.Bgt_un:
                 case ILOpCode.Ble_s: case ILOpCode.Ble: case ILOpCode.Ble_un_s: case ILOpCode.Ble_un:
                 case ILOpCode.Blt_s: case ILOpCode.Blt: case ILOpCode.Blt_un_s: case ILOpCode.Blt_un:
-                    pop = 2; break; // compare-and-branch pops 2
+                    pop = 2; break; // compare-and-branch pops 2 values (comparison operands)
                 case ILOpCode.Brfalse_s: case ILOpCode.Brfalse:
                 case ILOpCode.Brtrue_s: case ILOpCode.Brtrue:
                     pop = 1; break; // test-and-branch pops 1
