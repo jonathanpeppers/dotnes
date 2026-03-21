@@ -322,6 +322,10 @@ partial class IL2NESWriter
                         ILOpCode.Or => arg.compoundAddConst | arg.compoundBinOpConst,
                         ILOpCode.Xor => arg.compoundAddConst ^ arg.compoundBinOpConst,
                         ILOpCode.Mul => arg.compoundAddConst * arg.compoundBinOpConst,
+                        ILOpCode.Div or ILOpCode.Div_un => arg.compoundBinOpConst != 0
+                            ? arg.compoundAddConst / arg.compoundBinOpConst : 0,
+                        ILOpCode.Rem or ILOpCode.Rem_un => arg.compoundBinOpConst != 0
+                            ? arg.compoundAddConst % arg.compoundBinOpConst : 0,
                         ILOpCode.Nop => arg.compoundAddConst, // no binary op, just a constant
                         _ => throw new TranspileException(
                             $"Unsupported binary op '{arg.compoundBinOp}' in constant-only compound oam_spr arg.",
@@ -367,10 +371,49 @@ partial class IL2NESWriter
                         Emit(Opcode.SBC, AddressMode.Immediate, checked((byte)arg.compoundBinOpConst));
                         break;
                     case ILOpCode.Div: case ILOpCode.Div_un:
+                    {
+                        int divisor = arg.compoundBinOpConst;
+                        if (divisor > 0 && (divisor & (divisor - 1)) == 0)
+                        {
+                            // Power-of-2: use LSR shifts
+                            int shifts = 0;
+                            int temp = divisor;
+                            while (temp > 1) { temp >>= 1; shifts++; }
+                            for (int s = 0; s < shifts; s++)
+                                Emit(Opcode.LSR, AddressMode.Accumulator);
+                        }
+                        else
+                        {
+                            // General division via repeated subtraction
+                            // A = dividend. Result: quotient in X → TXA → A
+                            Emit(Opcode.LDX, AddressMode.Immediate, 0xFF);
+                            Emit(Opcode.SEC, AddressMode.Implied);
+                            Emit(Opcode.INX, AddressMode.Implied);
+                            Emit(Opcode.SBC, AddressMode.Immediate, (byte)divisor);
+                            Emit(Opcode.BCS, AddressMode.Relative, unchecked((byte)-5));
+                            Emit(Opcode.TXA, AddressMode.Implied);
+                        }
+                        break;
+                    }
                     case ILOpCode.Rem: case ILOpCode.Rem_un:
-                        throw new TranspileException(
-                            $"Unsupported binary op '{arg.compoundBinOp}' in compound oam_spr argument. " +
-                            "Division and modulo cannot be efficiently compiled for the 6502.", MethodName);
+                    {
+                        int divisor = arg.compoundBinOpConst;
+                        if (divisor > 0 && (divisor & (divisor - 1)) == 0)
+                        {
+                            // Power-of-2: use AND mask
+                            Emit(Opcode.AND, AddressMode.Immediate, (byte)(divisor - 1));
+                        }
+                        else
+                        {
+                            // General modulo via repeated subtraction
+                            // A = dividend. Result: remainder in A (after adding back divisor)
+                            Emit(Opcode.SEC, AddressMode.Implied);
+                            Emit(Opcode.SBC, AddressMode.Immediate, (byte)divisor);
+                            Emit(Opcode.BCS, AddressMode.Relative, unchecked((byte)-4));
+                            Emit(Opcode.ADC, AddressMode.Immediate, (byte)divisor);
+                        }
+                        break;
+                    }
                 }
 
                 // Apply the outer add
