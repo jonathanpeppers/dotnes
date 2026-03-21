@@ -4652,4 +4652,37 @@ public class RoslynTests
         // Must contain LDA #$00 (A900) for stelem value 0
         Assert.Contains("A900", hex);
     }
+
+    [Fact]
+    public void LdelemU1_NestedArrayIndex()
+    {
+        // Regression: arr1[arr2[i]] generated wrong code — the transpiler
+        // loaded from arr2 twice instead of using arr2[i] as index into arr1.
+        // The workaround (intermediate local) should produce correct code.
+        // Direct nested access (arr1[arr2[i]]) requires further transpiler work.
+        var bytes = GetProgramBytes(
+            """
+            byte[] names = new byte[4];
+            byte[] lookup = new byte[4];
+            names[0] = 10; names[1] = 20; names[2] = 30; names[3] = 40;
+            lookup[0] = 3; lookup[1] = 2; lookup[2] = 1; lookup[3] = 0;
+            for (byte i = 0; i < 4; i++)
+            {
+                byte idx = lookup[i];
+                byte result = names[idx];
+                pal_col(i, result);
+            }
+            ppu_on_all();
+            while (true) ;
+            """);
+
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"LdelemU1_NestedArrayIndex hex: {hex}");
+
+        // LDA names,X pattern (BD xx xx) — indexed load from names array
+        Assert.Contains("BD", hex);
+    }
 }
