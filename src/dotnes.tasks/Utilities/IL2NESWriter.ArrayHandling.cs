@@ -703,6 +703,7 @@ partial class IL2NESWriter
                 case ILOpCode.Ldc_i4_0: case ILOpCode.Ldc_i4_1: case ILOpCode.Ldc_i4_2: case ILOpCode.Ldc_i4_3:
                 case ILOpCode.Ldc_i4_4: case ILOpCode.Ldc_i4_5: case ILOpCode.Ldc_i4_6: case ILOpCode.Ldc_i4_7:
                 case ILOpCode.Ldc_i4_8: case ILOpCode.Ldc_i4_s: case ILOpCode.Ldc_i4:
+                case ILOpCode.Dup:
                     push = 1; break;
                 case ILOpCode.Add: case ILOpCode.Sub: case ILOpCode.Mul: case ILOpCode.Div: case ILOpCode.Rem:
                 case ILOpCode.And: case ILOpCode.Or: case ILOpCode.Xor:
@@ -713,6 +714,20 @@ partial class IL2NESWriter
                 case ILOpCode.Conv_u1: case ILOpCode.Conv_u2: case ILOpCode.Conv_u4: case ILOpCode.Conv_u8:
                 case ILOpCode.Conv_i1: case ILOpCode.Conv_i2: case ILOpCode.Conv_i4:
                     break; // no net change
+                case ILOpCode.Stloc_0: case ILOpCode.Stloc_1: case ILOpCode.Stloc_2: case ILOpCode.Stloc_3:
+                case ILOpCode.Stloc_s: case ILOpCode.Stloc:
+                case ILOpCode.Pop:
+                    pop = 1; break;
+                case ILOpCode.Bne_un_s: case ILOpCode.Bne_un:
+                case ILOpCode.Beq_s: case ILOpCode.Beq:
+                case ILOpCode.Bge_s: case ILOpCode.Bge: case ILOpCode.Bge_un_s: case ILOpCode.Bge_un:
+                case ILOpCode.Bgt_s: case ILOpCode.Bgt: case ILOpCode.Bgt_un_s: case ILOpCode.Bgt_un:
+                case ILOpCode.Ble_s: case ILOpCode.Ble: case ILOpCode.Ble_un_s: case ILOpCode.Ble_un:
+                case ILOpCode.Blt_s: case ILOpCode.Blt: case ILOpCode.Blt_un_s: case ILOpCode.Blt_un:
+                    pop = 2; break; // compare-and-branch pops 2 values (comparison operands)
+                case ILOpCode.Brfalse_s: case ILOpCode.Brfalse:
+                case ILOpCode.Brtrue_s: case ILOpCode.Brtrue:
+                    pop = 1; break; // test-and-branch pops 1
                 case ILOpCode.Call:
                     // Determine how many args the call takes
                     int args = il.String != null ? _reflectionCache.GetNumberOfArguments(il.String) : 0;
