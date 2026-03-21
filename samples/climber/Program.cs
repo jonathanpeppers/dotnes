@@ -655,14 +655,13 @@ while (true)
             }
             // Clear item tiles: redraw the two rows (dy=2, dy=3) of the picked-up floor.
             // Since floor_objtype[pf] is now 0, the redraw won't include the item.
-            // Uses NTADR_A/C with constant x=1 (which the transpiler supports).
             if (pickup_type != 0)
             {
                 byte fy = floor_ypos[pf];
-                for (byte dyi = 2; dyi <= 3; dyi++)
+
+                // Row dy=2 (bottom half of item)
                 {
-                    byte rh_i = (byte)(fy + dyi);
-                    // Build row: walls + ladders (no item since objtype is 0)
+                    byte rh_2 = (byte)(fy + 2);
                     Array.Fill(buf, (byte)0);
                     if (pf < MAX_FLOORS - 1)
                     {
@@ -681,13 +680,43 @@ while (true)
                         buf[lc2] = CH_LADDER;
                         buf[(byte)(lc2 + 1)] = (byte)(CH_LADDER + 1);
                     }
-                    byte rowy_i = (byte)((byte)(ROWS - 1) - (byte)(rh_i % ROWS));
-                    ushort raddr;
-                    if (rowy_i < 30)
-                        raddr = NTADR_A(1, rowy_i);
+                    byte rowy_2 = (byte)(59 - (byte)(rh_2 % ROWS));
+                    ushort raddr2;
+                    if (rowy_2 < 30)
+                        raddr2 = NTADR_A(1, rowy_2);
                     else
-                        raddr = NTADR_C(1, (byte)(rowy_i - 30));
-                    vrambuf_put(raddr, buf, COLS);
+                        raddr2 = NTADR_C(1, (byte)(rowy_2 - 30));
+                    vrambuf_put(raddr2, buf, COLS);
+                    vrambuf_flush();
+                }
+                // Row dy=3 (top half of item)
+                {
+                    byte rh_3 = (byte)(fy + 3);
+                    Array.Fill(buf, (byte)0);
+                    if (pf < MAX_FLOORS - 1)
+                    {
+                        buf[0] = (byte)(CH_FLOOR + 1);
+                        buf[COLS - 1] = CH_FLOOR;
+                    }
+                    if (floor_ladder1[pf] != 0)
+                    {
+                        byte lc1 = (byte)(floor_ladder1[pf] * 2);
+                        buf[lc1] = CH_LADDER;
+                        buf[(byte)(lc1 + 1)] = (byte)(CH_LADDER + 1);
+                    }
+                    if (floor_ladder2[pf] != 0)
+                    {
+                        byte lc2 = (byte)(floor_ladder2[pf] * 2);
+                        buf[lc2] = CH_LADDER;
+                        buf[(byte)(lc2 + 1)] = (byte)(CH_LADDER + 1);
+                    }
+                    byte rowy_3 = (byte)(59 - (byte)(rh_3 % ROWS));
+                    ushort raddr3;
+                    if (rowy_3 < 30)
+                        raddr3 = NTADR_A(1, rowy_3);
+                    else
+                        raddr3 = NTADR_C(1, (byte)(rowy_3 - 30));
+                    vrambuf_put(raddr3, buf, COLS);
                 }
             }
 
