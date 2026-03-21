@@ -1466,6 +1466,53 @@ partial class IL2NESWriter
                         _immediateInA = null;
                         _pokeLastValue = null;
                         break;
+                    case nameof(NESLib.mmc3_set_chr_bank):
+                        {
+                            // mmc3_set_chr_bank(byte reg, byte bank) -> STA $8000 (reg), STA $8001 (bank)
+                            // MMC3 CHR bank switching: write register number to $8000, then bank number to $8001
+                            if (Stack.Count >= 2)
+                            {
+                                int bank = Stack.Pop();
+                                int reg = Stack.Pop();
+
+                                // Check if bank (last loaded arg) is from a local or static field
+                                Local? bankLocal = null;
+                                bool bankIsLocal = _lastLoadedLocalIndex.HasValue &&
+                                    Locals.TryGetValue(_lastLoadedLocalIndex.Value, out bankLocal) &&
+                                    bankLocal.Address.HasValue;
+                                bool bankIsStaticField = _lastStaticFieldAddress.HasValue;
+                                ushort? bankStaticAddr = _lastStaticFieldAddress;
+
+                                // Remove previously emitted instructions:
+                                // LDA #reg, JSR pusha, LDA #bank = 3 instructions
+                                RemoveLastInstructions(3);
+
+                                // Write register number to $8000 (bank select)
+                                Emit(Opcode.LDA, AddressMode.Immediate, (byte)reg);
+                                Emit(Opcode.STA, AddressMode.Absolute, NESLib.MMC3_BANK_SELECT);
+
+                                // Write bank number to $8001 (bank data)
+                                if (bankIsLocal)
+                                {
+                                    Emit(Opcode.LDA, AddressMode.Absolute, (ushort)bankLocal!.Address!.Value);
+                                }
+                                else if (bankIsStaticField)
+                                {
+                                    Emit(Opcode.LDA, AddressMode.Absolute, bankStaticAddr!.Value);
+                                }
+                                else
+                                {
+                                    Emit(Opcode.LDA, AddressMode.Immediate, (byte)bank);
+                                }
+                                Emit(Opcode.STA, AddressMode.Absolute, NESLib.MMC3_BANK_DATA);
+                            }
+                            _lastLoadedLocalIndex = null;
+                            _lastStaticFieldAddress = null;
+                            _immediateInA = null;
+                            _pokeLastValue = null;
+                            argsAlreadyPopped = true;
+                        }
+                        break;
                     case nameof(NESLib.poke):
                         {
                             // poke(ushort addr, byte value) -> LDA #value, STA abs addr

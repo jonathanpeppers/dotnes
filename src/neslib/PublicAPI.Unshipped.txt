@@ -67,6 +67,7 @@ static NES.NESLib.mmc1_set_chr_bank(byte bank0, byte bank1) -> void
 static NES.NESLib.mmc1_set_mirroring(byte mode) -> void
 static NES.NESLib.mmc1_set_prg_bank(byte bank) -> void
 static NES.NESLib.mmc1_write(ushort addr, byte value) -> void
+static NES.NESLib.mmc3_set_chr_bank(byte reg, byte bank) -> void
 static NES.NESLib.music_pause(byte pause) -> void
 static NES.NESLib.music_play(byte song) -> void
 static NES.NESLib.music_stop() -> void
