@@ -2,6 +2,10 @@
 using NES;
 using static NES.NESLib;
 
+// Link FamiTone2 sound engine (from famitone2.s / demosounds.s)
+static extern void sfx_play(byte sound, byte channel);
+static extern void famitone_update();
+
 const byte PLAYER_1 = 0;
 const byte PLAYER_2 = 1;
 
@@ -543,6 +547,11 @@ byte[] player_1_meta_spr_attack_1_left = new byte[] { 0xF0, 0xF8, 0x54, 0x41, 0x
 oam_size(1);
 bank_spr(0);
 bank_bg(1);
+
+// Initialize sound effects
+sfx_init("demo_sounds");
+unsafe { nmi_set_callback(&famitone_update); }
+
 vram_adr(NAMETABLE_A);
 vram_unrle(bg_top_left);
 vram_adr(NAMETABLE_B);
@@ -646,7 +655,7 @@ while (true)
 
         if (G.next_level != 0)
         {
-            // sfx_play(3, 2);
+            sfx_play(3, 2);
             // [inlined: reset]
             G.next_level = 0;
             G.frame = 0;
@@ -801,7 +810,7 @@ while (true)
 
         if (G.player_hp[0] == 0 || G.player_hp[1] == 0)
         {
-            // sfx_play(4, 2);
+            sfx_play(4, 2);
             G.difficulty = 0;
             G.next_level = 0;
             // [inlined: reset]
@@ -1376,7 +1385,7 @@ while (true)
                                     {
                                         G.player_carry[G.i] = G.j;
                                         G.player_carry_dir[G.i] = G.player_dir[G.i];
-                                        // sfx_play(5, 3);
+                                        sfx_play(5, 3);
                                     }
                                 }
                             }
@@ -1886,7 +1895,7 @@ while (true)
                             }
                             else
                             {
-                                // sfx_play(1, 0);
+                                sfx_play(1, 0);
                             }
                             break;
                         }
@@ -1912,7 +1921,7 @@ while (true)
                         G.item_y[G.i] = item_target_y[G.i];
                         if (G.player_carry[0] == G.i) G.player_carry[0] = 0xFF;
                         if (G.player_carry[1] == G.i) G.player_carry[1] = 0xFF;
-                        // sfx_play(2, 3);
+                        sfx_play(2, 3);
                     }
                 }
             }
@@ -2131,7 +2140,7 @@ while (true)
                                 G.temp5 = 1;
                                 G.player_hp[G.j] = (byte)(G.player_hp[G.j] - 1);
                                 G.player_god_mode[G.j] = 4;
-                                // sfx_play(0, 1);
+                                sfx_play(0, 1);
                             }
                             if (G.player_hp[G.j] == 0 && G.enemies_enemy[G.i] == G.j)
                             {
