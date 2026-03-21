@@ -1,8 +1,0 @@
-=== FORCING FALL at frame 300 ===
-Before: state=1 floor=0 yy=0020 yvel=0 x=64
-floor_ypos: 2 6 12 18 24 30 38 42 48 52 58 66 72 76 80 86 92 98 104 112 
-After: floor=0 target_ypos=2 target_yy=0x0020
-Current yy=0x0020, distance=0 pixels
-F300: st=5 fl=0 yy=0020 yvel=0(0x00)
-F301: st=1 fl=0 yy=0020 yvel=255(0xFF)
-=== LANDED ===
