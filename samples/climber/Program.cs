@@ -653,8 +653,55 @@ while (true)
                 // Clear item from floor data after all other work
                 floor_objtype[pf] = 0;
             }
-            // Note: item tiles remain visible after pickup — NTADR_A/C with
-            // runtime locals still causes HighByteOperand cast errors (#302).
+            // Clear item tiles from nametable when picked up.
+            // Can't use NTADR_A/C with runtime locals (transpiler limitation #302),
+            // so compute nametable address with pre-computed row offset.
+            if (pickup_type != 0)
+            {
+                byte ipos = floor_objpos[pf];
+                byte icol = (byte)(ipos * 2 + 1);
+                byte fy = floor_ypos[pf];
+
+                // Row dy=2 (bottom half of item)
+                byte row2 = (byte)(fy + 2);
+                byte ntr2 = (byte)(59 - (byte)(row2 % ROWS));
+                byte nr2 = ntr2;
+                if (ntr2 >= 30) nr2 = (byte)(ntr2 - 30);
+                // Compute row*32 as byte shifts to stay in byte arithmetic
+                // nr2 is 0-29, so nr2*32 fits in 10 bits (max 928)
+                // Split: lo = (nr2 << 5) & 0xFF, hi_add = nr2 >> 3
+                byte roff_lo2 = (byte)(nr2 << 5);
+                byte roff_hi2 = (byte)(nr2 >> 3);
+                byte addr2_lo = (byte)(roff_lo2 + icol);
+                byte base_hi2 = 0x20;
+                if (ntr2 >= 30) base_hi2 = 0x28;
+                byte addr2_hi = (byte)(base_hi2 + roff_hi2);
+                // Use byte + 256 pattern that transpiler supports
+                ushort addr2 = (ushort)(addr2_lo + 256);
+                if (addr2_hi != 1) addr2 = addr2_lo;
+                // Actually just use vrambuf with poke-style: set PPU addr then write
+                // This avoids all ushort construction issues
+                poke(0x2006, addr2_hi);
+                poke(0x2006, addr2_lo);
+                poke(0x2007, 0);
+                poke(0x2007, 0);
+
+                // Row dy=3 (top half of item)
+                byte row3 = (byte)(fy + 3);
+                byte ntr3 = (byte)(59 - (byte)(row3 % ROWS));
+                byte nr3 = ntr3;
+                if (ntr3 >= 30) nr3 = (byte)(ntr3 - 30);
+                byte roff_lo3 = (byte)(nr3 << 5);
+                byte roff_hi3 = (byte)(nr3 >> 3);
+                byte addr3_lo = (byte)(roff_lo3 + icol);
+                byte base_hi3 = 0x20;
+                if (ntr3 >= 30) base_hi3 = 0x28;
+                byte addr3_hi = (byte)(base_hi3 + roff_hi3);
+                poke(0x2006, addr3_hi);
+                poke(0x2006, addr3_lo);
+                poke(0x2007, 0);
+                poke(0x2007, 0);
+            }
 
             // Scroll check — update scroll and redraw offscreen rows on tile boundaries
             // Original: set_scroll_pixel_yy() in climber.c draws a row every 8 pixels
