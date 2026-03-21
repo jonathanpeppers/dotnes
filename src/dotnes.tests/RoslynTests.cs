@@ -3687,6 +3687,54 @@ public class RoslynTests
     }
 
     [Fact]
+    public void Mmc3SetChrBank_EmitsRegAndBankWrites()
+    {
+        // set_chr_mode(byte reg, byte bank) should emit:
+        // LDA #reg, STA $8000 (bank select), LDA #bank, STA $8001 (bank data)
+        var bytes = GetProgramBytes(
+            """
+            set_chr_mode(0x00, 0x00);
+            set_chr_mode(0x02, 0x09);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"MMC3 CHR hex: {hex}");
+
+        // First call: LDA #$00, STA $8000, LDA #$00, STA $8001
+        Assert.Contains("A9008D0080A9008D0180", hex);
+        // Second call: LDA #$02, STA $8000, LDA #$09, STA $8001
+        Assert.Contains("A9028D0080A9098D0180", hex);
+    }
+
+    [Fact]
+    public void SetChrMode_SupportsLocalBankArg()
+    {
+        // set_chr_mode with bank from a local variable should emit
+        // LDA #reg, STA $8000, LDA $bank_addr, STA $8001.
+        var bytes = GetProgramBytes(
+            """
+            byte bank = 9;
+            set_chr_mode(0x02, bank);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"SetChrMode local bank hex: {hex}");
+
+        // LDA #$02, STA $8000 (register select)
+        Assert.Contains("A9028D0080", hex);
+        // STA $8001 (bank data write)
+        Assert.Contains("8D0180", hex);
+    }
+
+    [Fact]
     public void Mmc1Write_EmitsShiftRegisterProtocol()
     {
         // mmc1_write(0x8000, 0x0C) should emit:

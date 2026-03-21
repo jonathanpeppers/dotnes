@@ -532,6 +532,18 @@ public static class NESLib
     public const ushort MMC3_IRQ_DISABLE = 0xE000;
     public const ushort MMC3_IRQ_ENABLE = 0xE001;
 
+    /// <summary>
+    /// Set an MMC3 CHR bank register to the specified bank number.
+    /// Writes reg to $8000 (MMC3_BANK_SELECT) and bank to $8001 (MMC3_BANK_DATA).
+    /// </summary>
+    /// <param name="reg">MMC3 bank-select value. Bits 0-2 select the register (R0-R7),
+    /// bits 6-7 control PRG/CHR banking mode. Must be a compile-time constant.
+    /// R0/R1 (reg 0-1): 2KB CHR banks at PPU $0000/$0800.
+    /// R2-R5 (reg 2-5): 1KB CHR banks at PPU $1000/$1400/$1800/$1C00.
+    /// R6-R7 (reg 6-7): PRG banks (not CHR).</param>
+    /// <param name="bank">Bank number to select. Can be a constant or local variable.</param>
+    public static void set_chr_mode(byte reg, byte bank) => throw null!;
+
     // MMC1 mapper register addresses for serial shift register writes via mmc1_write()
     public const ushort MMC1_CONTROL = 0x8000;
     public const ushort MMC1_CHR_BANK0 = 0xA000;
