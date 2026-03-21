@@ -653,72 +653,9 @@ while (true)
                 // Clear item from floor data after all other work
                 floor_objtype[pf] = 0;
             }
-            // Clear item tiles: redraw the two rows (dy=2, dy=3) of the picked-up floor.
-            // Since floor_objtype[pf] is now 0, the redraw won't include the item.
-            if (pickup_type != 0)
-            {
-                byte fy = floor_ypos[pf];
-
-                // Row dy=2 (bottom half of item)
-                {
-                    byte rh_2 = (byte)(fy + 2);
-                    Array.Fill(buf, (byte)0);
-                    if (pf < MAX_FLOORS - 1)
-                    {
-                        buf[0] = (byte)(CH_FLOOR + 1);
-                        buf[COLS - 1] = CH_FLOOR;
-                    }
-                    if (floor_ladder1[pf] != 0)
-                    {
-                        byte lc1 = (byte)(floor_ladder1[pf] * 2);
-                        buf[lc1] = CH_LADDER;
-                        buf[(byte)(lc1 + 1)] = (byte)(CH_LADDER + 1);
-                    }
-                    if (floor_ladder2[pf] != 0)
-                    {
-                        byte lc2 = (byte)(floor_ladder2[pf] * 2);
-                        buf[lc2] = CH_LADDER;
-                        buf[(byte)(lc2 + 1)] = (byte)(CH_LADDER + 1);
-                    }
-                    byte rowy_2 = (byte)(59 - (byte)(rh_2 % ROWS));
-                    ushort raddr2;
-                    if (rowy_2 < 30)
-                        raddr2 = NTADR_A(1, rowy_2);
-                    else
-                        raddr2 = NTADR_C(1, (byte)(rowy_2 - 30));
-                    vrambuf_put(raddr2, buf, COLS);
-                    vrambuf_flush();
-                }
-                // Row dy=3 (top half of item)
-                {
-                    byte rh_3 = (byte)(fy + 3);
-                    Array.Fill(buf, (byte)0);
-                    if (pf < MAX_FLOORS - 1)
-                    {
-                        buf[0] = (byte)(CH_FLOOR + 1);
-                        buf[COLS - 1] = CH_FLOOR;
-                    }
-                    if (floor_ladder1[pf] != 0)
-                    {
-                        byte lc1 = (byte)(floor_ladder1[pf] * 2);
-                        buf[lc1] = CH_LADDER;
-                        buf[(byte)(lc1 + 1)] = (byte)(CH_LADDER + 1);
-                    }
-                    if (floor_ladder2[pf] != 0)
-                    {
-                        byte lc2 = (byte)(floor_ladder2[pf] * 2);
-                        buf[lc2] = CH_LADDER;
-                        buf[(byte)(lc2 + 1)] = (byte)(CH_LADDER + 1);
-                    }
-                    byte rowy_3 = (byte)(59 - (byte)(rh_3 % ROWS));
-                    ushort raddr3;
-                    if (rowy_3 < 30)
-                        raddr3 = NTADR_A(1, rowy_3);
-                    else
-                        raddr3 = NTADR_C(1, (byte)(rowy_3 - 30));
-                    vrambuf_put(raddr3, buf, COLS);
-                }
-            }
+            // TODO: Item tiles remain visible after pickup. Clearing them requires
+            // runtime nametable address computation which has transpiler limitations (#302).
+            // The game state (floor_objtype[pf]=0) correctly prevents re-pickup.
 
             // Scroll check — update scroll and redraw offscreen rows on tile boundaries
             // Original: set_scroll_pixel_yy() in climber.c draws a row every 8 pixels
