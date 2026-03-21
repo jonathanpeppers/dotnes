@@ -5,7 +5,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <NESChrBanks>1</NESChrBanks>
+    <NESChrBanks>2</NESChrBanks>
   </PropertyGroup>
 
   <ItemGroup>
