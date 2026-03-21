@@ -597,6 +597,13 @@ while (true)
                     actor_yy_hi[pi] = fyy_hi;
                     actor_state[pi] = STANDING;
                 }
+                // Safety: if Y underflowed (went above screen), clamp to floor
+                if (actor_yy_hi[pi] >= 4)
+                {
+                    actor_yy_lo[pi] = fyy_lo;
+                    actor_yy_hi[pi] = fyy_hi;
+                    actor_state[pi] = STANDING;
+                }
             }
 
             // Clamp X
@@ -850,6 +857,12 @@ while (true)
                 }
                 actor_yvel[ei] = (byte)(actor_yvel[ei] - 1);
                 if (actor_yy_hi[ei] < efyy_hi || (actor_yy_hi[ei] == efyy_hi && actor_yy_lo[ei] <= efyy_lo))
+                {
+                    actor_yy_lo[ei] = efyy_lo;
+                    actor_yy_hi[ei] = efyy_hi;
+                    actor_state[ei] = STANDING;
+                }
+                if (actor_yy_hi[ei] >= 4)
                 {
                     actor_yy_lo[ei] = efyy_lo;
                     actor_yy_hi[ei] = efyy_hi;
