@@ -1,7 +1,7 @@
 <Project>
   <PropertyGroup>
-    <Version>0.2.0</Version>
-    <PackageVersion>$(Version)-alpha</PackageVersion>
+    <Version>0.3.0</Version>
+    <PackageVersion>$(Version)-beta</PackageVersion>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <DownloadFileRetries>3</DownloadFileRetries>
     <DownloadFileRetryDelayMilliseconds>2000</DownloadFileRetryDelayMilliseconds>

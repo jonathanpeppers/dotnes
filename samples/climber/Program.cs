@@ -646,17 +646,141 @@ while (true)
                 }
             }
 
-            // Scroll check
-            if (player_screen_y < ACTOR_SCROLL_UP_Y)
+            // Scroll check — update scroll and redraw offscreen rows on tile boundaries
+            // Original: set_scroll_pixel_yy() in climber.c draws a row every 8 pixels
             {
-                byte new_lo = (byte)(scroll_yy_lo + 1);
-                if (new_lo == 0) scroll_yy_hi = (byte)(scroll_yy_hi + 1);
-                scroll_yy_lo = new_lo;
-            }
-            if (player_screen_y > ACTOR_SCROLL_DOWN_Y && (scroll_yy_lo != 0 || scroll_yy_hi != 0))
-            {
-                if (scroll_yy_lo == 0) scroll_yy_hi = (byte)(scroll_yy_hi - 1);
-                scroll_yy_lo = (byte)(scroll_yy_lo - 1);
+                byte scrolled = 0; // 1=up, 2=down
+                if (player_screen_y < ACTOR_SCROLL_UP_Y)
+                {
+                    byte new_lo = (byte)(scroll_yy_lo + 1);
+                    if (new_lo == 0) scroll_yy_hi = (byte)(scroll_yy_hi + 1);
+                    scroll_yy_lo = new_lo;
+                    scrolled = 1;
+                }
+                if (player_screen_y > ACTOR_SCROLL_DOWN_Y && (scroll_yy_lo != 0 || scroll_yy_hi != 0))
+                {
+                    if (scroll_yy_lo == 0) scroll_yy_hi = (byte)(scroll_yy_hi - 1);
+                    scroll_yy_lo = (byte)(scroll_yy_lo - 1);
+                    scrolled = 2;
+                }
+
+                // Redraw offscreen row on every tile boundary (every 8 pixels)
+                if (scrolled != 0 && (scroll_yy_lo & 7) == 0)
+                {
+                    // Update scroll_tile_y
+                    scroll_tile_y = (byte)(scroll_yy_lo >> 3);
+                    if (scroll_yy_hi != 0)
+                        scroll_tile_y = (byte)(scroll_tile_y + (byte)(scroll_yy_hi * 32));
+
+                    // Compute which row to redraw
+                    byte draw_rh;
+                    if (scrolled == 1)
+                        draw_rh = (byte)(scroll_tile_y + 30); // row above viewport
+                    else
+                        draw_rh = scroll_tile_y; // row below viewport
+
+                    // --- Inline draw_floor_line for draw_rh ---
+                    Array.Fill(buf, (byte)0);
+                    for (byte df = 0; df < MAX_FLOORS; df++)
+                    {
+                        byte ddy = (byte)(draw_rh - floor_ypos[df]);
+                        if (ddy >= 253) ddy = 0;
+                        if (ddy < floor_height[df])
+                        {
+                            if (ddy <= 1)
+                            {
+                                for (byte dcol = 0; dcol < COLS; dcol += 2)
+                                {
+                                    if (ddy != 0)
+                                    {
+                                        buf[dcol] = CH_FLOOR;
+                                        buf[(byte)(dcol + 1)] = (byte)(CH_FLOOR + 2);
+                                    }
+                                    else
+                                    {
+                                        buf[dcol] = (byte)(CH_FLOOR + 1);
+                                        buf[(byte)(dcol + 1)] = (byte)(CH_FLOOR + 3);
+                                    }
+                                }
+                                if (floor_gap[df] != 0)
+                                {
+                                    byte dgstart = (byte)(floor_gap[df] * 2);
+                                    for (byte dg = 0; dg < GAPSIZE; dg++)
+                                        buf[(byte)(dgstart + dg)] = 0;
+                                }
+                            }
+                            else
+                            {
+                                if (df < MAX_FLOORS - 1)
+                                {
+                                    buf[0] = (byte)(CH_FLOOR + 1);
+                                    buf[COLS - 1] = CH_FLOOR;
+                                }
+                                if (floor_ladder1[df] != 0)
+                                {
+                                    byte dlc = (byte)(floor_ladder1[df] * 2);
+                                    buf[dlc] = CH_LADDER;
+                                    buf[(byte)(dlc + 1)] = (byte)(CH_LADDER + 1);
+                                }
+                                if (floor_ladder2[df] != 0)
+                                {
+                                    byte dlc = (byte)(floor_ladder2[df] * 2);
+                                    buf[dlc] = CH_LADDER;
+                                    buf[(byte)(dlc + 1)] = (byte)(CH_LADDER + 1);
+                                }
+                            }
+                            if (floor_objtype[df] != 0)
+                            {
+                                byte dch = (byte)(floor_objtype[df] * 4 + CH_ITEM);
+                                if (ddy == 2)
+                                {
+                                    buf[(byte)(floor_objpos[df] * 2)] = (byte)(dch + 1);
+                                    buf[(byte)(floor_objpos[df] * 2 + 1)] = (byte)(dch + 3);
+                                }
+                                if (ddy == 3)
+                                {
+                                    buf[(byte)(floor_objpos[df] * 2)] = dch;
+                                    buf[(byte)(floor_objpos[df] * 2 + 1)] = (byte)(dch + 2);
+                                }
+                            }
+                            break;
+                        }
+                    }
+                    // Compute nametable address
+                    byte drowy = (byte)((byte)(ROWS - 1) - (byte)(draw_rh % ROWS));
+                    ushort daddr;
+                    if (drowy < 30)
+                        daddr = NTADR_A(1, drowy);
+                    else
+                        daddr = NTADR_C(1, (byte)(drowy - 30));
+
+                    // Update attribute table on every 4th row (matches original draw_floor_line)
+                    if ((drowy & 3) == 0)
+                    {
+                        byte attr_a = 0x00;
+                        for (byte af = 0; af < MAX_FLOORS; af++)
+                        {
+                            byte ady = (byte)(draw_rh - floor_ypos[af]);
+                            if (ady >= 253) ady = 0;
+                            if (ady < floor_height[af])
+                            {
+                                if (ady == 1) attr_a = 0x05;
+                                else if (ady == 3) attr_a = 0x50;
+                                break;
+                            }
+                        }
+                        Array.Fill(attrbuf, attr_a);
+                        ushort attraddr;
+                        if (drowy < 30)
+                            attraddr = (ushort)(0x23C0 + (drowy >> 2) * 8);
+                        else
+                            attraddr = (ushort)(0x2BC0 + ((byte)(drowy - 30) >> 2) * 8);
+                        vrambuf_put(attraddr, attrbuf, 8);
+                    }
+
+                    vrambuf_put(daddr, buf, COLS);
+                    // No vrambuf_flush here — the main loop's flush at the top handles it
+                }
             }
         }
 

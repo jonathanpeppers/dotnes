@@ -8,7 +8,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="dotnes" Version="0.2.0-alpha" />
+    <PackageReference Include="dotnes" Version="0.3.0-beta" />
     <PackageReference Include="dotnes.anese" Version="0.9.1" />
   </ItemGroup>
 

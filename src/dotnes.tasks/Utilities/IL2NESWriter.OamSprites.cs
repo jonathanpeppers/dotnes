@@ -310,20 +310,23 @@ partial class IL2NESWriter
                 else
                 {
                     // No source variable — constant-only compound expression.
-                    // Evaluate binary op at compile time: addConst + (0 BINOP binOpConst)
-                    int inner = arg.compoundBinOp switch
+                    // Apply the binary op to the two captured constants directly.
+                    // compAddConst is the first operand, compBinOpConst is the second.
+                    int constResult = arg.compoundBinOp switch
                     {
-                        ILOpCode.Add => arg.compoundBinOpConst,
-                        ILOpCode.Sub => -arg.compoundBinOpConst,
-                        ILOpCode.Shl => 0, // 0 << N = 0
-                        ILOpCode.Shr or ILOpCode.Shr_un => 0, // 0 >> N = 0
-                        ILOpCode.And => 0, // 0 & N = 0
-                        ILOpCode.Or => arg.compoundBinOpConst, // 0 | N = N
-                        ILOpCode.Xor => arg.compoundBinOpConst, // 0 ^ N = N
-                        ILOpCode.Mul => 0, // 0 * N = 0
-                        _ => arg.compoundBinOpConst
+                        ILOpCode.Add => arg.compoundAddConst + arg.compoundBinOpConst,
+                        ILOpCode.Sub => arg.compoundAddConst - arg.compoundBinOpConst,
+                        ILOpCode.Shl => arg.compoundAddConst << arg.compoundBinOpConst,
+                        ILOpCode.Shr or ILOpCode.Shr_un => arg.compoundAddConst >> arg.compoundBinOpConst,
+                        ILOpCode.And => arg.compoundAddConst & arg.compoundBinOpConst,
+                        ILOpCode.Or => arg.compoundAddConst | arg.compoundBinOpConst,
+                        ILOpCode.Xor => arg.compoundAddConst ^ arg.compoundBinOpConst,
+                        ILOpCode.Mul => arg.compoundAddConst * arg.compoundBinOpConst,
+                        ILOpCode.Nop => arg.compoundAddConst, // no binary op, just a constant
+                        _ => throw new TranspileException(
+                            $"Unsupported binary op '{arg.compoundBinOp}' in constant-only compound oam_spr arg.",
+                            MethodName),
                     };
-                    int constResult = arg.compoundAddConst + inner;
                     Emit(Opcode.LDA, AddressMode.Immediate, (byte)(constResult & 0xFF));
                     goto emitDecspStore;
                 }
