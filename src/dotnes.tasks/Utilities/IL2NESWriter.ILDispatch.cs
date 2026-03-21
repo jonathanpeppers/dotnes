@@ -1822,10 +1822,7 @@ partial class IL2NESWriter
                         break;
                     case "split":
                     case "scroll":
-                    case nameof(NESLib.bcd_add):
-                        // These functions take unsigned int/ushort params via popax (2-byte pop).
-                        // First arg must be pushed via pushax (not pusha).
-                        // Second arg should be in A:X (X=0 for byte-sized values).
+                        // scroll()/split() takes unsigned int params, which use popax (2-byte pop).
                         // Patterns for the second arg (Y):
                         // 1. Byte constant: last instr = LDA #yy
                         // 2. Byte local: last instr = LDA $addr
@@ -1864,9 +1861,6 @@ partial class IL2NESWriter
                                 {
                                     // Ushort arg already pushed correctly via pushax
                                     RemoveLastInstructions(1); // Remove just LDA (second arg)
-                                    // Second arg is a byte constant — clear X for 16-bit convention
-                                    if (ldaInstr.Mode == AddressMode.Immediate)
-                                        Emit(Opcode.LDX, AddressMode.Immediate, 0x00);
                                     block.Emit(ldaInstr); // Re-emit LDA for second arg
                                 }
                                 else if (hasPusha)
@@ -1885,6 +1879,49 @@ partial class IL2NESWriter
                                     EmitJSR("pushax");
                                     block.Emit(ldaInstr); // Re-emit second arg LDA
                                 }
+                            }
+                            EmitWithLabel(Opcode.JSR, AddressMode.Absolute, operand);
+                            _immediateInA = null;
+                        }
+                        break;
+                    case nameof(NESLib.bcd_add):
+                        // bcd_add(ushort a, ushort b) — first arg on cc65 stack via pushax,
+                        // second arg in A:X. Both args are 16-bit, so X must be 0 for byte values.
+                        {
+                            var block = CurrentBlock!;
+                            var lastInstr = block[block.Count - 1];
+
+                            // Second arg is LDA (byte constant or local)
+                            var ldaInstr = lastInstr;
+                            var prevInstr = block[block.Count - 2];
+                            bool alreadyPushax = prevInstr.Opcode == Opcode.JSR
+                                && prevInstr.Operand is LabelOperand bcdLbl && bcdLbl.Label == "pushax";
+                            bool hasPusha = prevInstr.Opcode == Opcode.JSR
+                                && prevInstr.Operand is LabelOperand bcdLbl2 && bcdLbl2.Label == "pusha";
+                            if (alreadyPushax)
+                            {
+                                // Ushort arg already pushed correctly via pushax
+                                RemoveLastInstructions(1); // Remove just LDA (second arg)
+                                // Clear X for byte-sized second arg (pushax preserves X from first arg)
+                                if (ldaInstr.Mode == AddressMode.Immediate)
+                                    Emit(Opcode.LDX, AddressMode.Immediate, 0x00);
+                                block.Emit(ldaInstr); // Re-emit LDA for second arg
+                            }
+                            else if (hasPusha)
+                            {
+                                // Byte value: replace pusha with LDX #$00 + pushax
+                                RemoveLastInstructions(2); // Remove JSR pusha + LDA
+                                Emit(Opcode.LDX, AddressMode.Immediate, 0x00);
+                                EmitJSR("pushax");
+                                block.Emit(ldaInstr); // Re-emit LDA for second arg
+                            }
+                            else
+                            {
+                                // Local var or runtime value: A has the value, push with X=0
+                                RemoveLastInstructions(1); // Remove only the second arg's LDA
+                                Emit(Opcode.LDX, AddressMode.Immediate, 0x00);
+                                EmitJSR("pushax");
+                                block.Emit(ldaInstr); // Re-emit second arg LDA
                             }
                             EmitWithLabel(Opcode.JSR, AddressMode.Absolute, operand);
                             UsedMethods?.Add("pushax");
