@@ -653,9 +653,95 @@ while (true)
                 // Clear item from floor data after all other work
                 floor_objtype[pf] = 0;
             }
-            // TODO: Item tiles remain visible after pickup. Clearing them requires
-            // runtime nametable address computation which has transpiler limitations (#302).
-            // The game state (floor_objtype[pf]=0) correctly prevents re-pickup.
+            // Redraw item floor rows after pickup to clear tiles visually.
+            // Reuses the same inline draw_floor_line pattern that the scroll
+            // redraw uses (which the transpiler handles correctly).
+            if (pickup_type != 0)
+            {
+                byte refresh_rh = (byte)(floor_ypos[pf] + 2);
+                Array.Fill(buf, (byte)0);
+                for (byte df = 0; df < MAX_FLOORS; df++)
+                {
+                    byte ddy = (byte)(refresh_rh - floor_ypos[df]);
+                    if (ddy >= 253) ddy = 0;
+                    if (ddy < floor_height[df])
+                    {
+                        if (ddy <= 1)
+                        {
+                            for (byte dcol = 0; dcol < COLS; dcol += 2)
+                            {
+                                if (ddy != 0) { buf[dcol] = CH_FLOOR; buf[(byte)(dcol + 1)] = (byte)(CH_FLOOR + 2); }
+                                else { buf[dcol] = (byte)(CH_FLOOR + 1); buf[(byte)(dcol + 1)] = (byte)(CH_FLOOR + 3); }
+                            }
+                            if (floor_gap[df] != 0)
+                            {
+                                byte dgstart = (byte)(floor_gap[df] * 2);
+                                for (byte dg = 0; dg < GAPSIZE; dg++) buf[(byte)(dgstart + dg)] = 0;
+                            }
+                        }
+                        else
+                        {
+                            if (df < MAX_FLOORS - 1) { buf[0] = (byte)(CH_FLOOR + 1); buf[COLS - 1] = CH_FLOOR; }
+                            if (floor_ladder1[df] != 0) { byte dlc = (byte)(floor_ladder1[df] * 2); buf[dlc] = CH_LADDER; buf[(byte)(dlc + 1)] = (byte)(CH_LADDER + 1); }
+                            if (floor_ladder2[df] != 0) { byte dlc = (byte)(floor_ladder2[df] * 2); buf[dlc] = CH_LADDER; buf[(byte)(dlc + 1)] = (byte)(CH_LADDER + 1); }
+                        }
+                        if (floor_objtype[df] != 0)
+                        {
+                            byte dch = (byte)(floor_objtype[df] * 4 + CH_ITEM);
+                            if (ddy == 2) { buf[(byte)(floor_objpos[df] * 2)] = (byte)(dch + 1); buf[(byte)(floor_objpos[df] * 2 + 1)] = (byte)(dch + 3); }
+                            if (ddy == 3) { buf[(byte)(floor_objpos[df] * 2)] = dch; buf[(byte)(floor_objpos[df] * 2 + 1)] = (byte)(dch + 2); }
+                        }
+                        break;
+                    }
+                }
+                byte drowy2 = (byte)((byte)(ROWS - 1) - (byte)(refresh_rh % ROWS));
+                ushort daddr2;
+                if (drowy2 < 30) daddr2 = NTADR_A(1, drowy2); else daddr2 = NTADR_C(1, (byte)(drowy2 - 30));
+                vrambuf_put(daddr2, buf, COLS);
+                vrambuf_flush();
+
+                // Second row (dy=3)
+                refresh_rh = (byte)(floor_ypos[pf] + 3);
+                Array.Fill(buf, (byte)0);
+                for (byte df = 0; df < MAX_FLOORS; df++)
+                {
+                    byte ddy = (byte)(refresh_rh - floor_ypos[df]);
+                    if (ddy >= 253) ddy = 0;
+                    if (ddy < floor_height[df])
+                    {
+                        if (ddy <= 1)
+                        {
+                            for (byte dcol = 0; dcol < COLS; dcol += 2)
+                            {
+                                if (ddy != 0) { buf[dcol] = CH_FLOOR; buf[(byte)(dcol + 1)] = (byte)(CH_FLOOR + 2); }
+                                else { buf[dcol] = (byte)(CH_FLOOR + 1); buf[(byte)(dcol + 1)] = (byte)(CH_FLOOR + 3); }
+                            }
+                            if (floor_gap[df] != 0)
+                            {
+                                byte dgstart = (byte)(floor_gap[df] * 2);
+                                for (byte dg = 0; dg < GAPSIZE; dg++) buf[(byte)(dgstart + dg)] = 0;
+                            }
+                        }
+                        else
+                        {
+                            if (df < MAX_FLOORS - 1) { buf[0] = (byte)(CH_FLOOR + 1); buf[COLS - 1] = CH_FLOOR; }
+                            if (floor_ladder1[df] != 0) { byte dlc = (byte)(floor_ladder1[df] * 2); buf[dlc] = CH_LADDER; buf[(byte)(dlc + 1)] = (byte)(CH_LADDER + 1); }
+                            if (floor_ladder2[df] != 0) { byte dlc = (byte)(floor_ladder2[df] * 2); buf[dlc] = CH_LADDER; buf[(byte)(dlc + 1)] = (byte)(CH_LADDER + 1); }
+                        }
+                        if (floor_objtype[df] != 0)
+                        {
+                            byte dch = (byte)(floor_objtype[df] * 4 + CH_ITEM);
+                            if (ddy == 2) { buf[(byte)(floor_objpos[df] * 2)] = (byte)(dch + 1); buf[(byte)(floor_objpos[df] * 2 + 1)] = (byte)(dch + 3); }
+                            if (ddy == 3) { buf[(byte)(floor_objpos[df] * 2)] = dch; buf[(byte)(floor_objpos[df] * 2 + 1)] = (byte)(dch + 2); }
+                        }
+                        break;
+                    }
+                }
+                byte drowy3 = (byte)((byte)(ROWS - 1) - (byte)(refresh_rh % ROWS));
+                ushort daddr3;
+                if (drowy3 < 30) daddr3 = NTADR_A(1, drowy3); else daddr3 = NTADR_C(1, (byte)(drowy3 - 30));
+                vrambuf_put(daddr3, buf, COLS);
+            }
 
             // Scroll check — update scroll and redraw offscreen rows on tile boundaries
             // Original: set_scroll_pixel_yy() in climber.c draws a row every 8 pixels
