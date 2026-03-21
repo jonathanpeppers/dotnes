@@ -3687,6 +3687,54 @@ public class RoslynTests
     }
 
     [Fact]
+    public void Mmc3SetChrBank_EmitsRegAndBankWrites()
+    {
+        // set_chr_mode(byte reg, byte bank) should emit:
+        // LDA #reg, STA $8000 (bank select), LDA #bank, STA $8001 (bank data)
+        var bytes = GetProgramBytes(
+            """
+            set_chr_mode(0x00, 0x00);
+            set_chr_mode(0x02, 0x09);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"MMC3 CHR hex: {hex}");
+
+        // First call: LDA #$00, STA $8000, LDA #$00, STA $8001
+        Assert.Contains("A9008D0080A9008D0180", hex);
+        // Second call: LDA #$02, STA $8000, LDA #$09, STA $8001
+        Assert.Contains("A9028D0080A9098D0180", hex);
+    }
+
+    [Fact]
+    public void SetChrMode_SupportsLocalBankArg()
+    {
+        // set_chr_mode with bank from a local variable should emit
+        // LDA #reg, STA $8000, LDA $bank_addr, STA $8001.
+        var bytes = GetProgramBytes(
+            """
+            byte bank = 9;
+            set_chr_mode(0x02, bank);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"SetChrMode local bank hex: {hex}");
+
+        // LDA #$02, STA $8000 (register select)
+        Assert.Contains("A9028D0080", hex);
+        // STA $8001 (bank data write)
+        Assert.Contains("8D0180", hex);
+    }
+
+    [Fact]
     public void Mmc1Write_EmitsShiftRegisterProtocol()
     {
         // mmc1_write(0x8000, 0x0C) should emit:
@@ -4491,5 +4539,117 @@ public class RoslynTests
 
         // Should contain JMP (4C) for the always-true branch, not CMP #$00 (overflow)
         Assert.Contains("4C", hex);
+    }
+
+    [Fact]
+    public void NtadrWithTwoLocalVarArgs()
+    {
+        // Bug: NTADR_A(localVar, localVar) crashed because the handler's
+        // "both runtime" path removed the JSR pusha then called JSR popa,
+        // finding nothing on the cc65 stack. Fix: use direct loads instead
+        // of pusha/popa for consecutive local loads.
+        var bytes = GetProgramBytes(
+            """
+            byte x = 1;
+            byte y = 2;
+            ushort addr = NTADR_A(x, y);
+            vram_adr(addr);
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"NtadrTwoLocals hex: {hex}");
+        // Must contain STA $17 (8517) to save x into TEMP
+        Assert.Contains("8517", hex); // STA TEMP (x)
+        // Must contain STA $19 (8519) from NTADR result lo byte
+        Assert.Contains("8519", hex); // STA TEMP2
+
+        // Verify JSR (opcode 0x20) appears between TEMP and TEMP2 stores (runtime nametable_a),
+        // and at least one JSR after TEMP2 (vram_adr).
+        int tempIdx = hex.IndexOf("8517");
+        int temp2Idx = hex.IndexOf("8519");
+        Assert.True(temp2Idx > tempIdx, "TEMP2 store should occur after TEMP store.");
+        string between = hex.Substring(tempIdx, temp2Idx - tempIdx);
+        Assert.Contains("20", between); // JSR nametable_a between TEMP stores
+    }
+
+    [Fact]
+    public void BcdAddWithRuntimeFirstArg()
+    {
+        // Bug: bcd_add(score, 1) where score is ushort — the first argument
+        // needs pushax (16-bit push), and the second argument needs X=0.
+        // Without the fix, pusha (1-byte) is used or X is garbage.
+        var bytes = GetProgramBytes(
+            """
+            ushort score = 0;
+            score = bcd_add(score, 1);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"BcdAddRuntime hex: {hex}");
+        // Must contain LDX #$00 (A200) and LDA #$01 (A901) for the constant arg
+        Assert.Contains("A200", hex); // LDX #$00 (clear X)
+        Assert.Contains("A901", hex); // LDA #$01 (second arg)
+
+        // Verify the sequence for second arg: LDX #$00 then LDA #$01 then JSR bcd_add
+        // A2 00 A9 01 20 ?? ??
+        bool patternFound = false;
+        for (int i = 0; i + 6 < bytes!.Length; i++)
+        {
+            if (bytes[i] == 0xA2 && bytes[i + 1] == 0x00      // LDX #$00
+                && bytes[i + 2] == 0xA9 && bytes[i + 3] == 0x01 // LDA #$01
+                && bytes[i + 4] == 0x20)                        // JSR bcd_add
+            {
+                patternFound = true;
+                break;
+            }
+        }
+        Assert.True(patternFound, "Expected LDX #$00; LDA #$01; JSR bcd_add pattern not found.");
+    }
+
+    [Fact]
+    public void StelemDoesNotConsumeIfElseBranches()
+    {
+        // Bug: HandleStelemI1's backward IL scan walked past if/else branches,
+        // and the _blockCountAtILOffset removal consumed the entire branch code.
+        // Pattern: ldelem + if/else + stelem in the same scope.
+        // Use a loop to force Roslyn to store the array in a local variable.
+        var bytes = GetProgramBytes(
+            """
+            byte[] types = new byte[8];
+            types[0] = 1;
+            types[1] = 2;
+            for (byte pf = 0; pf < 2; pf++)
+            {
+                byte ot = types[pf];
+                if (ot == 1)
+                {
+                    oam_clear();
+                }
+                else
+                {
+                    pal_col(0, 0x30);
+                }
+                types[pf] = 0;
+            }
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"StelemBranch hex: {hex}");
+        // Must contain CMP #$01 (C901) for the if (ot == 1) comparison
+        Assert.Contains("C901", hex);
+        // Must contain LDA #$30 (A930) for the pal_col color argument in else branch
+        Assert.Contains("A930", hex);
+        // Must contain LDA #$00 (A900) for stelem value 0
+        Assert.Contains("A900", hex);
     }
 }

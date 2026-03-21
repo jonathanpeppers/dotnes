@@ -653,8 +653,8 @@ while (true)
                 // Clear item from floor data after all other work
                 floor_objtype[pf] = 0;
             }
-            // Note: item tiles remain visible after pickup because NTADR_A/C
-            // can only be called with constants in the transpiler (see #300).
+            // Note: item tiles remain visible after pickup — NTADR_A/C with
+            // runtime locals still causes HighByteOperand cast errors (#302).
 
             // Scroll check — update scroll and redraw offscreen rows on tile boundaries
             // Original: set_scroll_pixel_yy() in climber.c draws a row every 8 pixels
