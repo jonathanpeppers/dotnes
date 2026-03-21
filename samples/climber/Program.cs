@@ -653,9 +653,8 @@ while (true)
                 // Clear item from floor data after all other work
                 floor_objtype[pf] = 0;
             }
-            // TODO: clear item tiles from nametable (needs refresh_floor)
-            // For now, floor_objtype[pf]=0 prevents re-pickup even though
-            // tiles remain visible.
+            // Note: item tiles remain visible after pickup because NTADR_A/C
+            // can only be called with constants in the transpiler (see #300).
 
             // Scroll check — update scroll and redraw offscreen rows on tile boundaries
             // Original: set_scroll_pixel_yy() in climber.c draws a row every 8 pixels
