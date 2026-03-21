@@ -648,7 +648,17 @@ while (true)
             if (pickup_type >= 2)
             {
                 floor_objtype[pf] = 0;
-                score = (byte)bcd_add(score, 1);
+                // Inline BCD increment: add 1 to packed BCD score.
+                byte lo = (byte)(score & 0x0f);
+                byte hi = (byte)(score & 0xf0);
+                if (lo < 9)
+                {
+                    score = (byte)(hi + lo + 1);
+                }
+                if (lo >= 9)
+                {
+                    score = (byte)(hi + 0x10);
+                }
                 sfx_play(SND_COIN, 0);
             }
 
