@@ -399,6 +399,13 @@ partial class IL2NESWriter : NESWriter
     PendingStructElement? _pendingStructElement;
 
     /// <summary>
+    /// Pending byte array element access state from ldelema System.Byte.
+    /// Null when no byte array ldelema is pending.
+    /// Used for compound assignments: arr[i]++, arr[i] += expr, etc.
+    /// </summary>
+    PendingByteArrayElement? _pendingByteArrayElement;
+
+    /// <summary>
     /// State for a pending struct array element access (from ldelema).
     /// </summary>
     readonly record struct PendingStructElement(
@@ -408,6 +415,16 @@ partial class IL2NESWriter : NESWriter
         ushort? ConstantBase,
         /// <summary>When true, X holds the runtime element offset; use AbsoluteX addressing.</summary>
         bool RuntimeIndex
+    );
+
+    /// <summary>
+    /// State for a pending byte array element access (from ldelema System.Byte).
+    /// </summary>
+    readonly record struct PendingByteArrayElement(
+        /// <summary>Array base address for AbsoluteX addressing (runtime index).</summary>
+        ushort ArrayBase,
+        /// <summary>Element address for constant-index access; null for runtime-index.</summary>
+        ushort? ConstantElementAddress
     );
 
     /// <summary>

@@ -262,7 +262,8 @@ while (true)
                         actor_state[aidx] = STANDING;
                         actor_name[aidx] = 1; // ACTOR_ENEMY
                         actor_x[aidx] = rand8();
-                        ushort ayy = (ushort)(floor_ypos[f] * 8 + 16);
+                        byte aypos = floor_ypos[f];
+                        ushort ayy = (ushort)(aypos * 8 + 16);
                         actor_yy_lo[aidx] = (byte)ayy;
                         actor_yy_hi[aidx] = (byte)(ayy >> 8);
                         actor_floor[aidx] = f;
@@ -456,11 +457,14 @@ while (true)
 
         // --- Player movement ---
         PAD joy = pad_poll(0);
+        byte player_was_moving = 0; // Track if player was standing/walking at frame start
         {
             byte pi = 0;
             byte pf = actor_floor[pi];
             byte ps = actor_state[pi];
-            ushort floor_yy = (ushort)(floor_ypos[pf] * 8 + 16);
+            if (ps <= WALKING) player_was_moving = 1;
+            byte pfypos = floor_ypos[pf];
+            ushort floor_yy = (ushort)(pfypos * 8 + 16);
             byte fyy_lo = (byte)floor_yy;
             byte fyy_hi = (byte)(floor_yy >> 8);
             byte ceil_y_base = (byte)(floor_ypos[pf] + floor_height[pf]);
@@ -572,29 +576,37 @@ while (true)
             if (ps == JUMPING || ps == FALLING)
             {
                 actor_x[pi] = (byte)(actor_x[pi] + actor_xvel[pi]);
-                // yvel / 4 (signed): extract sign, shift, apply
-                byte absvel = actor_yvel[pi];
-                byte neg = 0;
-                if (absvel >= 128) { absvel = (byte)(0 - absvel); neg = 1; }
-                byte dv = (byte)(absvel >> 2);
-                if (neg != 0)
+                // Signed velocity / 4
+                byte vel = actor_yvel[pi];
+                if (vel < 128)
                 {
-                    byte prev_lo = actor_yy_lo[pi];
-                    actor_yy_lo[pi] = (byte)(prev_lo - dv);
-                    if (actor_yy_lo[pi] > prev_lo) actor_yy_hi[pi] = (byte)(actor_yy_hi[pi] - 1);
+                    // Positive velocity (going up): add vel/4 to yy
+                    byte dv = (byte)(vel >> 2);
+                    byte old_lo = actor_yy_lo[pi];
+                    actor_yy_lo[pi] = (byte)(old_lo + dv);
+                    if (actor_yy_lo[pi] < old_lo)
+                        actor_yy_hi[pi] = (byte)(actor_yy_hi[pi] + 1);
                 }
-                else
+                if (vel >= 128)
                 {
-                    byte prev_lo = actor_yy_lo[pi];
-                    actor_yy_lo[pi] = (byte)(prev_lo + dv);
-                    if (actor_yy_lo[pi] < prev_lo) actor_yy_hi[pi] = (byte)(actor_yy_hi[pi] + 1);
+                    // Negative velocity (falling): subtract |vel|/4 from yy
+                    byte dv = (byte)((byte)(0 - vel) >> 2);
+                    byte old_lo = actor_yy_lo[pi];
+                    actor_yy_lo[pi] = (byte)(old_lo - dv);
+                    if (actor_yy_lo[pi] > old_lo)
+                        actor_yy_hi[pi] = (byte)(actor_yy_hi[pi] - 1);
                 }
-                actor_yvel[pi] = (byte)(actor_yvel[pi] - 1);
-                // Landed?
-                if (actor_yy_hi[pi] < fyy_hi || (actor_yy_hi[pi] == fyy_hi && actor_yy_lo[pi] <= fyy_lo))
+                actor_yvel[pi] = (byte)(vel - 1);
+                // Landed on floor? Use intermediate to avoid arr[arr[i]] transpiler bug
+                byte cur_fl = actor_floor[pi];
+                byte land_ypos = floor_ypos[cur_fl];
+                ushort land_yy = (ushort)(land_ypos * 8 + 16);
+                byte land_lo = (byte)land_yy;
+                byte land_hi = (byte)(land_yy >> 8);
+                if (actor_yy_hi[pi] < land_hi || (actor_yy_hi[pi] == land_hi && actor_yy_lo[pi] <= land_lo))
                 {
-                    actor_yy_lo[pi] = fyy_lo;
-                    actor_yy_hi[pi] = fyy_hi;
+                    actor_yy_lo[pi] = land_lo;
+                    actor_yy_hi[pi] = land_hi;
                     actor_state[pi] = STANDING;
                 }
             }
@@ -603,8 +615,8 @@ while (true)
             if (actor_x[pi] > ACTOR_MAX_X) actor_x[pi] = ACTOR_MAX_X;
             if (actor_x[pi] < ACTOR_MIN_X) actor_x[pi] = ACTOR_MIN_X;
 
-            // Check gap fall
-            ps = actor_state[pi];
+            // Check gap fall — only if player was standing/walking at start of frame
+            // (not if they just landed from a fall this frame)
             if (ps == STANDING || ps == WALKING)
             {
                 byte gap = floor_gap[pf];
@@ -621,29 +633,126 @@ while (true)
                 }
             }
 
-            // Pickup object
-            if (actor_state[pi] <= WALKING && floor_objtype[pf] != 0)
+            // Pickup object — split into two phases to prevent stelem backward scan
+            // from consuming the item type comparison and score/sfx code.
+            // Phase 1: detect item type
+            byte pickup_type = 0;
+            if (ps <= WALKING && floor_objtype[pf] != 0)
             {
                 byte objx = (byte)(floor_objpos[pf] * 16);
-                if (actor_x[pi] >= objx && actor_x[pi] < (byte)(objx + 16))
+                byte objx_end = (byte)(objx + 16);
+                if (actor_x[pi] >= objx && actor_x[pi] < objx_end)
                 {
-                    byte ot = floor_objtype[pf];
-                    floor_objtype[pf] = 0;
-                    if (ot == 1)
+                    pickup_type = floor_objtype[pf];
+                }
+            }
+            // Phase 2: act on pickup (mine = fall, others = score)
+            if (pickup_type == 1)
+            {
+                floor_objtype[pf] = 0;
+                if (pf > 0) actor_floor[pi] = (byte)(pf - 1);
+                actor_state[pi] = FALLING;
+                actor_xvel[pi] = 0;
+                actor_yvel[pi] = 0;
+                sfx_play(SND_HIT, 0);
+                vbright = 8;
+            }
+            if (pickup_type >= 2)
+            {
+                // Simple score increment (non-BCD, displays as hex digits)
+                score = (byte)(score + 1);
+                sfx_play(SND_COIN, 0);
+                // Clear item from floor data after all other work
+                floor_objtype[pf] = 0;
+            }
+            // Redraw item floor rows after pickup to clear tiles visually.
+            // Reuses the same inline draw_floor_line pattern that the scroll
+            // redraw uses (which the transpiler handles correctly).
+            if (pickup_type != 0)
+            {
+                byte refresh_rh = (byte)(floor_ypos[pf] + 2);
+                Array.Fill(buf, (byte)0);
+                for (byte df = 0; df < MAX_FLOORS; df++)
+                {
+                    byte ddy = (byte)(refresh_rh - floor_ypos[df]);
+                    if (ddy >= 253) ddy = 0;
+                    if (ddy < floor_height[df])
                     {
-                        if (pf > 0) actor_floor[pi] = (byte)(pf - 1);
-                        actor_state[pi] = FALLING;
-                        actor_xvel[pi] = 0;
-                        actor_yvel[pi] = 0;
-                        sfx_play(SND_HIT, 0);
-                        vbright = 8;
-                    }
-                    else
-                    {
-                        score = (byte)bcd_add(score, 1);
-                        sfx_play(SND_COIN, 0);
+                        if (ddy <= 1)
+                        {
+                            for (byte dcol = 0; dcol < COLS; dcol += 2)
+                            {
+                                if (ddy != 0) { buf[dcol] = CH_FLOOR; buf[(byte)(dcol + 1)] = (byte)(CH_FLOOR + 2); }
+                                else { buf[dcol] = (byte)(CH_FLOOR + 1); buf[(byte)(dcol + 1)] = (byte)(CH_FLOOR + 3); }
+                            }
+                            if (floor_gap[df] != 0)
+                            {
+                                byte dgstart = (byte)(floor_gap[df] * 2);
+                                for (byte dg = 0; dg < GAPSIZE; dg++) buf[(byte)(dgstart + dg)] = 0;
+                            }
+                        }
+                        else
+                        {
+                            if (df < MAX_FLOORS - 1) { buf[0] = (byte)(CH_FLOOR + 1); buf[COLS - 1] = CH_FLOOR; }
+                            if (floor_ladder1[df] != 0) { byte dlc = (byte)(floor_ladder1[df] * 2); buf[dlc] = CH_LADDER; buf[(byte)(dlc + 1)] = (byte)(CH_LADDER + 1); }
+                            if (floor_ladder2[df] != 0) { byte dlc = (byte)(floor_ladder2[df] * 2); buf[dlc] = CH_LADDER; buf[(byte)(dlc + 1)] = (byte)(CH_LADDER + 1); }
+                        }
+                        if (floor_objtype[df] != 0)
+                        {
+                            byte dch = (byte)(floor_objtype[df] * 4 + CH_ITEM);
+                            if (ddy == 2) { buf[(byte)(floor_objpos[df] * 2)] = (byte)(dch + 1); buf[(byte)(floor_objpos[df] * 2 + 1)] = (byte)(dch + 3); }
+                            if (ddy == 3) { buf[(byte)(floor_objpos[df] * 2)] = dch; buf[(byte)(floor_objpos[df] * 2 + 1)] = (byte)(dch + 2); }
+                        }
+                        break;
                     }
                 }
+                byte drowy2 = (byte)((byte)(ROWS - 1) - (byte)(refresh_rh % ROWS));
+                ushort daddr2;
+                if (drowy2 < 30) daddr2 = NTADR_A(1, drowy2); else daddr2 = NTADR_C(1, (byte)(drowy2 - 30));
+                vrambuf_put(daddr2, buf, COLS);
+                vrambuf_flush();
+
+                // Second row (dy=3)
+                refresh_rh = (byte)(floor_ypos[pf] + 3);
+                Array.Fill(buf, (byte)0);
+                for (byte df = 0; df < MAX_FLOORS; df++)
+                {
+                    byte ddy = (byte)(refresh_rh - floor_ypos[df]);
+                    if (ddy >= 253) ddy = 0;
+                    if (ddy < floor_height[df])
+                    {
+                        if (ddy <= 1)
+                        {
+                            for (byte dcol = 0; dcol < COLS; dcol += 2)
+                            {
+                                if (ddy != 0) { buf[dcol] = CH_FLOOR; buf[(byte)(dcol + 1)] = (byte)(CH_FLOOR + 2); }
+                                else { buf[dcol] = (byte)(CH_FLOOR + 1); buf[(byte)(dcol + 1)] = (byte)(CH_FLOOR + 3); }
+                            }
+                            if (floor_gap[df] != 0)
+                            {
+                                byte dgstart = (byte)(floor_gap[df] * 2);
+                                for (byte dg = 0; dg < GAPSIZE; dg++) buf[(byte)(dgstart + dg)] = 0;
+                            }
+                        }
+                        else
+                        {
+                            if (df < MAX_FLOORS - 1) { buf[0] = (byte)(CH_FLOOR + 1); buf[COLS - 1] = CH_FLOOR; }
+                            if (floor_ladder1[df] != 0) { byte dlc = (byte)(floor_ladder1[df] * 2); buf[dlc] = CH_LADDER; buf[(byte)(dlc + 1)] = (byte)(CH_LADDER + 1); }
+                            if (floor_ladder2[df] != 0) { byte dlc = (byte)(floor_ladder2[df] * 2); buf[dlc] = CH_LADDER; buf[(byte)(dlc + 1)] = (byte)(CH_LADDER + 1); }
+                        }
+                        if (floor_objtype[df] != 0)
+                        {
+                            byte dch = (byte)(floor_objtype[df] * 4 + CH_ITEM);
+                            if (ddy == 2) { buf[(byte)(floor_objpos[df] * 2)] = (byte)(dch + 1); buf[(byte)(floor_objpos[df] * 2 + 1)] = (byte)(dch + 3); }
+                            if (ddy == 3) { buf[(byte)(floor_objpos[df] * 2)] = dch; buf[(byte)(floor_objpos[df] * 2 + 1)] = (byte)(dch + 2); }
+                        }
+                        break;
+                    }
+                }
+                byte drowy3 = (byte)((byte)(ROWS - 1) - (byte)(refresh_rh % ROWS));
+                ushort daddr3;
+                if (drowy3 < 30) daddr3 = NTADR_A(1, drowy3); else daddr3 = NTADR_C(1, (byte)(drowy3 - 30));
+                vrambuf_put(daddr3, buf, COLS);
             }
 
             // Scroll check — update scroll and redraw offscreen rows on tile boundaries
@@ -792,7 +901,8 @@ while (true)
             byte ej = rand8();
             byte ef = actor_floor[ei];
             byte es = actor_state[ei];
-            ushort efloor_yy = (ushort)(floor_ypos[ef] * 8 + 16);
+            byte efypos = floor_ypos[ef];
+            ushort efloor_yy = (ushort)(efypos * 8 + 16);
             byte efyy_lo = (byte)efloor_yy;
             byte efyy_hi = (byte)(efloor_yy >> 8);
 
@@ -832,38 +942,45 @@ while (true)
             if (es == JUMPING || es == FALLING)
             {
                 actor_x[ei] = (byte)(actor_x[ei] + actor_xvel[ei]);
-                byte eabsvel = actor_yvel[ei];
-                byte eneg = 0;
-                if (eabsvel >= 128) { eabsvel = (byte)(0 - eabsvel); eneg = 1; }
-                byte edv = (byte)(eabsvel >> 2);
-                if (eneg != 0)
+                byte evel = actor_yvel[ei];
+                if (evel < 128)
                 {
-                    byte prev_lo = actor_yy_lo[ei];
-                    actor_yy_lo[ei] = (byte)(prev_lo - edv);
-                    if (actor_yy_lo[ei] > prev_lo) actor_yy_hi[ei] = (byte)(actor_yy_hi[ei] - 1);
+                    byte edv = (byte)(evel >> 2);
+                    byte old_lo = actor_yy_lo[ei];
+                    actor_yy_lo[ei] = (byte)(old_lo + edv);
+                    if (actor_yy_lo[ei] < old_lo)
+                        actor_yy_hi[ei] = (byte)(actor_yy_hi[ei] + 1);
                 }
-                else
+                if (evel >= 128)
                 {
-                    byte prev_lo = actor_yy_lo[ei];
-                    actor_yy_lo[ei] = (byte)(prev_lo + edv);
-                    if (actor_yy_lo[ei] < prev_lo) actor_yy_hi[ei] = (byte)(actor_yy_hi[ei] + 1);
+                    byte edv = (byte)((byte)(0 - evel) >> 2);
+                    byte old_lo = actor_yy_lo[ei];
+                    actor_yy_lo[ei] = (byte)(old_lo - edv);
+                    if (actor_yy_lo[ei] > old_lo)
+                        actor_yy_hi[ei] = (byte)(actor_yy_hi[ei] - 1);
                 }
-                actor_yvel[ei] = (byte)(actor_yvel[ei] - 1);
-                if (actor_yy_hi[ei] < efyy_hi || (actor_yy_hi[ei] == efyy_hi && actor_yy_lo[ei] <= efyy_lo))
+                actor_yvel[ei] = (byte)(evel - 1);
+                byte ecur_fl = actor_floor[ei];
+                byte elypos = floor_ypos[ecur_fl];
+                ushort eland_yy = (ushort)(elypos * 8 + 16);
+                byte eland_lo = (byte)eland_yy;
+                byte eland_hi = (byte)(eland_yy >> 8);
+                if (actor_yy_hi[ei] < eland_hi || (actor_yy_hi[ei] == eland_hi && actor_yy_lo[ei] <= eland_lo))
                 {
-                    actor_yy_lo[ei] = efyy_lo;
-                    actor_yy_hi[ei] = efyy_hi;
+                    actor_yy_lo[ei] = eland_lo;
+                    actor_yy_hi[ei] = eland_hi;
                     actor_state[ei] = STANDING;
                 }
             }
         }
 
-        // --- Collision check ---
-        if (actor_state[0] != FALLING && actor_floor[0] > 0)
+        // --- Collision check — only if player was standing/walking at start of frame ---
+        if (player_was_moving != 0 && actor_floor[0] > 0)
         {
+            byte collided = 0;
             for (byte ci = 1; ci < MAX_ACTORS; ci++)
             {
-                if (actor_onscreen[ci] != 0 && actor_floor[ci] == actor_floor[0])
+                if (collided == 0 && actor_onscreen[ci] != 0 && actor_floor[ci] == actor_floor[0])
                 {
                     byte dx = (byte)(actor_x[0] - actor_x[ci]);
                     if (dx >= 248) dx = (byte)(0 - dx);
@@ -871,15 +988,20 @@ while (true)
                     if (dyl >= 248) dyl = (byte)(0 - dyl);
                     if (dx < 8 && dyl < 8)
                     {
-                        if (actor_floor[0] > 0) actor_floor[0] = (byte)(actor_floor[0] - 1);
-                        actor_state[0] = FALLING;
-                        actor_xvel[0] = 0;
-                        actor_yvel[0] = 0;
-                        sfx_play(SND_HIT, 0);
-                        vbright = 8;
-                        break;
+                        collided = 1;
                     }
                 }
+            }
+            if (collided != 0)
+            {
+                byte cfl = actor_floor[0];
+                cfl = (byte)(cfl - 1);
+                actor_floor[0] = cfl;
+                actor_state[0] = FALLING;
+                actor_xvel[0] = 0;
+                actor_yvel[0] = 0;
+                sfx_play(SND_HIT, 0);
+                vbright = 8;
             }
         }
 

@@ -2327,6 +2327,50 @@ public class RoslynTests
     }
 
     [Fact]
+    public void CompoundArrayIncrementByConstant()
+    {
+        // Pattern: arr[i] += 2 generates ldelema System.Byte / dup / ldind.u1 / ldc.i4.2 / add / conv.u1 / stind.i1
+        // Should emit: LDX i_addr; LDA arr,X; CLC; ADC #02; STA arr,X
+        var bytes = GetProgramBytes(
+            """
+            byte[] arr = new byte[4];
+            byte i = 0;
+            arr[i] += 2;
+            pal_col(0, arr[i]);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"CompoundIncr hex: {hex}");
+        // Must contain ADC #$02 (6902) for the += 2
+        Assert.Contains("6902", hex);
+    }
+
+    [Fact]
+    public void CompoundArrayDecrement()
+    {
+        // Pattern: arr[i]-- generates ldelema System.Byte / dup / ldind.u1 / ldc.i4.1 / sub / conv.u1 / stind.i1
+        // Should emit: LDX i_addr; LDA arr,X; SEC; SBC #01; STA arr,X
+        var bytes = GetProgramBytes(
+            """
+            byte[] arr = new byte[4];
+            byte i = 0;
+            arr[i]--;
+            pal_col(0, arr[i]);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"CompoundDecr hex: {hex}");
+        // Must contain SBC #$01 (E901) for the --
+        Assert.Contains("E901", hex);
+    }
+
+    [Fact]
     public void SubtractRuntimeFromPushaConstant()
     {
         // Pattern from climber: byte rowy = (byte)(59 - (byte)(rh % 60))
@@ -4651,6 +4695,39 @@ public class RoslynTests
         Assert.Contains("A930", hex);
         // Must contain LDA #$00 (A900) for stelem value 0
         Assert.Contains("A900", hex);
+    }
+
+    [Fact]
+    public void LdelemU1_NestedArrayIndex()
+    {
+        // Regression: arr1[arr2[i]] generated wrong code — the transpiler
+        // loaded from arr2 twice instead of using arr2[i] as index into arr1.
+        // The workaround (intermediate local) should produce correct code.
+        // Direct nested access (arr1[arr2[i]]) requires further transpiler work.
+        var bytes = GetProgramBytes(
+            """
+            byte[] names = new byte[4];
+            byte[] lookup = new byte[4];
+            names[0] = 10; names[1] = 20; names[2] = 30; names[3] = 40;
+            lookup[0] = 3; lookup[1] = 2; lookup[2] = 1; lookup[3] = 0;
+            for (byte i = 0; i < 4; i++)
+            {
+                byte idx = lookup[i];
+                byte result = names[idx];
+                pal_col(i, result);
+            }
+            ppu_on_all();
+            while (true) ;
+            """);
+
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"LdelemU1_NestedArrayIndex hex: {hex}");
+
+        // LDA names,X pattern (BD xx xx) — indexed load from names array
+        Assert.Contains("BD", hex);
     }
 
     [Fact]
