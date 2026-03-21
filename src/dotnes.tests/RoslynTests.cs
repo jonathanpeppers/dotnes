@@ -4729,4 +4729,78 @@ public class RoslynTests
         // LDA names,X pattern (BD xx xx) — indexed load from names array
         Assert.Contains("BD", hex);
     }
+
+    [Fact]
+    public void OamSpr_DivisionInCompoundArg()
+    {
+        // oam_spr with division in a compound argument should emit a
+        // division loop instead of throwing TranspileException.
+        // Pattern: (byte)(0x05 + (difficulty / 10))
+        var bytes = GetProgramBytes(
+            """
+            byte[] PALETTE = [
+                0x30,
+                0x11, 0x30, 0x27, 0x0,
+                0x1c, 0x20, 0x2c, 0x0,
+                0x00, 0x10, 0x20, 0x0,
+                0x06, 0x16, 0x26, 0x0,
+                0x14, 0x34, 0x0d, 0x0,
+                0x00, 0x37, 0x25, 0x0,
+                0x0d, 0x2d, 0x3a, 0x0,
+                0x0d, 0x27, 0x2a
+            ];
+
+            pal_all(PALETTE);
+            byte difficulty = 42;
+            oam_spr(148, 114, (byte)(0x05 + (difficulty / 10)), 0x01, 0);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"OamSpr_Div hex: {hex}");
+
+        // Division by 10 uses repeated subtraction loop:
+        // LDX #$FF, SEC, INX, SBC #$0A, BCS -5, TXA
+        Assert.Contains("A2FF38E8E90AB0FB8A", hex);
+    }
+
+    [Fact]
+    public void OamSpr_ModuloInCompoundArg()
+    {
+        // oam_spr with modulo in a compound argument should emit a
+        // modulo loop instead of throwing TranspileException.
+        // Pattern: (byte)(0x04 + (difficulty % 10))
+        var bytes = GetProgramBytes(
+            """
+            byte[] PALETTE = [
+                0x30,
+                0x11, 0x30, 0x27, 0x0,
+                0x1c, 0x20, 0x2c, 0x0,
+                0x00, 0x10, 0x20, 0x0,
+                0x06, 0x16, 0x26, 0x0,
+                0x14, 0x34, 0x0d, 0x0,
+                0x00, 0x37, 0x25, 0x0,
+                0x0d, 0x2d, 0x3a, 0x0,
+                0x0d, 0x27, 0x2a
+            ];
+
+            pal_all(PALETTE);
+            byte difficulty = 42;
+            oam_spr(156, 114, (byte)(0x04 + (difficulty % 10)), 0x01, 0);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"OamSpr_Rem hex: {hex}");
+
+        // Modulo by 10 uses repeated subtraction:
+        // SEC, SBC #$0A, BCS -4, ADC #$0A
+        Assert.Contains("38E90AB0FC690A", hex);
+    }
 }
