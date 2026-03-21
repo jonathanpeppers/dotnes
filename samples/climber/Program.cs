@@ -649,8 +649,6 @@ while (true)
             // Scroll check — update scroll and redraw offscreen rows on tile boundaries
             // Original: set_scroll_pixel_yy() in climber.c draws a row every 8 pixels
             {
-                byte prev_lo = scroll_yy_lo;
-                byte prev_hi = scroll_yy_hi;
                 byte scrolled = 0; // 1=up, 2=down
                 if (player_screen_y < ACTOR_SCROLL_UP_Y)
                 {
@@ -755,8 +753,33 @@ while (true)
                         daddr = NTADR_A(1, drowy);
                     else
                         daddr = NTADR_C(1, (byte)(drowy - 30));
+
+                    // Update attribute table on every 4th row (matches original draw_floor_line)
+                    if ((drowy & 3) == 0)
+                    {
+                        byte attr_a = 0x00;
+                        for (byte af = 0; af < MAX_FLOORS; af++)
+                        {
+                            byte ady = (byte)(draw_rh - floor_ypos[af]);
+                            if (ady >= 253) ady = 0;
+                            if (ady < floor_height[af])
+                            {
+                                if (ady == 1) attr_a = 0x05;
+                                else if (ady == 3) attr_a = 0x50;
+                                break;
+                            }
+                        }
+                        Array.Fill(attrbuf, attr_a);
+                        ushort attraddr;
+                        if (drowy < 30)
+                            attraddr = (ushort)(0x23C0 + (drowy >> 2) * 8);
+                        else
+                            attraddr = (ushort)(0x2BC0 + ((byte)(drowy - 30) >> 2) * 8);
+                        vrambuf_put(attraddr, attrbuf, 8);
+                    }
+
                     vrambuf_put(daddr, buf, COLS);
-                    vrambuf_flush();
+                    // No vrambuf_flush here — the main loop's flush at the top handles it
                 }
             }
         }
