@@ -3735,6 +3735,49 @@ public class RoslynTests
     }
 
     [Fact]
+    public void SetIrqScanline_EmitsLatchReloadEnable()
+    {
+        // set_irq_scanline(48) should emit:
+        // LDA #48 (already loaded), STA $C000 (latch), STA $C001 (reload), STA $E001 (enable)
+        var bytes = GetProgramBytes(
+            """
+            set_irq_scanline(48);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"SetIrqScanline hex: {hex}");
+
+        // LDA #$30 (48 decimal), STA $C000, STA $C001, STA $E001
+        Assert.Contains("A930", hex); // LDA #48
+        Assert.Contains("8D00C0", hex); // STA $C000 (latch)
+        Assert.Contains("8D01C0", hex); // STA $C001 (reload)
+        Assert.Contains("8D01E0", hex); // STA $E001 (enable)
+    }
+
+    [Fact]
+    public void DisableIrq_EmitsStaToDisableReg()
+    {
+        // disable_irq() should emit STA $E000
+        var bytes = GetProgramBytes(
+            """
+            disable_irq();
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"DisableIrq hex: {hex}");
+
+        Assert.Contains("8D00E0", hex); // STA $E000 (disable)
+    }
+
+    [Fact]
     public void Mmc1Write_EmitsShiftRegisterProtocol()
     {
         // mmc1_write(0x8000, 0x0C) should emit:

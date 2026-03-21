@@ -533,6 +533,20 @@ public static class NESLib
     public const ushort MMC3_IRQ_ENABLE = 0xE001;
 
     /// <summary>
+    /// Set MMC3 scanline IRQ to fire after the specified number of scanlines.
+    /// Writes scanline to $C000 (latch), then $C001 (reload), then $E001 (enable).
+    /// Call <see cref="cli"/> first to enable CPU interrupts.
+    /// </summary>
+    /// <param name="scanline">Number of scanlines to count before triggering IRQ.</param>
+    public static void set_irq_scanline(byte scanline) => throw null!;
+
+    /// <summary>
+    /// Disable MMC3 scanline IRQ by writing to $E000.
+    /// Also acknowledges any pending IRQ.
+    /// </summary>
+    public static void disable_irq() => throw null!;
+
+    /// <summary>
     /// Set an MMC3 CHR bank register to the specified bank number.
     /// Writes reg to $8000 (MMC3_BANK_SELECT) and bank to $8001 (MMC3_BANK_DATA).
     /// </summary>

@@ -1513,6 +1513,20 @@ partial class IL2NESWriter
                         Emit(Opcode.SEI, AddressMode.Implied);
                         argsAlreadyPopped = true;
                         break;
+                    case nameof(NESLib.set_irq_scanline):
+                        // set_irq_scanline(byte scanline) — inline MMC3 IRQ setup:
+                        // LDA #scanline (already in A from arg), STA $C000, STA $C001, STA $E001
+                        Emit(Opcode.STA, AddressMode.Absolute, NESLib.MMC3_IRQ_LATCH);
+                        Emit(Opcode.STA, AddressMode.Absolute, NESLib.MMC3_IRQ_RELOAD);
+                        Emit(Opcode.STA, AddressMode.Absolute, NESLib.MMC3_IRQ_ENABLE);
+                        _immediateInA = null;
+                        break;
+                    case nameof(NESLib.disable_irq):
+                        // disable_irq() — write anything to $E000 to disable MMC3 IRQ
+                        Emit(Opcode.STA, AddressMode.Absolute, NESLib.MMC3_IRQ_DISABLE);
+                        argsAlreadyPopped = true;
+                        _immediateInA = null;
+                        break;
                     case nameof(NESLib.cnrom_set_chr_bank):
                         // CNROM (mapper 3) bank switch: write bank number to $8000
                         // The bank number is already in A from the argument load
