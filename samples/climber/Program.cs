@@ -633,43 +633,33 @@ while (true)
                 }
             }
 
-            // Pickup object — split into two phases to prevent stelem backward scan
-            // from consuming the item type comparison and score/sfx code.
-            // Phase 1: detect item type
-            byte pickup_type = 0;
+            // Pickup object
             if (ps <= WALKING && floor_objtype[pf] != 0)
             {
                 byte objx = (byte)(floor_objpos[pf] * 16);
                 byte objx_end = (byte)(objx + 16);
                 if (actor_x[pi] >= objx && actor_x[pi] < objx_end)
                 {
-                    pickup_type = floor_objtype[pf];
-                }
-            }
-            // Phase 2: act on pickup (mine = fall, others = score)
-            if (pickup_type == 1)
-            {
-                floor_objtype[pf] = 0;
-                if (pf > 0) actor_floor[pi] = (byte)(pf - 1);
-                actor_state[pi] = FALLING;
-                actor_xvel[pi] = 0;
-                actor_yvel[pi] = 0;
-                sfx_play(SND_HIT, 0);
-                vbright = 8;
-            }
-            if (pickup_type >= 2)
-            {
-                // Simple score increment (non-BCD, displays as hex digits)
-                score = (byte)(score + 1);
-                sfx_play(SND_COIN, 0);
-                // Clear item from floor data after all other work
-                floor_objtype[pf] = 0;
-            }
-            // Redraw item floor rows after pickup to clear tiles visually.
-            // Reuses the same inline draw_floor_line pattern that the scroll
-            // redraw uses (which the transpiler handles correctly).
-            if (pickup_type != 0)
-            {
+                    byte ot = floor_objtype[pf];
+                    floor_objtype[pf] = 0;
+                    if (ot == 1)
+                    {
+                        if (pf > 0) actor_floor[pi] = (byte)(pf - 1);
+                        actor_state[pi] = FALLING;
+                        actor_xvel[pi] = 0;
+                        actor_yvel[pi] = 0;
+                        sfx_play(SND_HIT, 0);
+                        vbright = 8;
+                    }
+                    else
+                    {
+                        score = (byte)bcd_add(score, 1);
+                        sfx_play(SND_COIN, 0);
+                    }
+                    // Redraw item floor rows after pickup to clear tiles visually.
+                    // Reuses the same inline draw_floor_line pattern that the scroll
+                    // redraw uses (which the transpiler handles correctly).
+                    {
                 byte refresh_rh = (byte)(floor_ypos[pf] + 2);
                 Array.Fill(buf, (byte)0);
                 for (byte df = 0; df < MAX_FLOORS; df++)
@@ -753,6 +743,8 @@ while (true)
                 ushort daddr3;
                 if (drowy3 < 30) daddr3 = NTADR_A(1, drowy3); else daddr3 = NTADR_C(1, (byte)(drowy3 - 30));
                 vrambuf_put(daddr3, buf, COLS);
+                    }
+                }
             }
 
             // Scroll check — update scroll and redraw offscreen rows on tile boundaries
