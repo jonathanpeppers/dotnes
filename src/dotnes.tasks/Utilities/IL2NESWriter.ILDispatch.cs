@@ -294,6 +294,14 @@ partial class IL2NESWriter
                 // stelem.i*(stack: arrayref, index, value → stack: )
                 HandleStelemI1();
                 break;
+            case ILOpCode.Ldind_u1:
+                // ldind.u1: load byte through pointer (from ldelema System.Byte)
+                HandleLdindU1();
+                break;
+            case ILOpCode.Stind_i1:
+                // stind.i1: store byte through pointer (from ldelema System.Byte)
+                HandleStindI1();
+                break;
             case ILOpCode.Add:
                 HandleAddSub(isAdd: true);
                 break;
