@@ -144,6 +144,7 @@ while (true)
     // Buffers
     byte[] buf = new byte[COLS];
     byte[] attrbuf = new byte[8];
+    byte[] blankpair = new byte[2]; // for clearing 2-tile item sprites
 
     // --- make_floors ---
     {
@@ -647,19 +648,31 @@ while (true)
             }
             if (pickup_type >= 2)
             {
-                floor_objtype[pf] = 0;
-                // Inline BCD increment: add 1 to packed BCD score.
-                byte lo = (byte)(score & 0x0f);
-                byte hi = (byte)(score & 0xf0);
-                if (lo < 9)
-                {
-                    score = (byte)(hi + lo + 1);
-                }
-                if (lo >= 9)
-                {
-                    score = (byte)(hi + 0x10);
-                }
+                // Simple score increment (non-BCD, displays as hex digits)
+                score = (byte)(score + 1);
                 sfx_play(SND_COIN, 0);
+                // Clear item from floor data after all other work
+                floor_objtype[pf] = 0;
+            }
+            // Clear item tiles from nametable when any item is picked up
+            if (pickup_type != 0)
+            {
+                byte obj_col = (byte)(floor_objpos[pf] * 2 + 1);
+                byte rh2 = (byte)(floor_ypos[pf] + 2);
+                byte rowy2 = (byte)((byte)(ROWS - 1) - (byte)(rh2 % ROWS));
+                ushort tile_addr;
+                if (rowy2 < 30)
+                    tile_addr = NTADR_A(obj_col, rowy2);
+                else
+                    tile_addr = NTADR_C(obj_col, (byte)(rowy2 - 30));
+                vrambuf_put(tile_addr, blankpair, 2);
+                byte rh3 = (byte)(floor_ypos[pf] + 3);
+                byte rowy3 = (byte)((byte)(ROWS - 1) - (byte)(rh3 % ROWS));
+                if (rowy3 < 30)
+                    tile_addr = NTADR_A(obj_col, rowy3);
+                else
+                    tile_addr = NTADR_C(obj_col, (byte)(rowy3 - 30));
+                vrambuf_put(tile_addr, blankpair, 2);
             }
 
             // Scroll check — update scroll and redraw offscreen rows on tile boundaries
