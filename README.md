@@ -31,7 +31,7 @@
 | **statusbar** ⬇️ | |
 | ![statusbar](samples/statusbar/statusbar.gif) | |
 
-> See the [samples/](samples/) folder for all 44 sample projects. Generate images with `dotnet run scripts/record-all-samples.cs`.
+> See the [samples/](samples/) folder for all 46 sample projects. Generate images with `dotnet run scripts/record-all-samples.cs`.
 
 ## Contributing
 
