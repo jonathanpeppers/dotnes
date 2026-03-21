@@ -3689,12 +3689,12 @@ public class RoslynTests
     [Fact]
     public void Mmc3SetChrBank_EmitsRegAndBankWrites()
     {
-        // mmc3_set_chr_bank(byte reg, byte bank) should emit:
+        // set_chr_mode(byte reg, byte bank) should emit:
         // LDA #reg, STA $8000 (bank select), LDA #bank, STA $8001 (bank data)
         var bytes = GetProgramBytes(
             """
-            mmc3_set_chr_bank(0x00, 0x00);
-            mmc3_set_chr_bank(0x02, 0x09);
+            set_chr_mode(0x00, 0x00);
+            set_chr_mode(0x02, 0x09);
             ppu_on_all();
             while (true) ;
             """);

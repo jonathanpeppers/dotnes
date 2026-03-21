@@ -1520,9 +1520,9 @@ partial class IL2NESWriter
                         _immediateInA = null;
                         _pokeLastValue = null;
                         break;
-                    case nameof(NESLib.mmc3_set_chr_bank):
+                    case nameof(NESLib.set_chr_mode):
                         {
-                            // mmc3_set_chr_bank(byte reg, byte bank) -> STA $8000 (reg), STA $8001 (bank)
+                            // set_chr_mode(byte reg, byte bank) -> STA $8000 (reg), STA $8001 (bank)
                             // MMC3 CHR bank switching: write register number to $8000, then bank number to $8001
                             if (Stack.Count >= 2)
                             {
