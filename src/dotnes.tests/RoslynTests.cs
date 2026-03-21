@@ -3711,6 +3711,30 @@ public class RoslynTests
     }
 
     [Fact]
+    public void SetChrMode_SupportsLocalBankArg()
+    {
+        // set_chr_mode with bank from a local variable should emit
+        // LDA #reg, STA $8000, LDA $bank_addr, STA $8001.
+        var bytes = GetProgramBytes(
+            """
+            byte bank = 9;
+            set_chr_mode(0x02, bank);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"SetChrMode local bank hex: {hex}");
+
+        // LDA #$02, STA $8000 (register select)
+        Assert.Contains("A9028D0080", hex);
+        // STA $8001 (bank data write)
+        Assert.Contains("8D0180", hex);
+    }
+
+    [Fact]
     public void Mmc1Write_EmitsShiftRegisterProtocol()
     {
         // mmc1_write(0x8000, 0x0C) should emit:

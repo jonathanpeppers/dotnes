@@ -1523,22 +1523,33 @@ partial class IL2NESWriter
                     case nameof(NESLib.set_chr_mode):
                         {
                             // set_chr_mode(byte reg, byte bank) -> STA $8000 (reg), STA $8001 (bank)
-                            // MMC3 CHR bank switching: write register number to $8000, then bank number to $8001
+                            // MMC3 CHR bank switching: write register number to $8000, then bank number to $8001.
+                            // reg must be a compile-time constant (register selector 0-7).
                             if (Stack.Count >= 2)
                             {
                                 int bank = Stack.Pop();
                                 int reg = Stack.Pop();
 
-                                // Check if bank (last loaded arg) is from a local or static field
+                                // Verify reg was a constant by checking the block pattern:
+                                // LDA #reg, JSR pusha, LDA #bank (or LDA $bank_addr)
+                                var block = CurrentBlock!;
+                                if (block.Count < 3
+                                    || block[block.Count - 3].Opcode != Opcode.LDA
+                                    || block[block.Count - 3].Mode != AddressMode.Immediate)
+                                {
+                                    throw new TranspileException(
+                                        "set_chr_mode: first argument (reg) must be a compile-time constant.",
+                                        MethodName);
+                                }
+
+                                // Check if bank (last loaded arg) is from a local variable
                                 Local? bankLocal = null;
                                 bool bankIsLocal = _lastLoadedLocalIndex.HasValue &&
                                     Locals.TryGetValue(_lastLoadedLocalIndex.Value, out bankLocal) &&
                                     bankLocal.Address.HasValue;
-                                bool bankIsStaticField = _lastStaticFieldAddress.HasValue;
-                                ushort? bankStaticAddr = _lastStaticFieldAddress;
 
                                 // Remove previously emitted instructions:
-                                // LDA #reg, JSR pusha, LDA #bank = 3 instructions
+                                // LDA #reg, JSR pusha, LDA #bank (or LDA $bank_addr) = 3 instructions
                                 RemoveLastInstructions(3);
 
                                 // Write register number to $8000 (bank select)
@@ -1549,10 +1560,6 @@ partial class IL2NESWriter
                                 if (bankIsLocal)
                                 {
                                     Emit(Opcode.LDA, AddressMode.Absolute, (ushort)bankLocal!.Address!.Value);
-                                }
-                                else if (bankIsStaticField)
-                                {
-                                    Emit(Opcode.LDA, AddressMode.Absolute, bankStaticAddr!.Value);
                                 }
                                 else
                                 {
