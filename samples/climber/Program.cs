@@ -572,36 +572,35 @@ while (true)
             if (ps == JUMPING || ps == FALLING)
             {
                 actor_x[pi] = (byte)(actor_x[pi] + actor_xvel[pi]);
-                // yvel / 4 (signed): extract sign, shift, apply
-                byte absvel = actor_yvel[pi];
-                byte neg = 0;
-                if (absvel >= 128) { absvel = (byte)(0 - absvel); neg = 1; }
-                byte dv = (byte)(absvel >> 2);
-                if (neg != 0)
+                // Signed velocity / 4
+                byte vel = actor_yvel[pi];
+                if (vel < 128)
                 {
-                    byte prev_lo = actor_yy_lo[pi];
-                    actor_yy_lo[pi] = (byte)(prev_lo - dv);
-                    if (actor_yy_lo[pi] > prev_lo) actor_yy_hi[pi] = (byte)(actor_yy_hi[pi] - 1);
+                    // Positive velocity (going up): add vel/4 to yy
+                    byte dv = (byte)(vel >> 2);
+                    byte old_lo = actor_yy_lo[pi];
+                    actor_yy_lo[pi] = (byte)(old_lo + dv);
+                    if (actor_yy_lo[pi] < old_lo)
+                        actor_yy_hi[pi] = (byte)(actor_yy_hi[pi] + 1);
                 }
-                else
+                if (vel >= 128)
                 {
-                    byte prev_lo = actor_yy_lo[pi];
-                    actor_yy_lo[pi] = (byte)(prev_lo + dv);
-                    if (actor_yy_lo[pi] < prev_lo) actor_yy_hi[pi] = (byte)(actor_yy_hi[pi] + 1);
+                    // Negative velocity (falling): subtract |vel|/4 from yy
+                    byte dv = (byte)((byte)(0 - vel) >> 2);
+                    byte old_lo = actor_yy_lo[pi];
+                    actor_yy_lo[pi] = (byte)(old_lo - dv);
+                    if (actor_yy_lo[pi] > old_lo)
+                        actor_yy_hi[pi] = (byte)(actor_yy_hi[pi] - 1);
                 }
-                actor_yvel[pi] = (byte)(actor_yvel[pi] - 1);
-                // Landed?
-                if (actor_yy_hi[pi] < fyy_hi || (actor_yy_hi[pi] == fyy_hi && actor_yy_lo[pi] <= fyy_lo))
+                actor_yvel[pi] = (byte)(vel - 1);
+                // Landed on floor?
+                ushort land_yy = (ushort)(floor_ypos[actor_floor[pi]] * 8 + 16);
+                byte land_lo = (byte)land_yy;
+                byte land_hi = (byte)(land_yy >> 8);
+                if (actor_yy_hi[pi] < land_hi || (actor_yy_hi[pi] == land_hi && actor_yy_lo[pi] <= land_lo))
                 {
-                    actor_yy_lo[pi] = fyy_lo;
-                    actor_yy_hi[pi] = fyy_hi;
-                    actor_state[pi] = STANDING;
-                }
-                // Safety: if Y underflowed (went above screen), clamp to floor
-                if (actor_yy_hi[pi] >= 4)
-                {
-                    actor_yy_lo[pi] = fyy_lo;
-                    actor_yy_hi[pi] = fyy_hi;
+                    actor_yy_lo[pi] = land_lo;
+                    actor_yy_hi[pi] = land_hi;
                     actor_state[pi] = STANDING;
                 }
             }
@@ -839,33 +838,31 @@ while (true)
             if (es == JUMPING || es == FALLING)
             {
                 actor_x[ei] = (byte)(actor_x[ei] + actor_xvel[ei]);
-                byte eabsvel = actor_yvel[ei];
-                byte eneg = 0;
-                if (eabsvel >= 128) { eabsvel = (byte)(0 - eabsvel); eneg = 1; }
-                byte edv = (byte)(eabsvel >> 2);
-                if (eneg != 0)
+                byte evel = actor_yvel[ei];
+                if (evel < 128)
                 {
-                    byte prev_lo = actor_yy_lo[ei];
-                    actor_yy_lo[ei] = (byte)(prev_lo - edv);
-                    if (actor_yy_lo[ei] > prev_lo) actor_yy_hi[ei] = (byte)(actor_yy_hi[ei] - 1);
+                    byte edv = (byte)(evel >> 2);
+                    byte old_lo = actor_yy_lo[ei];
+                    actor_yy_lo[ei] = (byte)(old_lo + edv);
+                    if (actor_yy_lo[ei] < old_lo)
+                        actor_yy_hi[ei] = (byte)(actor_yy_hi[ei] + 1);
                 }
-                else
+                if (evel >= 128)
                 {
-                    byte prev_lo = actor_yy_lo[ei];
-                    actor_yy_lo[ei] = (byte)(prev_lo + edv);
-                    if (actor_yy_lo[ei] < prev_lo) actor_yy_hi[ei] = (byte)(actor_yy_hi[ei] + 1);
+                    byte edv = (byte)((byte)(0 - evel) >> 2);
+                    byte old_lo = actor_yy_lo[ei];
+                    actor_yy_lo[ei] = (byte)(old_lo - edv);
+                    if (actor_yy_lo[ei] > old_lo)
+                        actor_yy_hi[ei] = (byte)(actor_yy_hi[ei] - 1);
                 }
-                actor_yvel[ei] = (byte)(actor_yvel[ei] - 1);
-                if (actor_yy_hi[ei] < efyy_hi || (actor_yy_hi[ei] == efyy_hi && actor_yy_lo[ei] <= efyy_lo))
+                actor_yvel[ei] = (byte)(evel - 1);
+                ushort eland_yy = (ushort)(floor_ypos[actor_floor[ei]] * 8 + 16);
+                byte eland_lo = (byte)eland_yy;
+                byte eland_hi = (byte)(eland_yy >> 8);
+                if (actor_yy_hi[ei] < eland_hi || (actor_yy_hi[ei] == eland_hi && actor_yy_lo[ei] <= eland_lo))
                 {
-                    actor_yy_lo[ei] = efyy_lo;
-                    actor_yy_hi[ei] = efyy_hi;
-                    actor_state[ei] = STANDING;
-                }
-                if (actor_yy_hi[ei] >= 4)
-                {
-                    actor_yy_lo[ei] = efyy_lo;
-                    actor_yy_hi[ei] = efyy_hi;
+                    actor_yy_lo[ei] = eland_lo;
+                    actor_yy_hi[ei] = eland_hi;
                     actor_state[ei] = STANDING;
                 }
             }

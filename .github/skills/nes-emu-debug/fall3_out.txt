@@ -1,0 +1,13 @@
+------------------------------------------------------
+Loading rom: climber.nes
+File CRC32: 0x2FDBABDF
+------------------------------------------------------
+[DB] Initialized - 10655 games in DB
+PRG CRC32: 0x21144C06
+PRG+CHR CRC32: 0xD1068E43
+[iNes] Mapper: 0 Sub: 0
+[iNes] PRG ROM: 32 KB
+[iNes] CHR ROM: 8 KB
+[iNes] Mirroring: Horizontal
+[iNes] Battery: No
+[DB] Game not found in database
