@@ -519,6 +519,7 @@ partial class IL2NESWriter
                 case ILOpCode.And: case ILOpCode.Or: case ILOpCode.Xor:
                 case ILOpCode.Shr: case ILOpCode.Shr_un: case ILOpCode.Shl:
                 case ILOpCode.Rem: case ILOpCode.Rem_un:
+                case ILOpCode.Ldelem_u1: // nested ldelem: pops array+index, pushes result
                     pop = 2; push = 1; break;
                 case ILOpCode.Conv_u1: case ILOpCode.Conv_u2: case ILOpCode.Conv_u4:
                 case ILOpCode.Conv_i1: case ILOpCode.Conv_i2: case ILOpCode.Conv_i4:
