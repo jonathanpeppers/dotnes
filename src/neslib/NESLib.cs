@@ -370,9 +370,9 @@ public static class NESLib
     public static void bank_bg(byte n) => throw null!;
 
     /// <summary>
-    /// get random number 0..32767, cc65-compatible 16-bit PRNG (32-bit LCG state)
+    /// get random number 0..255, same as rand8()
     /// </summary>
-    public static ushort rand() => throw null!;
+    public static byte rand() => throw null!;
 
     /// <summary>
     /// get random number 0..255
@@ -380,7 +380,7 @@ public static class NESLib
     public static byte rand8() => throw null!;
 
     /// <summary>
-    /// get random number 0..65535
+    /// get random number 0..32767, cc65-compatible 16-bit PRNG (32-bit LCG state)
     /// </summary>
     public static ushort rand16() => throw null!;
 

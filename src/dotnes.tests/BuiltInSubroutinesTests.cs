@@ -731,15 +731,15 @@ public class BuiltInSubroutinesTests
         Assert.Equal("zerobss", BuiltInSubroutines.Zerobss().Label);
         Assert.Equal("pad_poll", BuiltInSubroutines.PadPoll().Label);
         Assert.Equal("srand", BuiltInSubroutines.SRand().Label);
-        Assert.Equal("rand", BuiltInSubroutines.Rand().Label);
+        Assert.Equal("rand16", BuiltInSubroutines.Rand().Label);
     }
 
     [Fact]
     public void Rand_HasCorrectInstructions()
     {
-        // cc65 LCG rand: 16 instructions
+        // cc65 LCG rand16: 16 instructions
         var block = BuiltInSubroutines.Rand();
-        Assert.Equal("rand", block.Label);
+        Assert.Equal("rand16", block.Label);
         Assert.Equal(16, block.Count);
 
         // CLC
@@ -758,7 +758,7 @@ public class BuiltInSubroutinesTests
     public void SRand_HasCorrectInstructions()
     {
         // srand stores seed in 4 zero-page bytes.
-        // No RTS: falls through to rand (ordering enforced in Program6502.ForEachOptionalBuiltIn).
+        // No RTS: falls through to rand16 (ordering enforced in Program6502.ForEachOptionalBuiltIn).
         var block = BuiltInSubroutines.SRand();
         Assert.Equal("srand", block.Label);
         Assert.Equal(4, block.Count);

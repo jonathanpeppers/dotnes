@@ -693,7 +693,7 @@ public class Program6502
             action(BuiltInSubroutines.SetRand());
         if (usedMethods.Contains("srand"))
             action(BuiltInSubroutines.SRand());
-        if (usedMethods.Contains("rand") || usedMethods.Contains("srand"))
+        if (usedMethods.Contains("rand16") || usedMethods.Contains("srand"))
             action(BuiltInSubroutines.Rand());
         if (usedMethods.Contains("oam_meta_spr"))
             action(BuiltInSubroutines.OamMetaSpr());

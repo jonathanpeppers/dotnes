@@ -43,8 +43,9 @@ const byte PACING = 6;
 static byte rndint(byte a, byte b)
 {
     byte range = (byte)(b - a);
-    byte r = (byte)rand();
-    return (byte)((byte)(r % range) + a);
+    // use rand16() because rand8() has a cycle of only 255
+    ushort r = rand16();
+    return (byte)((r % range) + a);
 }
 
 // Setup sounds

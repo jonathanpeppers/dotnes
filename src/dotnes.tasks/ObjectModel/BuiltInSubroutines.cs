@@ -573,7 +573,7 @@ internal static class BuiltInSubroutines
     /// </summary>
     public static Block Rand()
     {
-        var block = new Block(nameof(NESLib.rand));
+        var block = new Block(nameof(NESLib.rand16));
         block.Emit(CLC())
              .Emit(LDA_zpg(RAND_STATE))
              .Emit(ADC(0xB3))
