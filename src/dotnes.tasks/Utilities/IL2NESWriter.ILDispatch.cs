@@ -692,6 +692,10 @@ partial class IL2NESWriter
                         int immediateMask = mask;
                         if (mask == 0 && value != 0)
                             immediateMask = value;
+                        // If localInA (not runtime), WriteLdc(ushort) emitted LDX #hi + LDA #lo
+                        // which clobbered the local's A:X. Remove those 2 instructions.
+                        if (!_runtimeValueInA && localInA)
+                            RemoveLastInstructions(2);
                         Emit16BitBitwiseOp(Opcode.AND, immediateMask);
                         _runtimeValueInA = true;
                         Stack.Push(0);
@@ -764,6 +768,8 @@ partial class IL2NESWriter
                         int immediateOrMask = orMask;
                         if (orMask == 0 && orValue != 0)
                             immediateOrMask = orValue;
+                        if (!_runtimeValueInA && orLocalInA)
+                            RemoveLastInstructions(2);
                         Emit16BitBitwiseOp(Opcode.ORA, immediateOrMask);
                         _runtimeValueInA = true;
                         Stack.Push(0);
@@ -822,6 +828,8 @@ partial class IL2NESWriter
                         int xorConst = xorVal2;
                         if (xorVal2 == 0 && xorVal1 != 0)
                             xorConst = xorVal1;
+                        if (!_runtimeValueInA && xorLocalInA)
+                            RemoveLastInstructions(2);
                         Emit16BitBitwiseOp(Opcode.EOR, xorConst);
                         _runtimeValueInA = true;
                         Stack.Push(0);

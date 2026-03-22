@@ -437,8 +437,8 @@ public class IL2NESWriterTests
     }
 
     /// <summary>
-    /// Test that 16-bit AND with ushort mask emits AND on low byte and
-    /// STA TEMP / TXA / AND / TAX / LDA TEMP on high byte.
+    /// Test that 16-bit AND with ushort mask 0xFF00 emits AND #$00 on the low byte,
+    /// and that the high-byte AND #$FF is treated as an identity and optimized away.
     /// Pattern: rand16() &amp; 0xFF00
     /// </summary>
     [Fact]
@@ -468,7 +468,8 @@ public class IL2NESWriterTests
     }
 
     /// <summary>
-    /// Test that 16-bit OR with ushort mask emits ORA on both bytes.
+    /// Test that 16-bit OR with ushort mask emits ORA only for non-identity bytes
+    /// (skips low-byte ORA #$00, emits ORA #$80 on the high byte).
     /// Pattern: rand16() | 0x8000
     /// </summary>
     [Fact]
