@@ -483,4 +483,34 @@ partial class IL2NESWriter
         Stack.Push(compileTimeResult);
         _lastLoadedLocalIndex = null;
     }
+
+    /// <summary>
+    /// Emits a 16-bit bitwise operation (AND/ORA/EOR) on A:X with an immediate mask.
+    /// A holds the low byte, X holds the high byte. The operation is applied to both bytes.
+    /// </summary>
+    void Emit16BitBitwiseOp(Opcode opcode, int mask)
+    {
+        byte lo = (byte)(mask & 0xFF);
+        byte hi = (byte)((mask >> 8) & 0xFF);
+
+        // Determine if the operation on each byte is a no-op
+        bool loIsNoop = (opcode == Opcode.AND && lo == 0xFF)
+                     || (opcode != Opcode.AND && lo == 0x00);
+        bool hiIsNoop = (opcode == Opcode.AND && hi == 0xFF)
+                     || (opcode != Opcode.AND && hi == 0x00);
+
+        // Apply operation to low byte (A) if not a no-op
+        if (!loIsNoop)
+            Emit(opcode, AddressMode.Immediate, lo);
+
+        // Apply operation to high byte (X) if not a no-op
+        if (!hiIsNoop)
+        {
+            Emit(Opcode.STA, AddressMode.ZeroPage, TEMP);
+            Emit(Opcode.TXA, AddressMode.Implied);
+            Emit(opcode, AddressMode.Immediate, hi);
+            Emit(Opcode.TAX, AddressMode.Implied);
+            Emit(Opcode.LDA, AddressMode.ZeroPage, TEMP);
+        }
+    }
 }

@@ -156,6 +156,14 @@ partial class IL2NESWriter
             return;
         }
 
+        if (_runtimeValueInA)
+        {
+            // Don't emit LDX/LDA — the runtime value in A (and possibly X) must be preserved.
+            // The constant is tracked on the Stack for the next operation (AND, OR, XOR, Add, Sub, etc.)
+            Stack.Push(operand);
+            return;
+        }
+
         if (LastLDA)
         {
             EmitJSR("pusha");

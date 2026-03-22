@@ -437,6 +437,115 @@ public class IL2NESWriterTests
     }
 
     /// <summary>
+    /// Test that 16-bit AND with ushort mask emits AND on low byte and
+    /// STA TEMP / TXA / AND / TAX / LDA TEMP on high byte.
+    /// Pattern: rand16() &amp; 0xFF00
+    /// </summary>
+    [Fact]
+    public void And_16Bit_EmitsAndOnBothBytes()
+    {
+        using var writer = GetWriter();
+        writer.Labels["rand16"] = 0x8400;
+
+        // rand16() & 0xFF00 → low byte AND #$00, high byte AND #$FF (no-op)
+        writer.Write(new ILInstruction(ILOpCode.Call), nameof(rand16));
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4), 0xFF00);
+        writer.Write(new ILInstruction(ILOpCode.And));
+
+        var block = writer.CurrentBlock!;
+        bool foundAndImm = false;
+        for (int i = 0; i < block.Count; i++)
+        {
+            if (block[i].Opcode == Opcode.AND && block[i].Mode == AddressMode.Immediate
+                && block[i].Operand is ImmediateOperand andOp)
+            {
+                foundAndImm = true;
+                Assert.Equal(0x00, andOp.Value);
+                break;
+            }
+        }
+        Assert.True(foundAndImm, "Expected AND Immediate #$00 for low byte of 16-bit AND with 0xFF00");
+    }
+
+    /// <summary>
+    /// Test that 16-bit OR with ushort mask emits ORA on both bytes.
+    /// Pattern: rand16() | 0x8000
+    /// </summary>
+    [Fact]
+    public void Or_16Bit_EmitsOraOnBothBytes()
+    {
+        using var writer = GetWriter();
+        writer.Labels["rand16"] = 0x8400;
+
+        // rand16() | 0x8000 → low byte ORA #$00 (no-op), high byte needs ORA #$80
+        writer.Write(new ILInstruction(ILOpCode.Call), nameof(rand16));
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4), 0x8000);
+        writer.Write(new ILInstruction(ILOpCode.Or));
+
+        var block = writer.CurrentBlock!;
+        // Low byte ORA #$00 is a no-op, so should NOT be emitted.
+        // High byte ORA #$80 requires TXA/ORA/TAX sequence.
+        bool foundTxa = false;
+        bool foundOraImm = false;
+        for (int i = 0; i < block.Count; i++)
+        {
+            if (block[i].Opcode == Opcode.TXA)
+                foundTxa = true;
+            if (foundTxa && block[i].Opcode == Opcode.ORA && block[i].Mode == AddressMode.Immediate
+                && block[i].Operand is ImmediateOperand oraOp)
+            {
+                foundOraImm = true;
+                Assert.Equal(0x80, oraOp.Value);
+                break;
+            }
+        }
+        Assert.True(foundTxa, "Expected TXA for high byte of 16-bit OR");
+        Assert.True(foundOraImm, "Expected ORA Immediate #$80 for high byte of 16-bit OR with 0x8000");
+    }
+
+    /// <summary>
+    /// Test that 16-bit XOR with ushort mask emits EOR on both bytes.
+    /// Pattern: rand16() ^ 0xFFFF
+    /// </summary>
+    [Fact]
+    public void Xor_16Bit_EmitsEorOnBothBytes()
+    {
+        using var writer = GetWriter();
+        writer.Labels["rand16"] = 0x8400;
+
+        // rand16() ^ 0xFFFF → low byte EOR #$FF, high byte EOR #$FF
+        writer.Write(new ILInstruction(ILOpCode.Call), nameof(rand16));
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4), 0xFFFF);
+        writer.Write(new ILInstruction(ILOpCode.Xor));
+
+        var block = writer.CurrentBlock!;
+        bool foundEorLo = false;
+        bool foundTxa = false;
+        bool foundEorHi = false;
+        for (int i = 0; i < block.Count; i++)
+        {
+            if (!foundEorLo && block[i].Opcode == Opcode.EOR && block[i].Mode == AddressMode.Immediate
+                && block[i].Operand is ImmediateOperand eorLoOp && eorLoOp.Value == 0xFF)
+            {
+                foundEorLo = true;
+            }
+            else if (foundEorLo && block[i].Opcode == Opcode.TXA)
+            {
+                foundTxa = true;
+            }
+            else if (foundTxa && block[i].Opcode == Opcode.EOR && block[i].Mode == AddressMode.Immediate
+                && block[i].Operand is ImmediateOperand eorHiOp && eorHiOp.Value == 0xFF)
+            {
+                foundEorHi = true;
+                break;
+            }
+        }
+        Assert.True(foundEorLo, "Expected EOR Immediate #$FF for low byte of 16-bit XOR with 0xFFFF");
+        Assert.True(foundTxa, "Expected TXA for high byte of 16-bit XOR");
+        Assert.True(foundEorHi, "Expected EOR Immediate #$FF for high byte of 16-bit XOR with 0xFFFF");
+    }
+
+    /// <summary>
     /// Test that MUL with a non-power-of-2 constant emits shift-and-add multiply loop.
     /// Pattern: rand8() * 3
     /// </summary>
