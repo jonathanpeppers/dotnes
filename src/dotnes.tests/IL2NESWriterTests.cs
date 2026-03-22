@@ -1,5 +1,6 @@
 ﻿using System.Collections.Immutable;
 using System.Reflection.Metadata;
+using dotnes.ObjectModel;
 using Xunit.Abstractions;
 using static NES.NESLib;
 
@@ -298,5 +299,201 @@ public class IL2NESWriterTests
         var message = IL2NESWriter.GetUnsupportedOpcodeMessage(ILOpCode.Arglist);
         Assert.Contains("not yet supported", message);
         Assert.Contains("Arglist", message);
+    }
+
+    /// <summary>
+    /// Test that XOR with two compile-time constants produces correct stack value.
+    /// </summary>
+    [Fact]
+    public void Xor_CompileTime_ProducesCorrectResult()
+    {
+        using var writer = GetWriter();
+
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4), 0xAA);
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4), 0x55);
+        writer.Write(new ILInstruction(ILOpCode.Xor));
+
+        Assert.Equal(0xAA ^ 0x55, writer.Stack.Peek());
+    }
+
+    /// <summary>
+    /// Test that XOR with a runtime value and constant emits EOR #immediate.
+    /// Pattern: rand8() ^ 0x0F
+    /// </summary>
+    [Fact]
+    public void Xor_RuntimeAndConstant_EmitsEorImmediate()
+    {
+        using var writer = GetWriter();
+        writer.Labels["rand8"] = 0x8400;
+
+        // rand8() ^ 0x0F
+        writer.Write(new ILInstruction(ILOpCode.Call), nameof(rand8));
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4), 0x0F);
+        writer.Write(new ILInstruction(ILOpCode.Xor));
+
+        // Should have emitted EOR #$0F
+        var block = writer.CurrentBlock!;
+        bool foundEor = false;
+        for (int i = 0; i < block.Count; i++)
+        {
+            if (block[i].Opcode == Opcode.EOR && block[i].Mode == AddressMode.Immediate)
+            {
+                foundEor = true;
+                break;
+            }
+        }
+        Assert.True(foundEor, "Expected EOR Immediate instruction for runtime XOR with constant");
+    }
+
+    /// <summary>
+    /// Test that AND with two runtime values emits AND ZeroPage,TEMP.
+    /// Pattern: rand8() & rand8() (via stloc/ldloc)
+    /// </summary>
+    [Fact]
+    public void And_RuntimeAndRuntime_EmitsAndZeroPage()
+    {
+        using var writer = GetWriter();
+        writer.Labels["rand8"] = 0x8400;
+
+        // Simulate: byte a = rand8(); byte result = rand8() & a;
+        // IL: call rand8, stloc.0, call rand8, ldloc.0, and
+        writer.Write(new ILInstruction(ILOpCode.Call), nameof(rand8));
+        writer.Write(new ILInstruction(ILOpCode.Stloc_0));
+        writer.Write(new ILInstruction(ILOpCode.Call), nameof(rand8));
+        writer.Write(new ILInstruction(ILOpCode.Ldloc_0));
+        writer.Write(new ILInstruction(ILOpCode.And));
+
+        var block = writer.CurrentBlock!;
+        bool foundAndZp = false;
+        for (int i = 0; i < block.Count; i++)
+        {
+            if (block[i].Opcode == Opcode.AND && block[i].Mode == AddressMode.ZeroPage)
+            {
+                foundAndZp = true;
+                break;
+            }
+        }
+        Assert.True(foundAndZp, "Expected AND ZeroPage instruction for runtime-runtime AND");
+    }
+
+    /// <summary>
+    /// Test that OR with two runtime values emits ORA ZeroPage,TEMP.
+    /// Pattern: rand8() | rand8() (via stloc/ldloc)
+    /// </summary>
+    [Fact]
+    public void Or_RuntimeAndRuntime_EmitsOraZeroPage()
+    {
+        using var writer = GetWriter();
+        writer.Labels["rand8"] = 0x8400;
+
+        // Simulate: byte a = rand8(); byte result = rand8() | a;
+        writer.Write(new ILInstruction(ILOpCode.Call), nameof(rand8));
+        writer.Write(new ILInstruction(ILOpCode.Stloc_0));
+        writer.Write(new ILInstruction(ILOpCode.Call), nameof(rand8));
+        writer.Write(new ILInstruction(ILOpCode.Ldloc_0));
+        writer.Write(new ILInstruction(ILOpCode.Or));
+
+        var block = writer.CurrentBlock!;
+        bool foundOraZp = false;
+        for (int i = 0; i < block.Count; i++)
+        {
+            if (block[i].Opcode == Opcode.ORA && block[i].Mode == AddressMode.ZeroPage)
+            {
+                foundOraZp = true;
+                break;
+            }
+        }
+        Assert.True(foundOraZp, "Expected ORA ZeroPage instruction for runtime-runtime OR");
+    }
+
+    /// <summary>
+    /// Test that XOR with two runtime values emits EOR ZeroPage,TEMP.
+    /// Pattern: rand8() ^ rand8() (via stloc/ldloc)
+    /// </summary>
+    [Fact]
+    public void Xor_RuntimeAndRuntime_EmitsEorZeroPage()
+    {
+        using var writer = GetWriter();
+        writer.Labels["rand8"] = 0x8400;
+
+        // Simulate: byte a = rand8(); byte result = rand8() ^ a;
+        writer.Write(new ILInstruction(ILOpCode.Call), nameof(rand8));
+        writer.Write(new ILInstruction(ILOpCode.Stloc_0));
+        writer.Write(new ILInstruction(ILOpCode.Call), nameof(rand8));
+        writer.Write(new ILInstruction(ILOpCode.Ldloc_0));
+        writer.Write(new ILInstruction(ILOpCode.Xor));
+
+        var block = writer.CurrentBlock!;
+        bool foundEorZp = false;
+        for (int i = 0; i < block.Count; i++)
+        {
+            if (block[i].Opcode == Opcode.EOR && block[i].Mode == AddressMode.ZeroPage)
+            {
+                foundEorZp = true;
+                break;
+            }
+        }
+        Assert.True(foundEorZp, "Expected EOR ZeroPage instruction for runtime-runtime XOR");
+    }
+
+    /// <summary>
+    /// Test that MUL with a non-power-of-2 constant emits shift-and-add multiply loop.
+    /// Pattern: rand8() * 3
+    /// </summary>
+    [Fact]
+    public void Mul_RuntimeTimesNonPow2_EmitsMultiplyLoop()
+    {
+        using var writer = GetWriter();
+        writer.Labels["rand8"] = 0x8400;
+
+        // rand8() * 3
+        writer.Write(new ILInstruction(ILOpCode.Call), nameof(rand8));
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_3));
+        writer.Write(new ILInstruction(ILOpCode.Mul));
+
+        // Should emit a shift-and-add multiply loop with BNE back branch
+        var block = writer.CurrentBlock!;
+        bool foundLsr = false;
+        bool foundBne = false;
+        for (int i = 0; i < block.Count; i++)
+        {
+            if (block[i].Opcode == Opcode.LSR && block[i].Mode == AddressMode.ZeroPage)
+                foundLsr = true;
+            if (block[i].Opcode == Opcode.BNE)
+                foundBne = true;
+        }
+        Assert.True(foundLsr, "Expected LSR ZeroPage for multiply loop");
+        Assert.True(foundBne, "Expected BNE for multiply loop back-branch");
+    }
+
+    /// <summary>
+    /// Test that MUL with two runtime values emits shift-and-add multiply.
+    /// Pattern: rand8() * rand8() (via stloc/ldloc)
+    /// </summary>
+    [Fact]
+    public void Mul_RuntimeTimesRuntime_EmitsMultiplyLoop()
+    {
+        using var writer = GetWriter();
+        writer.Labels["rand8"] = 0x8400;
+
+        // Simulate: byte a = rand8(); byte result = rand8() * a;
+        writer.Write(new ILInstruction(ILOpCode.Call), nameof(rand8));
+        writer.Write(new ILInstruction(ILOpCode.Stloc_0));
+        writer.Write(new ILInstruction(ILOpCode.Call), nameof(rand8));
+        writer.Write(new ILInstruction(ILOpCode.Ldloc_0));
+        writer.Write(new ILInstruction(ILOpCode.Mul));
+
+        var block = writer.CurrentBlock!;
+        bool foundLsr = false;
+        bool foundBne = false;
+        for (int i = 0; i < block.Count; i++)
+        {
+            if (block[i].Opcode == Opcode.LSR && block[i].Mode == AddressMode.ZeroPage)
+                foundLsr = true;
+            if (block[i].Opcode == Opcode.BNE)
+                foundBne = true;
+        }
+        Assert.True(foundLsr, "Expected LSR ZeroPage for runtime-runtime multiply loop");
+        Assert.True(foundBne, "Expected BNE for runtime-runtime multiply loop back-branch");
     }
 }
