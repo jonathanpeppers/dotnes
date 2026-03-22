@@ -547,10 +547,13 @@ internal static class BuiltInSubroutines
     /// _srand - Set random seed for cc65-compatible 16-bit PRNG
     /// Entry: seed in A(lo)/X(hi)
     /// Stores seed in RAND_STATE, then falls through to Rand() to shuffle.
+    /// IMPORTANT: Must be emitted immediately before Rand() in ROM layout.
+    /// This ordering is enforced in Program6502.ForEachOptionalBuiltIn().
     /// Source: https://github.com/cc65/cc65/blob/master/libsrc/common/rand.s
     /// </summary>
     public static Block SRand()
     {
+        // No RTS: falls through to Rand() which immediately follows
         var block = new Block(nameof(NESLib.srand));
         block.Emit(STA_zpg(RAND_STATE))
              .Emit(STX_zpg(RAND_STATE + 1))

@@ -757,7 +757,8 @@ public class BuiltInSubroutinesTests
     [Fact]
     public void SRand_HasCorrectInstructions()
     {
-        // srand stores seed in 4 zero-page bytes (no RTS - falls through to rand)
+        // srand stores seed in 4 zero-page bytes.
+        // No RTS: falls through to rand (ordering enforced in Program6502.ForEachOptionalBuiltIn).
         var block = BuiltInSubroutines.SRand();
         Assert.Equal("srand", block.Label);
         Assert.Equal(4, block.Count);
