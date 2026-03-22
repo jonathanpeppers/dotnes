@@ -384,9 +384,29 @@ while (true)
             byte rel_lo = (byte)(actor_yy_lo[ai] - scroll_yy_lo);
             byte rel_hi = (byte)(actor_yy_hi[ai] - scroll_yy_hi);
             if (actor_yy_lo[ai] < scroll_yy_lo) rel_hi = (byte)(rel_hi - 1);
-            if (rel_hi != 0) { actor_onscreen[ai] = 0; continue; }
-            byte screen_y = (byte)(SCREEN_Y_BOTTOM - rel_lo);
-            if (screen_y > 224) { actor_onscreen[ai] = 0; continue; }
+            // For player (ai==0): always compute screen_y and render — never cull.
+            // The original uses signed 16-bit screen_y which never overflows.
+            // For enemies: skip if off-screen.
+            byte screen_y;
+            if (ai == 0)
+            {
+                if (rel_hi == 0)
+                {
+                    screen_y = (byte)(SCREEN_Y_BOTTOM - rel_lo);
+                }
+                else
+                {
+                    // Player off-screen: clamp sprite to bottom edge
+                    screen_y = 224;
+                }
+                player_screen_y = screen_y;
+            }
+            else
+            {
+                if (rel_hi != 0) { actor_onscreen[ai] = 0; continue; }
+                screen_y = (byte)(SCREEN_Y_BOTTOM - rel_lo);
+                if (screen_y > 224) { actor_onscreen[ai] = 0; continue; }
+            }
 
             byte dir = actor_dir[ai];
             byte st = actor_state[ai];
