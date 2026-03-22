@@ -1902,10 +1902,12 @@ internal static class BuiltInSubroutines
             }
         }
         // Re-write universal background color last.
-        // After 32 sequential PPU_DATA writes starting at $3F00,
-        // the PPU address auto-increments to $3F20 which mirrors $3F00.
-        // Writing X here ensures $3F00 has the correct background color,
-        // even after $3F10 (which mirrors $3F00) was written above.
+        // X still holds the background color computed at the start of UpdPal
+        // (brightness_table[PAL_BUF[0]]). After 32 sequential PPU_DATA writes
+        // starting at $3F00, the PPU address auto-increments to $3F20 which
+        // mirrors $3F00. Writing X here ensures $3F00 has the correct
+        // background color, even after $3F10 (which mirrors $3F00) was
+        // written above.
         block.Emit(STX_abs(PPU_DATA));
         return block;
     }
@@ -2009,7 +2011,7 @@ internal static class BuiltInSubroutines
              .Emit(JSR(0x84F7))    // initlib
              .Emit(LDA(0x4C))      // JMP opcode
              .Emit(STA_zpg(NMI_CALLBACK))
-             .Emit(LDA(0x13))      // low byte of callback
+             .Emit(LDA(0x13))      // low byte of callback (RTS in nmi_set_callback, layout dependent)
              .Emit(STA_zpg(NMI_CALLBACK + 1))
              .Emit(LDA(0x82))      // high byte of callback
              .Emit(STA_zpg(NMI_CALLBACK + 2))
