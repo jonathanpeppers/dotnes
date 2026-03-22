@@ -697,12 +697,17 @@ partial class IL2NESWriter
             case ILOpCode.Neg:
                 {
                     int value = Stack.Pop();
-                    if (_runtimeValueInA)
+
+                    bool negLocalInA = _lastLoadedLocalIndex.HasValue &&
+                        Locals.TryGetValue(_lastLoadedLocalIndex.Value, out var negLocal) && negLocal.Address != null;
+
+                    if (_runtimeValueInA || negLocalInA)
                     {
                         // Two's complement negation: EOR #$FF; CLC; ADC #$01
                         Emit(Opcode.EOR, AddressMode.Immediate, (byte)0xFF);
                         Emit(Opcode.CLC);
                         Emit(Opcode.ADC, AddressMode.Immediate, (byte)0x01);
+                        _runtimeValueInA = true;
                         Stack.Push(0); // Runtime placeholder
                     }
                     else
@@ -714,10 +719,15 @@ partial class IL2NESWriter
             case ILOpCode.Not:
                 {
                     int value = Stack.Pop();
-                    if (_runtimeValueInA)
+
+                    bool notLocalInA = _lastLoadedLocalIndex.HasValue &&
+                        Locals.TryGetValue(_lastLoadedLocalIndex.Value, out var notLocal) && notLocal.Address != null;
+
+                    if (_runtimeValueInA || notLocalInA)
                     {
                         // Bitwise NOT: EOR #$FF
                         Emit(Opcode.EOR, AddressMode.Immediate, (byte)0xFF);
+                        _runtimeValueInA = true;
                         Stack.Push(0); // Runtime placeholder
                     }
                     else
@@ -730,15 +740,26 @@ partial class IL2NESWriter
                 {
                     int ceqVal2 = Stack.Count > 0 ? Stack.Pop() : 0;
                     int ceqVal1 = Stack.Count > 0 ? Stack.Pop() : 0;
-                    if (_runtimeValueInA)
+
+                    bool ceqLocalInA = _lastLoadedLocalIndex.HasValue &&
+                        Locals.TryGetValue(_lastLoadedLocalIndex.Value, out var ceqLocal) && ceqLocal.Address != null;
+
+                    if (_runtimeValueInA || ceqLocalInA)
                     {
-                        EmitBranchCompare(ceqVal2);
-                        // Set A = 1 if equal, 0 if not
-                        // BEQ +4 skips: LDA #0 (2 bytes) + BEQ +2 (2 bytes)
-                        Emit(Opcode.BEQ, AddressMode.Relative, (byte)4);
-                        Emit(Opcode.LDA, AddressMode.Immediate, (byte)0);
-                        Emit(Opcode.BEQ, AddressMode.Relative, (byte)2);
-                        Emit(Opcode.LDA, AddressMode.Immediate, (byte)1);
+                        if (!EmitBranchCompare(ceqVal2))
+                        {
+                            // Out-of-range compare value: A (byte) can never equal ceqVal2
+                            Emit(Opcode.LDA, AddressMode.Immediate, (byte)0);
+                        }
+                        else
+                        {
+                            // Set A = 1 if equal, 0 if not
+                            // BEQ +4 skips: LDA #0 (2 bytes) + BEQ +2 (2 bytes)
+                            Emit(Opcode.BEQ, AddressMode.Relative, (byte)4);
+                            Emit(Opcode.LDA, AddressMode.Immediate, (byte)0);
+                            Emit(Opcode.BEQ, AddressMode.Relative, (byte)2);
+                            Emit(Opcode.LDA, AddressMode.Immediate, (byte)1);
+                        }
                         _runtimeValueInA = true;
                         Stack.Push(0); // Runtime placeholder
                     }
@@ -753,7 +774,11 @@ partial class IL2NESWriter
                 {
                     int cgtVal2 = Stack.Count > 0 ? Stack.Pop() : 0;
                     int cgtVal1 = Stack.Count > 0 ? Stack.Pop() : 0;
-                    if (_runtimeValueInA)
+
+                    bool cgtLocalInA = _lastLoadedLocalIndex.HasValue &&
+                        Locals.TryGetValue(_lastLoadedLocalIndex.Value, out var cgtLocal) && cgtLocal.Address != null;
+
+                    if (_runtimeValueInA || cgtLocalInA)
                     {
                         if (!EmitBranchCompare(cgtVal2, adjustValue: 1))
                         {
@@ -782,7 +807,11 @@ partial class IL2NESWriter
                 {
                     int cltVal2 = Stack.Count > 0 ? Stack.Pop() : 0;
                     int cltVal1 = Stack.Count > 0 ? Stack.Pop() : 0;
-                    if (_runtimeValueInA)
+
+                    bool cltLocalInA = _lastLoadedLocalIndex.HasValue &&
+                        Locals.TryGetValue(_lastLoadedLocalIndex.Value, out var cltLocal) && cltLocal.Address != null;
+
+                    if (_runtimeValueInA || cltLocalInA)
                     {
                         if (!EmitBranchCompare(cltVal2))
                         {

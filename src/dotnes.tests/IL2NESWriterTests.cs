@@ -321,9 +321,27 @@ public class IL2NESWriterTests
         // Load local 0 — puts a runtime value in A
         writer.Write(new ILInstruction(ILOpCode.Ldloc_0));
 
-        // Neg should not throw and should keep runtime value in A
+        // Neg should emit EOR #$FF; CLC; ADC #$01
         writer.Write(new ILInstruction(ILOpCode.Neg));
         Assert.Single(writer.Stack);
+
+        // Verify the emitted 6502 instructions contain the two's complement sequence
+        writer.FlushMainBlock();
+        var bytes = _stream.ToArray();
+        Assert.True(bytes.Length >= 5, $"Expected at least 5 bytes, got {bytes.Length}");
+        bool foundNeg = false;
+        for (int i = 0; i <= bytes.Length - 5; i++)
+        {
+            // EOR #$FF (0x49 0xFF), CLC (0x18), ADC #$01 (0x69 0x01)
+            if (bytes[i] == 0x49 && bytes[i + 1] == 0xFF
+                && bytes[i + 2] == 0x18
+                && bytes[i + 3] == 0x69 && bytes[i + 4] == 0x01)
+            {
+                foundNeg = true;
+                break;
+            }
+        }
+        Assert.True(foundNeg, $"Expected EOR #$FF; CLC; ADC #$01 sequence. Bytes: {BitConverter.ToString(bytes)}");
     }
 
     [Fact]
@@ -347,9 +365,25 @@ public class IL2NESWriterTests
         // Load local 0 — puts a runtime value in A
         writer.Write(new ILInstruction(ILOpCode.Ldloc_0));
 
-        // Not should not throw and should keep runtime value in A
+        // Not should emit EOR #$FF
         writer.Write(new ILInstruction(ILOpCode.Not));
         Assert.Single(writer.Stack);
+
+        // Verify the emitted 6502 instructions contain EOR #$FF
+        writer.FlushMainBlock();
+        var bytes = _stream.ToArray();
+        Assert.True(bytes.Length >= 2, $"Expected at least 2 bytes, got {bytes.Length}");
+        bool foundEor = false;
+        for (int i = 0; i <= bytes.Length - 2; i++)
+        {
+            // EOR #$FF (0x49 0xFF)
+            if (bytes[i] == 0x49 && bytes[i + 1] == 0xFF)
+            {
+                foundEor = true;
+                break;
+            }
+        }
+        Assert.True(foundEor, $"Expected EOR #$FF opcode sequence. Bytes: {BitConverter.ToString(bytes)}");
     }
 
     [Fact]
@@ -412,4 +446,13 @@ public class IL2NESWriterTests
         Assert.Equal(0, writer.Stack.Peek());
     }
 
+    [Fact]
+    public void Cgt_CompileTime_EqualValues_PushesZero()
+    {
+        using var writer = GetWriter();
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_5));
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_5));
+        writer.Write(new ILInstruction(ILOpCode.Cgt));
+        Assert.Equal(0, writer.Stack.Peek());
+    }
 }
