@@ -138,7 +138,267 @@ partial class IL2NESWriter
     }
 
     /// <summary>
-    /// Emits a JMP to a label reference.
+    /// Tries to emit a 16-bit comparison and branch sequence.
+    /// When A:X hold a 16-bit runtime value (from a word local load), this method
+    /// scans the emitted block to find the local's memory addresses and emits a
+    /// multi-byte comparison against a compile-time constant.
+    ///
+    /// Returns true if the 16-bit comparison was emitted, false if the block doesn't
+    /// contain a word local pattern (LDA/LDX Absolute pair) and the caller should
+    /// fall through to the 8-bit comparison path.
+    ///
+    /// branchTaken: the branch opcode for the "taken" case (BCC for LT, BCS for GE, BEQ for EQ, BNE for NE).
+    /// </summary>
+    /// <summary>
+    /// Emits a 16-bit comparison and branch sequence.
+    /// When A:X hold a 16-bit value (_ushortInAX is true), compares against
+    /// the constant cmpVal using CPX for hi byte and CMP for lo byte.
+    /// The caller must verify _ushortInAX is true before calling.
+    /// </summary>
+    void EmitBranch16Bit(int cmpVal, string labelName, Opcode branchTaken, bool isShortForm)
+    {
+        byte cmpLo = (byte)(cmpVal & 0xFF);
+        byte cmpHi = (byte)((cmpVal >> 8) & 0xFF);
+
+        // A:X holds the 16-bit value (lo in A, hi in X).
+        // Use CPX for hi byte comparison and CMP for lo byte.
+        if (isShortForm)
+            EmitBranch16DirectShort(cmpLo, cmpHi, labelName, branchTaken);
+        else
+            EmitBranch16DirectLong(cmpLo, cmpHi, labelName, branchTaken);
+
+        _ushortInAX = false;
+        _runtimeValueInA = false;
+    }
+
+    /// <summary>
+    /// Emits a 16-bit comparison + short branch sequence (target reachable via relative branch).
+    /// </summary>
+    void EmitBranch16Short(ushort loAddr, ushort hiAddr, byte cmpLo, byte cmpHi, string labelName, Opcode branchTaken)
+    {
+        switch (branchTaken)
+        {
+            case Opcode.BNE:
+                // hi differ → taken; else compare lo
+                // LDA hi; CMP #hi; BNE target; LDA lo; CMP #lo; BNE target
+                Emit(Opcode.LDA, AddressMode.Absolute, hiAddr);
+                Emit(Opcode.CMP, AddressMode.Immediate, cmpHi);
+                EmitWithLabel(Opcode.BNE, AddressMode.Relative, labelName);
+                Emit(Opcode.LDA, AddressMode.Absolute, loAddr);
+                Emit(Opcode.CMP, AddressMode.Immediate, cmpLo);
+                EmitWithLabel(Opcode.BNE, AddressMode.Relative, labelName);
+                break;
+
+            case Opcode.BEQ:
+                // hi differ → skip; else compare lo → BEQ target
+                // LDA hi; CMP #hi; BNE +7; LDA lo; CMP #lo; BEQ target
+                // Skip: LDA(3) + CMP(2) + BEQ(2) = 7
+                Emit(Opcode.LDA, AddressMode.Absolute, hiAddr);
+                Emit(Opcode.CMP, AddressMode.Immediate, cmpHi);
+                Emit(Opcode.BNE, AddressMode.Relative, 7);
+                Emit(Opcode.LDA, AddressMode.Absolute, loAddr);
+                Emit(Opcode.CMP, AddressMode.Immediate, cmpLo);
+                EmitWithLabel(Opcode.BEQ, AddressMode.Relative, labelName);
+                break;
+
+            case Opcode.BCC: // less than (unsigned)
+                // hi < hi_c → taken; hi > hi_c → skip; else compare lo
+                // LDA hi; CMP #hi; BCC target; BNE +7; LDA lo; CMP #lo; BCC target
+                // Skip from BNE: LDA(3) + CMP(2) + BCC(2) = 7
+                Emit(Opcode.LDA, AddressMode.Absolute, hiAddr);
+                Emit(Opcode.CMP, AddressMode.Immediate, cmpHi);
+                EmitWithLabel(Opcode.BCC, AddressMode.Relative, labelName);
+                Emit(Opcode.BNE, AddressMode.Relative, 7);
+                Emit(Opcode.LDA, AddressMode.Absolute, loAddr);
+                Emit(Opcode.CMP, AddressMode.Immediate, cmpLo);
+                EmitWithLabel(Opcode.BCC, AddressMode.Relative, labelName);
+                break;
+
+            case Opcode.BCS: // greater or equal (unsigned)
+                // hi < hi_c → skip; hi > hi_c → taken; else compare lo
+                // LDA hi; CMP #hi; BCC +9; BNE target; LDA lo; CMP #lo; BCS target
+                // Skip from BCC: BNE(2) + LDA(3) + CMP(2) + BCS(2) = 9
+                Emit(Opcode.LDA, AddressMode.Absolute, hiAddr);
+                Emit(Opcode.CMP, AddressMode.Immediate, cmpHi);
+                Emit(Opcode.BCC, AddressMode.Relative, 9);
+                EmitWithLabel(Opcode.BNE, AddressMode.Relative, labelName);
+                Emit(Opcode.LDA, AddressMode.Absolute, loAddr);
+                Emit(Opcode.CMP, AddressMode.Immediate, cmpLo);
+                EmitWithLabel(Opcode.BCS, AddressMode.Relative, labelName);
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Emits a 16-bit comparison + long branch sequence (target requires JMP trampoline).
+    /// </summary>
+    void EmitBranch16Long(ushort loAddr, ushort hiAddr, byte cmpLo, byte cmpHi, string labelName, Opcode branchTaken)
+    {
+        switch (branchTaken)
+        {
+            case Opcode.BNE:
+                // LDA hi; CMP #hi; BEQ +3; JMP target; LDA lo; CMP #lo; BEQ +3; JMP target
+                Emit(Opcode.LDA, AddressMode.Absolute, hiAddr);
+                Emit(Opcode.CMP, AddressMode.Immediate, cmpHi);
+                Emit(Opcode.BEQ, AddressMode.Relative, 3);
+                EmitWithLabel(Opcode.JMP, AddressMode.Absolute, labelName);
+                Emit(Opcode.LDA, AddressMode.Absolute, loAddr);
+                Emit(Opcode.CMP, AddressMode.Immediate, cmpLo);
+                Emit(Opcode.BEQ, AddressMode.Relative, 3);
+                EmitWithLabel(Opcode.JMP, AddressMode.Absolute, labelName);
+                break;
+
+            case Opcode.BEQ:
+                // LDA hi; CMP #hi; BNE +10; LDA lo; CMP #lo; BNE +3; JMP target
+                // Skip from first BNE: LDA(3) + CMP(2) + BNE(2) + JMP(3) = 10
+                Emit(Opcode.LDA, AddressMode.Absolute, hiAddr);
+                Emit(Opcode.CMP, AddressMode.Immediate, cmpHi);
+                Emit(Opcode.BNE, AddressMode.Relative, 10);
+                Emit(Opcode.LDA, AddressMode.Absolute, loAddr);
+                Emit(Opcode.CMP, AddressMode.Immediate, cmpLo);
+                Emit(Opcode.BNE, AddressMode.Relative, 3);
+                EmitWithLabel(Opcode.JMP, AddressMode.Absolute, labelName);
+                break;
+
+            case Opcode.BCC: // less than
+                // LDA hi; CMP #hi; BCS +3; JMP target; BNE +10; LDA lo; CMP #lo; BCS +3; JMP target
+                // At BNE: skip LDA(3) + CMP(2) + BCS(2) + JMP(3) = 10
+                Emit(Opcode.LDA, AddressMode.Absolute, hiAddr);
+                Emit(Opcode.CMP, AddressMode.Immediate, cmpHi);
+                Emit(Opcode.BCS, AddressMode.Relative, 3);
+                EmitWithLabel(Opcode.JMP, AddressMode.Absolute, labelName);
+                Emit(Opcode.BNE, AddressMode.Relative, 10);
+                Emit(Opcode.LDA, AddressMode.Absolute, loAddr);
+                Emit(Opcode.CMP, AddressMode.Immediate, cmpLo);
+                Emit(Opcode.BCS, AddressMode.Relative, 3);
+                EmitWithLabel(Opcode.JMP, AddressMode.Absolute, labelName);
+                break;
+
+            case Opcode.BCS: // greater or equal
+                // [0] LDA hi (3); [3] CMP #hi (2)
+                // [5] BCC +15 (2) → skip to done at [22]
+                // [7] BEQ +3 (2) → skip JMP, check lo at [12]
+                // [9] JMP target (3) → hi > hi_c → taken
+                // [12] LDA lo (3); [15] CMP #lo (2)
+                // [17] BCC +3 (2) → skip to done at [22]
+                // [19] JMP target (3) → lo >= lo_c → taken
+                // [22] = done
+                Emit(Opcode.LDA, AddressMode.Absolute, hiAddr);
+                Emit(Opcode.CMP, AddressMode.Immediate, cmpHi);
+                Emit(Opcode.BCC, AddressMode.Relative, 15);
+                Emit(Opcode.BEQ, AddressMode.Relative, 3);
+                EmitWithLabel(Opcode.JMP, AddressMode.Absolute, labelName);
+                Emit(Opcode.LDA, AddressMode.Absolute, loAddr);
+                Emit(Opcode.CMP, AddressMode.Immediate, cmpLo);
+                Emit(Opcode.BCC, AddressMode.Relative, 3);
+                EmitWithLabel(Opcode.JMP, AddressMode.Absolute, labelName);
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Emits a 16-bit comparison + short branch when A:X hold the value directly (e.g., from JSR return).
+    /// Uses CPX for hi byte comparison (X register) and CMP for lo byte (A register).
+    /// </summary>
+    void EmitBranch16DirectShort(byte cmpLo, byte cmpHi, string labelName, Opcode branchTaken)
+    {
+        switch (branchTaken)
+        {
+            case Opcode.BNE:
+                // CPX #hi; BNE target; CMP #lo; BNE target
+                Emit(Opcode.CPX, AddressMode.Immediate, cmpHi);
+                EmitWithLabel(Opcode.BNE, AddressMode.Relative, labelName);
+                Emit(Opcode.CMP, AddressMode.Immediate, cmpLo);
+                EmitWithLabel(Opcode.BNE, AddressMode.Relative, labelName);
+                break;
+
+            case Opcode.BEQ:
+                // CPX #hi; BNE +4; CMP #lo; BEQ target
+                // Skip: CMP(2) + BEQ(2) = 4
+                Emit(Opcode.CPX, AddressMode.Immediate, cmpHi);
+                Emit(Opcode.BNE, AddressMode.Relative, 4);
+                Emit(Opcode.CMP, AddressMode.Immediate, cmpLo);
+                EmitWithLabel(Opcode.BEQ, AddressMode.Relative, labelName);
+                break;
+
+            case Opcode.BCC: // less than (unsigned)
+                // CPX #hi; BCC target; BNE +4; CMP #lo; BCC target
+                // Skip from BNE: CMP(2) + BCC(2) = 4
+                Emit(Opcode.CPX, AddressMode.Immediate, cmpHi);
+                EmitWithLabel(Opcode.BCC, AddressMode.Relative, labelName);
+                Emit(Opcode.BNE, AddressMode.Relative, 4);
+                Emit(Opcode.CMP, AddressMode.Immediate, cmpLo);
+                EmitWithLabel(Opcode.BCC, AddressMode.Relative, labelName);
+                break;
+
+            case Opcode.BCS: // greater or equal (unsigned)
+                // CPX #hi; BCC +6; BNE target; CMP #lo; BCS target
+                // Skip from BCC: BNE(2) + CMP(2) + BCS(2) = 6
+                Emit(Opcode.CPX, AddressMode.Immediate, cmpHi);
+                Emit(Opcode.BCC, AddressMode.Relative, 6);
+                EmitWithLabel(Opcode.BNE, AddressMode.Relative, labelName);
+                Emit(Opcode.CMP, AddressMode.Immediate, cmpLo);
+                EmitWithLabel(Opcode.BCS, AddressMode.Relative, labelName);
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Emits a 16-bit comparison + long branch when A:X hold the value directly.
+    /// Uses CPX for hi byte and CMP for lo byte, with JMP trampolines for far targets.
+    /// </summary>
+    void EmitBranch16DirectLong(byte cmpLo, byte cmpHi, string labelName, Opcode branchTaken)
+    {
+        switch (branchTaken)
+        {
+            case Opcode.BNE:
+                // CPX #hi; BEQ +3; JMP target; CMP #lo; BEQ +3; JMP target
+                Emit(Opcode.CPX, AddressMode.Immediate, cmpHi);
+                Emit(Opcode.BEQ, AddressMode.Relative, 3);
+                EmitWithLabel(Opcode.JMP, AddressMode.Absolute, labelName);
+                Emit(Opcode.CMP, AddressMode.Immediate, cmpLo);
+                Emit(Opcode.BEQ, AddressMode.Relative, 3);
+                EmitWithLabel(Opcode.JMP, AddressMode.Absolute, labelName);
+                break;
+
+            case Opcode.BEQ:
+                // CPX #hi; BNE +7; CMP #lo; BNE +3; JMP target
+                // Skip from BNE: CMP(2) + BNE(2) + JMP(3) = 7
+                Emit(Opcode.CPX, AddressMode.Immediate, cmpHi);
+                Emit(Opcode.BNE, AddressMode.Relative, 7);
+                Emit(Opcode.CMP, AddressMode.Immediate, cmpLo);
+                Emit(Opcode.BNE, AddressMode.Relative, 3);
+                EmitWithLabel(Opcode.JMP, AddressMode.Absolute, labelName);
+                break;
+
+            case Opcode.BCC: // less than
+                // CPX #hi; BCS +3; JMP target; BNE +7; CMP #lo; BCS +3; JMP target
+                // At BNE: skip CMP(2) + BCS(2) + JMP(3) = 7
+                Emit(Opcode.CPX, AddressMode.Immediate, cmpHi);
+                Emit(Opcode.BCS, AddressMode.Relative, 3);
+                EmitWithLabel(Opcode.JMP, AddressMode.Absolute, labelName);
+                Emit(Opcode.BNE, AddressMode.Relative, 7);
+                Emit(Opcode.CMP, AddressMode.Immediate, cmpLo);
+                Emit(Opcode.BCS, AddressMode.Relative, 3);
+                EmitWithLabel(Opcode.JMP, AddressMode.Absolute, labelName);
+                break;
+
+            case Opcode.BCS: // greater or equal
+                // CPX #hi; BCC +12; BEQ +3; JMP target; CMP #lo; BCC +3; JMP target
+                // Skip BCC: BEQ(2) + JMP(3) + CMP(2) + BCC(2) + JMP(3) = 12
+                Emit(Opcode.CPX, AddressMode.Immediate, cmpHi);
+                Emit(Opcode.BCC, AddressMode.Relative, 12);
+                Emit(Opcode.BEQ, AddressMode.Relative, 3);
+                EmitWithLabel(Opcode.JMP, AddressMode.Absolute, labelName);
+                Emit(Opcode.CMP, AddressMode.Immediate, cmpLo);
+                Emit(Opcode.BCC, AddressMode.Relative, 3);
+                EmitWithLabel(Opcode.JMP, AddressMode.Absolute, labelName);
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Emits an absolute JMP to the specified label.
     /// </summary>
     void EmitJMP(string labelName) => EmitWithLabel(Opcode.JMP, AddressMode.Absolute, labelName);
 
