@@ -333,52 +333,115 @@ partial class IL2NESWriter
                             RemoveLastInstructions(1);
                         }
 
-                        // Runtime multiply: use ASL for power-of-2 constants
-                        int constant = val2 >= 0 ? val2 : val1;
-                        if (constant > 0 && (constant & (constant - 1)) == 0)
+                        if (_savedRuntimeToTemp)
                         {
-                            int shifts = 0;
-                            int temp = constant;
-                            while (temp > 1) { temp >>= 1; shifts++; }
-                            // Check if the result needs to be 16-bit: look ahead past Add/Sub/Ldc for Conv_u2
-                            bool needs16Bit = false;
-                            if (Instructions is not null)
+                            // Two runtime values: first in TEMP, second in A
+                            // 8-bit multiply: TEMP × A → A
+                            //   STA TEMP2      ; multiplier
+                            //   LDA #0         ; result = 0
+                            //   LDX #8         ; 8 bits
+                            //   LSR TEMP2      ; ← @loop: shift multiplier right
+                            //   BCC @skip      ; +3 to skip CLC+ADC
+                            //   CLC
+                            //   ADC TEMP       ; result += multiplicand
+                            //   ASL TEMP       ; ← @skip: shift multiplicand left
+                            //   DEX
+                            //   BNE @loop      ; -10 to LSR
+                            Emit(Opcode.STA, AddressMode.ZeroPage, (byte)NESConstants.TEMP2);
+                            Emit(Opcode.LDA, AddressMode.Immediate, 0);
+                            Emit(Opcode.LDX, AddressMode.Immediate, 8);
+                            Emit(Opcode.LSR, AddressMode.ZeroPage, (byte)NESConstants.TEMP2);
+                            Emit(Opcode.BCC, AddressMode.Relative, 3); // skip CLC(1) + ADC_zp(2)
+                            Emit(Opcode.CLC, AddressMode.Implied);
+                            Emit(Opcode.ADC, AddressMode.ZeroPage, (byte)TEMP);
+                            Emit(Opcode.ASL, AddressMode.ZeroPage, (byte)TEMP);
+                            Emit(Opcode.DEX, AddressMode.Implied);
+                            Emit(Opcode.BNE, AddressMode.Relative, unchecked((byte)-12));
+                            _savedRuntimeToTemp = false;
+                        }
+                        else
+                        {
+                            // Determine which operand is the compile-time constant
+                            bool previousWasLdc =
+                                previous is ILOpCode.Ldc_i4_s or ILOpCode.Ldc_i4
+                                or ILOpCode.Ldc_i4_0 or ILOpCode.Ldc_i4_1 or ILOpCode.Ldc_i4_2
+                                or ILOpCode.Ldc_i4_3 or ILOpCode.Ldc_i4_4 or ILOpCode.Ldc_i4_5
+                                or ILOpCode.Ldc_i4_6 or ILOpCode.Ldc_i4_7 or ILOpCode.Ldc_i4_8;
+                            int constant = previousWasLdc ? val2 : val1;
+                            if (constant > 0 && (constant & (constant - 1)) == 0)
                             {
-                                for (int look = Index + 1; look < Instructions.Length; look++)
+                                int shifts = 0;
+                                int temp = constant;
+                                while (temp > 1) { temp >>= 1; shifts++; }
+                                // Check if the result needs to be 16-bit: look ahead past Add/Sub/Ldc for Conv_u2
+                                bool needs16Bit = false;
+                                if (Instructions is not null)
                                 {
-                                    var lookOp = Instructions[look].OpCode;
-                                    if (lookOp == ILOpCode.Conv_u2 || lookOp == ILOpCode.Conv_i2)
+                                    for (int look = Index + 1; look < Instructions.Length; look++)
                                     {
-                                        needs16Bit = true;
+                                        var lookOp = Instructions[look].OpCode;
+                                        if (lookOp == ILOpCode.Conv_u2 || lookOp == ILOpCode.Conv_i2)
+                                        {
+                                            needs16Bit = true;
+                                            break;
+                                        }
+                                        if (lookOp is ILOpCode.Add or ILOpCode.Sub
+                                            or ILOpCode.Ldc_i4_s or ILOpCode.Ldc_i4
+                                            or ILOpCode.Ldc_i4_0 or ILOpCode.Ldc_i4_1 or ILOpCode.Ldc_i4_2
+                                            or ILOpCode.Ldc_i4_3 or ILOpCode.Ldc_i4_4 or ILOpCode.Ldc_i4_5
+                                            or ILOpCode.Ldc_i4_6 or ILOpCode.Ldc_i4_7 or ILOpCode.Ldc_i4_8)
+                                            continue;
                                         break;
                                     }
-                                    if (lookOp is ILOpCode.Add or ILOpCode.Sub
-                                        or ILOpCode.Ldc_i4_s or ILOpCode.Ldc_i4
-                                        or ILOpCode.Ldc_i4_0 or ILOpCode.Ldc_i4_1 or ILOpCode.Ldc_i4_2
-                                        or ILOpCode.Ldc_i4_3 or ILOpCode.Ldc_i4_4 or ILOpCode.Ldc_i4_5
-                                        or ILOpCode.Ldc_i4_6 or ILOpCode.Ldc_i4_7 or ILOpCode.Ldc_i4_8)
-                                        continue;
-                                    break;
                                 }
-                            }
-                            if (needs16Bit)
-                            {
-                                // 16-bit shift (ASL A + ROL TEMP) to capture overflow
-                                Emit(Opcode.LDX, AddressMode.Immediate, 0);
-                                Emit(Opcode.STX, AddressMode.ZeroPage, TEMP); // TEMP = 0 (high byte)
-                                for (int s = 0; s < shifts; s++)
+                                if (needs16Bit)
                                 {
-                                    Emit(Opcode.ASL, AddressMode.Accumulator);
-                                    Emit(Opcode.ROL, AddressMode.ZeroPage, TEMP);
+                                    // 16-bit shift (ASL A + ROL TEMP) to capture overflow
+                                    Emit(Opcode.LDX, AddressMode.Immediate, 0);
+                                    Emit(Opcode.STX, AddressMode.ZeroPage, TEMP); // TEMP = 0 (high byte)
+                                    for (int s = 0; s < shifts; s++)
+                                    {
+                                        Emit(Opcode.ASL, AddressMode.Accumulator);
+                                        Emit(Opcode.ROL, AddressMode.ZeroPage, TEMP);
+                                    }
+                                    Emit(Opcode.LDX, AddressMode.ZeroPage, TEMP); // X = high byte
+                                    _ushortInAX = true;
                                 }
-                                Emit(Opcode.LDX, AddressMode.ZeroPage, TEMP); // X = high byte
-                                _ushortInAX = true;
+                                else
+                                {
+                                    // 8-bit shift only
+                                    for (int s = 0; s < shifts; s++)
+                                        Emit(Opcode.ASL, AddressMode.Accumulator);
+                                }
                             }
                             else
                             {
-                                // 8-bit shift only
-                                for (int s = 0; s < shifts; s++)
-                                    Emit(Opcode.ASL, AddressMode.Accumulator);
+                                // General non-power-of-2 multiply: A × constant → A
+                                // Store runtime value as multiplicand, constant as multiplier
+                                //   STA TEMP       ; multiplicand
+                                //   LDA #constant  ; multiplier → TEMP2
+                                //   STA TEMP2
+                                //   LDA #0         ; result = 0
+                                //   LDX #8         ; 8 bits
+                                //   LSR TEMP2      ; ← @loop: shift multiplier right
+                                //   BCC @skip      ; +3 to skip CLC+ADC
+                                //   CLC
+                                //   ADC TEMP       ; result += multiplicand
+                                //   ASL TEMP       ; ← @skip: shift multiplicand left
+                                //   DEX
+                                //   BNE @loop      ; -10 to LSR
+                                Emit(Opcode.STA, AddressMode.ZeroPage, (byte)TEMP);
+                                Emit(Opcode.LDA, AddressMode.Immediate, checked((byte)constant));
+                                Emit(Opcode.STA, AddressMode.ZeroPage, (byte)NESConstants.TEMP2);
+                                Emit(Opcode.LDA, AddressMode.Immediate, 0);
+                                Emit(Opcode.LDX, AddressMode.Immediate, 8);
+                                Emit(Opcode.LSR, AddressMode.ZeroPage, (byte)NESConstants.TEMP2);
+                                Emit(Opcode.BCC, AddressMode.Relative, 3); // skip CLC(1) + ADC_zp(2)
+                                Emit(Opcode.CLC, AddressMode.Implied);
+                                Emit(Opcode.ADC, AddressMode.ZeroPage, (byte)TEMP);
+                                Emit(Opcode.ASL, AddressMode.ZeroPage, (byte)TEMP);
+                                Emit(Opcode.DEX, AddressMode.Implied);
+                                Emit(Opcode.BNE, AddressMode.Relative, unchecked((byte)-12));
                             }
                         }
                         Stack.Push(val1 * val2);
@@ -626,29 +689,44 @@ partial class IL2NESWriter
                     // Emit runtime AND if A has a runtime value
                     if (_padPollResultAvailable || _runtimeValueInA || localInA)
                     {
-                        // Remove the LDA #mask that was emitted by Ldc_i4*
-                        // Only remove if WriteLdc actually emitted LDA (not skipped due to _runtimeValueInA)
-                        if (!_runtimeValueInA
-                            && previous is ILOpCode.Ldc_i4_s or ILOpCode.Ldc_i4 
-                            or ILOpCode.Ldc_i4_m1
-                            or ILOpCode.Ldc_i4_0 or ILOpCode.Ldc_i4_1 or ILOpCode.Ldc_i4_2
-                            or ILOpCode.Ldc_i4_3 or ILOpCode.Ldc_i4_4 or ILOpCode.Ldc_i4_5
-                            or ILOpCode.Ldc_i4_6 or ILOpCode.Ldc_i4_7 or ILOpCode.Ldc_i4_8)
+                        if (_savedRuntimeToTemp)
                         {
-                            RemoveLastInstructions(1);
+                            // Two runtime values: first in TEMP, second in A
+                            Emit(Opcode.AND, AddressMode.ZeroPage, (byte)TEMP);
+                            _savedRuntimeToTemp = false;
                         }
-
-                        // If not first AND after pad_poll, need to reload pad value.
-                        // Skip reload when A already holds the intended operand for
-                        // this AND (e.g., from ldelem or arithmetic), so we don't
-                        // overwrite it with a stale pad_poll result.
-                        if (_padPollResultAvailable && !_firstAndAfterPadPoll && !_runtimeValueInA)
+                        else
                         {
-                            Emit(Opcode.LDA, AddressMode.Absolute, _padReloadAddress);
+                            // Remove the LDA #mask that was emitted by Ldc_i4*
+                            // Only remove if WriteLdc actually emitted LDA (not skipped due to _runtimeValueInA)
+                            if (!_runtimeValueInA
+                                && previous is ILOpCode.Ldc_i4_s or ILOpCode.Ldc_i4 
+                                or ILOpCode.Ldc_i4_m1
+                                or ILOpCode.Ldc_i4_0 or ILOpCode.Ldc_i4_1 or ILOpCode.Ldc_i4_2
+                                or ILOpCode.Ldc_i4_3 or ILOpCode.Ldc_i4_4 or ILOpCode.Ldc_i4_5
+                                or ILOpCode.Ldc_i4_6 or ILOpCode.Ldc_i4_7 or ILOpCode.Ldc_i4_8)
+                            {
+                                RemoveLastInstructions(1);
+                            }
+
+                            // If not first AND after pad_poll, need to reload pad value.
+                            // Skip reload when A already holds the intended operand for
+                            // this AND (e.g., from ldelem or arithmetic), so we don't
+                            // overwrite it with a stale pad_poll result.
+                            if (_padPollResultAvailable && !_firstAndAfterPadPoll && !_runtimeValueInA)
+                            {
+                                Emit(Opcode.LDA, AddressMode.Absolute, _padReloadAddress);
+                            }
+
+                            // AND is commutative: pick the non-zero operand as the mask
+                            // (runtime values show as 0 placeholder on the stack)
+                            int immediateMask = mask;
+                            if (mask == 0 && value != 0)
+                                immediateMask = value;
+
+                            Emit(Opcode.AND, AddressMode.Immediate, checked((byte)immediateMask));
                         }
                         _firstAndAfterPadPoll = false;
-
-                        Emit(Opcode.AND, AddressMode.Immediate, checked((byte)mask));
                         _runtimeValueInA = true; // AND result is still runtime
                         Stack.Push(0); // Runtime placeholder
                     }
@@ -670,18 +748,32 @@ partial class IL2NESWriter
 
                     if (_runtimeValueInA || orLocalInA)
                     {
-                        // Remove the LDA #mask emitted by WriteLdc
-                        if (!_runtimeValueInA
-                            && previous is ILOpCode.Ldc_i4_s or ILOpCode.Ldc_i4
-                            or ILOpCode.Ldc_i4_m1
-                            or ILOpCode.Ldc_i4_0 or ILOpCode.Ldc_i4_1 or ILOpCode.Ldc_i4_2
-                            or ILOpCode.Ldc_i4_3 or ILOpCode.Ldc_i4_4 or ILOpCode.Ldc_i4_5
-                            or ILOpCode.Ldc_i4_6 or ILOpCode.Ldc_i4_7 or ILOpCode.Ldc_i4_8)
+                        if (_savedRuntimeToTemp)
                         {
-                            RemoveLastInstructions(1);
+                            // Two runtime values: first in TEMP, second in A
+                            Emit(Opcode.ORA, AddressMode.ZeroPage, (byte)TEMP);
+                            _savedRuntimeToTemp = false;
                         }
+                        else
+                        {
+                            // Remove the LDA #mask emitted by WriteLdc
+                            if (!_runtimeValueInA
+                                && previous is ILOpCode.Ldc_i4_s or ILOpCode.Ldc_i4
+                                or ILOpCode.Ldc_i4_m1
+                                or ILOpCode.Ldc_i4_0 or ILOpCode.Ldc_i4_1 or ILOpCode.Ldc_i4_2
+                                or ILOpCode.Ldc_i4_3 or ILOpCode.Ldc_i4_4 or ILOpCode.Ldc_i4_5
+                                or ILOpCode.Ldc_i4_6 or ILOpCode.Ldc_i4_7 or ILOpCode.Ldc_i4_8)
+                            {
+                                RemoveLastInstructions(1);
+                            }
 
-                        Emit(Opcode.ORA, AddressMode.Immediate, checked((byte)orMask));
+                            // OR is commutative: pick the non-zero operand as the mask
+                            int immediateOrMask = orMask;
+                            if (orMask == 0 && orValue != 0)
+                                immediateOrMask = orValue;
+
+                            Emit(Opcode.ORA, AddressMode.Immediate, checked((byte)immediateOrMask));
+                        }
                         _runtimeValueInA = true;
                         Stack.Push(0); // Runtime placeholder
                     }
@@ -692,7 +784,50 @@ partial class IL2NESWriter
                 }
                 break;
             case ILOpCode.Xor:
-                Stack.Push(Stack.Pop() ^ Stack.Pop());
+                {
+                    _lastStaticFieldAddress = null;
+                    int xorVal2 = Stack.Pop();
+                    int xorVal1 = Stack.Count > 0 ? Stack.Pop() : 0;
+
+                    bool xorLocalInA = _lastLoadedLocalIndex.HasValue &&
+                        Locals.TryGetValue(_lastLoadedLocalIndex.Value, out var xorLocal) && xorLocal.Address != null;
+
+                    if (_runtimeValueInA || xorLocalInA)
+                    {
+                        if (_savedRuntimeToTemp)
+                        {
+                            // Two runtime values: first in TEMP, second in A
+                            Emit(Opcode.EOR, AddressMode.ZeroPage, (byte)TEMP);
+                            _savedRuntimeToTemp = false;
+                        }
+                        else
+                        {
+                            // Remove the LDA #constant emitted by WriteLdc
+                            if (!_runtimeValueInA
+                                && previous is ILOpCode.Ldc_i4_s or ILOpCode.Ldc_i4
+                                or ILOpCode.Ldc_i4_m1
+                                or ILOpCode.Ldc_i4_0 or ILOpCode.Ldc_i4_1 or ILOpCode.Ldc_i4_2
+                                or ILOpCode.Ldc_i4_3 or ILOpCode.Ldc_i4_4 or ILOpCode.Ldc_i4_5
+                                or ILOpCode.Ldc_i4_6 or ILOpCode.Ldc_i4_7 or ILOpCode.Ldc_i4_8)
+                            {
+                                RemoveLastInstructions(1);
+                            }
+
+                            // XOR is commutative: pick the non-zero operand as constant
+                            int xorConst = xorVal2;
+                            if (xorVal2 == 0 && xorVal1 != 0)
+                                xorConst = xorVal1;
+
+                            Emit(Opcode.EOR, AddressMode.Immediate, checked((byte)xorConst));
+                        }
+                        _runtimeValueInA = true;
+                        Stack.Push(0);
+                    }
+                    else
+                    {
+                        Stack.Push(xorVal1 ^ xorVal2);
+                    }
+                }
                 break;
             case ILOpCode.Neg:
                 {
