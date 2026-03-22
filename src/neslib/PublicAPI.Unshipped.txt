@@ -89,6 +89,7 @@ static NES.NESLib.set_rand(byte seed) -> void
 static NES.NESLib.set_vram_update(ushort addr) -> void
 static NES.NESLib.sfx_init(string! soundDataLabel) -> void
 static NES.NESLib.sfx_play(byte sound, byte channel) -> void
+static NES.NESLib.srand(ushort seed) -> void
 static NES.NESLib.start_music(byte[]! data) -> void
 static NES.NESLib.vram_read(byte[]! dst, uint size) -> void
 static NES.NESLib.vram_unlz4(byte[]! input, byte[]! output, uint uncompressedSize) -> void
