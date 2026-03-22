@@ -39,11 +39,14 @@ const byte JUMPING = 4;
 const byte FALLING = 5;
 const byte PACING = 6;
 
-// Pure utility function (no captured state)
+// Random byte between (a ... b-1)
+// XOR two rand8() calls to break the 255-value cycle that causes
+// biased item distribution. The original climber.c uses rand() (16-bit)
+// for the same reason, but ushort arithmetic has transpiler limitations.
 static byte rndint(byte a, byte b)
 {
     byte range = (byte)(b - a);
-    byte r = rand8();
+    byte r = (byte)(rand8() ^ rand8());
     return (byte)((byte)(r % range) + a);
 }
 
