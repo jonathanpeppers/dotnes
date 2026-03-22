@@ -437,6 +437,145 @@ public class IL2NESWriterTests
     }
 
     /// <summary>
+    /// Test that ushort division by a power-of-2 emits 16-bit right shifts.
+    /// Pattern: rand16() / 4
+    /// </summary>
+    [Fact]
+    public void Div_UshortByPow2_Emits16BitRightShift()
+    {
+        using var writer = GetWriter();
+        writer.Labels["rand16"] = 0x8500;
+
+        // Set up Instructions array so WriteLdc lookahead detects Div
+        var instructions = new ILInstruction[]
+        {
+            new(ILOpCode.Call),
+            new(ILOpCode.Ldc_i4_4),
+            new(ILOpCode.Div),
+        };
+        writer.Instructions = instructions;
+
+        // rand16() / 4  (shift by 2)
+        writer.Index = 0;
+        writer.Write(instructions[0], nameof(rand16));
+        writer.Index = 1;
+        writer.Write(instructions[1]);
+        writer.Index = 2;
+        writer.Write(instructions[2]);
+
+        // Should emit 16-bit right shift: STX TEMP, LSR TEMP, ROR A, LDX TEMP (×2)
+        var block = writer.CurrentBlock!;
+        int lsrZpCount = 0;
+        int rorAccCount = 0;
+        for (int i = 0; i < block.Count; i++)
+        {
+            if (block[i].Opcode == Opcode.LSR && block[i].Mode == AddressMode.ZeroPage)
+                lsrZpCount++;
+            if (block[i].Opcode == Opcode.ROR && block[i].Mode == AddressMode.Accumulator)
+                rorAccCount++;
+        }
+        Assert.Equal(2, lsrZpCount); // div by 4 = 2 shifts
+        Assert.Equal(2, rorAccCount);
+    }
+
+    /// <summary>
+    /// Test that ushort division by a large power-of-2 (≥256) moves hi byte to A.
+    /// Pattern: rand16() / 256
+    /// </summary>
+    [Fact]
+    public void Div_UshortByPow2_LargeShift_EmitsTxaAndLsr()
+    {
+        using var writer = GetWriter();
+        writer.Labels["rand16"] = 0x8500;
+
+        // Set up Instructions array so WriteLdc(ushort) lookahead detects Div
+        var instructions = new ILInstruction[]
+        {
+            new(ILOpCode.Call),
+            new(ILOpCode.Ldc_i4, Integer: 256),
+            new(ILOpCode.Div),
+        };
+        writer.Instructions = instructions;
+
+        // rand16() / 256  (shift by 8: just move hi byte to A)
+        writer.Index = 0;
+        writer.Write(instructions[0], nameof(rand16));
+        writer.Index = 1;
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4), 256);
+        writer.Index = 2;
+        writer.Write(instructions[2]);
+
+        var block = writer.CurrentBlock!;
+        bool foundTxa = false;
+        bool foundLdxZero = false;
+        for (int i = 0; i < block.Count; i++)
+        {
+            if (block[i].Opcode == Opcode.TXA)
+                foundTxa = true;
+            if (block[i].Opcode == Opcode.LDX && block[i].Mode == AddressMode.Immediate
+                && block[i].Operand is ImmediateOperand op && op.Value == 0)
+                foundLdxZero = true;
+        }
+        Assert.True(foundTxa, "Expected TXA to move hi byte to A for div by 256");
+        Assert.True(foundLdxZero, "Expected LDX #0 to clear hi byte for div by 256");
+    }
+
+    /// <summary>
+    /// Test that ushort division by a non-power-of-2 emits 16-bit binary long division.
+    /// Pattern: rand16() / 10
+    /// </summary>
+    [Fact]
+    public void Div_UshortByNonPow2_Emits16BitBinaryDivision()
+    {
+        using var writer = GetWriter();
+        writer.Labels["rand16"] = 0x8500;
+
+        // Set up Instructions array so WriteLdc lookahead detects Div
+        var instructions = new ILInstruction[]
+        {
+            new(ILOpCode.Call),
+            new(ILOpCode.Ldc_i4_s),
+            new(ILOpCode.Div),
+        };
+        writer.Instructions = instructions;
+
+        // rand16() / 10
+        writer.Index = 0;
+        writer.Write(instructions[0], nameof(rand16));
+        writer.Index = 1;
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_s), 10);
+        writer.Index = 2;
+        writer.Write(instructions[2]);
+
+        // Should emit 16-bit binary long division with:
+        // - LDY #16 (16-bit counter)
+        // - ASL TEMP (shift dividend)
+        // - ROL accumulator (shift carry into remainder)
+        // - BNE loop
+        var block = writer.CurrentBlock!;
+        bool foundLdy16 = false;
+        bool foundAslZp = false;
+        bool foundRolAcc = false;
+        bool foundBne = false;
+        for (int i = 0; i < block.Count; i++)
+        {
+            if (block[i].Opcode == Opcode.LDY && block[i].Mode == AddressMode.Immediate
+                && block[i].Operand is ImmediateOperand op && op.Value == 16)
+                foundLdy16 = true;
+            if (block[i].Opcode == Opcode.ASL && block[i].Mode == AddressMode.ZeroPage)
+                foundAslZp = true;
+            if (block[i].Opcode == Opcode.ROL && block[i].Mode == AddressMode.Accumulator)
+                foundRolAcc = true;
+            if (block[i].Opcode == Opcode.BNE)
+                foundBne = true;
+        }
+        Assert.True(foundLdy16, "Expected LDY #16 for 16-bit division loop counter");
+        Assert.True(foundAslZp, "Expected ASL ZeroPage to shift dividend");
+        Assert.True(foundRolAcc, "Expected ROL Accumulator to shift carry into remainder");
+        Assert.True(foundBne, "Expected BNE for division loop back-branch");
+    }
+
+    /// <summary>
     /// Test that MUL with a non-power-of-2 constant emits shift-and-add multiply loop.
     /// Pattern: rand8() * 3
     /// </summary>
