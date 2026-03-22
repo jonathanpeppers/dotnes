@@ -163,6 +163,14 @@ partial class IL2NESWriter
             return;
         }
 
+        if (_runtimeValueInA)
+        {
+            // Don't emit LDX/LDA — the runtime value in A (and possibly X) must be preserved.
+            // The constant is tracked on the Stack for the next operation (AND, OR, XOR, Add, Sub, etc.)
+            Stack.Push(operand);
+            return;
+        }
+
         // When A:X already hold a 16-bit value (from a word local load) and the next
         // instruction is a branch comparison, keep A:X intact so the branch handler
         // can emit a proper 16-bit comparison sequence.

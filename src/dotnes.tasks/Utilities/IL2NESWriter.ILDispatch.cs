@@ -753,6 +753,22 @@ partial class IL2NESWriter
                     bool localInA = _lastLoadedLocalIndex.HasValue &&
                         Locals.TryGetValue(_lastLoadedLocalIndex.Value, out var andLocal) && andLocal.Address != null;
 
+                    // 16-bit AND: runtime ushort in A:X with immediate mask
+                    if (_ushortInAX && (_runtimeValueInA || localInA))
+                    {
+                        int immediateMask = mask;
+                        if (mask == 0 && value != 0)
+                            immediateMask = value;
+                        // If localInA (not runtime), WriteLdc(ushort) emitted LDX #hi + LDA #lo
+                        // which clobbered the local's A:X. Remove those 2 instructions.
+                        if (!_runtimeValueInA && localInA)
+                            RemoveLastInstructions(2);
+                        Emit16BitBitwiseOp(Opcode.AND, immediateMask);
+                        _runtimeValueInA = true;
+                        Stack.Push(0);
+                        break;
+                    }
+
                     // Emit runtime AND if A has a runtime value
                     if (_padPollResultAvailable || _runtimeValueInA || localInA)
                     {
@@ -813,6 +829,20 @@ partial class IL2NESWriter
                     bool orLocalInA = _lastLoadedLocalIndex.HasValue &&
                         Locals.TryGetValue(_lastLoadedLocalIndex.Value, out var orLocal) && orLocal.Address != null;
 
+                    // 16-bit OR: runtime ushort in A:X with immediate mask
+                    if (_ushortInAX && (_runtimeValueInA || orLocalInA))
+                    {
+                        int immediateOrMask = orMask;
+                        if (orMask == 0 && orValue != 0)
+                            immediateOrMask = orValue;
+                        if (!_runtimeValueInA && orLocalInA)
+                            RemoveLastInstructions(2);
+                        Emit16BitBitwiseOp(Opcode.ORA, immediateOrMask);
+                        _runtimeValueInA = true;
+                        Stack.Push(0);
+                        break;
+                    }
+
                     if (_runtimeValueInA || orLocalInA)
                     {
                         if (_savedRuntimeToTemp)
@@ -858,6 +888,20 @@ partial class IL2NESWriter
 
                     bool xorLocalInA = _lastLoadedLocalIndex.HasValue &&
                         Locals.TryGetValue(_lastLoadedLocalIndex.Value, out var xorLocal) && xorLocal.Address != null;
+
+                    // 16-bit XOR: runtime ushort in A:X with immediate mask
+                    if (_ushortInAX && (_runtimeValueInA || xorLocalInA))
+                    {
+                        int xorConst = xorVal2;
+                        if (xorVal2 == 0 && xorVal1 != 0)
+                            xorConst = xorVal1;
+                        if (!_runtimeValueInA && xorLocalInA)
+                            RemoveLastInstructions(2);
+                        Emit16BitBitwiseOp(Opcode.EOR, xorConst);
+                        _runtimeValueInA = true;
+                        Stack.Push(0);
+                        break;
+                    }
 
                     if (_runtimeValueInA || xorLocalInA)
                     {

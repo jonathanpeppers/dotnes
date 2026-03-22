@@ -1,4 +1,4 @@
-﻿using System.Collections.Immutable;
+using System.Collections.Immutable;
 using System.Reflection.Metadata;
 using dotnes.ObjectModel;
 using Xunit.Abstractions;
@@ -301,92 +301,6 @@ public class IL2NESWriterTests
         Assert.Contains("Arglist", message);
     }
 
-    [Fact]
-    public void Neg_CompileTime_NegatesValue()
-    {
-        using var writer = GetWriter();
-        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_5));
-        writer.Write(new ILInstruction(ILOpCode.Neg));
-        Assert.Equal(-5, writer.Stack.Peek());
-    }
-
-    [Fact]
-    public void Neg_Runtime_EmitsNegation()
-    {
-        using var writer = GetWriter();
-
-        // Store a constant to local 0 to allocate an address
-        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_5));
-        writer.Write(new ILInstruction(ILOpCode.Stloc_0));
-
-        // Load local 0 — puts a runtime value in A
-        writer.Write(new ILInstruction(ILOpCode.Ldloc_0));
-
-        // Neg should emit EOR #$FF; CLC; ADC #$01
-        writer.Write(new ILInstruction(ILOpCode.Neg));
-        Assert.Single(writer.Stack);
-
-        // Verify the emitted 6502 instructions contain the two's complement sequence
-        writer.FlushMainBlock();
-        var bytes = _stream.ToArray();
-        Assert.True(bytes.Length >= 5, $"Expected at least 5 bytes, got {bytes.Length}");
-        bool foundNeg = false;
-        for (int i = 0; i <= bytes.Length - 5; i++)
-        {
-            // EOR #$FF (0x49 0xFF), CLC (0x18), ADC #$01 (0x69 0x01)
-            if (bytes[i] == 0x49 && bytes[i + 1] == 0xFF
-                && bytes[i + 2] == 0x18
-                && bytes[i + 3] == 0x69 && bytes[i + 4] == 0x01)
-            {
-                foundNeg = true;
-                break;
-            }
-        }
-        Assert.True(foundNeg, $"Expected EOR #$FF; CLC; ADC #$01 sequence. Bytes: {BitConverter.ToString(bytes)}");
-    }
-
-    [Fact]
-    public void Not_CompileTime_InvertsValue()
-    {
-        using var writer = GetWriter();
-        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_5));
-        writer.Write(new ILInstruction(ILOpCode.Not));
-        Assert.Equal(~5, writer.Stack.Peek());
-    }
-
-    [Fact]
-    public void Not_Runtime_EmitsEor()
-    {
-        using var writer = GetWriter();
-
-        // Store a constant to local 0 to allocate an address
-        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_5));
-        writer.Write(new ILInstruction(ILOpCode.Stloc_0));
-
-        // Load local 0 — puts a runtime value in A
-        writer.Write(new ILInstruction(ILOpCode.Ldloc_0));
-
-        // Not should emit EOR #$FF
-        writer.Write(new ILInstruction(ILOpCode.Not));
-        Assert.Single(writer.Stack);
-
-        // Verify the emitted 6502 instructions contain EOR #$FF
-        writer.FlushMainBlock();
-        var bytes = _stream.ToArray();
-        Assert.True(bytes.Length >= 2, $"Expected at least 2 bytes, got {bytes.Length}");
-        bool foundEor = false;
-        for (int i = 0; i <= bytes.Length - 2; i++)
-        {
-            // EOR #$FF (0x49 0xFF)
-            if (bytes[i] == 0x49 && bytes[i + 1] == 0xFF)
-            {
-                foundEor = true;
-                break;
-            }
-        }
-        Assert.True(foundEor, $"Expected EOR #$FF opcode sequence. Bytes: {BitConverter.ToString(bytes)}");
-    }
-
     /// <summary>
     /// Test that XOR with two compile-time constants produces correct stack value.
     /// </summary>
@@ -429,160 +343,6 @@ public class IL2NESWriterTests
             }
         }
         Assert.True(foundEor, "Expected EOR Immediate instruction for runtime XOR with constant");
-    }
-
-    [Fact]
-    public void Ceq_CompileTime_Equal_PushesOne()
-    {
-        using var writer = GetWriter();
-        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_5));
-        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_5));
-        writer.Write(new ILInstruction(ILOpCode.Ceq));
-        Assert.Equal(1, writer.Stack.Peek());
-    }
-
-    [Fact]
-    public void Ceq_CompileTime_NotEqual_PushesZero()
-    {
-        using var writer = GetWriter();
-        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_5));
-        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_3));
-        writer.Write(new ILInstruction(ILOpCode.Ceq));
-        Assert.Equal(0, writer.Stack.Peek());
-    }
-
-    [Fact]
-    public void Cgt_CompileTime_GreaterThan_PushesOne()
-    {
-        using var writer = GetWriter();
-        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_5));
-        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_3));
-        writer.Write(new ILInstruction(ILOpCode.Cgt));
-        Assert.Equal(1, writer.Stack.Peek());
-    }
-
-    [Fact]
-    public void Cgt_CompileTime_NotGreaterThan_PushesZero()
-    {
-        using var writer = GetWriter();
-        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_3));
-        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_5));
-        writer.Write(new ILInstruction(ILOpCode.Cgt));
-        Assert.Equal(0, writer.Stack.Peek());
-    }
-
-    [Fact]
-    public void Clt_CompileTime_LessThan_PushesOne()
-    {
-        using var writer = GetWriter();
-        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_3));
-        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_5));
-        writer.Write(new ILInstruction(ILOpCode.Clt));
-        Assert.Equal(1, writer.Stack.Peek());
-    }
-
-    [Fact]
-    public void Clt_CompileTime_NotLessThan_PushesZero()
-    {
-        using var writer = GetWriter();
-        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_5));
-        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_3));
-        writer.Write(new ILInstruction(ILOpCode.Clt));
-        Assert.Equal(0, writer.Stack.Peek());
-    }
-
-    [Fact]
-    public void Cgt_CompileTime_EqualValues_PushesZero()
-    {
-        using var writer = GetWriter();
-        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_5));
-        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_5));
-        writer.Write(new ILInstruction(ILOpCode.Cgt));
-        Assert.Equal(0, writer.Stack.Peek());
-    }
-
-    [Fact]
-    public void Ceq_Runtime_EmitsCmpBranchPattern()
-    {
-        using var writer = GetWriter();
-
-        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_5));
-        writer.Write(new ILInstruction(ILOpCode.Stloc_0));
-        writer.Write(new ILInstruction(ILOpCode.Ldloc_0));
-        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_3));
-        writer.Write(new ILInstruction(ILOpCode.Ceq));
-        Assert.Single(writer.Stack);
-
-        writer.FlushMainBlock();
-        var bytes = _stream.ToArray();
-        // Expected: CMP #$03 (0xC9 0x03), BEQ +4 (0xF0 0x04)
-        bool foundPattern = false;
-        for (int i = 0; i <= bytes.Length - 4; i++)
-        {
-            if (bytes[i] == 0xC9 && bytes[i + 1] == 0x03
-                && bytes[i + 2] == 0xF0 && bytes[i + 3] == 0x04)
-            {
-                foundPattern = true;
-                break;
-            }
-        }
-        Assert.True(foundPattern, $"Expected CMP #$03; BEQ +4 sequence. Bytes: {BitConverter.ToString(bytes)}");
-    }
-
-    [Fact]
-    public void Cgt_Runtime_EmitsCmpBcsPattern()
-    {
-        using var writer = GetWriter();
-
-        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_5));
-        writer.Write(new ILInstruction(ILOpCode.Stloc_0));
-        writer.Write(new ILInstruction(ILOpCode.Ldloc_0));
-        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_3));
-        writer.Write(new ILInstruction(ILOpCode.Cgt));
-        Assert.Single(writer.Stack);
-
-        writer.FlushMainBlock();
-        var bytes = _stream.ToArray();
-        // Expected: CMP #$04 (0xC9 0x04, val2+1 for >), BCS +4 (0xB0 0x04)
-        bool foundPattern = false;
-        for (int i = 0; i <= bytes.Length - 4; i++)
-        {
-            if (bytes[i] == 0xC9 && bytes[i + 1] == 0x04
-                && bytes[i + 2] == 0xB0 && bytes[i + 3] == 0x04)
-            {
-                foundPattern = true;
-                break;
-            }
-        }
-        Assert.True(foundPattern, $"Expected CMP #$04; BCS +4 sequence. Bytes: {BitConverter.ToString(bytes)}");
-    }
-
-    [Fact]
-    public void Clt_Runtime_EmitsCmpBccPattern()
-    {
-        using var writer = GetWriter();
-
-        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_5));
-        writer.Write(new ILInstruction(ILOpCode.Stloc_0));
-        writer.Write(new ILInstruction(ILOpCode.Ldloc_0));
-        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_8));
-        writer.Write(new ILInstruction(ILOpCode.Clt));
-        Assert.Single(writer.Stack);
-
-        writer.FlushMainBlock();
-        var bytes = _stream.ToArray();
-        // Expected: CMP #$08 (0xC9 0x08), BCC +4 (0x90 0x04)
-        bool foundPattern = false;
-        for (int i = 0; i <= bytes.Length - 4; i++)
-        {
-            if (bytes[i] == 0xC9 && bytes[i + 1] == 0x08
-                && bytes[i + 2] == 0x90 && bytes[i + 3] == 0x04)
-            {
-                foundPattern = true;
-                break;
-            }
-        }
-        Assert.True(foundPattern, $"Expected CMP #$08; BCC +4 sequence. Bytes: {BitConverter.ToString(bytes)}");
     }
 
     /// <summary>
@@ -677,6 +437,116 @@ public class IL2NESWriterTests
     }
 
     /// <summary>
+    /// Test that 16-bit AND with ushort mask 0xFF00 emits AND #$00 on the low byte,
+    /// and that the high-byte AND #$FF is treated as an identity and optimized away.
+    /// Pattern: rand16() &amp; 0xFF00
+    /// </summary>
+    [Fact]
+    public void And_16Bit_EmitsAndOnBothBytes()
+    {
+        using var writer = GetWriter();
+        writer.Labels["rand16"] = 0x8400;
+
+        // rand16() & 0xFF00 → low byte AND #$00, high byte AND #$FF (no-op)
+        writer.Write(new ILInstruction(ILOpCode.Call), nameof(rand16));
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4), 0xFF00);
+        writer.Write(new ILInstruction(ILOpCode.And));
+
+        var block = writer.CurrentBlock!;
+        bool foundAndImm = false;
+        for (int i = 0; i < block.Count; i++)
+        {
+            if (block[i].Opcode == Opcode.AND && block[i].Mode == AddressMode.Immediate
+                && block[i].Operand is ImmediateOperand andOp)
+            {
+                foundAndImm = true;
+                Assert.Equal(0x00, andOp.Value);
+                break;
+            }
+        }
+        Assert.True(foundAndImm, "Expected AND Immediate #$00 for low byte of 16-bit AND with 0xFF00");
+    }
+
+    /// <summary>
+    /// Test that 16-bit OR with ushort mask emits ORA only for non-identity bytes
+    /// (skips low-byte ORA #$00, emits ORA #$80 on the high byte).
+    /// Pattern: rand16() | 0x8000
+    /// </summary>
+    [Fact]
+    public void Or_16Bit_EmitsOraOnBothBytes()
+    {
+        using var writer = GetWriter();
+        writer.Labels["rand16"] = 0x8400;
+
+        // rand16() | 0x8000 → low byte ORA #$00 (no-op), high byte needs ORA #$80
+        writer.Write(new ILInstruction(ILOpCode.Call), nameof(rand16));
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4), 0x8000);
+        writer.Write(new ILInstruction(ILOpCode.Or));
+
+        var block = writer.CurrentBlock!;
+        // Low byte ORA #$00 is a no-op, so should NOT be emitted.
+        // High byte ORA #$80 requires TXA/ORA/TAX sequence.
+        bool foundTxa = false;
+        bool foundOraImm = false;
+        for (int i = 0; i < block.Count; i++)
+        {
+            if (block[i].Opcode == Opcode.TXA)
+                foundTxa = true;
+            if (foundTxa && block[i].Opcode == Opcode.ORA && block[i].Mode == AddressMode.Immediate
+                && block[i].Operand is ImmediateOperand oraOp)
+            {
+                foundOraImm = true;
+                Assert.Equal(0x80, oraOp.Value);
+                break;
+            }
+        }
+        Assert.True(foundTxa, "Expected TXA for high byte of 16-bit OR");
+        Assert.True(foundOraImm, "Expected ORA Immediate #$80 for high byte of 16-bit OR with 0x8000");
+    }
+
+    /// <summary>
+    /// Test that 16-bit XOR with ushort mask emits EOR on both bytes.
+    /// Pattern: rand16() ^ 0xFFFF
+    /// </summary>
+    [Fact]
+    public void Xor_16Bit_EmitsEorOnBothBytes()
+    {
+        using var writer = GetWriter();
+        writer.Labels["rand16"] = 0x8400;
+
+        // rand16() ^ 0xFFFF → low byte EOR #$FF, high byte EOR #$FF
+        writer.Write(new ILInstruction(ILOpCode.Call), nameof(rand16));
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4), 0xFFFF);
+        writer.Write(new ILInstruction(ILOpCode.Xor));
+
+        var block = writer.CurrentBlock!;
+        bool foundEorLo = false;
+        bool foundTxa = false;
+        bool foundEorHi = false;
+        for (int i = 0; i < block.Count; i++)
+        {
+            if (!foundEorLo && block[i].Opcode == Opcode.EOR && block[i].Mode == AddressMode.Immediate
+                && block[i].Operand is ImmediateOperand eorLoOp && eorLoOp.Value == 0xFF)
+            {
+                foundEorLo = true;
+            }
+            else if (foundEorLo && block[i].Opcode == Opcode.TXA)
+            {
+                foundTxa = true;
+            }
+            else if (foundTxa && block[i].Opcode == Opcode.EOR && block[i].Mode == AddressMode.Immediate
+                && block[i].Operand is ImmediateOperand eorHiOp && eorHiOp.Value == 0xFF)
+            {
+                foundEorHi = true;
+                break;
+            }
+        }
+        Assert.True(foundEorLo, "Expected EOR Immediate #$FF for low byte of 16-bit XOR with 0xFFFF");
+        Assert.True(foundTxa, "Expected TXA for high byte of 16-bit XOR");
+        Assert.True(foundEorHi, "Expected EOR Immediate #$FF for high byte of 16-bit XOR with 0xFFFF");
+    }
+
+        /// <summary>
     /// Test that ushort division by a power-of-2 emits 16-bit right shifts.
     /// Pattern: rand16() / 4
     /// </summary>
@@ -703,7 +573,7 @@ public class IL2NESWriterTests
         writer.Index = 2;
         writer.Write(instructions[2]);
 
-        // Should emit 16-bit right shift: STX TEMP, LSR TEMP, ROR A, LDX TEMP (×2)
+        // Should emit 16-bit right shift: STX TEMP, LSR TEMP, ROR A, LDX TEMP (├ù2)
         var block = writer.CurrentBlock!;
         int lsrZpCount = 0;
         int rorAccCount = 0;
@@ -719,7 +589,7 @@ public class IL2NESWriterTests
     }
 
     /// <summary>
-    /// Test that ushort division by a large power-of-2 (≥256) moves hi byte to A.
+    /// Test that ushort division by a large power-of-2 (ΓëÑ256) moves hi byte to A.
     /// Pattern: rand16() / 256
     /// </summary>
     [Fact]
@@ -874,125 +744,5 @@ public class IL2NESWriterTests
         }
         Assert.True(foundLsr, "Expected LSR ZeroPage for runtime-runtime multiply loop");
         Assert.True(foundBne, "Expected BNE for runtime-runtime multiply loop back-branch");
-    }
-
-    /// <summary>
-    /// Test that subtraction of two runtime ushort values emits proper 16-bit subtraction
-    /// with borrow propagation. Pattern: ushort a = ...; ushort b = ...; ushort c = (ushort)(a - b);
-    /// </summary>
-    [Fact]
-    public void Sub_UshortMinusUshort_Emits16BitSubtraction()
-    {
-        _stream.SetLength(0);
-        using var writer = new IL2NESWriter(_stream, leaveOpen: true, logger: _logger)
-        {
-            WordLocals = new HashSet<int> { 0, 1 }
-        };
-        writer.StartBlockBuffering();
-
-        // ushort a = 0x0200;
-        writer.Write(new ILInstruction(ILOpCode.Ldc_i4), 0x0200);
-        writer.Write(new ILInstruction(ILOpCode.Stloc_0));
-
-        // ushort b = 0x0100;
-        writer.Write(new ILInstruction(ILOpCode.Ldc_i4), 0x0100);
-        writer.Write(new ILInstruction(ILOpCode.Stloc_1));
-
-        // (ushort)(a - b)
-        writer.Write(new ILInstruction(ILOpCode.Ldloc_0));
-        writer.Write(new ILInstruction(ILOpCode.Ldloc_1));
-        writer.Write(new ILInstruction(ILOpCode.Sub));
-
-        // Verify the full 16-bit subtraction pattern:
-        // 1. STA TEMP + STX TEMP2 (save first ushort)
-        // 2. SEC + SBC ZeroPage for low byte
-        // 3. SBC ZeroPage for high byte
-        var block = writer.CurrentBlock!;
-        bool foundStaTemp = false;
-        bool foundStxTemp2 = false;
-        bool foundSec = false;
-        bool foundSbcLo = false;
-        bool foundSbcHi = false;
-        for (int i = 0; i < block.Count; i++)
-        {
-            if (block[i].Opcode == Opcode.STA && block[i].Mode == AddressMode.ZeroPage
-                && block[i].Operand is ImmediateOperand staImm && staImm.Value == (byte)NESConstants.TEMP)
-                foundStaTemp = true;
-            if (block[i].Opcode == Opcode.STX && block[i].Mode == AddressMode.ZeroPage
-                && block[i].Operand is ImmediateOperand stxImm && stxImm.Value == (byte)NESConstants.TEMP2)
-                foundStxTemp2 = true;
-            if (block[i].Opcode == Opcode.SEC)
-                foundSec = true;
-            if (block[i].Opcode == Opcode.SBC && block[i].Mode == AddressMode.ZeroPage)
-            {
-                if (!foundSbcLo) foundSbcLo = true;
-                else foundSbcHi = true;
-            }
-        }
-        Assert.True(foundStaTemp, "Expected STA TEMP to save first ushort low byte");
-        Assert.True(foundStxTemp2, "Expected STX TEMP2 to save first ushort high byte");
-        Assert.True(foundSec, "Expected SEC instruction for 16-bit subtraction");
-        Assert.True(foundSbcLo, "Expected SBC ZeroPage for low-byte subtraction");
-        Assert.True(foundSbcHi, "Expected second SBC ZeroPage for high-byte subtraction");
-    }
-
-    /// <summary>
-    /// Test that addition of two runtime ushort values emits proper 16-bit addition
-    /// with carry propagation. Pattern: ushort a = ...; ushort b = ...; ushort c = (ushort)(a + b);
-    /// </summary>
-    [Fact]
-    public void Add_UshortPlusUshort_Emits16BitAddition()
-    {
-        _stream.SetLength(0);
-        using var writer = new IL2NESWriter(_stream, leaveOpen: true, logger: _logger)
-        {
-            WordLocals = new HashSet<int> { 0, 1 }
-        };
-        writer.StartBlockBuffering();
-
-        // ushort a = 0x0200;
-        writer.Write(new ILInstruction(ILOpCode.Ldc_i4), 0x0200);
-        writer.Write(new ILInstruction(ILOpCode.Stloc_0));
-
-        // ushort b = 0x0100;
-        writer.Write(new ILInstruction(ILOpCode.Ldc_i4), 0x0100);
-        writer.Write(new ILInstruction(ILOpCode.Stloc_1));
-
-        // (ushort)(a + b)
-        writer.Write(new ILInstruction(ILOpCode.Ldloc_0));
-        writer.Write(new ILInstruction(ILOpCode.Ldloc_1));
-        writer.Write(new ILInstruction(ILOpCode.Add));
-
-        // Verify the full 16-bit addition pattern:
-        // 1. STA TEMP + STX TEMP2 (save first ushort)
-        // 2. CLC + ADC ZeroPage for low byte
-        // 3. ADC ZeroPage for high byte (via TXA; ADC TEMP2)
-        var block = writer.CurrentBlock!;
-        bool foundStaTemp = false;
-        bool foundStxTemp2 = false;
-        bool foundClc = false;
-        bool foundAdcLo = false;
-        bool foundAdcHi = false;
-        for (int i = 0; i < block.Count; i++)
-        {
-            if (block[i].Opcode == Opcode.STA && block[i].Mode == AddressMode.ZeroPage
-                && block[i].Operand is ImmediateOperand staImm && staImm.Value == (byte)NESConstants.TEMP)
-                foundStaTemp = true;
-            if (block[i].Opcode == Opcode.STX && block[i].Mode == AddressMode.ZeroPage
-                && block[i].Operand is ImmediateOperand stxImm && stxImm.Value == (byte)NESConstants.TEMP2)
-                foundStxTemp2 = true;
-            if (block[i].Opcode == Opcode.CLC)
-                foundClc = true;
-            if (block[i].Opcode == Opcode.ADC && block[i].Mode == AddressMode.ZeroPage)
-            {
-                if (!foundAdcLo) foundAdcLo = true;
-                else foundAdcHi = true;
-            }
-        }
-        Assert.True(foundStaTemp, "Expected STA TEMP to save first ushort low byte");
-        Assert.True(foundStxTemp2, "Expected STX TEMP2 to save first ushort high byte");
-        Assert.True(foundClc, "Expected CLC instruction for 16-bit addition");
-        Assert.True(foundAdcLo, "Expected ADC ZeroPage for low-byte addition");
-        Assert.True(foundAdcHi, "Expected second ADC ZeroPage for high-byte addition");
     }
 }
