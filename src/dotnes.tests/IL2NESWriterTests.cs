@@ -496,4 +496,90 @@ public class IL2NESWriterTests
         Assert.True(foundLsr, "Expected LSR ZeroPage for runtime-runtime multiply loop");
         Assert.True(foundBne, "Expected BNE for runtime-runtime multiply loop back-branch");
     }
+
+    /// <summary>
+    /// Test that subtraction of two runtime ushort values emits proper 16-bit subtraction
+    /// with borrow propagation. Pattern: ushort a = ...; ushort b = ...; ushort c = (ushort)(a - b);
+    /// </summary>
+    [Fact]
+    public void Sub_UshortMinusUshort_Emits16BitSubtraction()
+    {
+        _stream.SetLength(0);
+        using var writer = new IL2NESWriter(_stream, leaveOpen: true, logger: _logger)
+        {
+            WordLocals = new HashSet<int> { 0, 1 }
+        };
+        writer.StartBlockBuffering();
+
+        // ushort a = 0x0200;
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4), 0x0200);
+        writer.Write(new ILInstruction(ILOpCode.Stloc_0));
+
+        // ushort b = 0x0100;
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4), 0x0100);
+        writer.Write(new ILInstruction(ILOpCode.Stloc_1));
+
+        // (ushort)(a - b)
+        writer.Write(new ILInstruction(ILOpCode.Ldloc_0));
+        writer.Write(new ILInstruction(ILOpCode.Ldloc_1));
+        writer.Write(new ILInstruction(ILOpCode.Sub));
+
+        // Should have:
+        // 1. STA TEMP + STX TEMP2 (save first ushort before loading second)
+        // 2. SEC + SBC ZeroPage (16-bit subtraction with borrow)
+        var block = writer.CurrentBlock!;
+        bool foundSec = false;
+        bool foundSbcZp = false;
+        for (int i = 0; i < block.Count; i++)
+        {
+            if (block[i].Opcode == Opcode.SEC)
+                foundSec = true;
+            if (block[i].Opcode == Opcode.SBC && block[i].Mode == AddressMode.ZeroPage)
+                foundSbcZp = true;
+        }
+        Assert.True(foundSec, "Expected SEC instruction for 16-bit subtraction");
+        Assert.True(foundSbcZp, "Expected SBC ZeroPage instruction for 16-bit subtraction with borrow");
+    }
+
+    /// <summary>
+    /// Test that addition of two runtime ushort values emits proper 16-bit addition
+    /// with carry propagation. Pattern: ushort a = ...; ushort b = ...; ushort c = (ushort)(a + b);
+    /// </summary>
+    [Fact]
+    public void Add_UshortPlusUshort_Emits16BitAddition()
+    {
+        _stream.SetLength(0);
+        using var writer = new IL2NESWriter(_stream, leaveOpen: true, logger: _logger)
+        {
+            WordLocals = new HashSet<int> { 0, 1 }
+        };
+        writer.StartBlockBuffering();
+
+        // ushort a = 0x0200;
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4), 0x0200);
+        writer.Write(new ILInstruction(ILOpCode.Stloc_0));
+
+        // ushort b = 0x0100;
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4), 0x0100);
+        writer.Write(new ILInstruction(ILOpCode.Stloc_1));
+
+        // (ushort)(a + b)
+        writer.Write(new ILInstruction(ILOpCode.Ldloc_0));
+        writer.Write(new ILInstruction(ILOpCode.Ldloc_1));
+        writer.Write(new ILInstruction(ILOpCode.Add));
+
+        // Should have CLC + ADC ZeroPage (16-bit addition with carry)
+        var block = writer.CurrentBlock!;
+        bool foundClc = false;
+        bool foundAdcZp = false;
+        for (int i = 0; i < block.Count; i++)
+        {
+            if (block[i].Opcode == Opcode.CLC)
+                foundClc = true;
+            if (block[i].Opcode == Opcode.ADC && block[i].Mode == AddressMode.ZeroPage)
+                foundAdcZp = true;
+        }
+        Assert.True(foundClc, "Expected CLC instruction for 16-bit addition");
+        Assert.True(foundAdcZp, "Expected ADC ZeroPage instruction for 16-bit addition with carry");
+    }
 }

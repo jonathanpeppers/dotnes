@@ -216,9 +216,17 @@ partial class IL2NESWriter
 
     void WriteLdloc(Local local)
     {
+        // Check if we need to save the current ushort before it's overwritten
+        bool needSaveUshort = _ushortInAX && local.Address.HasValue && local.IsWord;
         _ushortInAX = false;
         _savedConstantViaPusha = false;
         _lastStaticFieldAddress = null;
+        if (needSaveUshort)
+        {
+            Emit(Opcode.STA, AddressMode.ZeroPage, (byte)NESConstants.TEMP);
+            Emit(Opcode.STX, AddressMode.ZeroPage, (byte)NESConstants.TEMP2);
+            _savedUshortToTemp = true;
+        }
         if (local.LabelName is not null)
         {
             // This local holds a byte array label reference
