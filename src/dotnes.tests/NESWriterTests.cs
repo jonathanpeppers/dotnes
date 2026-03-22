@@ -134,7 +134,7 @@ public class NESWriterTests
         using var writer = GetWriter();
         writer.WriteBlock(BuiltInSubroutines.PpuOnOff());
         writer.Flush();
-        AssertInstructions("8512 4CF082");
+        AssertInstructions("8512 4CF382");
     }
 
     [Fact]

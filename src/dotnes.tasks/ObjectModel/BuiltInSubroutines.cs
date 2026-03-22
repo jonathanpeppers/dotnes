@@ -105,7 +105,7 @@ internal static class BuiltInSubroutines
     public static Block Nmi()
     {
         // NESWriter: 48 8A 48 98 48 A512 2918 D003 4CE681
-        // Note: JMP address (0x81E6) is @skipAll, layout dependent
+        // Note: JMP address (0x81E9) is @skipAll, layout dependent
         var block = new Block(nameof(_nmi));
         block.Emit(PHA())
              .Emit(TXA())
@@ -115,7 +115,7 @@ internal static class BuiltInSubroutines
              .Emit(LDA_zpg(PPU_MASK_VAR))
              .Emit(AND(0x18))
              .Emit(BNE(3))           // if rendering enabled, continue
-             .Emit(JMP_abs(0x81E6)); // JMP to @skipAll (address is layout dependent)
+             .Emit(JMP_abs(0x81E9)); // JMP to @skipAll (address is layout dependent)
         return block;
     }
 
@@ -1682,7 +1682,7 @@ internal static class BuiltInSubroutines
     /// donelib - Cleanup C runtime library
     /// Note: NESWriter uses totalSize parameter.
     /// </summary>
-    public static Block Donelib() => Donelib(0x85FE);
+    public static Block Donelib() => Donelib(0x8601);
 
     /// <summary>
     /// donelib - Cleanup C runtime library (parameterized version)
@@ -1743,7 +1743,7 @@ internal static class BuiltInSubroutines
     /// <summary>
     /// copydata - Copy initialized data section (simplified)
     /// </summary>
-    public static Block Copydata() => Copydata(0x85FE);
+    public static Block Copydata() => Copydata(0x8601);
 
     /// <summary>
     /// copydata - Copy initialized data section (parameterized version)
@@ -1833,7 +1833,7 @@ internal static class BuiltInSubroutines
              .Emit(LDA_abs(PPU_STATUS))
              .Emit(AND(0x80))
              .Emit(STA_zpg(0x00))
-             .Emit(JSR(0x8280))  // ppu_wait_frame
+             .Emit(JSR(0x8283))  // ppu_wait_frame
              .Emit(LDA(0x00))
              .Emit(STA_abs(PPU_SCROLL))
              .Emit(STA_abs(PPU_SCROLL))
@@ -1852,7 +1852,7 @@ internal static class BuiltInSubroutines
              .Emit(STA_abs(PPU_OAM_DMA))
              .Emit(LDA_zpg(PAL_UPDATE))
              .Emit(BNE(3))             // branch to updPal
-             .Emit(JMP_abs(0x81C0));   // updVRAM
+             .Emit(JMP_abs(0x81C3));   // updVRAM
         return block;
     }
 
@@ -1901,6 +1901,12 @@ internal static class BuiltInSubroutines
                      .Emit(STA_abs(PPU_DATA));
             }
         }
+        // Re-write universal background color last.
+        // After 32 sequential PPU_DATA writes starting at $3F00,
+        // the PPU address auto-increments to $3F20 which mirrors $3F00.
+        // Writing X here ensures $3F00 has the correct background color,
+        // even after $3F10 (which mirrors $3F00) was written above.
+        block.Emit(STX_abs(PPU_DATA));
         return block;
     }
 
@@ -1916,7 +1922,7 @@ internal static class BuiltInSubroutines
              .Emit(STA_zpg(VRAM_UPDATE))
              .Emit(LDA_zpg(NAME_UPD_ENABLE))
              .Emit(BEQ(3))         // 0x03 - skip to skipUpd
-             .Emit(JSR(0x8383));   // _flush_vram_update_nmi
+             .Emit(JSR(0x8386));   // _flush_vram_update_nmi
         return block;
     }
 
@@ -1974,7 +1980,7 @@ internal static class BuiltInSubroutines
 
     /// <summary>
     /// clearRAM - Clear RAM and initialize system
-    /// Note: Uses fixed addresses for labels (pal_bright=0x8279, pal_clear=0x824E, oam_clear=0x82AE, initlib=0x84F4)
+    /// Note: Uses fixed addresses for labels (pal_bright=0x827C, pal_clear=0x8251, oam_clear=0x82B1, initlib=0x84F7)
     /// </summary>
     public static Block ClearRAM()
     {
@@ -1991,19 +1997,19 @@ internal static class BuiltInSubroutines
              .Emit(INX())
              .Emit(BNE(-26))       // 0xE6 - back to @loop
              .Emit(LDA(0x04))
-             .Emit(JSR(0x8279))    // pal_bright
-             .Emit(JSR(0x824E))    // pal_clear
-             .Emit(JSR(0x82AE))    // oam_clear
+             .Emit(JSR(0x827C))    // pal_bright
+             .Emit(JSR(0x8251))    // pal_clear
+             .Emit(JSR(0x82B1))    // oam_clear
              .Emit(JSR(nameof(zerobss)))
              .Emit(JSR(nameof(copydata)))
              .Emit(LDA(0x00))
              .Emit(STA_zpg(sp))
              .Emit(LDA(PAL_BG_PTR))  // 0x08 = stack high byte
              .Emit(STA_zpg(sp + 1))
-             .Emit(JSR(0x84F4))    // initlib
+             .Emit(JSR(0x84F7))    // initlib
              .Emit(LDA(0x4C))      // JMP opcode
              .Emit(STA_zpg(NMI_CALLBACK))
-             .Emit(LDA(0x10))      // low byte of callback
+             .Emit(LDA(0x13))      // low byte of callback
              .Emit(STA_zpg(NMI_CALLBACK + 1))
              .Emit(LDA(0x82))      // high byte of callback
              .Emit(STA_zpg(NMI_CALLBACK + 2))

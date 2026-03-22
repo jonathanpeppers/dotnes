@@ -177,7 +177,7 @@ partial class Transpiler : IDisposable
         ushort reset_data = NESConstants.PrgRomStart;
         // Use irq_with_callback handler when irq_set_callback is used, otherwise default _irq handler
         ushort irq_data = labels.TryGetValue(NESConstants.irq_with_callback, out var irqCbAddr) ? irqCbAddr
-            : labels.TryGetValue(NESConstants._irq, out var irqAddr) ? irqAddr : (ushort)0x8202;
+            : labels.TryGetValue(NESConstants._irq, out var irqAddr) ? irqAddr : (ushort)0x8205;
         writer.Write((byte)(nmi_data & 0xFF));
         writer.Write((byte)(nmi_data >> 8));
         writer.Write((byte)(reset_data & 0xFF));
@@ -513,7 +513,7 @@ partial class Transpiler : IDisposable
         // PRG_LAST already accounts for the standard final built-ins size (donelib, copydata, popax,
         // incsp2, popa, pusha, pushax, zerobss with 0 locals). When optional methods change the
         // final built-ins composition, we must add the size delta.
-        const ushort PRG_LAST = 0x85AE;
+        const ushort PRG_LAST = 0x85B1;
         int standardSize = Program6502.CalculateFinalBuiltInsSize(0, null);
         int actualSize = Program6502.CalculateFinalBuiltInsSize(locals, UsedMethods);
         int finalBuiltInsOffset = actualSize - standardSize;

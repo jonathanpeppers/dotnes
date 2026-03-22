@@ -148,32 +148,32 @@ public class RoslynTests
             expectedAssembly:
                 """
                 A900    ; LDA #$00
-                20A285  ; JSR pusha
+                20A585  ; JSR pusha
                 A902    ; LDA #$02
-                203E82  ; JSR pal_col
+                204182  ; JSR pal_col
                 A901    ; LDA #$01
-                20A285  ; JSR pusha
+                20A585  ; JSR pusha
                 A914    ; LDA #$14
-                203E82  ; JSR pal_col
+                204182  ; JSR pal_col
                 A902    ; LDA #$02
-                20A285  ; JSR pusha
+                20A585  ; JSR pusha
                 A920    ; LDA #$20
-                203E82  ; JSR pal_col
+                204182  ; JSR pal_col
                 A903    ; LDA #$03
-                20A285  ; JSR pusha
+                20A585  ; JSR pusha
                 A930    ; LDA #$30
-                203E82  ; JSR pal_col
+                204182  ; JSR pal_col
                 A220    ; LDX #$20
                 A942    ; LDA #$42
-                20D483  ; JSR vram_adr
-                A9F1    ; LDA #$F1
+                20D783  ; JSR vram_adr
+                A9F4  ; LDA #$F1
                 A285    ; LDX #$85
-                20B885  ; JSR pushax
+                20BB85  ; JSR pushax
                 A200    ; LDX #$00
                 A90C    ; LDA #$0C
-                204F83  ; JSR vram_write
-                208982  ; JSR ppu_on_all
-                4C4085  ; JMP $8540
+                205283  ; JSR vram_write
+                208C82  ; JSR ppu_on_all
+                4C4385  ; JMP $8540
                 """);
     }
 
@@ -209,25 +209,25 @@ public class RoslynTests
                 """,
             expectedAssembly:
                 """
-                A91C    ; LDA #$1C
+                A91F  ; LDA #$1C
                 A286    ; LDX #$86
-                202B82  ; JSR pal_bg
+                202E82  ; JSR pal_bg
                 A220    ; LDX #$20
                 A900    ; LDA #$00
-                20D483  ; JSR vram_adr
+                20D783  ; JSR vram_adr
                 A916    ; LDA #$16
-                208D85  ; JSR pusha
+                209085  ; JSR pusha
                 A203    ; LDX #$03
                 A9C0    ; LDA #$C0
-                20DF83  ; JSR vram_fill
-                A9DC    ; LDA #$DC
+                20E283  ; JSR vram_fill
+                A9DF  ; LDA #$DC
                 A285    ; LDX #$85
-                20A385  ; JSR pushax
+                20A685  ; JSR pushax
                 A200    ; LDX #$00
                 A940    ; LDA #$40
-                204F83  ; JSR vram_write
-                208982  ; JSR ppu_on_all
-                4C2B85  ; JMP $852B
+                205283  ; JSR vram_write
+                208C82  ; JSR ppu_on_all
+                4C2E85  ; JMP $852B
                 """);
     }
 
@@ -268,25 +268,25 @@ public class RoslynTests
                 A9C0
                 8D2503
                 8E2603
-                A928
+                A92B
                 A286
-                202B82  ; JSR pal_bg
+                202E82  ; JSR pal_bg
                 A220
                 A900
-                20D483  ; JSR vram_adr
+                20D783  ; JSR vram_adr
                 A916
-                209985  ; JSR pusha
+                209C85  ; JSR pusha
                 AD2503
                 AE2603
-                20DF83  ; JSR vram_fill
-                A9E8
+                20E283  ; JSR vram_fill
+                A9EB
                 A285
-                20AF85  ; JSR pushax
+                20B285  ; JSR pushax
                 A200
                 A940
-                204F83  ; JSR vram_write
-                208982  ; JSR ppu_on_all
-                4C3785  ; JMP $8537
+                205283  ; JSR vram_write
+                208C82  ; JSR ppu_on_all
+                4C3A85  ; JMP $8537
                 """);
     }
 
@@ -325,24 +325,24 @@ public class RoslynTests
                 """
                 A916
                 8D2503  ; STA M0001
-                A91F
+                A922
                 A286
-                202B82  ; JSR pal_bg
+                202E82  ; JSR pal_bg
                 A220
                 A900
-                20D483  ; JSR vram_adr
+                20D783  ; JSR vram_adr
                 AD2503
                 A203
                 A9C0
-                20DF83  ; JSR vram_fill
-                A9DF
+                20E283  ; JSR vram_fill
+                A9E2
                 A285
-                20A685  ; JSR pushax
+                20A985  ; JSR pushax
                 A200
                 A940
-                204F83  ; JSR vram_write
-                208982  ; JSR ppu_on_all
-                4C2E85  ; JMP loop
+                205283  ; JSR vram_write
+                208C82  ; JSR ppu_on_all
+                4C3185  ; JMP loop
                 """);
     }
 
@@ -370,10 +370,10 @@ public class RoslynTests
                 """,
             expectedAssembly:
                 """
-                A9E1
+                A9E4
                 A285
-                201182  ; JSR pal_all
-                206385  ; JSR decsp4
+                201482  ; JSR pal_all
+                206685  ; JSR decsp4
                 A928
                 A003    ; LDY #$03
                 9122    ; STA ($22),Y
@@ -387,9 +387,9 @@ public class RoslynTests
                 88      ; DEY
                 9122    ; STA ($22),Y
                 A900
-                20B585  ; JSR oam_spr
-                208982  ; JSR ppu_on_all
-                4C2785  ; JMP loop
+                20B885  ; JSR oam_spr
+                208C82  ; JSR ppu_on_all
+                4C2A85  ; JMP loop
                 """);
     }
 
@@ -419,14 +419,14 @@ public class RoslynTests
                 """,
             expectedAssembly:
                 """
-                A9EEA285
-                201182  ; JSR pal_all
+                A9F1A285
+                201482  ; JSR pal_all
                 A928    ; LDA #$28 (x = 40)
                 8D2503  ; STA $0325
                 AD2503  ; LDA $0325 (load x)
                 C928    ; CMP #$28
                 D01E    ; BNE skip
-                207085  ; JSR decsp4
+                207385  ; JSR decsp4
                 AD2503  ; LDA $0325 (x)
                 A003    ; LDY #$03
                 9122    ; STA ($22),Y
@@ -440,9 +440,9 @@ public class RoslynTests
                 88      ; DEY
                 9122    ; STA ($22),Y
                 A900    ; LDA #$00
-                20C285  ; JSR oam_spr
-                208982  ; JSR ppu_on_all
-                4C3485  ; JMP loop
+                20C585  ; JSR oam_spr
+                208C82  ; JSR ppu_on_all
+                4C3785  ; JMP loop
                 """);
     }
 
@@ -479,18 +479,18 @@ public class RoslynTests
                 """
                 A928        ; LDA #$28 (x = 40)
                 8D2503      ; STA $0325 (store x to local)
-                A948        ; LDA byte array low (deferred)
+                A94B  ; LDA byte array low (deferred)
                 A286        ; LDX byte array high
-                201182      ; JSR pal_all
-                208982      ; JSR ppu_on_all
-                20F082      ; JSR ppu_wait_nmi (loop start)
+                201482  ; JSR pal_all
+                208C82  ; JSR ppu_on_all
+                20F382  ; JSR ppu_wait_nmi (loop start)
                 A900        ; LDA #$00 (pad_poll argument)
-                20CB85      ; JSR pad_poll
+                20CE85  ; JSR pad_poll
                 8D2603      ; STA $0326 (store pad for reuse)
                 2940        ; AND #$40 (PAD.LEFT)
                 F003        ; BEQ +3 (skip DEC if zero)
                 CE2503      ; DEC $0325 (x--)
-                207985      ; JSR decsp4
+                207C85  ; JSR decsp4
                 AD2503      ; LDA $0325 (load x for oam_spr)
                 A003        ; LDY #$03
                 9122        ; STA ($22),Y
@@ -503,8 +503,8 @@ public class RoslynTests
                 A900        ; LDA #$00 (attr)
                 88          ; DEY
                 9122        ; STA ($22),Y
-                201C86      ; JSR oam_spr
-                4C0F85      ; JMP loop
+                201F86  ; JSR oam_spr
+                4C1285  ; JMP loop
                 """);
     }
 
@@ -546,13 +546,13 @@ public class RoslynTests
                 A928        ; LDA #$28 (x = y = 40)
                 8D2503      ; STA $0325 (store x)
                 8D2603      ; STA $0326 (store y, reuse A=40)
-                A96A        ; LDA byte array low (deferred)
+                A96D  ; LDA byte array low (deferred)
                 A286        ; LDX byte array high
-                201182      ; JSR pal_all
-                208982      ; JSR ppu_on_all
-                20F082      ; JSR ppu_wait_nmi (loop start)
+                201482  ; JSR pal_all
+                208C82  ; JSR ppu_on_all
+                20F382  ; JSR ppu_wait_nmi (loop start)
                 A900        ; LDA #$00
-                20ED85      ; JSR pad_poll
+                20F085  ; JSR pad_poll
                 8D2703      ; STA $0327 (store pad for reuse)
                 2940        ; AND #$40 (PAD.LEFT)
                 F003        ; BEQ +3 (skip DEC if zero)
@@ -569,7 +569,7 @@ public class RoslynTests
                 2920        ; AND #$20 (PAD.DOWN)
                 F003        ; BEQ +3 (skip INC if zero)
                 EE2603      ; INC $0326 (y++)
-                209B85      ; JSR decsp4
+                209E85  ; JSR decsp4
                 AD2503      ; LDA $0325 (load x)
                 A003        ; LDY #$03
                 9122        ; STA ($22),Y
@@ -582,8 +582,8 @@ public class RoslynTests
                 A900        ; LDA #$00 (attr)
                 88          ; DEY
                 9122        ; STA ($22),Y
-                203E86      ; JSR oam_spr
-                4C1285      ; JMP loop
+                204186  ; JSR oam_spr
+                4C1585  ; JMP loop
                 """);
     }
 
@@ -620,34 +620,34 @@ public class RoslynTests
                 """,
             expectedAssembly:
                 """
-                A9F1    ; LDA array_lo (ATTRIBUTE_TABLE)
+                A9F4  ; LDA array_lo (ATTRIBUTE_TABLE)
                 A285    ; LDX array_hi
-                20B885  ; JSR pushax
+                20BB85  ; JSR pushax
                 A200    ; LDX #$00
                 A940    ; LDA #$40
-                20A285  ; JSR pusha
+                20A585  ; JSR pusha
                 A900    ; LDA #$00
-                20A285  ; JSR pusha
+                20A585  ; JSR pusha
                 A955    ; LDA #$55
-                A931    ; LDA #$31 (PALETTE address lo)
+                A934  ; LDA #$31 (PALETTE address lo)
                 A286    ; LDX #$86 (PALETTE address hi)
-                202B82  ; JSR pal_bg
+                202E82  ; JSR pal_bg
                 A220    ; LDX #$20
                 A900    ; LDA #$00
-                20D483  ; JSR vram_adr
+                20D783  ; JSR vram_adr
                 A916    ; LDA #$16
-                20A285  ; JSR pusha
+                20A585  ; JSR pusha
                 A203    ; LDX #$03
                 A9C0    ; LDA #$C0
-                20DF83  ; JSR vram_fill
-                A9F1    ; LDA array_lo (ATTRIBUTE_TABLE)
+                20E283  ; JSR vram_fill
+                A9F4  ; LDA array_lo (ATTRIBUTE_TABLE)
                 A285    ; LDX array_hi
-                20B885  ; JSR pushax
+                20BB85  ; JSR pushax
                 A200    ; LDX #$00
                 A940    ; LDA #$40
-                204F83  ; JSR vram_write
-                208982  ; JSR ppu_on_all
-                4C4085  ; JMP loop
+                205283  ; JSR vram_write
+                208C82  ; JSR ppu_on_all
+                4C4385  ; JMP loop
                 """);
     }
 
@@ -665,10 +665,10 @@ public class RoslynTests
             expectedAssembly:
                 """
                 A900    ; LDA #$00
-                206C85  ; JSR pusha
+                206F85  ; JSR pusha
                 A955    ; LDA #$55
-                208982  ; JSR ppu_on_all
-                4C0A85  ; JMP $850A
+                208C82  ; JSR ppu_on_all
+                4C0D85  ; JMP $850A
                 """);
     }
 
@@ -4087,7 +4087,7 @@ public class RoslynTests
             """);
 
         Assert.Equal(
-            "A203A9C08D25038E2603A928A286202B82A220A90020D483A916209985AD2503AE260320DF83A9E8A28520AF85A200A940204F832089824C3785",
+            "A203A9C08D25038E2603A92BA286202E82A220A90020D783A916209C85AD2503AE260320E283A9EBA28520B285A200A940205283208C824C3A85",
             Convert.ToHexString(bytes));
     }
 
@@ -4129,7 +4129,7 @@ public class RoslynTests
             """);
 
         Assert.Equal(
-            "A9168D2503A91FA286202B82A220A90020D483AD2503A203A9C020DF83A9DFA28520A685A200A940204F832089824C2E85",
+            "A9168D2503A922A286202E82A220A90020D783AD2503A203A9C020E283A9E2A28520A985A200A940205283208C824C3185",
             Convert.ToHexString(bytes));
     }
 
@@ -4163,7 +4163,7 @@ public class RoslynTests
             """);
 
         Assert.Equal(
-            "A936A28620118220B885A928A0039122A928889122A9D8889122A900889122200A8620B885A930A0039122A928889122A9DA889122A900889122A904200A8620B885A928A0039122A930889122A9D9889122A900889122A908200A8620B885A930A0039122A930889122A9DB889122A900889122A90C200A862089824C7C85",
+            "A939A28620148220BB85A928A0039122A928889122A9D8889122A900889122200D8620BB85A930A0039122A928889122A9DA889122A900889122A904200D8620BB85A928A0039122A930889122A9D9889122A900889122A908200D8620BB85A930A0039122A930889122A9DB889122A900889122A90C200D86208C824C7F85",
             Convert.ToHexString(bytes));
     }
 
@@ -4212,7 +4212,7 @@ public class RoslynTests
             """);
 
         Assert.Equal(
-            "202C86202C86A9008D00208D0120A93F8D0620A9008D0620A9018D0720A9008D0720A9108D0720A9208D0720A9218D0620A9C98D0620A9488D0720A9458D0720A94C8D07208D0720A94F8D0720A9208D0720A9508D07208D0720A9558D0720A9218D0720A9008D05208D0520A9208D0620A9008D0620A91E8D01204C7B85",
+            "202F86202F86A9008D00208D0120A93F8D0620A9008D0620A9018D0720A9008D0720A9108D0720A9208D0720A9218D0620A9C98D0620A9488D0720A9458D0720A94C8D07208D0720A94F8D0720A9208D0720A9508D07208D0720A9558D0720A9218D0720A9008D05208D0520A9208D0620A9008D0620A91E8D01204C7E85",
             Convert.ToHexString(bytes));
     }
 
@@ -4252,7 +4252,7 @@ public class RoslynTests
             """);
 
         Assert.Equal(
-            "A9008D2503A900200E86A902203E82A901200E86A914203E82A902200E86A920203E82A903200E86A930203E82A220A94220D483A95DA286202486A200A91D204F83A221A90220D483A95DA286202486A200A91D204F83A221A9C220D483A95DA286202486A200A91D204F83A222A98220D483A95DA286202486A200A91D204F83A223A94220D483A95DA286202486A200A91D204F8320898220DB82EE2503A900A200202486AD250320FB824C9985",
+            "A9008D2503A900201186A902204182A901201186A914204182A902201186A920204182A903201186A930204182A220A94220D783A960A286202786A200A91D205283A221A90220D783A960A286202786A200A91D205283A221A9C220D783A960A286202786A200A91D205283A222A98220D783A960A286202786A200A91D205283A223A94220D783A960A286202786A200A91D205283208C8220DE82EE2503A900A200202786AD250320FE824C9C85",
             Convert.ToHexString(bytes));
     }
 
@@ -4296,7 +4296,7 @@ public class RoslynTests
             """);
 
         Assert.Equal(
-            "A926A28620118220AE82A97CA97C8D2603A96CA96C8D270320A885AD260338E904A0039122AD270338E904889122A9C0889122A903889122A90020FA858D250320A885AD260338E904A0039122AD2703186904889122A9C1889122A903889122AD250320FA858D25032089824C6C85",
+            "A929A28620148220B182A97CA97C8D2603A96CA96C8D270320AB85AD260338E904A0039122AD270338E904889122A9C0889122A903889122A90020FD858D250320AB85AD260338E904A0039122AD2703186904889122A9C1889122A903889122AD250320FD858D2503208C824C6F85",
             Convert.ToHexString(bytes));
     }
 
@@ -4385,7 +4385,7 @@ public class RoslynTests
             """);
 
         Assert.Equal(
-            "A9288D25038D2603A9D3A28620118220898220F082A9002056868D27032940F003CE2503AD27032980F003EE2503AD27032910F003CE2603AD27032920F003EE2603200486AD2503A0039122AD2603889122A9D8889122A90088912220A786200486AD2503186908A0039122AD2603889122A9DA889122A900889122A90420A786200486AD2503A0039122AD2603186908889122A9D9889122A900889122A90820A786200486AD2503186908A0039122AD2603186908889122A9DB889122A900889122A90C20A7864C1285",
+            "A9288D25038D2603A9D6A286201482208C8220F382A9002059868D27032940F003CE2503AD27032980F003EE2503AD27032910F003CE2603AD27032920F003EE2603200786AD2503A0039122AD2603889122A9D8889122A90088912220AA86200786AD2503186908A0039122AD2603889122A9DA889122A900889122A90420AA86200786AD2503A0039122AD2603186908889122A9D9889122A900889122A90820AA86200786AD2503186908A0039122AD2603186908889122A9DB889122A900889122A90C20AA864C1585",
             Convert.ToHexString(bytes));
     }
 
