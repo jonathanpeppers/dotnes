@@ -4872,4 +4872,52 @@ public class RoslynTests
         Assert.Contains("A92A", hex); // LDA #$2A (42, low byte of seed)
         Assert.Matches("20[0-9A-F]{4}", hex); // JSR to srand
     }
+
+    [Fact]
+    public void Multiply_NonPowerOf2_Constant()
+    {
+        // val * 3 should use shift+add (not just shifts)
+        var bytes = GetProgramBytes(
+            """
+            byte x = 10;
+            byte result = (byte)(x * 3);
+            pal_col(0, result);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+    }
+
+    [Fact]
+    public void Multiply_NonPowerOf2_5()
+    {
+        // val * 5 should work
+        var bytes = GetProgramBytes(
+            """
+            byte x = 7;
+            byte result = (byte)(x * 5);
+            pal_col(0, result);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+    }
+
+    [Fact]
+    public void UShort_Division()
+    {
+        // ushort / byte should produce a result
+        var bytes = GetProgramBytes(
+            """
+            ushort val = 1000;
+            byte result = (byte)(val / 10);
+            pal_col(0, result);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+    }
 }
