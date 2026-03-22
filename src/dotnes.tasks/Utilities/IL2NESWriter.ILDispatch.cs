@@ -694,6 +694,121 @@ partial class IL2NESWriter
             case ILOpCode.Xor:
                 Stack.Push(Stack.Pop() ^ Stack.Pop());
                 break;
+            case ILOpCode.Neg:
+                {
+                    int negValue = Stack.Pop();
+                    if (_runtimeValueInA)
+                    {
+                        // Two's complement negation: EOR #$FF; CLC; ADC #$01
+                        Emit(Opcode.EOR, AddressMode.Immediate, (byte)0xFF);
+                        Emit(Opcode.CLC);
+                        Emit(Opcode.ADC, AddressMode.Immediate, (byte)0x01);
+                        Stack.Push(0); // Runtime placeholder
+                    }
+                    else
+                    {
+                        Stack.Push(-negValue);
+                    }
+                }
+                break;
+            case ILOpCode.Not:
+                {
+                    int notValue = Stack.Pop();
+                    if (_runtimeValueInA)
+                    {
+                        // Bitwise NOT: EOR #$FF
+                        Emit(Opcode.EOR, AddressMode.Immediate, (byte)0xFF);
+                        Stack.Push(0); // Runtime placeholder
+                    }
+                    else
+                    {
+                        Stack.Push(~notValue);
+                    }
+                }
+                break;
+            case ILOpCode.Ceq:
+                {
+                    int ceqVal2 = Stack.Count > 0 ? Stack.Pop() : 0;
+                    int ceqVal1 = Stack.Count > 0 ? Stack.Pop() : 0;
+                    if (_runtimeValueInA)
+                    {
+                        EmitBranchCompare(ceqVal2);
+                        // Set A = 1 if equal, 0 if not
+                        // BEQ +4 skips: LDA #0 (2 bytes) + BEQ +2 (2 bytes)
+                        Emit(Opcode.BEQ, AddressMode.Relative, (byte)4);
+                        Emit(Opcode.LDA, AddressMode.Immediate, (byte)0);
+                        Emit(Opcode.BEQ, AddressMode.Relative, (byte)2);
+                        Emit(Opcode.LDA, AddressMode.Immediate, (byte)1);
+                        _runtimeValueInA = true;
+                        Stack.Push(0); // Runtime placeholder
+                    }
+                    else
+                    {
+                        Stack.Push(ceqVal1 == ceqVal2 ? 1 : 0);
+                    }
+                }
+                break;
+            case ILOpCode.Cgt:
+            case ILOpCode.Cgt_un:
+                {
+                    int cgtVal2 = Stack.Count > 0 ? Stack.Pop() : 0;
+                    int cgtVal1 = Stack.Count > 0 ? Stack.Pop() : 0;
+                    if (_runtimeValueInA)
+                    {
+                        if (!EmitBranchCompare(cgtVal2, adjustValue: 1))
+                        {
+                            // val2+1 overflows: A > 255 is always false for bytes
+                            Emit(Opcode.LDA, AddressMode.Immediate, (byte)0);
+                        }
+                        else
+                        {
+                            // BCS = A >= val2+1 = A > val2
+                            Emit(Opcode.BCS, AddressMode.Relative, (byte)4);
+                            Emit(Opcode.LDA, AddressMode.Immediate, (byte)0);
+                            Emit(Opcode.BEQ, AddressMode.Relative, (byte)2);
+                            Emit(Opcode.LDA, AddressMode.Immediate, (byte)1);
+                        }
+                        _runtimeValueInA = true;
+                        Stack.Push(0); // Runtime placeholder
+                    }
+                    else
+                    {
+                        Stack.Push(cgtVal1 > cgtVal2 ? 1 : 0);
+                    }
+                }
+                break;
+            case ILOpCode.Clt:
+            case ILOpCode.Clt_un:
+                {
+                    int cltVal2 = Stack.Count > 0 ? Stack.Pop() : 0;
+                    int cltVal1 = Stack.Count > 0 ? Stack.Pop() : 0;
+                    if (_runtimeValueInA)
+                    {
+                        if (!EmitBranchCompare(cltVal2))
+                        {
+                            // Compare value out of byte range
+                            if (cltVal2 > 255)
+                                Emit(Opcode.LDA, AddressMode.Immediate, (byte)1);  // A < 256+ always true
+                            else
+                                Emit(Opcode.LDA, AddressMode.Immediate, (byte)0);  // A < negative always false
+                        }
+                        else
+                        {
+                            // BCC = A < val2 (carry clear)
+                            Emit(Opcode.BCC, AddressMode.Relative, (byte)4);
+                            Emit(Opcode.LDA, AddressMode.Immediate, (byte)0);
+                            Emit(Opcode.BEQ, AddressMode.Relative, (byte)2);
+                            Emit(Opcode.LDA, AddressMode.Immediate, (byte)1);
+                        }
+                        _runtimeValueInA = true;
+                        Stack.Push(0); // Runtime placeholder
+                    }
+                    else
+                    {
+                        Stack.Push(cltVal1 < cltVal2 ? 1 : 0);
+                    }
+                }
+                break;
             case ILOpCode.Ldelem_u1:
                 // ldelem.u1: pop array ref and index, push array[index]
                 // Pattern: Ldloc_N (array), Ldloc_M (index), Ldelem_u1

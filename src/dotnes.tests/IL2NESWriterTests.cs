@@ -299,4 +299,126 @@ public class IL2NESWriterTests
         Assert.Contains("not yet supported", message);
         Assert.Contains("Arglist", message);
     }
+
+    [Fact]
+    public void Neg_CompileTime_NegatesValue()
+    {
+        using var writer = GetWriter();
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_5));
+        writer.Write(new ILInstruction(ILOpCode.Neg));
+        Assert.Equal(-5, writer.Stack.Peek());
+    }
+
+    [Fact]
+    public void Neg_Runtime_EmitsNegation()
+    {
+        using var writer = GetWriter();
+
+        // Store a constant to local 0 to allocate an address
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_5));
+        writer.Write(new ILInstruction(ILOpCode.Stloc_0));
+
+        // Load local 0 — puts a runtime value in A
+        writer.Write(new ILInstruction(ILOpCode.Ldloc_0));
+
+        // Neg should not throw and should keep runtime value in A
+        writer.Write(new ILInstruction(ILOpCode.Neg));
+        Assert.Single(writer.Stack);
+    }
+
+    [Fact]
+    public void Not_CompileTime_InvertsValue()
+    {
+        using var writer = GetWriter();
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_5));
+        writer.Write(new ILInstruction(ILOpCode.Not));
+        Assert.Equal(~5, writer.Stack.Peek());
+    }
+
+    [Fact]
+    public void Not_Runtime_EmitsEor()
+    {
+        using var writer = GetWriter();
+
+        // Store a constant to local 0 to allocate an address
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_5));
+        writer.Write(new ILInstruction(ILOpCode.Stloc_0));
+
+        // Load local 0 — puts a runtime value in A
+        writer.Write(new ILInstruction(ILOpCode.Ldloc_0));
+
+        // Not should not throw and should keep runtime value in A
+        writer.Write(new ILInstruction(ILOpCode.Not));
+        Assert.Single(writer.Stack);
+    }
+
+    [Fact]
+    public void Ceq_CompileTime_Equal_PushesOne()
+    {
+        using var writer = GetWriter();
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_5));
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_5));
+        writer.Write(new ILInstruction(ILOpCode.Ceq));
+        Assert.Equal(1, writer.Stack.Peek());
+    }
+
+    [Fact]
+    public void Ceq_CompileTime_NotEqual_PushesZero()
+    {
+        using var writer = GetWriter();
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_5));
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_3));
+        writer.Write(new ILInstruction(ILOpCode.Ceq));
+        Assert.Equal(0, writer.Stack.Peek());
+    }
+
+    [Fact]
+    public void Cgt_CompileTime_GreaterThan_PushesOne()
+    {
+        using var writer = GetWriter();
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_5));
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_3));
+        writer.Write(new ILInstruction(ILOpCode.Cgt));
+        Assert.Equal(1, writer.Stack.Peek());
+    }
+
+    [Fact]
+    public void Cgt_CompileTime_NotGreaterThan_PushesZero()
+    {
+        using var writer = GetWriter();
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_3));
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_5));
+        writer.Write(new ILInstruction(ILOpCode.Cgt));
+        Assert.Equal(0, writer.Stack.Peek());
+    }
+
+    [Fact]
+    public void Clt_CompileTime_LessThan_PushesOne()
+    {
+        using var writer = GetWriter();
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_3));
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_5));
+        writer.Write(new ILInstruction(ILOpCode.Clt));
+        Assert.Equal(1, writer.Stack.Peek());
+    }
+
+    [Fact]
+    public void Clt_CompileTime_NotLessThan_PushesZero()
+    {
+        using var writer = GetWriter();
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_5));
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_3));
+        writer.Write(new ILInstruction(ILOpCode.Clt));
+        Assert.Equal(0, writer.Stack.Peek());
+    }
+
+    [Fact]
+    public void Ceq_CompileTime_Equal_PushesCorrectValue()
+    {
+        using var writer = GetWriter();
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_8));
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_8));
+        writer.Write(new ILInstruction(ILOpCode.Ceq));
+        Assert.Equal(1, writer.Stack.Peek());
+    }
 }
