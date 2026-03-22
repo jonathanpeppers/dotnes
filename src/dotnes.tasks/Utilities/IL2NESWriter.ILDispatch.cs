@@ -356,13 +356,18 @@ partial class IL2NESWriter
                             Emit(Opcode.ADC, AddressMode.ZeroPage, (byte)TEMP);
                             Emit(Opcode.ASL, AddressMode.ZeroPage, (byte)TEMP);
                             Emit(Opcode.DEX, AddressMode.Implied);
-                            Emit(Opcode.BNE, AddressMode.Relative, unchecked((byte)-10));
+                            Emit(Opcode.BNE, AddressMode.Relative, unchecked((byte)-12));
                             _savedRuntimeToTemp = false;
                         }
                         else
                         {
-                            // Runtime multiply: use ASL for power-of-2 constants
-                            int constant = val2 >= 0 ? val2 : val1;
+                            // Determine which operand is the compile-time constant
+                            bool previousWasLdc =
+                                previous is ILOpCode.Ldc_i4_s or ILOpCode.Ldc_i4
+                                or ILOpCode.Ldc_i4_0 or ILOpCode.Ldc_i4_1 or ILOpCode.Ldc_i4_2
+                                or ILOpCode.Ldc_i4_3 or ILOpCode.Ldc_i4_4 or ILOpCode.Ldc_i4_5
+                                or ILOpCode.Ldc_i4_6 or ILOpCode.Ldc_i4_7 or ILOpCode.Ldc_i4_8;
+                            int constant = previousWasLdc ? val2 : val1;
                             if (constant > 0 && (constant & (constant - 1)) == 0)
                             {
                                 int shifts = 0;
@@ -436,7 +441,7 @@ partial class IL2NESWriter
                                 Emit(Opcode.ADC, AddressMode.ZeroPage, (byte)TEMP);
                                 Emit(Opcode.ASL, AddressMode.ZeroPage, (byte)TEMP);
                                 Emit(Opcode.DEX, AddressMode.Implied);
-                                Emit(Opcode.BNE, AddressMode.Relative, unchecked((byte)-10));
+                                Emit(Opcode.BNE, AddressMode.Relative, unchecked((byte)-12));
                             }
                         }
                         Stack.Push(val1 * val2);
@@ -713,7 +718,13 @@ partial class IL2NESWriter
                                 Emit(Opcode.LDA, AddressMode.Absolute, _padReloadAddress);
                             }
 
-                            Emit(Opcode.AND, AddressMode.Immediate, checked((byte)mask));
+                            // AND is commutative: pick the non-zero operand as the mask
+                            // (runtime values show as 0 placeholder on the stack)
+                            int immediateMask = mask;
+                            if (mask == 0 && value != 0)
+                                immediateMask = value;
+
+                            Emit(Opcode.AND, AddressMode.Immediate, checked((byte)immediateMask));
                         }
                         _firstAndAfterPadPoll = false;
                         _runtimeValueInA = true; // AND result is still runtime
@@ -756,7 +767,12 @@ partial class IL2NESWriter
                                 RemoveLastInstructions(1);
                             }
 
-                            Emit(Opcode.ORA, AddressMode.Immediate, checked((byte)orMask));
+                            // OR is commutative: pick the non-zero operand as the mask
+                            int immediateOrMask = orMask;
+                            if (orMask == 0 && orValue != 0)
+                                immediateOrMask = orValue;
+
+                            Emit(Opcode.ORA, AddressMode.Immediate, checked((byte)immediateOrMask));
                         }
                         _runtimeValueInA = true;
                         Stack.Push(0); // Runtime placeholder
@@ -797,8 +813,12 @@ partial class IL2NESWriter
                                 RemoveLastInstructions(1);
                             }
 
-                            // Runtime value in A ^ compile-time constant
-                            Emit(Opcode.EOR, AddressMode.Immediate, checked((byte)xorVal2));
+                            // XOR is commutative: pick the non-zero operand as constant
+                            int xorConst = xorVal2;
+                            if (xorVal2 == 0 && xorVal1 != 0)
+                                xorConst = xorVal1;
+
+                            Emit(Opcode.EOR, AddressMode.Immediate, checked((byte)xorConst));
                         }
                         _runtimeValueInA = true;
                         Stack.Push(0);
