@@ -163,6 +163,15 @@ partial class IL2NESWriter
             return;
         }
 
+        // When A:X already hold a 16-bit value (from a word local load) and the next
+        // instruction is a branch comparison, keep A:X intact so the branch handler
+        // can emit a proper 16-bit comparison sequence.
+        if (_ushortInAX && NextIsBranchComparison())
+        {
+            Stack.Push(operand);
+            return;
+        }
+
         if (LastLDA)
         {
             EmitJSR("pusha");
@@ -184,9 +193,9 @@ partial class IL2NESWriter
                 Instructions[Index + 1].OpCode is ILOpCode.Add or ILOpCode.Sub;
             bool nextIsDivRem = _runtimeValueInA && Instructions is not null && Index + 1 < Instructions.Length &&
                 Instructions[Index + 1].OpCode is ILOpCode.Div or ILOpCode.Rem;
-            if (nextIsShift || nextIsAddSub || nextIsDivRem)
+            if (nextIsShift || nextIsAddSub || nextIsDivRem || NextIsBranchComparison())
             {
-                // Keep A:X intact — the operator will handle the 16-bit value
+                // Keep A:X intact — the operator/branch will handle the 16-bit value
                 Stack.Push(operand);
                 return;
             }
