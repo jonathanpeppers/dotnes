@@ -455,4 +455,88 @@ public class IL2NESWriterTests
         writer.Write(new ILInstruction(ILOpCode.Cgt));
         Assert.Equal(0, writer.Stack.Peek());
     }
+
+    [Fact]
+    public void Ceq_Runtime_EmitsCmpBranchPattern()
+    {
+        using var writer = GetWriter();
+
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_5));
+        writer.Write(new ILInstruction(ILOpCode.Stloc_0));
+        writer.Write(new ILInstruction(ILOpCode.Ldloc_0));
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_3));
+        writer.Write(new ILInstruction(ILOpCode.Ceq));
+        Assert.Single(writer.Stack);
+
+        writer.FlushMainBlock();
+        var bytes = _stream.ToArray();
+        // Expected: CMP #$03 (0xC9 0x03), BEQ +4 (0xF0 0x04)
+        bool foundPattern = false;
+        for (int i = 0; i <= bytes.Length - 4; i++)
+        {
+            if (bytes[i] == 0xC9 && bytes[i + 1] == 0x03
+                && bytes[i + 2] == 0xF0 && bytes[i + 3] == 0x04)
+            {
+                foundPattern = true;
+                break;
+            }
+        }
+        Assert.True(foundPattern, $"Expected CMP #$03; BEQ +4 sequence. Bytes: {BitConverter.ToString(bytes)}");
+    }
+
+    [Fact]
+    public void Cgt_Runtime_EmitsCmpBcsPattern()
+    {
+        using var writer = GetWriter();
+
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_5));
+        writer.Write(new ILInstruction(ILOpCode.Stloc_0));
+        writer.Write(new ILInstruction(ILOpCode.Ldloc_0));
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_3));
+        writer.Write(new ILInstruction(ILOpCode.Cgt));
+        Assert.Single(writer.Stack);
+
+        writer.FlushMainBlock();
+        var bytes = _stream.ToArray();
+        // Expected: CMP #$04 (0xC9 0x04, val2+1 for >), BCS +4 (0xB0 0x04)
+        bool foundPattern = false;
+        for (int i = 0; i <= bytes.Length - 4; i++)
+        {
+            if (bytes[i] == 0xC9 && bytes[i + 1] == 0x04
+                && bytes[i + 2] == 0xB0 && bytes[i + 3] == 0x04)
+            {
+                foundPattern = true;
+                break;
+            }
+        }
+        Assert.True(foundPattern, $"Expected CMP #$04; BCS +4 sequence. Bytes: {BitConverter.ToString(bytes)}");
+    }
+
+    [Fact]
+    public void Clt_Runtime_EmitsCmpBccPattern()
+    {
+        using var writer = GetWriter();
+
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_5));
+        writer.Write(new ILInstruction(ILOpCode.Stloc_0));
+        writer.Write(new ILInstruction(ILOpCode.Ldloc_0));
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_8));
+        writer.Write(new ILInstruction(ILOpCode.Clt));
+        Assert.Single(writer.Stack);
+
+        writer.FlushMainBlock();
+        var bytes = _stream.ToArray();
+        // Expected: CMP #$08 (0xC9 0x08), BCC +4 (0x90 0x04)
+        bool foundPattern = false;
+        for (int i = 0; i <= bytes.Length - 4; i++)
+        {
+            if (bytes[i] == 0xC9 && bytes[i + 1] == 0x08
+                && bytes[i + 2] == 0x90 && bytes[i + 3] == 0x04)
+            {
+                foundPattern = true;
+                break;
+            }
+        }
+        Assert.True(foundPattern, $"Expected CMP #$08; BCC +4 sequence. Bytes: {BitConverter.ToString(bytes)}");
+    }
 }
