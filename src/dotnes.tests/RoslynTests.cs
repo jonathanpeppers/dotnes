@@ -4874,12 +4874,12 @@ public class RoslynTests
     }
 
     [Fact]
-    public void Multiply_NonPowerOf2_Constant()
+    public void Multiply_NonPowerOf2_3()
     {
-        // val * 3 should use shift+add (not just shifts)
+        // Runtime val * 3 should use the general 8x8 multiply loop
         var bytes = GetProgramBytes(
             """
-            byte x = 10;
+            byte x = rand8();
             byte result = (byte)(x * 3);
             pal_col(0, result);
             ppu_on_all();
@@ -4887,15 +4887,22 @@ public class RoslynTests
             """);
         Assert.NotNull(bytes);
         Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"Multiply_NonPowerOf2_3 hex: {hex}");
+
+        // General multiply loop: LDX #$08 (8 bits), LSR TEMP2, BCC, CLC, ADC TEMP
+        Assert.Contains("A208", hex);     // LDX #$08
+        Assert.Contains("4619", hex);     // LSR $19 (TEMP2)
     }
 
     [Fact]
     public void Multiply_NonPowerOf2_5()
     {
-        // val * 5 should work
+        // Runtime val * 5 should use the general 8x8 multiply loop
         var bytes = GetProgramBytes(
             """
-            byte x = 7;
+            byte x = rand8();
             byte result = (byte)(x * 5);
             pal_col(0, result);
             ppu_on_all();
@@ -4903,21 +4910,36 @@ public class RoslynTests
             """);
         Assert.NotNull(bytes);
         Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"Multiply_NonPowerOf2_5 hex: {hex}");
+
+        // General multiply loop pattern: LDX #$08, LSR TEMP2
+        Assert.Contains("A208", hex);     // LDX #$08
+        Assert.Contains("4619", hex);     // LSR $19 (TEMP2)
     }
 
     [Fact]
-    public void UShort_Division()
+    public void Division_RuntimeDividend()
     {
-        // ushort / byte should produce a result
+        // Runtime dividend / constant divisor should emit repeated subtraction
         var bytes = GetProgramBytes(
             """
-            ushort val = 1000;
-            byte result = (byte)(val / 10);
+            byte x = rand8();
+            byte result = (byte)(x / 10);
             pal_col(0, result);
             ppu_on_all();
             while (true) ;
             """);
         Assert.NotNull(bytes);
         Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"Division_RuntimeDividend hex: {hex}");
+
+        // Repeated subtraction: LDX #$FF, SEC, INX, SBC #$0A, BCS
+        Assert.Contains("A2FF", hex);     // LDX #$FF
+        Assert.Contains("38", hex);       // SEC
+        Assert.Contains("E90A", hex);     // SBC #$0A (divisor 10)
     }
 }
