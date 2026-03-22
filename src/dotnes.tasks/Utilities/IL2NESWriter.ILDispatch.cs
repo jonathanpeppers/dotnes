@@ -533,11 +533,11 @@ partial class IL2NESWriter
                                 Emit(Opcode.ROL, AddressMode.ZeroPage, (byte)NESConstants.TEMP_HI);
                                 Emit(Opcode.ROL, AddressMode.Accumulator);
                                 Emit(Opcode.CMP, AddressMode.Immediate, (byte)divisor);
-                                Emit(Opcode.BCC, AddressMode.Relative, 4);
+                                Emit(Opcode.BCC, AddressMode.Relative, 4); // skip SBC(2) + INC(2)
                                 Emit(Opcode.SBC, AddressMode.Immediate, (byte)divisor);
                                 Emit(Opcode.INC, AddressMode.ZeroPage, (byte)TEMP);
                                 Emit(Opcode.DEY, AddressMode.Implied);
-                                Emit(Opcode.BNE, AddressMode.Relative, unchecked((byte)-16));
+                                Emit(Opcode.BNE, AddressMode.Relative, unchecked((byte)-16)); // -16 back to ASL
                                 Emit(Opcode.LDA, AddressMode.ZeroPage, (byte)TEMP);
                                 Emit(Opcode.LDX, AddressMode.ZeroPage, (byte)NESConstants.TEMP_HI);
                             }
