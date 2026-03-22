@@ -25,6 +25,7 @@ internal static class NESConstants
     public const int TEMP = 0x17;
     public const int TEMP_HI = 0x18;   // TEMP+1 (also used as DUP_TEMP; not always the "high byte")
     public const int RAND_SEED = 0x3C;  // 1 byte: random seed for LFSR PRNG (cc65 compatible)
+    public const int RAND_STATE = 0x3D; // 4 bytes: cc65 rand() LCG state ($3D-$40)
     public const int TEMP2 = 0x19;  // Additional temporary variable
     public const int TEMP3 = 0x1A;  // Additional temporary variable
     public const int OAM_OFF = 0x1B; // OAM buffer offset (neslib oam_off global)

@@ -370,9 +370,9 @@ public static class NESLib
     public static void bank_bg(byte n) => throw null!;
 
     /// <summary>
-    /// get random number 0..255, same as rand8()
+    /// get random number 0..32767, cc65-compatible 16-bit PRNG (32-bit LCG state)
     /// </summary>
-    public static byte rand() => throw null!;
+    public static ushort rand() => throw null!;
 
     /// <summary>
     /// get random number 0..255
@@ -385,7 +385,12 @@ public static class NESLib
     public static ushort rand16() => throw null!;
 
     /// <summary>
-    /// set random seed
+    /// set random seed for cc65-compatible PRNG, seed in A(lo)/X(hi)
+    /// </summary>
+    public static void srand(ushort seed) => throw null!;
+
+    /// <summary>
+    /// set random seed for 8-bit LFSR PRNG
     /// </summary>
     public static void set_rand(byte seed) => throw null!;
 

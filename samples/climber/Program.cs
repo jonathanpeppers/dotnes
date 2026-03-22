@@ -43,7 +43,7 @@ const byte PACING = 6;
 static byte rndint(byte a, byte b)
 {
     byte range = (byte)(b - a);
-    byte r = rand8();
+    byte r = (byte)rand();
     return (byte)((byte)(r % range) + a);
 }
 

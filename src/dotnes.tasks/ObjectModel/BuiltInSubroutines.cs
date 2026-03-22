@@ -533,12 +533,59 @@ internal static class BuiltInSubroutines
     }
 
     /// <summary>
-    /// _set_rand - Set random seed
+    /// _set_rand - Set random seed for 8-bit LFSR PRNG
     /// </summary>
     public static Block SetRand()
     {
         var block = new Block(nameof(NESLib.set_rand));
         block.Emit(STA_zpg(RAND_SEED))
+             .Emit(RTS());
+        return block;
+    }
+
+    /// <summary>
+    /// _srand - Set random seed for cc65-compatible 16-bit PRNG
+    /// Entry: seed in A(lo)/X(hi)
+    /// Stores seed in RAND_STATE, then falls through to Rand() to shuffle.
+    /// Source: https://github.com/cc65/cc65/blob/master/libsrc/common/rand.s
+    /// </summary>
+    public static Block SRand()
+    {
+        var block = new Block(nameof(NESLib.srand));
+        block.Emit(STA_zpg(RAND_STATE))
+             .Emit(STX_zpg(RAND_STATE + 1))
+             .Emit(STA_zpg(RAND_STATE + 2))
+             .Emit(STX_zpg(RAND_STATE + 3));
+        // Falls through to Rand() to sufficiently shuffle first result
+        return block;
+    }
+
+    /// <summary>
+    /// _rand - Get random number 0..32767 using cc65 LCG
+    /// 32-bit LCG: state = state * $01010101 + $B3B3B3B3 (mod 2^32)
+    /// Returns bits 16-31 XOR'd with bits 0-15, bit 15 cleared.
+    /// Exit: result in A(lo)/X(hi), range 0..32767
+    /// Uses RAND_STATE ($3D-$40) zero-page variables.
+    /// Source: https://github.com/cc65/cc65/blob/master/libsrc/common/rand.s
+    /// </summary>
+    public static Block Rand()
+    {
+        var block = new Block(nameof(NESLib.rand));
+        block.Emit(CLC())
+             .Emit(LDA_zpg(RAND_STATE))
+             .Emit(ADC(0xB3))
+             .Emit(STA_zpg(RAND_STATE))
+             .Emit(ADC_zpg(RAND_STATE + 1))
+             .Emit(STA_zpg(RAND_STATE + 1))
+             .Emit(ADC_zpg(RAND_STATE + 2))
+             .Emit(STA_zpg(RAND_STATE + 2))
+             .Emit(EOR_zpg(RAND_STATE))
+             .Emit(AND(0x7F))
+             .Emit(TAX())
+             .Emit(LDA_zpg(RAND_STATE + 2))
+             .Emit(ADC_zpg(RAND_STATE + 3))
+             .Emit(STA_zpg(RAND_STATE + 3))
+             .Emit(EOR_zpg(RAND_STATE + 1))
              .Emit(RTS());
         return block;
     }

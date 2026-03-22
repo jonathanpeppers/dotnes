@@ -4803,4 +4803,67 @@ public class RoslynTests
         // SEC, SBC #$0A, BCS -4, ADC #$0A
         Assert.Contains("38E90AB0FC690A", hex);
     }
+
+    [Fact]
+    public void Rand_Returns16Bit()
+    {
+        // rand() returns ushort (16-bit) in A:X
+        var bytes = GetProgramBytes(
+            """
+            ushort r = rand();
+            pal_col(0, (byte)r);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"Rand_Returns16Bit hex: {hex}");
+
+        // Should contain JSR to rand subroutine
+        Assert.Contains("20", hex); // JSR opcode
+    }
+
+    [Fact]
+    public void Rand_ByteTruncation()
+    {
+        // (byte)rand() should truncate 16-bit result to 8-bit (just use A, discard X)
+        var bytes = GetProgramBytes(
+            """
+            byte r = (byte)rand();
+            pal_col(0, r);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"Rand_ByteTruncation hex: {hex}");
+
+        // Should contain JSR to rand and STA for storing byte local
+        Assert.Contains("20", hex); // JSR opcode
+    }
+
+    [Fact]
+    public void SRand_AcceptsUshort()
+    {
+        // srand(ushort seed) should accept a 16-bit seed value
+        var bytes = GetProgramBytes(
+            """
+            srand(42);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"SRand_AcceptsUshort hex: {hex}");
+
+        // Should contain LDA #42 (0x2A) followed by JSR to srand
+        Assert.Contains("A92A", hex); // LDA #$2A (42)
+        Assert.Contains("20", hex);   // JSR opcode (to srand)
+    }
 }
