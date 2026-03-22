@@ -969,6 +969,15 @@ partial class IL2NESWriter
                     int instrSize = instruction.OpCode == ILOpCode.Bne_un_s ? 2 : 5;
                     int cmpVal = Stack.Count > 0 ? Stack.Pop() : 0;
                     if (Stack.Count > 0) Stack.Pop();
+                    var labelName = InstructionLabel(instruction.Offset + branchOffset + instrSize);
+
+                    if (_ushortInAX)
+                    {
+                        if (TryEmitBranch16Bit(cmpVal, labelName, Opcode.BNE, instruction.OpCode == ILOpCode.Bne_un_s))
+                            break;
+                        _ushortInAX = false;
+                    }
+
                     if (!EmitBranchCompare(cmpVal))
                         throw new TranspileException($"Branch comparison value {cmpVal} exceeds byte range.", MethodName);
                     
@@ -994,7 +1003,6 @@ partial class IL2NESWriter
                         _dupPendingSave = false;
                     }
                     
-                    var labelName = InstructionLabel(instruction.Offset + branchOffset + instrSize);
                     if (instruction.OpCode == ILOpCode.Bne_un_s)
                         EmitWithLabel(Opcode.BNE, AddressMode.Relative, labelName);
                     else
@@ -1014,6 +1022,15 @@ partial class IL2NESWriter
                     int instrSize = instruction.OpCode == ILOpCode.Beq_s ? 2 : 5;
                     int cmpVal = Stack.Count > 0 ? Stack.Pop() : 0;
                     if (Stack.Count > 0) Stack.Pop();
+                    var labelName = InstructionLabel(instruction.Offset + branchOffset + instrSize);
+
+                    if (_ushortInAX)
+                    {
+                        if (TryEmitBranch16Bit(cmpVal, labelName, Opcode.BEQ, instruction.OpCode == ILOpCode.Beq_s))
+                            break;
+                        _ushortInAX = false;
+                    }
+
                     if (!EmitBranchCompare(cmpVal))
                         throw new TranspileException($"Branch comparison value {cmpVal} exceeds byte range.", MethodName);
 
@@ -1023,7 +1040,6 @@ partial class IL2NESWriter
                         _dupPendingSave = false;
                     }
 
-                    var labelName = InstructionLabel(instruction.Offset + branchOffset + instrSize);
                     if (instruction.OpCode == ILOpCode.Beq_s)
                         EmitWithLabel(Opcode.BEQ, AddressMode.Relative, labelName);
                     else
@@ -1058,17 +1074,27 @@ partial class IL2NESWriter
                 break;
             case ILOpCode.Blt_s:
             case ILOpCode.Blt:
-                // Branch if less than (signed): value1 < value2
+            case ILOpCode.Blt_un_s:
+            case ILOpCode.Blt_un:
+                // Branch if less than: value1 < value2
                 {
-                    int branchOffset = instruction.OpCode == ILOpCode.Blt_s
-                        ? (sbyte)(byte)operand : operand;
-                    int instrSize = instruction.OpCode == ILOpCode.Blt_s ? 2 : 5;
+                    bool isShort = instruction.OpCode is ILOpCode.Blt_s or ILOpCode.Blt_un_s;
+                    int branchOffset = isShort ? (sbyte)(byte)operand : operand;
+                    int instrSize = isShort ? 2 : 5;
                     int cmpVal = Stack.Count > 0 ? Stack.Pop() : 0;
                     if (Stack.Count > 0) Stack.Pop();
+                    var labelName = InstructionLabel(instruction.Offset + branchOffset + instrSize);
+
+                    if (_ushortInAX)
+                    {
+                        if (TryEmitBranch16Bit(cmpVal, labelName, Opcode.BCC, isShort))
+                            break;
+                        _ushortInAX = false;
+                    }
+
                     if (!EmitBranchCompare(cmpVal))
                         throw new TranspileException($"Branch comparison value {cmpVal} exceeds byte range.", MethodName);
-                    var labelName = InstructionLabel(instruction.Offset + branchOffset + instrSize);
-                    if (instruction.OpCode == ILOpCode.Blt_s)
+                    if (isShort)
                         EmitWithLabel(Opcode.BCC, AddressMode.Relative, labelName);
                     else
                     {
@@ -1080,20 +1106,37 @@ partial class IL2NESWriter
                 break;
             case ILOpCode.Ble_s:
             case ILOpCode.Ble:
+            case ILOpCode.Ble_un_s:
+            case ILOpCode.Ble_un:
                 // Branch if less than or equal: CMP #(value2+1) + BCC/trampoline
                 {
-                    int branchOffset = instruction.OpCode == ILOpCode.Ble_s
-                        ? (sbyte)(byte)operand : operand;
-                    int instrSize = instruction.OpCode == ILOpCode.Ble_s ? 2 : 5;
+                    bool isShort = instruction.OpCode is ILOpCode.Ble_s or ILOpCode.Ble_un_s;
+                    int branchOffset = isShort ? (sbyte)(byte)operand : operand;
+                    int instrSize = isShort ? 2 : 5;
                     int cmpVal = Stack.Count > 0 ? Stack.Pop() : 0;
                     if (Stack.Count > 0) Stack.Pop();
                     var labelName = InstructionLabel(instruction.Offset + branchOffset + instrSize);
+
+                    if (_ushortInAX)
+                    {
+                        int adjusted = cmpVal + 1;
+                        if (adjusted > ushort.MaxValue)
+                        {
+                            EmitWithLabel(Opcode.JMP, AddressMode.Absolute, labelName);
+                            _ushortInAX = false;
+                            _runtimeValueInA = false;
+                            break;
+                        }
+                        if (TryEmitBranch16Bit(adjusted, labelName, Opcode.BCC, isShort))
+                            break;
+                        _ushortInAX = false;
+                    }
+
                     if (!EmitBranchCompare(cmpVal, adjustValue: 1))
                     {
-                        // Overflow: x <= 255 is always true for bytes → unconditional jump
                         EmitWithLabel(Opcode.JMP, AddressMode.Absolute, labelName);
                     }
-                    else if (instruction.OpCode == ILOpCode.Ble_s)
+                    else if (isShort)
                         EmitWithLabel(Opcode.BCC, AddressMode.Relative, labelName);
                     else
                     {
@@ -1105,17 +1148,27 @@ partial class IL2NESWriter
                 break;
             case ILOpCode.Bge_s:
             case ILOpCode.Bge:
+            case ILOpCode.Bge_un_s:
+            case ILOpCode.Bge_un:
                 // Branch if greater than or equal: CMP #value2 + BCS/trampoline
                 {
-                    int branchOffset = instruction.OpCode == ILOpCode.Bge_s
-                        ? (sbyte)(byte)operand : operand;
-                    int instrSize = instruction.OpCode == ILOpCode.Bge_s ? 2 : 5;
+                    bool isShort = instruction.OpCode is ILOpCode.Bge_s or ILOpCode.Bge_un_s;
+                    int branchOffset = isShort ? (sbyte)(byte)operand : operand;
+                    int instrSize = isShort ? 2 : 5;
                     int cmpVal = Stack.Count > 0 ? Stack.Pop() : 0;
                     if (Stack.Count > 0) Stack.Pop();
+                    var labelName = InstructionLabel(instruction.Offset + branchOffset + instrSize);
+
+                    if (_ushortInAX)
+                    {
+                        if (TryEmitBranch16Bit(cmpVal, labelName, Opcode.BCS, isShort))
+                            break;
+                        _ushortInAX = false;
+                    }
+
                     if (!EmitBranchCompare(cmpVal))
                         throw new TranspileException($"Branch comparison value {cmpVal} exceeds byte range.", MethodName);
-                    var labelName = InstructionLabel(instruction.Offset + branchOffset + instrSize);
-                    if (instruction.OpCode == ILOpCode.Bge_s)
+                    if (isShort)
                         EmitWithLabel(Opcode.BCS, AddressMode.Relative, labelName);
                     else
                     {
@@ -1127,19 +1180,36 @@ partial class IL2NESWriter
                 break;
             case ILOpCode.Bgt_s:
             case ILOpCode.Bgt:
+            case ILOpCode.Bgt_un_s:
+            case ILOpCode.Bgt_un:
                 // Branch if greater than: CMP #(value2+1) + BCS/trampoline
                 {
-                    int branchOffset = instruction.OpCode == ILOpCode.Bgt_s
-                        ? (sbyte)(byte)operand : operand;
-                    int instrSize = instruction.OpCode == ILOpCode.Bgt_s ? 2 : 5;
+                    bool isShort = instruction.OpCode is ILOpCode.Bgt_s or ILOpCode.Bgt_un_s;
+                    int branchOffset = isShort ? (sbyte)(byte)operand : operand;
+                    int instrSize = isShort ? 2 : 5;
                     int cmpVal = Stack.Count > 0 ? Stack.Pop() : 0;
                     if (Stack.Count > 0) Stack.Pop();
                     var labelName = InstructionLabel(instruction.Offset + branchOffset + instrSize);
+
+                    if (_ushortInAX)
+                    {
+                        int adjusted = cmpVal + 1;
+                        if (adjusted > ushort.MaxValue)
+                        {
+                            _ushortInAX = false;
+                            _runtimeValueInA = false;
+                            break;
+                        }
+                        if (TryEmitBranch16Bit(adjusted, labelName, Opcode.BCS, isShort))
+                            break;
+                        _ushortInAX = false;
+                    }
+
                     if (!EmitBranchCompare(cmpVal, adjustValue: 1))
                     {
                         // Overflow: x > 255 is always false for bytes → skip branch (no-op)
                     }
-                    else if (instruction.OpCode == ILOpCode.Bgt_s)
+                    else if (isShort)
                         EmitWithLabel(Opcode.BCS, AddressMode.Relative, labelName);
                     else
                     {

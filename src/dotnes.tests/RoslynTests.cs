@@ -4872,4 +4872,139 @@ public class RoslynTests
         Assert.Contains("A92A", hex); // LDA #$2A (42, low byte of seed)
         Assert.Matches("20[0-9A-F]{4}", hex); // JSR to srand
     }
+
+    [Fact]
+    public void UshortLessThanConstant16Bit()
+    {
+        // 16-bit comparison: ushort local < 300 (0x012C)
+        // Must emit multi-byte comparison: compare hi bytes first, then lo bytes.
+        // rand16() returns ushort, triggering word local detection via _runtimeValueInA && _ushortInAX.
+        var bytes = GetProgramBytes(
+            """
+            ushort y = rand16();
+            if (y < 300)
+            {
+                pal_col(0, 0x30);
+            }
+            pal_col(0, 0);
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"Ushort16BitLT hex: {hex}");
+
+        // Must contain CMP #$01 (C901) for hi byte comparison against 300 (hi=0x01)
+        Assert.Contains("C901", hex);
+        // Must contain CMP #$2C (C92C) for lo byte comparison against 300 (lo=0x2C)
+        Assert.Contains("C92C", hex);
+        // Must contain BCC (90) for the "less than" branch
+        Assert.Contains("90", hex);
+    }
+
+    [Fact]
+    public void UshortEqualConstant16Bit()
+    {
+        // 16-bit equality: ushort local == 500 (0x01F4)
+        var bytes = GetProgramBytes(
+            """
+            ushort y = rand16();
+            if (y == 500)
+            {
+                pal_col(0, 0x30);
+            }
+            pal_col(0, 0);
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"Ushort16BitEQ hex: {hex}");
+
+        // Must contain CMP #$01 (C901) for hi byte comparison against 500 (hi=0x01)
+        Assert.Contains("C901", hex);
+        // Must contain CMP #$F4 (C9F4) for lo byte comparison against 500 (lo=0xF4)
+        Assert.Contains("C9F4", hex);
+    }
+
+    [Fact]
+    public void UshortNotEqualConstant16Bit()
+    {
+        // 16-bit inequality: ushort local != 1000 (0x03E8)
+        var bytes = GetProgramBytes(
+            """
+            ushort y = rand16();
+            if (y != 1000)
+            {
+                pal_col(0, 0x30);
+            }
+            pal_col(0, 0);
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"Ushort16BitNE hex: {hex}");
+
+        // Must contain CMP #$03 (C903) for hi byte comparison against 1000 (hi=0x03)
+        Assert.Contains("C903", hex);
+        // Must contain CMP #$E8 (C9E8) for lo byte comparison against 1000 (lo=0xE8)
+        Assert.Contains("C9E8", hex);
+    }
+
+    [Fact]
+    public void UshortGreaterOrEqualConstant16Bit()
+    {
+        // 16-bit comparison: ushort local >= 256 (0x0100)
+        var bytes = GetProgramBytes(
+            """
+            ushort y = rand16();
+            if (y >= 256)
+            {
+                pal_col(0, 0x30);
+            }
+            pal_col(0, 0);
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"Ushort16BitGE hex: {hex}");
+
+        // Must contain CMP #$01 (C901) for hi byte comparison against 256 (hi=0x01)
+        Assert.Contains("C901", hex);
+        // Must contain CMP #$00 (C900) for lo byte comparison against 256 (lo=0x00)
+        Assert.Contains("C900", hex);
+    }
+
+    [Fact]
+    public void UshortLessThanSmallConstant()
+    {
+        // 16-bit local compared with small constant (fits in byte):
+        // ushort local < 5 — must still emit 16-bit comparison because local is 16-bit.
+        var bytes = GetProgramBytes(
+            """
+            ushort y = rand16();
+            if (y < 5)
+            {
+                pal_col(0, 0x30);
+            }
+            pal_col(0, 0);
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"Ushort8BitLT hex: {hex}");
+
+        // Must contain CMP #$00 (C900) for hi byte comparison (hi of 5 is 0x00)
+        Assert.Contains("C900", hex);
+        // Must contain CMP #$05 (C905) for lo byte comparison (lo of 5 is 0x05)
+        Assert.Contains("C905", hex);
+    }
 }
