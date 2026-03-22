@@ -301,6 +301,92 @@ public class IL2NESWriterTests
         Assert.Contains("Arglist", message);
     }
 
+    [Fact]
+    public void Neg_CompileTime_NegatesValue()
+    {
+        using var writer = GetWriter();
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_5));
+        writer.Write(new ILInstruction(ILOpCode.Neg));
+        Assert.Equal(-5, writer.Stack.Peek());
+    }
+
+    [Fact]
+    public void Neg_Runtime_EmitsNegation()
+    {
+        using var writer = GetWriter();
+
+        // Store a constant to local 0 to allocate an address
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_5));
+        writer.Write(new ILInstruction(ILOpCode.Stloc_0));
+
+        // Load local 0 — puts a runtime value in A
+        writer.Write(new ILInstruction(ILOpCode.Ldloc_0));
+
+        // Neg should emit EOR #$FF; CLC; ADC #$01
+        writer.Write(new ILInstruction(ILOpCode.Neg));
+        Assert.Single(writer.Stack);
+
+        // Verify the emitted 6502 instructions contain the two's complement sequence
+        writer.FlushMainBlock();
+        var bytes = _stream.ToArray();
+        Assert.True(bytes.Length >= 5, $"Expected at least 5 bytes, got {bytes.Length}");
+        bool foundNeg = false;
+        for (int i = 0; i <= bytes.Length - 5; i++)
+        {
+            // EOR #$FF (0x49 0xFF), CLC (0x18), ADC #$01 (0x69 0x01)
+            if (bytes[i] == 0x49 && bytes[i + 1] == 0xFF
+                && bytes[i + 2] == 0x18
+                && bytes[i + 3] == 0x69 && bytes[i + 4] == 0x01)
+            {
+                foundNeg = true;
+                break;
+            }
+        }
+        Assert.True(foundNeg, $"Expected EOR #$FF; CLC; ADC #$01 sequence. Bytes: {BitConverter.ToString(bytes)}");
+    }
+
+    [Fact]
+    public void Not_CompileTime_InvertsValue()
+    {
+        using var writer = GetWriter();
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_5));
+        writer.Write(new ILInstruction(ILOpCode.Not));
+        Assert.Equal(~5, writer.Stack.Peek());
+    }
+
+    [Fact]
+    public void Not_Runtime_EmitsEor()
+    {
+        using var writer = GetWriter();
+
+        // Store a constant to local 0 to allocate an address
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_5));
+        writer.Write(new ILInstruction(ILOpCode.Stloc_0));
+
+        // Load local 0 — puts a runtime value in A
+        writer.Write(new ILInstruction(ILOpCode.Ldloc_0));
+
+        // Not should emit EOR #$FF
+        writer.Write(new ILInstruction(ILOpCode.Not));
+        Assert.Single(writer.Stack);
+
+        // Verify the emitted 6502 instructions contain EOR #$FF
+        writer.FlushMainBlock();
+        var bytes = _stream.ToArray();
+        Assert.True(bytes.Length >= 2, $"Expected at least 2 bytes, got {bytes.Length}");
+        bool foundEor = false;
+        for (int i = 0; i <= bytes.Length - 2; i++)
+        {
+            // EOR #$FF (0x49 0xFF)
+            if (bytes[i] == 0x49 && bytes[i + 1] == 0xFF)
+            {
+                foundEor = true;
+                break;
+            }
+        }
+        Assert.True(foundEor, $"Expected EOR #$FF opcode sequence. Bytes: {BitConverter.ToString(bytes)}");
+    }
+
     /// <summary>
     /// Test that XOR with two compile-time constants produces correct stack value.
     /// </summary>
@@ -343,6 +429,160 @@ public class IL2NESWriterTests
             }
         }
         Assert.True(foundEor, "Expected EOR Immediate instruction for runtime XOR with constant");
+    }
+
+    [Fact]
+    public void Ceq_CompileTime_Equal_PushesOne()
+    {
+        using var writer = GetWriter();
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_5));
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_5));
+        writer.Write(new ILInstruction(ILOpCode.Ceq));
+        Assert.Equal(1, writer.Stack.Peek());
+    }
+
+    [Fact]
+    public void Ceq_CompileTime_NotEqual_PushesZero()
+    {
+        using var writer = GetWriter();
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_5));
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_3));
+        writer.Write(new ILInstruction(ILOpCode.Ceq));
+        Assert.Equal(0, writer.Stack.Peek());
+    }
+
+    [Fact]
+    public void Cgt_CompileTime_GreaterThan_PushesOne()
+    {
+        using var writer = GetWriter();
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_5));
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_3));
+        writer.Write(new ILInstruction(ILOpCode.Cgt));
+        Assert.Equal(1, writer.Stack.Peek());
+    }
+
+    [Fact]
+    public void Cgt_CompileTime_NotGreaterThan_PushesZero()
+    {
+        using var writer = GetWriter();
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_3));
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_5));
+        writer.Write(new ILInstruction(ILOpCode.Cgt));
+        Assert.Equal(0, writer.Stack.Peek());
+    }
+
+    [Fact]
+    public void Clt_CompileTime_LessThan_PushesOne()
+    {
+        using var writer = GetWriter();
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_3));
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_5));
+        writer.Write(new ILInstruction(ILOpCode.Clt));
+        Assert.Equal(1, writer.Stack.Peek());
+    }
+
+    [Fact]
+    public void Clt_CompileTime_NotLessThan_PushesZero()
+    {
+        using var writer = GetWriter();
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_5));
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_3));
+        writer.Write(new ILInstruction(ILOpCode.Clt));
+        Assert.Equal(0, writer.Stack.Peek());
+    }
+
+    [Fact]
+    public void Cgt_CompileTime_EqualValues_PushesZero()
+    {
+        using var writer = GetWriter();
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_5));
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_5));
+        writer.Write(new ILInstruction(ILOpCode.Cgt));
+        Assert.Equal(0, writer.Stack.Peek());
+    }
+
+    [Fact]
+    public void Ceq_Runtime_EmitsCmpBranchPattern()
+    {
+        using var writer = GetWriter();
+
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_5));
+        writer.Write(new ILInstruction(ILOpCode.Stloc_0));
+        writer.Write(new ILInstruction(ILOpCode.Ldloc_0));
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_3));
+        writer.Write(new ILInstruction(ILOpCode.Ceq));
+        Assert.Single(writer.Stack);
+
+        writer.FlushMainBlock();
+        var bytes = _stream.ToArray();
+        // Expected: CMP #$03 (0xC9 0x03), BEQ +4 (0xF0 0x04)
+        bool foundPattern = false;
+        for (int i = 0; i <= bytes.Length - 4; i++)
+        {
+            if (bytes[i] == 0xC9 && bytes[i + 1] == 0x03
+                && bytes[i + 2] == 0xF0 && bytes[i + 3] == 0x04)
+            {
+                foundPattern = true;
+                break;
+            }
+        }
+        Assert.True(foundPattern, $"Expected CMP #$03; BEQ +4 sequence. Bytes: {BitConverter.ToString(bytes)}");
+    }
+
+    [Fact]
+    public void Cgt_Runtime_EmitsCmpBcsPattern()
+    {
+        using var writer = GetWriter();
+
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_5));
+        writer.Write(new ILInstruction(ILOpCode.Stloc_0));
+        writer.Write(new ILInstruction(ILOpCode.Ldloc_0));
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_3));
+        writer.Write(new ILInstruction(ILOpCode.Cgt));
+        Assert.Single(writer.Stack);
+
+        writer.FlushMainBlock();
+        var bytes = _stream.ToArray();
+        // Expected: CMP #$04 (0xC9 0x04, val2+1 for >), BCS +4 (0xB0 0x04)
+        bool foundPattern = false;
+        for (int i = 0; i <= bytes.Length - 4; i++)
+        {
+            if (bytes[i] == 0xC9 && bytes[i + 1] == 0x04
+                && bytes[i + 2] == 0xB0 && bytes[i + 3] == 0x04)
+            {
+                foundPattern = true;
+                break;
+            }
+        }
+        Assert.True(foundPattern, $"Expected CMP #$04; BCS +4 sequence. Bytes: {BitConverter.ToString(bytes)}");
+    }
+
+    [Fact]
+    public void Clt_Runtime_EmitsCmpBccPattern()
+    {
+        using var writer = GetWriter();
+
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_5));
+        writer.Write(new ILInstruction(ILOpCode.Stloc_0));
+        writer.Write(new ILInstruction(ILOpCode.Ldloc_0));
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_8));
+        writer.Write(new ILInstruction(ILOpCode.Clt));
+        Assert.Single(writer.Stack);
+
+        writer.FlushMainBlock();
+        var bytes = _stream.ToArray();
+        // Expected: CMP #$08 (0xC9 0x08), BCC +4 (0x90 0x04)
+        bool foundPattern = false;
+        for (int i = 0; i <= bytes.Length - 4; i++)
+        {
+            if (bytes[i] == 0xC9 && bytes[i + 1] == 0x08
+                && bytes[i + 2] == 0x90 && bytes[i + 3] == 0x04)
+            {
+                foundPattern = true;
+                break;
+            }
+        }
+        Assert.True(foundPattern, $"Expected CMP #$08; BCC +4 sequence. Bytes: {BitConverter.ToString(bytes)}");
     }
 
     /// <summary>
