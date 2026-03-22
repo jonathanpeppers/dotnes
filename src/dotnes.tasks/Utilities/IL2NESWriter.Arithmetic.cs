@@ -149,46 +149,26 @@ partial class IL2NESWriter
     ///
     /// branchTaken: the branch opcode for the "taken" case (BCC for LT, BCS for GE, BEQ for EQ, BNE for NE).
     /// </summary>
-    bool TryEmitBranch16Bit(int cmpVal, string labelName, Opcode branchTaken, bool isShortForm)
+    /// <summary>
+    /// Emits a 16-bit comparison and branch sequence.
+    /// When A:X hold a 16-bit value (_ushortInAX is true), compares against
+    /// the constant cmpVal using CPX for hi byte and CMP for lo byte.
+    /// The caller must verify _ushortInAX is true before calling.
+    /// </summary>
+    void EmitBranch16Bit(int cmpVal, string labelName, Opcode branchTaken, bool isShortForm)
     {
         byte cmpLo = (byte)(cmpVal & 0xFF);
         byte cmpHi = (byte)((cmpVal >> 8) & 0xFF);
 
-        // Find value1's memory addresses from the block.
-        // Expected pattern: LDA $lo_addr (Absolute), LDX $hi_addr (Absolute)
-        var block = CurrentBlock!;
-        ushort? loAddr = null, hiAddr = null;
-        for (int i = block.Count - 1; i >= 0 && i >= block.Count - 4; i--)
-        {
-            var instr = block[i];
-            if (hiAddr == null && instr.Opcode == Opcode.LDX && instr.Mode == AddressMode.Absolute
-                && instr.Operand is AbsoluteOperand hiOp)
-                hiAddr = hiOp.Address;
-            else if (loAddr == null && instr.Opcode == Opcode.LDA && instr.Mode == AddressMode.Absolute
-                && instr.Operand is AbsoluteOperand loOp)
-                loAddr = loOp.Address;
-        }
-
-        if (loAddr != null && hiAddr != null)
-        {
-            // Word local pattern — reload from memory for comparison
-            if (isShortForm)
-                EmitBranch16Short(loAddr.Value, hiAddr.Value, cmpLo, cmpHi, labelName, branchTaken);
-            else
-                EmitBranch16Long(loAddr.Value, hiAddr.Value, cmpLo, cmpHi, labelName, branchTaken);
-        }
+        // A:X holds the 16-bit value (lo in A, hi in X).
+        // Use CPX for hi byte comparison and CMP for lo byte.
+        if (isShortForm)
+            EmitBranch16DirectShort(cmpLo, cmpHi, labelName, branchTaken);
         else
-        {
-            // Direct A:X pattern (e.g., JSR return value) — use CPX for hi, CMP for lo
-            if (isShortForm)
-                EmitBranch16DirectShort(cmpLo, cmpHi, labelName, branchTaken);
-            else
-                EmitBranch16DirectLong(cmpLo, cmpHi, labelName, branchTaken);
-        }
+            EmitBranch16DirectLong(cmpLo, cmpHi, labelName, branchTaken);
 
         _ushortInAX = false;
         _runtimeValueInA = false;
-        return true;
     }
 
     /// <summary>
@@ -416,6 +396,9 @@ partial class IL2NESWriter
                 break;
         }
     }
+
+    /// <summary>
+    /// Emits an absolute JMP to the specified label.
     /// </summary>
     void EmitJMP(string labelName) => EmitWithLabel(Opcode.JMP, AddressMode.Absolute, labelName);
 

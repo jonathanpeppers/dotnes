@@ -4899,8 +4899,8 @@ public class RoslynTests
         Assert.Contains("E001", hex);
         // Must contain CMP #$2C (C92C) for lo byte comparison against 300 (lo=0x2C)
         Assert.Contains("C92C", hex);
-        // Must contain BCC (90) for the "less than" branch
-        Assert.Contains("90", hex);
+        // Must contain BCC (90) after CPX #$01 for the "less than" hi byte check
+        Assert.Contains("E00190", hex);
     }
 
     [Fact]

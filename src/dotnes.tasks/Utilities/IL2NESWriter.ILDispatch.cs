@@ -973,9 +973,10 @@ partial class IL2NESWriter
 
                     if (_ushortInAX)
                     {
-                        if (TryEmitBranch16Bit(cmpVal, labelName, Opcode.BNE, instruction.OpCode == ILOpCode.Bne_un_s))
-                            break;
-                        _ushortInAX = false;
+                        if (_dupPendingSave)
+                            _dupPendingSave = false;
+                        EmitBranch16Bit(cmpVal, labelName, Opcode.BNE, instruction.OpCode == ILOpCode.Bne_un_s);
+                        break;
                     }
 
                     if (!EmitBranchCompare(cmpVal))
@@ -1026,9 +1027,10 @@ partial class IL2NESWriter
 
                     if (_ushortInAX)
                     {
-                        if (TryEmitBranch16Bit(cmpVal, labelName, Opcode.BEQ, instruction.OpCode == ILOpCode.Beq_s))
-                            break;
-                        _ushortInAX = false;
+                        if (_dupPendingSave)
+                            _dupPendingSave = false;
+                        EmitBranch16Bit(cmpVal, labelName, Opcode.BEQ, instruction.OpCode == ILOpCode.Beq_s);
+                        break;
                     }
 
                     if (!EmitBranchCompare(cmpVal))
@@ -1087,9 +1089,8 @@ partial class IL2NESWriter
 
                     if (_ushortInAX)
                     {
-                        if (TryEmitBranch16Bit(cmpVal, labelName, Opcode.BCC, isShort))
-                            break;
-                        _ushortInAX = false;
+                        EmitBranch16Bit(cmpVal, labelName, Opcode.BCC, isShort);
+                        break;
                     }
 
                     if (!EmitBranchCompare(cmpVal))
@@ -1127,9 +1128,8 @@ partial class IL2NESWriter
                             _runtimeValueInA = false;
                             break;
                         }
-                        if (TryEmitBranch16Bit(adjusted, labelName, Opcode.BCC, isShort))
-                            break;
-                        _ushortInAX = false;
+                        EmitBranch16Bit(adjusted, labelName, Opcode.BCC, isShort);
+                        break;
                     }
 
                     if (!EmitBranchCompare(cmpVal, adjustValue: 1))
@@ -1161,9 +1161,8 @@ partial class IL2NESWriter
 
                     if (_ushortInAX)
                     {
-                        if (TryEmitBranch16Bit(cmpVal, labelName, Opcode.BCS, isShort))
-                            break;
-                        _ushortInAX = false;
+                        EmitBranch16Bit(cmpVal, labelName, Opcode.BCS, isShort);
+                        break;
                     }
 
                     if (!EmitBranchCompare(cmpVal))
@@ -1200,9 +1199,8 @@ partial class IL2NESWriter
                             _runtimeValueInA = false;
                             break;
                         }
-                        if (TryEmitBranch16Bit(adjusted, labelName, Opcode.BCS, isShort))
-                            break;
-                        _ushortInAX = false;
+                        EmitBranch16Bit(adjusted, labelName, Opcode.BCS, isShort);
+                        break;
                     }
 
                     if (!EmitBranchCompare(cmpVal, adjustValue: 1))
