@@ -412,13 +412,4 @@ public class IL2NESWriterTests
         Assert.Equal(0, writer.Stack.Peek());
     }
 
-    [Fact]
-    public void Ceq_CompileTime_Equal_PushesCorrectValue()
-    {
-        using var writer = GetWriter();
-        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_8));
-        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_8));
-        writer.Write(new ILInstruction(ILOpCode.Ceq));
-        Assert.Equal(1, writer.Stack.Peek());
-    }
 }

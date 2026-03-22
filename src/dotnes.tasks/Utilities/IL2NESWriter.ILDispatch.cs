@@ -696,7 +696,7 @@ partial class IL2NESWriter
                 break;
             case ILOpCode.Neg:
                 {
-                    int negValue = Stack.Pop();
+                    int value = Stack.Pop();
                     if (_runtimeValueInA)
                     {
                         // Two's complement negation: EOR #$FF; CLC; ADC #$01
@@ -707,13 +707,13 @@ partial class IL2NESWriter
                     }
                     else
                     {
-                        Stack.Push(-negValue);
+                        Stack.Push(-value);
                     }
                 }
                 break;
             case ILOpCode.Not:
                 {
-                    int notValue = Stack.Pop();
+                    int value = Stack.Pop();
                     if (_runtimeValueInA)
                     {
                         // Bitwise NOT: EOR #$FF
@@ -722,7 +722,7 @@ partial class IL2NESWriter
                     }
                     else
                     {
-                        Stack.Push(~notValue);
+                        Stack.Push(~value);
                     }
                 }
                 break;
