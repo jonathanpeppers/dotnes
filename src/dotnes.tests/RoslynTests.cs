@@ -4895,8 +4895,8 @@ public class RoslynTests
         var hex = Convert.ToHexString(bytes);
         _logger.WriteLine($"Ushort16BitLT hex: {hex}");
 
-        // Must contain CMP #$01 (C901) for hi byte comparison against 300 (hi=0x01)
-        Assert.Contains("C901", hex);
+        // Must contain CPX #$01 (E001) for hi byte comparison against 300 (hi=0x01)
+        Assert.Contains("E001", hex);
         // Must contain CMP #$2C (C92C) for lo byte comparison against 300 (lo=0x2C)
         Assert.Contains("C92C", hex);
         // Must contain BCC (90) for the "less than" branch
@@ -4923,8 +4923,8 @@ public class RoslynTests
         var hex = Convert.ToHexString(bytes);
         _logger.WriteLine($"Ushort16BitEQ hex: {hex}");
 
-        // Must contain CMP #$01 (C901) for hi byte comparison against 500 (hi=0x01)
-        Assert.Contains("C901", hex);
+        // Must contain CPX #$01 (E001) for hi byte comparison against 500 (hi=0x01)
+        Assert.Contains("E001", hex);
         // Must contain CMP #$F4 (C9F4) for lo byte comparison against 500 (lo=0xF4)
         Assert.Contains("C9F4", hex);
     }
@@ -4949,8 +4949,8 @@ public class RoslynTests
         var hex = Convert.ToHexString(bytes);
         _logger.WriteLine($"Ushort16BitNE hex: {hex}");
 
-        // Must contain CMP #$03 (C903) for hi byte comparison against 1000 (hi=0x03)
-        Assert.Contains("C903", hex);
+        // Must contain CPX #$03 (E003) for hi byte comparison against 1000 (hi=0x03)
+        Assert.Contains("E003", hex);
         // Must contain CMP #$E8 (C9E8) for lo byte comparison against 1000 (lo=0xE8)
         Assert.Contains("C9E8", hex);
     }
@@ -4975,8 +4975,8 @@ public class RoslynTests
         var hex = Convert.ToHexString(bytes);
         _logger.WriteLine($"Ushort16BitGE hex: {hex}");
 
-        // Must contain CMP #$01 (C901) for hi byte comparison against 256 (hi=0x01)
-        Assert.Contains("C901", hex);
+        // Must contain CPX #$01 (E001) for hi byte comparison against 256 (hi=0x01)
+        Assert.Contains("E001", hex);
         // Must contain CMP #$00 (C900) for lo byte comparison against 256 (lo=0x00)
         Assert.Contains("C900", hex);
     }
@@ -5002,8 +5002,8 @@ public class RoslynTests
         var hex = Convert.ToHexString(bytes);
         _logger.WriteLine($"Ushort8BitLT hex: {hex}");
 
-        // Must contain CMP #$00 (C900) for hi byte comparison (hi of 5 is 0x00)
-        Assert.Contains("C900", hex);
+        // Must contain CPX #$00 (E000) for hi byte comparison (hi of 5 is 0x00)
+        Assert.Contains("E000", hex);
         // Must contain CMP #$05 (C905) for lo byte comparison (lo of 5 is 0x05)
         Assert.Contains("C905", hex);
     }
