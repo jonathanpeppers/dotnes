@@ -155,6 +155,13 @@ partial class IL2NESWriter
             Stack.Push(operand);
             return;
         }
+        // When A:X holds a ushort and next instruction is Div/Rem, preserve A:X
+        if (_ushortInAX && Instructions is not null && Index + 1 < Instructions.Length &&
+            Instructions[Index + 1].OpCode is ILOpCode.Div or ILOpCode.Rem)
+        {
+            Stack.Push(operand);
+            return;
+        }
 
         if (LastLDA)
         {
@@ -175,7 +182,9 @@ partial class IL2NESWriter
                 Instructions[Index + 1].OpCode is ILOpCode.Shr or ILOpCode.Shr_un or ILOpCode.Shl;
             bool nextIsAddSub = _runtimeValueInA && Instructions is not null && Index + 1 < Instructions.Length &&
                 Instructions[Index + 1].OpCode is ILOpCode.Add or ILOpCode.Sub;
-            if (nextIsShift || nextIsAddSub)
+            bool nextIsDivRem = _runtimeValueInA && Instructions is not null && Index + 1 < Instructions.Length &&
+                Instructions[Index + 1].OpCode is ILOpCode.Div or ILOpCode.Rem;
+            if (nextIsShift || nextIsAddSub || nextIsDivRem)
             {
                 // Keep A:X intact — the operator will handle the 16-bit value
                 Stack.Push(operand);

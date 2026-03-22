@@ -475,8 +475,75 @@ partial class IL2NESWriter
                             RemoveLastInstructions(1);
                         }
 
-                        // Emit LSR A for power-of-2 divisors
-                        if (divisor > 0 && (divisor & (divisor - 1)) == 0)
+                        if (_ushortInAX)
+                        {
+                            // 16-bit (ushort) division: A:X = lo:hi
+                            if (divisor > 0 && (divisor & (divisor - 1)) == 0)
+                            {
+                                // Power-of-2: 16-bit right shift
+                                int shifts = 0;
+                                int temp = divisor;
+                                while (temp > 1) { temp >>= 1; shifts++; }
+                                if (shifts >= 8)
+                                {
+                                    // Shift by 8+: move hi byte to A, clear X, shift remaining
+                                    Emit(Opcode.TXA, AddressMode.Implied);
+                                    Emit(Opcode.LDX, AddressMode.Immediate, 0);
+                                    for (int i = 0; i < shifts - 8; i++)
+                                        Emit(Opcode.LSR, AddressMode.Accumulator);
+                                    _ushortInAX = false;
+                                }
+                                else
+                                {
+                                    // 1-7 bit shifts: 16-bit right shift (same pattern as Shr_un)
+                                    for (int i = 0; i < shifts; i++)
+                                    {
+                                        Emit(Opcode.STX, AddressMode.ZeroPage, TEMP);
+                                        Emit(Opcode.LSR, AddressMode.ZeroPage, TEMP);
+                                        Emit(Opcode.ROR, AddressMode.Accumulator);
+                                        Emit(Opcode.LDX, AddressMode.ZeroPage, TEMP);
+                                    }
+                                }
+                            }
+                            else
+                            {
+                                // Non-power-of-2: 16-bit binary long division
+                                // Dividend in A:X (lo:hi), divisor is constant byte
+                                // Uses shift-and-subtract: quotient built in TEMP:TEMP_HI
+                                //   STA TEMP       ; save dividend lo
+                                //   STX TEMP_HI    ; save dividend hi
+                                //   LDA #0         ; remainder = 0
+                                //   LDY #16        ; 16 bits to process
+                                //   ASL TEMP       ; ← @loop: shift dividend left
+                                //   ROL TEMP_HI    ;   (moves MSB into carry)
+                                //   ROL A          ;   shift carry into remainder
+                                //   CMP #divisor   ;   compare remainder with divisor
+                                //   BCC @skip      ;   +4 to skip SBC+INC
+                                //   SBC #divisor   ;   subtract divisor
+                                //   INC TEMP       ;   set quotient bit (was 0 from ASL)
+                                //   DEY            ; ← @skip: decrement counter
+                                //   BNE @loop      ;   -16 back to ASL
+                                //   LDA TEMP       ; quotient lo
+                                //   LDX TEMP_HI    ; quotient hi
+                                Emit(Opcode.STA, AddressMode.ZeroPage, (byte)TEMP);
+                                Emit(Opcode.STX, AddressMode.ZeroPage, (byte)NESConstants.TEMP_HI);
+                                Emit(Opcode.LDA, AddressMode.Immediate, 0);
+                                Emit(Opcode.LDY, AddressMode.Immediate, 16);
+                                Emit(Opcode.ASL, AddressMode.ZeroPage, (byte)TEMP);
+                                Emit(Opcode.ROL, AddressMode.ZeroPage, (byte)NESConstants.TEMP_HI);
+                                Emit(Opcode.ROL, AddressMode.Accumulator);
+                                Emit(Opcode.CMP, AddressMode.Immediate, (byte)divisor);
+                                Emit(Opcode.BCC, AddressMode.Relative, 4); // skip SBC(2) + INC(2)
+                                Emit(Opcode.SBC, AddressMode.Immediate, (byte)divisor);
+                                Emit(Opcode.INC, AddressMode.ZeroPage, (byte)TEMP);
+                                Emit(Opcode.DEY, AddressMode.Implied);
+                                Emit(Opcode.BNE, AddressMode.Relative, unchecked((byte)-16)); // -16 back to ASL
+                                Emit(Opcode.LDA, AddressMode.ZeroPage, (byte)TEMP);
+                                Emit(Opcode.LDX, AddressMode.ZeroPage, (byte)NESConstants.TEMP_HI);
+                            }
+                        }
+                        // Emit LSR A for power-of-2 divisors (8-bit)
+                        else if (divisor > 0 && (divisor & (divisor - 1)) == 0)
                         {
                             int shifts = 0;
                             int temp = divisor;
