@@ -293,6 +293,44 @@ partial class IL2NESWriter
             }
         }
         
+        // 16-bit arithmetic: two runtime ushort values
+        // First ushort saved to TEMP (lo) + TEMP2 (hi), second in A:X
+        if (_savedUshortToTemp && _ushortInAX)
+        {
+            if (isAdd)
+            {
+                // Addition is commutative: A:X + TEMP:TEMP2
+                Emit(Opcode.CLC, AddressMode.Implied);
+                Emit(Opcode.ADC, AddressMode.ZeroPage, (byte)NESConstants.TEMP);
+                Emit(Opcode.STA, AddressMode.ZeroPage, (byte)NESConstants.TEMP);
+                Emit(Opcode.TXA, AddressMode.Implied);
+                Emit(Opcode.ADC, AddressMode.ZeroPage, (byte)NESConstants.TEMP2);
+                Emit(Opcode.TAX, AddressMode.Implied);
+                Emit(Opcode.LDA, AddressMode.ZeroPage, (byte)NESConstants.TEMP);
+            }
+            else
+            {
+                // Subtraction: TEMP:TEMP2 - A:X (first - second)
+                // Save second operand (A:X), then load first and subtract
+                Emit(Opcode.STA, AddressMode.ZeroPage, (byte)NESConstants.TEMP3);
+                Emit(Opcode.LDA, AddressMode.ZeroPage, (byte)NESConstants.TEMP);
+                Emit(Opcode.SEC, AddressMode.Implied);
+                Emit(Opcode.SBC, AddressMode.ZeroPage, (byte)NESConstants.TEMP3);
+                Emit(Opcode.STA, AddressMode.ZeroPage, (byte)NESConstants.TEMP);
+                Emit(Opcode.STX, AddressMode.ZeroPage, (byte)NESConstants.TEMP3);
+                Emit(Opcode.LDA, AddressMode.ZeroPage, (byte)NESConstants.TEMP2);
+                Emit(Opcode.SBC, AddressMode.ZeroPage, (byte)NESConstants.TEMP3);
+                Emit(Opcode.TAX, AddressMode.Implied);
+                Emit(Opcode.LDA, AddressMode.ZeroPage, (byte)NESConstants.TEMP);
+            }
+            Stack.Push(0);
+            _lastLoadedLocalIndex = null;
+            _savedUshortToTemp = false;
+            _runtimeValueInA = true;
+            // Result is in A:X (16-bit)
+            return;
+        }
+
         // 16-bit arithmetic: ushort +/- constant
         if (_ushortInAX)
         {

@@ -475,8 +475,75 @@ partial class IL2NESWriter
                             RemoveLastInstructions(1);
                         }
 
-                        // Emit LSR A for power-of-2 divisors
-                        if (divisor > 0 && (divisor & (divisor - 1)) == 0)
+                        if (_ushortInAX)
+                        {
+                            // 16-bit (ushort) division: A:X = lo:hi
+                            if (divisor > 0 && (divisor & (divisor - 1)) == 0)
+                            {
+                                // Power-of-2: 16-bit right shift
+                                int shifts = 0;
+                                int temp = divisor;
+                                while (temp > 1) { temp >>= 1; shifts++; }
+                                if (shifts >= 8)
+                                {
+                                    // Shift by 8+: move hi byte to A, clear X, shift remaining
+                                    Emit(Opcode.TXA, AddressMode.Implied);
+                                    Emit(Opcode.LDX, AddressMode.Immediate, 0);
+                                    for (int i = 0; i < shifts - 8; i++)
+                                        Emit(Opcode.LSR, AddressMode.Accumulator);
+                                    _ushortInAX = false;
+                                }
+                                else
+                                {
+                                    // 1-7 bit shifts: 16-bit right shift (same pattern as Shr_un)
+                                    for (int i = 0; i < shifts; i++)
+                                    {
+                                        Emit(Opcode.STX, AddressMode.ZeroPage, TEMP);
+                                        Emit(Opcode.LSR, AddressMode.ZeroPage, TEMP);
+                                        Emit(Opcode.ROR, AddressMode.Accumulator);
+                                        Emit(Opcode.LDX, AddressMode.ZeroPage, TEMP);
+                                    }
+                                }
+                            }
+                            else
+                            {
+                                // Non-power-of-2: 16-bit binary long division
+                                // Dividend in A:X (lo:hi), divisor is constant byte
+                                // Uses shift-and-subtract: quotient built in TEMP:TEMP_HI
+                                //   STA TEMP       ; save dividend lo
+                                //   STX TEMP_HI    ; save dividend hi
+                                //   LDA #0         ; remainder = 0
+                                //   LDY #16        ; 16 bits to process
+                                //   ASL TEMP       ; ← @loop: shift dividend left
+                                //   ROL TEMP_HI    ;   (moves MSB into carry)
+                                //   ROL A          ;   shift carry into remainder
+                                //   CMP #divisor   ;   compare remainder with divisor
+                                //   BCC @skip      ;   +4 to skip SBC+INC
+                                //   SBC #divisor   ;   subtract divisor
+                                //   INC TEMP       ;   set quotient bit (was 0 from ASL)
+                                //   DEY            ; ← @skip: decrement counter
+                                //   BNE @loop      ;   -16 back to ASL
+                                //   LDA TEMP       ; quotient lo
+                                //   LDX TEMP_HI    ; quotient hi
+                                Emit(Opcode.STA, AddressMode.ZeroPage, (byte)TEMP);
+                                Emit(Opcode.STX, AddressMode.ZeroPage, (byte)NESConstants.TEMP_HI);
+                                Emit(Opcode.LDA, AddressMode.Immediate, 0);
+                                Emit(Opcode.LDY, AddressMode.Immediate, 16);
+                                Emit(Opcode.ASL, AddressMode.ZeroPage, (byte)TEMP);
+                                Emit(Opcode.ROL, AddressMode.ZeroPage, (byte)NESConstants.TEMP_HI);
+                                Emit(Opcode.ROL, AddressMode.Accumulator);
+                                Emit(Opcode.CMP, AddressMode.Immediate, (byte)divisor);
+                                Emit(Opcode.BCC, AddressMode.Relative, 4); // skip SBC(2) + INC(2)
+                                Emit(Opcode.SBC, AddressMode.Immediate, (byte)divisor);
+                                Emit(Opcode.INC, AddressMode.ZeroPage, (byte)TEMP);
+                                Emit(Opcode.DEY, AddressMode.Implied);
+                                Emit(Opcode.BNE, AddressMode.Relative, unchecked((byte)-16)); // -16 back to ASL
+                                Emit(Opcode.LDA, AddressMode.ZeroPage, (byte)TEMP);
+                                Emit(Opcode.LDX, AddressMode.ZeroPage, (byte)NESConstants.TEMP_HI);
+                            }
+                        }
+                        // Emit LSR A for power-of-2 divisors (8-bit)
+                        else if (divisor > 0 && (divisor & (divisor - 1)) == 0)
                         {
                             int shifts = 0;
                             int temp = divisor;
@@ -870,6 +937,150 @@ partial class IL2NESWriter
                     else
                     {
                         Stack.Push(xorVal1 ^ xorVal2);
+                    }
+                }
+                break;
+            case ILOpCode.Neg:
+                {
+                    int value = Stack.Pop();
+
+                    bool negLocalInA = _lastLoadedLocalIndex.HasValue &&
+                        Locals.TryGetValue(_lastLoadedLocalIndex.Value, out var negLocal) && negLocal.Address != null;
+
+                    if (_runtimeValueInA || negLocalInA)
+                    {
+                        // Two's complement negation: EOR #$FF; CLC; ADC #$01
+                        Emit(Opcode.EOR, AddressMode.Immediate, (byte)0xFF);
+                        Emit(Opcode.CLC);
+                        Emit(Opcode.ADC, AddressMode.Immediate, (byte)0x01);
+                        _runtimeValueInA = true;
+                        Stack.Push(0); // Runtime placeholder
+                    }
+                    else
+                    {
+                        Stack.Push(-value);
+                    }
+                }
+                break;
+            case ILOpCode.Not:
+                {
+                    int value = Stack.Pop();
+
+                    bool notLocalInA = _lastLoadedLocalIndex.HasValue &&
+                        Locals.TryGetValue(_lastLoadedLocalIndex.Value, out var notLocal) && notLocal.Address != null;
+
+                    if (_runtimeValueInA || notLocalInA)
+                    {
+                        // Bitwise NOT: EOR #$FF
+                        Emit(Opcode.EOR, AddressMode.Immediate, (byte)0xFF);
+                        _runtimeValueInA = true;
+                        Stack.Push(0); // Runtime placeholder
+                    }
+                    else
+                    {
+                        Stack.Push(~value);
+                    }
+                }
+                break;
+            case ILOpCode.Ceq:
+                {
+                    int ceqVal2 = Stack.Count > 0 ? Stack.Pop() : 0;
+                    int ceqVal1 = Stack.Count > 0 ? Stack.Pop() : 0;
+
+                    bool ceqLocalInA = _lastLoadedLocalIndex.HasValue &&
+                        Locals.TryGetValue(_lastLoadedLocalIndex.Value, out var ceqLocal) && ceqLocal.Address != null;
+
+                    if (_runtimeValueInA || ceqLocalInA)
+                    {
+                        if (!EmitBranchCompare(ceqVal2))
+                        {
+                            // Out-of-range compare value: A (byte) can never equal ceqVal2
+                            Emit(Opcode.LDA, AddressMode.Immediate, (byte)0);
+                        }
+                        else
+                        {
+                            // Set A = 1 if equal, 0 if not
+                            // BEQ +4 skips: LDA #0 (2 bytes) + BEQ +2 (2 bytes)
+                            Emit(Opcode.BEQ, AddressMode.Relative, (byte)4);
+                            Emit(Opcode.LDA, AddressMode.Immediate, (byte)0);
+                            Emit(Opcode.BEQ, AddressMode.Relative, (byte)2);
+                            Emit(Opcode.LDA, AddressMode.Immediate, (byte)1);
+                        }
+                        _runtimeValueInA = true;
+                        Stack.Push(0); // Runtime placeholder
+                    }
+                    else
+                    {
+                        Stack.Push(ceqVal1 == ceqVal2 ? 1 : 0);
+                    }
+                }
+                break;
+            case ILOpCode.Cgt:
+            case ILOpCode.Cgt_un:
+                {
+                    int cgtVal2 = Stack.Count > 0 ? Stack.Pop() : 0;
+                    int cgtVal1 = Stack.Count > 0 ? Stack.Pop() : 0;
+
+                    bool cgtLocalInA = _lastLoadedLocalIndex.HasValue &&
+                        Locals.TryGetValue(_lastLoadedLocalIndex.Value, out var cgtLocal) && cgtLocal.Address != null;
+
+                    if (_runtimeValueInA || cgtLocalInA)
+                    {
+                        if (!EmitBranchCompare(cgtVal2, adjustValue: 1))
+                        {
+                            // val2+1 overflows: A > 255 is always false for bytes
+                            Emit(Opcode.LDA, AddressMode.Immediate, (byte)0);
+                        }
+                        else
+                        {
+                            // BCS = A >= val2+1 = A > val2
+                            Emit(Opcode.BCS, AddressMode.Relative, (byte)4);
+                            Emit(Opcode.LDA, AddressMode.Immediate, (byte)0);
+                            Emit(Opcode.BEQ, AddressMode.Relative, (byte)2);
+                            Emit(Opcode.LDA, AddressMode.Immediate, (byte)1);
+                        }
+                        _runtimeValueInA = true;
+                        Stack.Push(0); // Runtime placeholder
+                    }
+                    else
+                    {
+                        Stack.Push(cgtVal1 > cgtVal2 ? 1 : 0);
+                    }
+                }
+                break;
+            case ILOpCode.Clt:
+            case ILOpCode.Clt_un:
+                {
+                    int cltVal2 = Stack.Count > 0 ? Stack.Pop() : 0;
+                    int cltVal1 = Stack.Count > 0 ? Stack.Pop() : 0;
+
+                    bool cltLocalInA = _lastLoadedLocalIndex.HasValue &&
+                        Locals.TryGetValue(_lastLoadedLocalIndex.Value, out var cltLocal) && cltLocal.Address != null;
+
+                    if (_runtimeValueInA || cltLocalInA)
+                    {
+                        if (!EmitBranchCompare(cltVal2))
+                        {
+                            // Compare value out of byte range
+                            if (cltVal2 > 255)
+                                Emit(Opcode.LDA, AddressMode.Immediate, (byte)1);  // A < 256+ always true
+                            else
+                                Emit(Opcode.LDA, AddressMode.Immediate, (byte)0);  // A < negative always false
+                        }
+                        else
+                        {
+                            // BCC = A < val2 (carry clear)
+                            Emit(Opcode.BCC, AddressMode.Relative, (byte)4);
+                            Emit(Opcode.LDA, AddressMode.Immediate, (byte)0);
+                            Emit(Opcode.BEQ, AddressMode.Relative, (byte)2);
+                            Emit(Opcode.LDA, AddressMode.Immediate, (byte)1);
+                        }
+                        _runtimeValueInA = true;
+                        Stack.Push(0); // Runtime placeholder
+                    }
+                    else
+                    {
+                        Stack.Push(cltVal1 < cltVal2 ? 1 : 0);
                     }
                 }
                 break;

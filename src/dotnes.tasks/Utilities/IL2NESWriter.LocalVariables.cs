@@ -155,6 +155,13 @@ partial class IL2NESWriter
             Stack.Push(operand);
             return;
         }
+        // When A:X holds a ushort and next instruction is Div/Rem, preserve A:X
+        if (_ushortInAX && Instructions is not null && Index + 1 < Instructions.Length &&
+            Instructions[Index + 1].OpCode is ILOpCode.Div or ILOpCode.Rem)
+        {
+            Stack.Push(operand);
+            return;
+        }
 
         if (_runtimeValueInA)
         {
@@ -183,7 +190,9 @@ partial class IL2NESWriter
                 Instructions[Index + 1].OpCode is ILOpCode.Shr or ILOpCode.Shr_un or ILOpCode.Shl;
             bool nextIsAddSub = _runtimeValueInA && Instructions is not null && Index + 1 < Instructions.Length &&
                 Instructions[Index + 1].OpCode is ILOpCode.Add or ILOpCode.Sub;
-            if (nextIsShift || nextIsAddSub)
+            bool nextIsDivRem = _runtimeValueInA && Instructions is not null && Index + 1 < Instructions.Length &&
+                Instructions[Index + 1].OpCode is ILOpCode.Div or ILOpCode.Rem;
+            if (nextIsShift || nextIsAddSub || nextIsDivRem)
             {
                 // Keep A:X intact — the operator will handle the 16-bit value
                 Stack.Push(operand);
@@ -224,9 +233,34 @@ partial class IL2NESWriter
 
     void WriteLdloc(Local local)
     {
+        // Save the current ushort (A:X) when loading another word local that will
+        // be used for 16-bit arithmetic. In single-pass mode, only save when the
+        // next IL opcode is Add/Sub to avoid breaking call pattern-matching.
+        // In unit-test mode (no Instructions), save unconditionally when both
+        // values are words.
+        bool needSaveUshort = false;
+        if (_ushortInAX && local.Address.HasValue && local.IsWord)
+        {
+            if (Instructions is not null && Index + 1 < Instructions.Length)
+            {
+                var nextOp = Instructions[Index + 1].OpCode;
+                if (nextOp is ILOpCode.Add or ILOpCode.Sub)
+                    needSaveUshort = true;
+            }
+            else if (Instructions is null)
+            {
+                needSaveUshort = true;
+            }
+        }
         _ushortInAX = false;
         _savedConstantViaPusha = false;
         _lastStaticFieldAddress = null;
+        if (needSaveUshort)
+        {
+            Emit(Opcode.STA, AddressMode.ZeroPage, (byte)NESConstants.TEMP);
+            Emit(Opcode.STX, AddressMode.ZeroPage, (byte)NESConstants.TEMP2);
+            _savedUshortToTemp = true;
+        }
         if (local.LabelName is not null)
         {
             // This local holds a byte array label reference
