@@ -875,4 +875,124 @@ public class IL2NESWriterTests
         Assert.True(foundLsr, "Expected LSR ZeroPage for runtime-runtime multiply loop");
         Assert.True(foundBne, "Expected BNE for runtime-runtime multiply loop back-branch");
     }
+
+    /// <summary>
+    /// Test that subtraction of two runtime ushort values emits proper 16-bit subtraction
+    /// with borrow propagation. Pattern: ushort a = ...; ushort b = ...; ushort c = (ushort)(a - b);
+    /// </summary>
+    [Fact]
+    public void Sub_UshortMinusUshort_Emits16BitSubtraction()
+    {
+        _stream.SetLength(0);
+        using var writer = new IL2NESWriter(_stream, leaveOpen: true, logger: _logger)
+        {
+            WordLocals = new HashSet<int> { 0, 1 }
+        };
+        writer.StartBlockBuffering();
+
+        // ushort a = 0x0200;
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4), 0x0200);
+        writer.Write(new ILInstruction(ILOpCode.Stloc_0));
+
+        // ushort b = 0x0100;
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4), 0x0100);
+        writer.Write(new ILInstruction(ILOpCode.Stloc_1));
+
+        // (ushort)(a - b)
+        writer.Write(new ILInstruction(ILOpCode.Ldloc_0));
+        writer.Write(new ILInstruction(ILOpCode.Ldloc_1));
+        writer.Write(new ILInstruction(ILOpCode.Sub));
+
+        // Verify the full 16-bit subtraction pattern:
+        // 1. STA TEMP + STX TEMP2 (save first ushort)
+        // 2. SEC + SBC ZeroPage for low byte
+        // 3. SBC ZeroPage for high byte
+        var block = writer.CurrentBlock!;
+        bool foundStaTemp = false;
+        bool foundStxTemp2 = false;
+        bool foundSec = false;
+        bool foundSbcLo = false;
+        bool foundSbcHi = false;
+        for (int i = 0; i < block.Count; i++)
+        {
+            if (block[i].Opcode == Opcode.STA && block[i].Mode == AddressMode.ZeroPage
+                && block[i].Operand is ImmediateOperand staImm && staImm.Value == (byte)NESConstants.TEMP)
+                foundStaTemp = true;
+            if (block[i].Opcode == Opcode.STX && block[i].Mode == AddressMode.ZeroPage
+                && block[i].Operand is ImmediateOperand stxImm && stxImm.Value == (byte)NESConstants.TEMP2)
+                foundStxTemp2 = true;
+            if (block[i].Opcode == Opcode.SEC)
+                foundSec = true;
+            if (block[i].Opcode == Opcode.SBC && block[i].Mode == AddressMode.ZeroPage)
+            {
+                if (!foundSbcLo) foundSbcLo = true;
+                else foundSbcHi = true;
+            }
+        }
+        Assert.True(foundStaTemp, "Expected STA TEMP to save first ushort low byte");
+        Assert.True(foundStxTemp2, "Expected STX TEMP2 to save first ushort high byte");
+        Assert.True(foundSec, "Expected SEC instruction for 16-bit subtraction");
+        Assert.True(foundSbcLo, "Expected SBC ZeroPage for low-byte subtraction");
+        Assert.True(foundSbcHi, "Expected second SBC ZeroPage for high-byte subtraction");
+    }
+
+    /// <summary>
+    /// Test that addition of two runtime ushort values emits proper 16-bit addition
+    /// with carry propagation. Pattern: ushort a = ...; ushort b = ...; ushort c = (ushort)(a + b);
+    /// </summary>
+    [Fact]
+    public void Add_UshortPlusUshort_Emits16BitAddition()
+    {
+        _stream.SetLength(0);
+        using var writer = new IL2NESWriter(_stream, leaveOpen: true, logger: _logger)
+        {
+            WordLocals = new HashSet<int> { 0, 1 }
+        };
+        writer.StartBlockBuffering();
+
+        // ushort a = 0x0200;
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4), 0x0200);
+        writer.Write(new ILInstruction(ILOpCode.Stloc_0));
+
+        // ushort b = 0x0100;
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4), 0x0100);
+        writer.Write(new ILInstruction(ILOpCode.Stloc_1));
+
+        // (ushort)(a + b)
+        writer.Write(new ILInstruction(ILOpCode.Ldloc_0));
+        writer.Write(new ILInstruction(ILOpCode.Ldloc_1));
+        writer.Write(new ILInstruction(ILOpCode.Add));
+
+        // Verify the full 16-bit addition pattern:
+        // 1. STA TEMP + STX TEMP2 (save first ushort)
+        // 2. CLC + ADC ZeroPage for low byte
+        // 3. ADC ZeroPage for high byte (via TXA; ADC TEMP2)
+        var block = writer.CurrentBlock!;
+        bool foundStaTemp = false;
+        bool foundStxTemp2 = false;
+        bool foundClc = false;
+        bool foundAdcLo = false;
+        bool foundAdcHi = false;
+        for (int i = 0; i < block.Count; i++)
+        {
+            if (block[i].Opcode == Opcode.STA && block[i].Mode == AddressMode.ZeroPage
+                && block[i].Operand is ImmediateOperand staImm && staImm.Value == (byte)NESConstants.TEMP)
+                foundStaTemp = true;
+            if (block[i].Opcode == Opcode.STX && block[i].Mode == AddressMode.ZeroPage
+                && block[i].Operand is ImmediateOperand stxImm && stxImm.Value == (byte)NESConstants.TEMP2)
+                foundStxTemp2 = true;
+            if (block[i].Opcode == Opcode.CLC)
+                foundClc = true;
+            if (block[i].Opcode == Opcode.ADC && block[i].Mode == AddressMode.ZeroPage)
+            {
+                if (!foundAdcLo) foundAdcLo = true;
+                else foundAdcHi = true;
+            }
+        }
+        Assert.True(foundStaTemp, "Expected STA TEMP to save first ushort low byte");
+        Assert.True(foundStxTemp2, "Expected STX TEMP2 to save first ushort high byte");
+        Assert.True(foundClc, "Expected CLC instruction for 16-bit addition");
+        Assert.True(foundAdcLo, "Expected ADC ZeroPage for low-byte addition");
+        Assert.True(foundAdcHi, "Expected second ADC ZeroPage for high-byte addition");
+    }
 }

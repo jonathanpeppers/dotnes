@@ -241,6 +241,8 @@ partial class IL2NESWriter : NESWriter
         None,
         /// <summary>Runtime value was saved to TEMP ($17).</summary>
         ToTemp,
+        /// <summary>Runtime 16-bit ushort was saved to TEMP ($17) lo + TEMP2 ($19) hi.</summary>
+        UshortToTemp,
         /// <summary>Compile-time constant was pushed via JSR pusha.</summary>
         ViaPusha,
     }
@@ -266,6 +268,17 @@ partial class IL2NESWriter : NESWriter
     {
         get => _savedState == SavedValueState.ViaPusha;
         set => _savedState = value ? SavedValueState.ViaPusha : SavedValueState.None;
+    }
+
+    /// <summary>
+    /// True when a runtime 16-bit ushort (A:X) was saved to TEMP ($17, lo) and TEMP2 ($19, hi)
+    /// because a subsequent Ldloc of a Word local needed to clobber A and X.
+    /// Used by HandleAddSub for 16-bit runtime-runtime arithmetic.
+    /// </summary>
+    bool _savedUshortToTemp
+    {
+        get => _savedState == SavedValueState.UshortToTemp;
+        set => _savedState = value ? SavedValueState.UshortToTemp : SavedValueState.None;
     }
 
     /// <summary>
