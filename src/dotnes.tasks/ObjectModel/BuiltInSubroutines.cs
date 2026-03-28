@@ -2198,7 +2198,7 @@ internal static class BuiltInSubroutines
     /// Uses $0300+ absolute addressing for state (cc65 BSS layout).
     /// Uses interleaved 16-bit note tables with ASL+TAY indexing.
     /// </summary>
-    public static Block PlayMusic()
+    public static Block MusicTick()
     {
         var block = new Block(nameof(NESLib.music_tick));
 

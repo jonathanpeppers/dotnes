@@ -748,7 +748,7 @@ public class Program6502
         if (usedMethods != null)
         {
             if (usedMethods.Contains("music_tick"))
-                size += BuiltInSubroutines.PlayMusic().Size;
+                size += BuiltInSubroutines.MusicTick().Size;
             if (usedMethods.Contains("start_music"))
                 size += BuiltInSubroutines.StartMusic().Size;
         }
@@ -764,7 +764,7 @@ public class Program6502
         if (usedMethods != null)
         {
             if (usedMethods.Contains("music_tick"))
-                AddBlock(BuiltInSubroutines.PlayMusic());
+                AddBlock(BuiltInSubroutines.MusicTick());
             if (usedMethods.Contains("start_music"))
                 AddBlock(BuiltInSubroutines.StartMusic());
         }
