@@ -3,7 +3,7 @@
     <MesenVersion>2.1.1</MesenVersion>
     <_MesenBaseUrl>https://github.com/SourMesen/Mesen2/releases/download/$(MesenVersion)</_MesenBaseUrl>
     <_MesenLicenseUrl>https://raw.githubusercontent.com/SourMesen/Mesen2/$(MesenVersion)/LICENSE</_MesenLicenseUrl>
-    <_MesenDir>$(MSBuildThisFileDirectory)../bin/</_MesenDir>
+    <_MesenDir>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)../bin/'))</_MesenDir>
   </PropertyGroup>
 
   <!-- Detect OS and architecture to pick the right Mesen release asset -->
@@ -76,6 +76,7 @@
         DestinationFileName="$(_MesenZipName)"
         Retries="3" RetryDelayMilliseconds="2000" />
     <_VerifySha256 File="$(_MesenDir)$(_MesenZipName)" ExpectedHash="$(_MesenZipSha256)" />
+    <Error Condition="!Exists('$(_MesenDir)$(_MesenZipName)')" Text="Failed to download Mesen zip: $(_MesenZipName)" />
     <DownloadFile
         SourceUrl="$(_MesenLicenseUrl)"
         DestinationFolder="$(_MesenDir)"
@@ -89,6 +90,7 @@
     <Unzip SourceFiles="$(_MesenDir)$(_MesenZipName)" DestinationFolder="$(_MesenDir)" />
     <Delete Files="$(_MesenDir)$(_MesenZipName)" />
     <Exec Condition="!$([MSBuild]::IsOSPlatform('windows'))" Command="chmod +x &quot;$(_MesenExe)&quot;" />
+    <Error Condition="!Exists('$(_MesenExe)')" Text="Failed to extract Mesen executable: $(_MesenExe)" />
     <Message Importance="high" Text="Mesen $(MesenVersion) ready at $(_MesenExe)" />
   </Target>
 
