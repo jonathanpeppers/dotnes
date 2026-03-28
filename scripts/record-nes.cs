@@ -48,12 +48,24 @@ if (romPath == null)
 
 outputPath ??= gifMode ? "recording.gif" : "screenshot.png";
 
-// Find anese.exe
-string repoRoot = Path.GetFullPath(".");
-string anesePath = Path.Combine(repoRoot, "src", "dotnes.anese", "obj", "Debug", "win", "anese.exe");
-if (!File.Exists(anesePath))
+if (!OperatingSystem.IsWindows())
 {
-    Console.Error.WriteLine($"ERROR: anese.exe not found at {anesePath}");
+    Console.Error.WriteLine("ERROR: This script requires Windows (uses Win32 APIs for window capture).");
+    return;
+}
+
+// Find Mesen by querying MSBuild for the RunCommand property
+string repoRoot = Path.GetFullPath(".");
+string sampleCsproj = Directory.GetFiles(Path.Combine(repoRoot, "samples", "hello"), "*.csproj").FirstOrDefault()
+    ?? throw new FileNotFoundException("Could not find a sample csproj to resolve Mesen path");
+var msbuildProc = Process.Start(new ProcessStartInfo("dotnet", $"msbuild \"{sampleCsproj}\" -restore -getProperty:RunCommand")
+    { RedirectStandardOutput = true, UseShellExecute = false })!;
+string mesenPath = msbuildProc.StandardOutput.ReadToEnd().Trim();
+msbuildProc.WaitForExit();
+if (!File.Exists(mesenPath))
+{
+    Console.Error.WriteLine($"ERROR: Mesen not found at {mesenPath}");
+    Console.Error.WriteLine("Try building a sample first: dotnet build samples/hello");
     return;
 }
 
@@ -64,8 +76,8 @@ if (!File.Exists(romPath))
     return;
 }
 
-Console.WriteLine($"Launching ANESE with {Path.GetFileName(romPath)}...");
-var proc = Process.Start(new ProcessStartInfo(anesePath, $"\"{romPath}\" --no-sav") { UseShellExecute = false })!;
+Console.WriteLine($"Launching Mesen with {Path.GetFileName(romPath)}...");
+var proc = Process.Start(new ProcessStartInfo(mesenPath, $"--doNotSaveSettings \"{romPath}\"") { UseShellExecute = false })!;
 
 Console.WriteLine($"Waiting {delayMs}ms for emulator to render...");
 Thread.Sleep(delayMs);
@@ -74,7 +86,7 @@ Thread.Sleep(delayMs);
 IntPtr hwnd = FindWindowByPid(proc.Id);
 if (hwnd == IntPtr.Zero)
 {
-    Console.Error.WriteLine("ERROR: Could not find ANESE window");
+    Console.Error.WriteLine("ERROR: Could not find Mesen window");
     proc.Kill();
     return;
 }
@@ -152,8 +164,8 @@ Bitmap? CaptureWindow(IntPtr window)
 
 Bitmap CropToGameArea(Bitmap src)
 {
-    // ANESE window has title bar and borders — find the NES rendering area
-    // NES resolution is 256x240, ANESE scales it up
+    // Mesen window has title bar, menu bar, and borders — find the NES rendering area
+    // NES resolution is 256x240, Mesen scales it up
     // Simple approach: find the non-black content bounds
     // For now, just return the full bitmap — the window chrome is minimal
     return src;
