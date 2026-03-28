@@ -13,6 +13,12 @@ string romPath = args.Length > 0 ? args[0] : throw new Exception("Usage: dotnet 
 int delayMs = args.Length > 1 ? int.Parse(args[1]) : 3000;
 string outputPath = args.Length > 2 ? args[2] : "screenshot.png";
 
+if (!OperatingSystem.IsWindows())
+{
+    Console.Error.WriteLine("ERROR: This script requires Windows (uses Win32 APIs for window capture).");
+    return;
+}
+
 // Find Mesen by querying MSBuild for the RunCommand property
 string repoRoot = Path.GetFullPath(".");
 string sampleCsproj = Directory.GetFiles(Path.Combine(repoRoot, "samples", "hello"), "*.csproj").FirstOrDefault()

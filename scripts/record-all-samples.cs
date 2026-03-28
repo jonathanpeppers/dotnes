@@ -59,7 +59,7 @@ foreach (var sampleDir in sampleDirs)
 
     Thread.Sleep(5000); // Wait for build + emulator boot
 
-    // Find the Mesen emulator window (child process of dotnet run)
+    // Find the Mesen emulator window (spawned by running the sample)
     IntPtr hwnd = FindMesenWindow();
     if (hwnd == IntPtr.Zero)
     {

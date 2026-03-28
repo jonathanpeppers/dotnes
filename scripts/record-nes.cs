@@ -48,6 +48,12 @@ if (romPath == null)
 
 outputPath ??= gifMode ? "recording.gif" : "screenshot.png";
 
+if (!OperatingSystem.IsWindows())
+{
+    Console.Error.WriteLine("ERROR: This script requires Windows (uses Win32 APIs for window capture).");
+    return;
+}
+
 // Find Mesen by querying MSBuild for the RunCommand property
 string repoRoot = Path.GetFullPath(".");
 string sampleCsproj = Directory.GetFiles(Path.Combine(repoRoot, "samples", "hello"), "*.csproj").FirstOrDefault()
