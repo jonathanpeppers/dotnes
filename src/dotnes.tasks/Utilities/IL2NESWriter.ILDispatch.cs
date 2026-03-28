@@ -1237,6 +1237,11 @@ partial class IL2NESWriter
                     if (!EmitBranchCompare(cmpVal))
                     {
                         // Overflow (8-bit fallback): value in A can never equal 256+ → unconditional branch
+                        if (_dupPendingSave)
+                        {
+                            Emit(Opcode.STA, AddressMode.ZeroPage, TEMP_HI);
+                            _dupPendingSave = false;
+                        }
                         EmitWithLabel(Opcode.JMP, AddressMode.Absolute, labelName);
                     }
                     else
@@ -1296,6 +1301,11 @@ partial class IL2NESWriter
                     if (!EmitBranchCompare(cmpVal))
                     {
                         // Overflow (8-bit fallback): value in A can never equal 256+ → skip branch (no-op)
+                        if (_dupPendingSave)
+                        {
+                            Emit(Opcode.STA, AddressMode.ZeroPage, TEMP_HI);
+                            _dupPendingSave = false;
+                        }
                     }
                     else
                     {
