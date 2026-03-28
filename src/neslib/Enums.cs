@@ -32,6 +32,15 @@ public enum VramIncrement : byte
 }
 
 /// <summary>
+/// Return value of <see cref="NESLib.ppu_system()"/>
+/// </summary>
+public enum VideoSystem : byte
+{
+    PAL = 0x00,
+    NTSC = 0x80,
+}
+
+/// <summary>
 /// PPU mask bits for <see cref="NESLib.ppu_mask(MASK)"/>
 /// </summary>
 [Flags]
@@ -45,6 +54,16 @@ public enum MASK : byte
     TINT_RED = 0x20,
     TINT_GREEN = 0x40,
     TINT_BLUE = 0x80,
+}
+
+/// <summary>
+/// Sprite attribute flags for <see cref="NESLib.oam_spr(byte, byte, byte, byte, byte)"/>
+/// </summary>
+public static class OAM
+{
+    public const byte FLIP_V = 0x80;
+    public const byte FLIP_H = 0x40;
+    public const byte BEHIND = 0x20;
 }
 
 /// <summary>
