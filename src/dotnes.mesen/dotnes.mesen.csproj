@@ -8,8 +8,18 @@
     <PackageVersion>2.1.1</PackageVersion>
     <NoWarn>$(NoWarn);NU5119;NU5128</NoWarn>
     <GenerateDependencyFile>false</GenerateDependencyFile>
+    <BeforePack>
+      _AddPackageFiles;
+      $(BeforePack);
+    </BeforePack>
   </PropertyGroup>
   <ItemGroup>
     <None Update="@(None)" Pack="true" PackagePath="" />
+    <ProjectReference Include="..\dotnes.tasks\dotnes.tasks.csproj" ReferenceOutputAssembly="false" />
   </ItemGroup>
+  <Target Name="_AddPackageFiles">
+    <ItemGroup>
+      <_PackageFiles Include="..\dotnes.tasks\bin\$(Configuration)\netstandard2.0\dotnes.tasks.dll" PackagePath="build" />
+    </ItemGroup>
+  </Target>
 </Project>

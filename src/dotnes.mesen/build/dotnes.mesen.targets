@@ -40,96 +40,21 @@
     <RunWorkingDirectory>$(OutputPath)</RunWorkingDirectory>
   </PropertyGroup>
 
-  <!-- Inline task to verify SHA256 hash of downloaded file -->
-  <UsingTask TaskName="_VerifySha256" TaskFactory="RoslynCodeTaskFactory" AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
-    <ParameterGroup>
-      <File ParameterType="System.String" Required="true" />
-      <ExpectedHash ParameterType="System.String" Required="true" />
-    </ParameterGroup>
-    <Task>
-      <Using Namespace="System.IO" />
-      <Using Namespace="System.Security.Cryptography" />
-      <Code Type="Fragment" Language="cs"><![CDATA[
-        using var stream = System.IO.File.OpenRead(File);
-        using var sha256 = SHA256.Create();
-        var hashBytes = sha256.ComputeHash(stream);
-        var hash = BitConverter.ToString(hashBytes).Replace("-", "");
-        if (!hash.Equals(ExpectedHash, StringComparison.OrdinalIgnoreCase))
-        {
-            Log.LogError($"SHA256 mismatch for {File}: expected {ExpectedHash}, got {hash}");
-        }
-        else
-        {
-            Log.LogMessage(MessageImportance.Normal, $"SHA256 verified: {hash}");
-        }
-      ]]></Code>
-    </Task>
-  </UsingTask>
+  <!-- Use the compiled task from dotnes.tasks.dll -->
+  <UsingTask TaskName="dotnes.EnsureMesenInstalled" AssemblyFile="$(MSBuildThisFileDirectory)dotnes.tasks.dll" />
 
-  <!-- Inline task that acquires a named mutex before downloading/unzipping.
-       Prevents parallel builds in the same solution from stepping on each other. -->
-  <UsingTask TaskName="_MesenAcquireLock" TaskFactory="RoslynCodeTaskFactory" AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
-    <ParameterGroup>
-      <MutexName ParameterType="System.String" Required="true" />
-    </ParameterGroup>
-    <Task>
-      <Using Namespace="System.Threading" />
-      <Code Type="Fragment" Language="cs"><![CDATA[
-        var mutex = new Mutex(false, MutexName);
-        mutex.WaitOne();
-        // Store in AppDomain data so _MesenReleaseLock can find it
-        AppDomain.CurrentDomain.SetData(MutexName, mutex);
-      ]]></Code>
-    </Task>
-  </UsingTask>
-
-  <UsingTask TaskName="_MesenReleaseLock" TaskFactory="RoslynCodeTaskFactory" AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
-    <ParameterGroup>
-      <MutexName ParameterType="System.String" Required="true" />
-    </ParameterGroup>
-    <Task>
-      <Using Namespace="System.Threading" />
-      <Code Type="Fragment" Language="cs"><![CDATA[
-        var mutex = AppDomain.CurrentDomain.GetData(MutexName) as Mutex;
-        if (mutex != null)
-        {
-            mutex.ReleaseMutex();
-            mutex.Dispose();
-            AppDomain.CurrentDomain.SetData(MutexName, null);
-        }
-      ]]></Code>
-    </Task>
-  </UsingTask>
-
-  <!-- Download Mesen from GitHub releases into the NuGet package cache -->
-  <Target Name="_MesenDownload" BeforeTargets="Build"
+  <!-- Download, verify, and unzip Mesen (mutex-protected, safe for parallel builds) -->
+  <Target Name="_MesenEnsureInstalled" BeforeTargets="Build"
       Condition="'$(_MesenZipName)' != '' And !Exists('$(_MesenExe)')">
-    <_MesenAcquireLock MutexName="Global\dotnes_mesen_download" />
-    <!-- Re-check after acquiring lock — another project may have completed the download -->
-    <Message Importance="high" Text="Downloading Mesen $(MesenVersion)..." Condition="!Exists('$(_MesenExe)')" />
-    <DownloadFile Condition="!Exists('$(_MesenExe)')"
-        SourceUrl="$(_MesenBaseUrl)/$(_MesenZipName)"
-        DestinationFolder="$(_MesenDir)"
-        DestinationFileName="$(_MesenZipName)"
-        Retries="3" RetryDelayMilliseconds="2000" />
-    <_VerifySha256 Condition="!Exists('$(_MesenExe)')" File="$(_MesenDir)$(_MesenZipName)" ExpectedHash="$(_MesenZipSha256)" />
-    <Error Condition="!Exists('$(_MesenExe)') And !Exists('$(_MesenDir)$(_MesenZipName)')" Text="Failed to download Mesen zip: $(_MesenZipName)" />
-    <DownloadFile Condition="!Exists('$(_MesenExe)')"
-        SourceUrl="$(_MesenLicenseUrl)"
-        DestinationFolder="$(_MesenDir)"
-        DestinationFileName="LICENSE"
-        Retries="3" RetryDelayMilliseconds="2000" />
-  </Target>
-
-  <!-- Unzip after download -->
-  <Target Name="_MesenUnzip" AfterTargets="_MesenDownload"
-      Condition="'$(_MesenZipName)' != '' And !Exists('$(_MesenExe)')">
-    <Unzip Condition="!Exists('$(_MesenExe)')" SourceFiles="$(_MesenDir)$(_MesenZipName)" DestinationFolder="$(_MesenDir)" />
-    <Delete Condition="Exists('$(_MesenDir)$(_MesenZipName)')" Files="$(_MesenDir)$(_MesenZipName)" />
-    <Exec Condition="!$([MSBuild]::IsOSPlatform('windows'))" Command="chmod +x &quot;$(_MesenExe)&quot;" />
-    <Error Condition="!Exists('$(_MesenExe)')" Text="Failed to extract Mesen executable: $(_MesenExe)" />
-    <Message Importance="high" Text="Mesen $(MesenVersion) ready at $(_MesenExe)" />
-    <_MesenReleaseLock MutexName="Global\dotnes_mesen_download" />
+    <EnsureMesenInstalled
+        MesenExe="$(_MesenExe)"
+        DownloadUrl="$(_MesenBaseUrl)/$(_MesenZipName)"
+        LicenseUrl="$(_MesenLicenseUrl)"
+        DestDir="$(_MesenDir)"
+        ZipName="$(_MesenZipName)"
+        ExpectedHash="$(_MesenZipSha256)" />
+    <!-- Make executable on Unix -->
+    <Exec Condition="!$([MSBuild]::IsOSPlatform('windows')) And Exists('$(_MesenExe)')" Command="chmod +x &quot;$(_MesenExe)&quot;" />
   </Target>
 
   <Target Name="_MesenUnsupportedMessage" BeforeTargets="Build"
