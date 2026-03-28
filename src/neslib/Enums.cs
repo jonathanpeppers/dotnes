@@ -16,7 +16,6 @@ public enum PAD : byte
 }
 
 /// <summary>
-/// <summary>
 /// Return value of <see cref="NESLib.ppu_system()"/>
 /// </summary>
 public enum VideoSystem : byte
