@@ -1331,6 +1331,13 @@ partial class IL2NESWriter
                 {
                     operand = (sbyte)(byte)operand;
                     var labelName = InstructionLabel(instruction.Offset + operand + 2);
+                    if (_ushortInAX)
+                    {
+                        // 16-bit zero check: combine A (lo) and X (hi) via ORA
+                        Emit(Opcode.STX, AddressMode.ZeroPage, TEMP);
+                        Emit(Opcode.ORA, AddressMode.ZeroPage, TEMP);
+                        _ushortInAX = false;
+                    }
                     EmitWithLabel(Opcode.BEQ, AddressMode.Relative, labelName);
                     if (Stack.Count > 0)
                         Stack.Pop();
@@ -1342,6 +1349,13 @@ partial class IL2NESWriter
                 {
                     operand = (sbyte)(byte)operand;
                     var labelName = InstructionLabel(instruction.Offset + operand + 2);
+                    if (_ushortInAX)
+                    {
+                        // 16-bit non-zero check: combine A (lo) and X (hi) via ORA
+                        Emit(Opcode.STX, AddressMode.ZeroPage, TEMP);
+                        Emit(Opcode.ORA, AddressMode.ZeroPage, TEMP);
+                        _ushortInAX = false;
+                    }
                     EmitWithLabel(Opcode.BNE, AddressMode.Relative, labelName);
                     if (Stack.Count > 0)
                         Stack.Pop();
@@ -1500,6 +1514,13 @@ partial class IL2NESWriter
                 // Long-form branch if non-zero — use trampoline: BEQ +3, JMP target
                 {
                     var labelName = InstructionLabel(instruction.Offset + operand + 5);
+                    if (_ushortInAX)
+                    {
+                        // 16-bit non-zero check: combine A (lo) and X (hi) via ORA
+                        Emit(Opcode.STX, AddressMode.ZeroPage, TEMP);
+                        Emit(Opcode.ORA, AddressMode.ZeroPage, TEMP);
+                        _ushortInAX = false;
+                    }
                     Emit(Opcode.BEQ, AddressMode.Relative, 3); // skip JMP if zero
                     EmitWithLabel(Opcode.JMP, AddressMode.Absolute, labelName);
                     if (Stack.Count > 0)
@@ -1511,6 +1532,13 @@ partial class IL2NESWriter
                 // Long-form branch if zero — use trampoline: BNE +3, JMP target
                 {
                     var labelName = InstructionLabel(instruction.Offset + operand + 5);
+                    if (_ushortInAX)
+                    {
+                        // 16-bit zero check: combine A (lo) and X (hi) via ORA
+                        Emit(Opcode.STX, AddressMode.ZeroPage, TEMP);
+                        Emit(Opcode.ORA, AddressMode.ZeroPage, TEMP);
+                        _ushortInAX = false;
+                    }
                     Emit(Opcode.BNE, AddressMode.Relative, 3); // skip JMP if non-zero
                     EmitWithLabel(Opcode.JMP, AddressMode.Absolute, labelName);
                     if (Stack.Count > 0)
