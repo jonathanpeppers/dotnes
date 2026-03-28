@@ -79,7 +79,7 @@ static NES.NESLib.oam_off -> byte
 static NES.NESLib.pad_state(byte pad) -> NES.PAD
 static NES.NESLib.pad_trigger(byte pad) -> NES.PAD
 static NES.NESLib.peek(ushort addr) -> byte
-static NES.NESLib.play_music() -> void
+static NES.NESLib.music_tick() -> void
 static NES.NESLib.poke(ushort addr, byte value) -> void
 static NES.NESLib.sample_play(byte sample) -> void
 static NES.NESLib.sei() -> void

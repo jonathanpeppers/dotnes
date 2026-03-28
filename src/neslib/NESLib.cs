@@ -56,7 +56,11 @@ public static class NESLib
     public static void pal_bg_bright(byte bright) => throw null!;
 
     /// <summary>
-    /// play music (FamiTone)
+    /// play music (FamiTone2 library).
+    /// Starts or resumes playback of a song by index from FamiTone2 music data.
+    /// <para><b>⚠️ Not to be confused with <see cref="music_tick"/>.</b>
+    /// This method is for the FamiTone2 external music library.
+    /// <see cref="music_tick"/> is for the dotnes built-in music engine.</para>
     /// </summary>
     public static void music_play(byte song) => throw null!;
 
@@ -97,10 +101,13 @@ public static class NESLib
     public static void start_music(byte[] data) => throw null!;
 
     /// <summary>
-    /// play one frame of music, call once per vblank
-    /// processes music data and writes to APU registers
+    /// advance one frame of music playback (dotnes built-in music engine).
+    /// Call once per vblank/NMI to process music data and write to APU registers.
+    /// <para><b>⚠️ Not to be confused with <see cref="music_play"/>.</b>
+    /// <see cref="music_play"/> is for the FamiTone2 external library.
+    /// This method is for the dotnes built-in music engine.</para>
     /// </summary>
-    public static void play_music() => throw null!;
+    public static void music_tick() => throw null!;
 
     /// <summary>
     /// register a ushort[] note table for pulse channel playback

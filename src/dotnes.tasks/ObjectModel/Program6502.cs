@@ -739,7 +739,7 @@ public class Program6502
     }
 
     /// <summary>
-    /// Calculates the size of music subroutines (play_music + start_music).
+    /// Calculates the size of music subroutines (music_tick + start_music).
     /// These are emitted before main() to match cc65's ROM layout.
     /// </summary>
     public static int CalculateMusicSubroutinesSize(HashSet<string>? usedMethods = null)
@@ -747,7 +747,7 @@ public class Program6502
         int size = 0;
         if (usedMethods != null)
         {
-            if (usedMethods.Contains("play_music"))
+            if (usedMethods.Contains("music_tick"))
                 size += BuiltInSubroutines.PlayMusic().Size;
             if (usedMethods.Contains("start_music"))
                 size += BuiltInSubroutines.StartMusic().Size;
@@ -756,14 +756,14 @@ public class Program6502
     }
 
     /// <summary>
-    /// Adds music subroutines (play_music + start_music) before main().
+    /// Adds music subroutines (music_tick + start_music) before main().
     /// Matches cc65's ROM layout where music code precedes main().
     /// </summary>
     public void AddMusicSubroutines(HashSet<string>? usedMethods = null)
     {
         if (usedMethods != null)
         {
-            if (usedMethods.Contains("play_music"))
+            if (usedMethods.Contains("music_tick"))
                 AddBlock(BuiltInSubroutines.PlayMusic());
             if (usedMethods.Contains("start_music"))
                 AddBlock(BuiltInSubroutines.StartMusic());
