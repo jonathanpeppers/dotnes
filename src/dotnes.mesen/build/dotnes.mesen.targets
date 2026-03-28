@@ -9,22 +9,27 @@
   <!-- Detect OS and architecture to pick the right Mesen release asset -->
   <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('windows'))">
     <_MesenZipName>Mesen_$(MesenVersion)_Windows.zip</_MesenZipName>
+    <_MesenZipSha256>23ccc2bc060b663c68dad3a8c5d6da7d23a50f872d04f135bafa2b04ff7d5cbe</_MesenZipSha256>
     <_MesenExe>$(_MesenDir)Mesen.exe</_MesenExe>
   </PropertyGroup>
   <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('linux')) And '$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)' == 'X64'">
     <_MesenZipName>Mesen_$(MesenVersion)_Linux_x64.zip</_MesenZipName>
+    <_MesenZipSha256>7a9947575cc198209f743fef83fb2b702b786ea705506bdf3f2aea01ab7c1ce9</_MesenZipSha256>
     <_MesenExe>$(_MesenDir)Mesen</_MesenExe>
   </PropertyGroup>
   <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('linux')) And '$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)' == 'Arm64'">
     <_MesenZipName>Mesen_$(MesenVersion)_Linux_ARM64.zip</_MesenZipName>
+    <_MesenZipSha256>b0e028f616ab61ae3247f720a80cbe696a29fcbbf01aec0f0103b3b66b3f4dad</_MesenZipSha256>
     <_MesenExe>$(_MesenDir)Mesen</_MesenExe>
   </PropertyGroup>
   <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('osx')) And '$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)' == 'X64'">
     <_MesenZipName>Mesen_$(MesenVersion)_macOS_x64_Intel.zip</_MesenZipName>
+    <_MesenZipSha256>538f3d072891b1546c961e53f8deb0718d7b273573b16e3318db8f1e9b1ac96d</_MesenZipSha256>
     <_MesenExe>$(_MesenDir)Mesen</_MesenExe>
   </PropertyGroup>
   <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('osx')) And '$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)' == 'Arm64'">
     <_MesenZipName>Mesen_$(MesenVersion)_macOS_ARM64_AppleSilicon.zip</_MesenZipName>
+    <_MesenZipSha256>c16068b3d934f7b993b782a0652b8f0e7fc0cde7464862fea91d5e76b68a813f</_MesenZipSha256>
     <_MesenExe>$(_MesenDir)Mesen</_MesenExe>
   </PropertyGroup>
 
@@ -35,6 +40,32 @@
     <RunWorkingDirectory>$(OutputPath)</RunWorkingDirectory>
   </PropertyGroup>
 
+  <!-- Inline task to verify SHA256 hash of downloaded file -->
+  <UsingTask TaskName="_VerifySha256" TaskFactory="RoslynCodeTaskFactory" AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
+    <ParameterGroup>
+      <File ParameterType="System.String" Required="true" />
+      <ExpectedHash ParameterType="System.String" Required="true" />
+    </ParameterGroup>
+    <Task>
+      <Using Namespace="System.IO" />
+      <Using Namespace="System.Security.Cryptography" />
+      <Code Type="Fragment" Language="cs"><![CDATA[
+        using var stream = System.IO.File.OpenRead(File);
+        using var sha256 = SHA256.Create();
+        var hashBytes = sha256.ComputeHash(stream);
+        var hash = BitConverter.ToString(hashBytes).Replace("-", "");
+        if (!hash.Equals(ExpectedHash, StringComparison.OrdinalIgnoreCase))
+        {
+            Log.LogError($"SHA256 mismatch for {File}: expected {ExpectedHash}, got {hash}");
+        }
+        else
+        {
+            Log.LogMessage(MessageImportance.Normal, $"SHA256 verified: {hash}");
+        }
+      ]]></Code>
+    </Task>
+  </UsingTask>
+
   <!-- Download Mesen from GitHub releases into the NuGet package cache -->
   <Target Name="_MesenDownload" BeforeTargets="Build"
       Condition="'$(_MesenZipName)' != '' And !Exists('$(_MesenExe)')">
@@ -44,6 +75,7 @@
         DestinationFolder="$(_MesenDir)"
         DestinationFileName="$(_MesenZipName)"
         Retries="3" RetryDelayMilliseconds="2000" />
+    <_VerifySha256 File="$(_MesenDir)$(_MesenZipName)" ExpectedHash="$(_MesenZipSha256)" />
     <DownloadFile
         SourceUrl="$(_MesenLicenseUrl)"
         DestinationFolder="$(_MesenDir)"
