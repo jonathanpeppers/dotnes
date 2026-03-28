@@ -25,12 +25,12 @@
   <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('osx')) And '$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)' == 'X64'">
     <_MesenZipName>Mesen_$(MesenVersion)_macOS_x64_Intel.zip</_MesenZipName>
     <_MesenZipSha256>538f3d072891b1546c961e53f8deb0718d7b273573b16e3318db8f1e9b1ac96d</_MesenZipSha256>
-    <_MesenExe>$(_MesenDir)Mesen</_MesenExe>
+    <_MesenExe>$(_MesenDir)Mesen.app/Contents/MacOS/Mesen</_MesenExe>
   </PropertyGroup>
   <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('osx')) And '$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)' == 'Arm64'">
     <_MesenZipName>Mesen_$(MesenVersion)_macOS_ARM64_AppleSilicon.zip</_MesenZipName>
     <_MesenZipSha256>c16068b3d934f7b993b782a0652b8f0e7fc0cde7464862fea91d5e76b68a813f</_MesenZipSha256>
-    <_MesenExe>$(_MesenDir)Mesen</_MesenExe>
+    <_MesenExe>$(_MesenDir)Mesen.app/Contents/MacOS/Mesen</_MesenExe>
   </PropertyGroup>
 
   <!-- Set RunCommand so 'dotnet run' launches the ROM in Mesen -->
@@ -52,7 +52,9 @@
         LicenseUrl="$(_MesenLicenseUrl)"
         DestDir="$(_MesenDir)"
         ZipName="$(_MesenZipName)"
-        ExpectedHash="$(_MesenZipSha256)" />
+        ExpectedHash="$(_MesenZipSha256)"
+        Retries="3"
+        RetryDelayMilliseconds="2000" />
     <!-- Make executable on Unix -->
     <Exec Condition="!$([MSBuild]::IsOSPlatform('windows')) And Exists('$(_MesenExe)')" Command="chmod +x &quot;$(_MesenExe)&quot;" />
   </Target>

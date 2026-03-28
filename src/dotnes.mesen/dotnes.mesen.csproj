@@ -6,6 +6,7 @@
     <PackageProjectUrl>https://github.com/SourMesen/Mesen2</PackageProjectUrl>
     <PackageTags>$(PackageTags) Emulator Mesen</PackageTags>
     <PackageVersion>2.1.1</PackageVersion>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <NoWarn>$(NoWarn);NU5119;NU5128</NoWarn>
     <GenerateDependencyFile>false</GenerateDependencyFile>
     <BeforePack>
