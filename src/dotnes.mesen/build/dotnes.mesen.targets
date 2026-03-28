@@ -38,7 +38,7 @@
     <RunCommand>$(_MesenExe)</RunCommand>
     <_MesenTestRunnerArgs Condition="'$(MesenTestRunner)' == 'true'">--testrunner --doNotSaveSettings</_MesenTestRunnerArgs>
     <_MesenTimeoutArgs Condition="'$(MesenTimeout)' != ''">--timeout=$(MesenTimeout)</_MesenTimeoutArgs>
-    <RunArguments>&quot;$(TargetName).nes&quot; $(_MesenTestRunnerArgs) $(_MesenTimeoutArgs) $(MesenLuaScript)</RunArguments>
+    <RunArguments>$(TargetName).nes $(_MesenTestRunnerArgs) $(_MesenTimeoutArgs) $(MesenLuaScript)</RunArguments>
     <RunWorkingDirectory>$(OutputPath)</RunWorkingDirectory>
   </PropertyGroup>
 
