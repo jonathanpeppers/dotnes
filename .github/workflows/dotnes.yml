@@ -25,7 +25,7 @@ jobs:
     - name: build
       run: dotnet build -bl:build-debug.binlog && dotnet build -c Release -bl:build-release.binlog
     - name: test
-      run: dotnet test --verbosity normal && dotnet test --verbosity normal -c Release
+      run: dotnet test --no-build --verbosity normal && dotnet test --no-build --verbosity normal -c Release
     - name: samples
       run: dotnet build samples/samples.sln -bl:samples-debug.binlog && dotnet build samples/samples.sln -c Release -bl:samples-release.binlog
     - name: shutdown (best effort)
