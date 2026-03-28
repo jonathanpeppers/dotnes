@@ -2,7 +2,7 @@
 
 Review of new APIs in `src/neslib/PublicAPI.Unshipped.txt` before they ship as public API.
 
-Compared against the original [neslib.h](https://github.com/clbr/neslib/blob/master/neslib.h) by Shiru and the existing shipped C# API in `PublicAPI.Shipped.txt`.
+Compared against the original [neslib.h](https://github.com/clbr/neslib/blob/master/neslib.h) by Shiru and the existing shipped C# API in `src/neslib/PublicAPI.Shipped.txt`.
 
 ## What's Good
 
