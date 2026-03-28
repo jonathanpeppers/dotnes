@@ -13,12 +13,15 @@ string romPath = args.Length > 0 ? args[0] : throw new Exception("Usage: dotnet 
 int delayMs = args.Length > 1 ? int.Parse(args[1]) : 3000;
 string outputPath = args.Length > 2 ? args[2] : "screenshot.png";
 
-// Find anese.exe
+// Find Mesen
 string repoRoot = Path.GetFullPath(".");
-string anesePath = Path.Combine(repoRoot, "src", "dotnes.anese", "obj", "Debug", "win", "anese.exe");
-if (!File.Exists(anesePath))
+string mesenPath = Path.Combine(repoRoot, "src", "dotnes.mesen", "bin",
+    OperatingSystem.IsWindows() ? "Mesen.exe" :
+    OperatingSystem.IsMacOS() ? Path.Combine("Mesen.app", "Contents", "MacOS", "Mesen") :
+    "Mesen");
+if (!File.Exists(mesenPath))
 {
-    Console.Error.WriteLine($"ERROR: anese.exe not found at {anesePath}");
+    Console.Error.WriteLine($"ERROR: Mesen not found at {mesenPath}");
     return;
 }
 
@@ -29,8 +32,8 @@ if (!File.Exists(romPath))
     return;
 }
 
-Console.WriteLine($"Launching ANESE with {romPath}...");
-var proc = Process.Start(new ProcessStartInfo(anesePath, $"\"{romPath}\"") { UseShellExecute = false })!;
+Console.WriteLine($"Launching Mesen with {romPath}...");
+var proc = Process.Start(new ProcessStartInfo(mesenPath, $"--doNotSaveSettings \"{romPath}\"") { UseShellExecute = false })!;
 
 Console.WriteLine($"Waiting {delayMs}ms for emulator to render...");
 Thread.Sleep(delayMs);
@@ -55,7 +58,7 @@ for (int attempt = 0; attempt < 20 && hwnd == IntPtr.Zero; attempt++)
 
 if (hwnd == IntPtr.Zero)
 {
-    Console.Error.WriteLine("ERROR: Could not find ANESE window");
+    Console.Error.WriteLine("ERROR: Could not find Mesen window");
     proc.Kill();
     return;
 }
