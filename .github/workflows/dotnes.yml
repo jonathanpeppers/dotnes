@@ -86,11 +86,18 @@ jobs:
     - name: add local NuGet source
       run: dotnet nuget add source "${{ github.workspace }}/nupkgs" --name local
     - name: build project
-      run: dotnet build smoketest/smoketest.csproj
+      run: dotnet build smoketest/smoketest.csproj -bl:smoketest-build.binlog
     - name: run smoke test
       run: >
         dotnet run --project smoketest/smoketest.csproj
         -p:MesenTestRunner=true
         -p:MesenTimeout=10
         "-p:MesenLuaScript=${{ github.workspace }}/scripts/smoke-test.lua"
+        -bl:smoketest-run.binlog
+    - name: upload smoke test logs
+      if: always()
+      uses: actions/upload-artifact@v7
+      with:
+        name: smoke-test-logs-${{ matrix.os }}
+        path: '*.binlog'
 
