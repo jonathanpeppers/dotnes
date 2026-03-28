@@ -44,13 +44,11 @@ The C original is `void *dst`, but NES has no managed objects. `object` is seman
 - `memfill(ushort addr, byte value, uint len)` — address-based, matching `poke`/`peek`
 - `memfill(byte[] dst, byte value, uint len)` — buffer-based
 
-### 4. `music_play(byte)` vs `play_music()` naming confusion
+### 4. ~~`music_play(byte)` vs `play_music()` naming confusion~~ ✅ Resolved
 
-These are dangerously similar names for different subsystems:
+Resolved: `play_music()` has been renamed to `music_tick()`. The names are now clearly distinct:
 - `music_play(byte song)` — FamiTone (from neslib.h)
-- `play_music()` — dotnes custom music engine
-
-Users will confuse them. Consider renaming the custom engine method (e.g., `music_tick()`) or at minimum adding very prominent XML doc warnings.
+- `music_tick()` — dotnes custom music engine (advances one frame)
 
 ### 5. Missing `OAM_FLIP_V`, `OAM_FLIP_H`, `OAM_BEHIND` constants
 

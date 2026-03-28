@@ -2194,13 +2194,13 @@ internal static class BuiltInSubroutines
     const byte BASS_NOTE = 36; // 0x24
 
     /// <summary>
-    /// play_music - Play one frame of music. Matches cc65's compiled output exactly.
+    /// music_tick - Play one frame of music. Matches cc65's compiled output exactly.
     /// Uses $0300+ absolute addressing for state (cc65 BSS layout).
     /// Uses interleaved 16-bit note tables with ASL+TAY indexing.
     /// </summary>
-    public static Block PlayMusic()
+    public static Block MusicTick()
     {
-        var block = new Block(nameof(NESLib.play_music));
+        var block = new Block(nameof(NESLib.music_tick));
 
         // Check if music_ptr is NULL (both bytes zero = no music playing)
         block.Emit(LDA_abs(MUSIC_PTR))            // LDA $0301

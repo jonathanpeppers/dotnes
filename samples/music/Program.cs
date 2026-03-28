@@ -267,5 +267,5 @@ ppu_on_all();
 while (true)
 {
     ppu_wait_nmi();
-    play_music();
+    music_tick();
 }
