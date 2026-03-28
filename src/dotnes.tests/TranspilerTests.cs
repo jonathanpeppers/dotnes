@@ -250,4 +250,78 @@ public class TranspilerTests
         _logger.WriteLine($"{name} ({configuration}): LocalCount={locals}, MainSize={sizeOfMain}");
         Assert.Equal(expectedLocals, locals);
     }
+
+    [Theory]
+    [InlineData("climber", true)]
+    [InlineData("climber", false)]
+    public void ClimberPushaPopaBananced(string name, bool debug)
+    {
+        var configuration = debug ? "debug" : "release";
+
+        var assemblyReaders = new List<AssemblyReader>();
+        var chrStream = typeof(Utilities).Assembly.GetManifestResourceStream($"chr_{name}.s")
+            ?? Utilities.GetResource("chr_generic.s");
+        assemblyReaders.Add(new AssemblyReader(new StreamReader(chrStream)));
+
+        var famiDir = Path.Combine(AppContext.BaseDirectory, "Data", "fami");
+        if (Directory.Exists(famiDir))
+        {
+            foreach (var sFile in Directory.GetFiles(famiDir, "*.s").OrderBy(f => f))
+                assemblyReaders.Add(new AssemblyReader(sFile));
+        }
+
+        using var dll = Utilities.GetResource($"{name}.{configuration}.dll");
+        using var transpiler = new Transpiler(dll, assemblyReaders, _logger);
+        var program = transpiler.BuildProgram6502(out _, out _);
+
+        var mainBlock = program.GetBlock("main");
+        Assert.NotNull(mainBlock);
+
+        // Dump context around each pusha to identify leaks
+        var instrs = mainBlock.InstructionsWithLabels.ToList();
+        int pushaNum = 0;
+        var leakedContexts = new List<string>();
+        for (int i = 0; i < instrs.Count; i++)
+        {
+            var (instruction, _) = instrs[i];
+            if (instruction.Opcode == ObjectModel.Opcode.JSR && instruction.Operand is ObjectModel.LabelOperand lbl && lbl.Label == "pusha")
+            {
+                pushaNum++;
+                // Check if followed by a JSR function call (not stack ops)
+                bool isForFuncCall = false;
+                for (int j = i + 1; j < Math.Min(i + 8, instrs.Count); j++)
+                {
+                    var next = instrs[j].Instruction;
+                    if (next.Opcode == ObjectModel.Opcode.JSR && next.Operand is ObjectModel.LabelOperand callLbl)
+                    {
+                        if (callLbl.Label is not "pusha" and not "pushax" and not "popa" and not "popax" and not "incsp1" and not "incsp2")
+                        {
+                            isForFuncCall = true;
+                        }
+                        break;
+                    }
+                }
+
+                if (!isForFuncCall)
+                {
+                    // Show context: 2 before, the pusha, and 25 after
+                    var ctx = new StringBuilder();
+                    ctx.AppendLine($"  LEAKED pusha #{pushaNum} at index {i}:");
+                    int start = Math.Max(0, i - 2);
+                    int end = Math.Min(instrs.Count - 1, i + 25);
+                    for (int j = start; j <= end; j++)
+                    {
+                        var mark = (j == i) ? " >>> " : "     ";
+                        ctx.AppendLine($"{mark}[{j}] {instrs[j].Instruction}");
+                    }
+                    leakedContexts.Add(ctx.ToString());
+                }
+            }
+        }
+
+        foreach (var ctx in leakedContexts)
+            _logger.WriteLine($"{ctx}");
+
+        _logger.WriteLine($"{name} ({configuration}): total pusha={pushaNum}, leaked contexts={leakedContexts.Count}");
+    }
 }
