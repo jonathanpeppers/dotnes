@@ -30,3 +30,12 @@ public enum MASK : byte
     TINT_GREEN = 0x40,
     TINT_BLUE = 0x80,
 }
+
+/// <summary>
+/// Sprite size for <see cref="NESLib.oam_size(SpriteSize)"/>
+/// </summary>
+public enum SpriteSize : byte
+{
+    Size8x8 = 0,
+    Size8x16 = 1,
+}

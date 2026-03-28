@@ -280,9 +280,9 @@ public static class NESLib
     public static byte oam_off;
 
     /// <summary>
-    /// set sprite display mode, 0 for 8x8 sprites, 1 for 8x16 sprites
+    /// set sprite display mode, 8x8 or 8x16 sprites
     /// </summary>
-    public static void oam_size(byte size) => throw null!;
+    public static void oam_size(SpriteSize size) => throw null!;
 
     /// <summary>
     /// set sprite in OAM buffer, chrnum is tile, attr is attribute, sprid is offset in OAM in bytes
