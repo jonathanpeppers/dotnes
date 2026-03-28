@@ -41,23 +41,23 @@ vram_fill(0xdd, 8);
 ppu_on_all();
 
 // main loop
-byte mask = MASK.BG;
+MASK mask = MASK.BG;
 while (true)
 {
     ppu_wait_nmi();
     PAD pad = pad_poll(0);
     if ((pad & PAD.A) != 0)
-        mask = (byte)(mask | MASK.TINT_RED);
+        mask = mask | MASK.TINT_RED;
     if ((pad & PAD.B) != 0)
-        mask = (byte)(mask | MASK.TINT_GREEN);
+        mask = mask | MASK.TINT_GREEN;
     if ((pad & PAD.LEFT) != 0)
-        mask = (byte)(mask | MASK.TINT_BLUE);
+        mask = mask | MASK.TINT_BLUE;
     if ((pad & PAD.RIGHT) != 0)
-        mask = (byte)(mask | MASK.TINT_BLUE);
+        mask = mask | MASK.TINT_BLUE;
     if ((pad & PAD.UP) != 0)
-        mask = (byte)(mask | MASK.MONO);
+        mask = mask | MASK.MONO;
     if ((pad & PAD.DOWN) != 0)
-        mask = (byte)(mask | MASK.MONO);
+        mask = mask | MASK.MONO;
     ppu_mask(mask);
     mask = MASK.BG;
 }
