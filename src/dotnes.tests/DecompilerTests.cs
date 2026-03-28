@@ -154,7 +154,7 @@ public class DecompilerTests
 
         var code = decompiler.Decompile();
 
-        // Music sample has play_music/start_music subroutines between built-ins and main.
+        // Music sample has music_tick/start_music subroutines between built-ins and main.
         // The decompiler must find main at its actual address (not builtInsEnd).
         // Verify key NESLib calls that appear at the start of music's main():
         Assert.Contains("pal_col(0, 0x01);", code);

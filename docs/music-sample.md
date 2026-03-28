@@ -23,7 +23,7 @@ start_music(music1);
 while (true)
 {
     ppu_wait_nmi();
-    play_music();
+    music_tick();
 }
 ```
 
@@ -39,7 +39,7 @@ void main() {
     start_music(music1);
     while (1) {
         ppu_wait_nmi();
-        play_music();
+        music_tick();
     }
 }
 ```
@@ -52,7 +52,7 @@ void main() {
 | `set_music_triangle_table(ushort[])` | Sets the note frequency table for the triangle channel |
 | `apu_init()` | Initializes the APU — enables channels and silences all |
 | `start_music(byte[])` | Sets the music data pointer and begins playback |
-| `play_music()` | Advances one frame of music playback (call every NMI) |
+| `music_tick()` | Advances one frame of music playback (call every NMI) |
 | `ppu_wait_nmi()` | Waits for the next vertical blank interrupt |
 
 ## CHR ROM
@@ -65,7 +65,7 @@ The transpiler emits code in this order to match cc65's layout:
 
 ```
 $8000-$84FF  neslib runtime (palette, PPU, NMI handler, etc.)
-$8500-$85E7  play_music subroutine (232 bytes)
+$8500-$85E7  music_tick subroutine (232 bytes)
 $85E8-$85FD  start_music subroutine (22 bytes)
 $85FE-$8610  main() — JSR apu_init, JSR start_music, loop
 $8611-$86xx  donelib, copydata, popax, incsp2, popa, pusha, pushax, zerobss
@@ -99,7 +99,7 @@ The transpiler output is **functionally equivalent** to a cc65-compiled ROM — 
 
 **dotnes model:** The transpiler doesn't use cc65's DATA/BSS segment separation. Music state variables are at fixed addresses defined in `NESConstants.cs`, and `condes` is always `$0300`.
 
-These differences affect only the runtime initialization sequence — the actual music engine code (`play_music`, `start_music`, `apu_init`, `main`) is **instruction-identical** between cc65 and dotnes.
+These differences affect only the runtime initialization sequence — the actual music engine code (`music_tick`, `start_music`, `apu_init`, `main`) is **instruction-identical** between cc65 and dotnes.
 
 ### CHR ROM
 

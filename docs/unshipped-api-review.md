@@ -44,13 +44,11 @@ The C original is `void *dst`, but NES has no managed objects. `object` is seman
 - `memfill(ushort addr, byte value, uint len)` — address-based, matching `poke`/`peek`
 - `memfill(byte[] dst, byte value, uint len)` — buffer-based
 
-### 4. `music_play(byte)` vs `play_music()` naming confusion
+### 4. ~~`music_play(byte)` vs `play_music()` naming confusion~~ ✅ Resolved
 
-These are dangerously similar names for different subsystems:
+Resolved: `play_music()` has been renamed to `music_tick()`. The names are now clearly distinct:
 - `music_play(byte song)` — FamiTone (from neslib.h)
-- `play_music()` — dotnes custom music engine
-
-Users will confuse them. Consider renaming the custom engine method (e.g., `music_tick()`) or at minimum adding very prominent XML doc warnings.
+- `music_tick()` — dotnes custom music engine (advances one frame)
 
 ### 5. Missing `OAM_FLIP_V`, `OAM_FLIP_H`, `OAM_BEHIND` constants
 
@@ -65,7 +63,7 @@ These match the neslib.h "vibes" perfectly but could be more idiomatic C#. Lower
 | `oam_size(byte)` | "0 for 8x8, 1 for 8x16" | `SpriteSize` enum |
 | ~~`vram_inc(byte)`~~ | ~~"0 for +1, not 0 for +32"~~ | ~~`bool` or enum~~ ✅ Done — now `vram_inc(VramIncrement)` |
 | `ppu_system()` returns `byte` | "0 for PAL, not 0 for NTSC" | `VideoSystem` enum or `bool IsNtsc` |
-| `MMC1_MIRROR_*` constants | `const byte` | `MMC1Mirror` enum |
+| `MMC1_MIRROR_*` constants | `const byte` | `MMC1Mirror` enum ✅ |
 | `music_pause(byte)` | "0 unpause, 1 pause" | `bool` |
 | `oam_off` field | public mutable field | property |
 

@@ -37,7 +37,7 @@
 ### music.c
 - **Description:** A custom music player that directly programs APU registers using `apu.h` macros to play "The Easy Winners" by Scott Joplin.
 - **Status:** ✅ Already Implemented
-- **dotnes sample:** `music` (uses dotnes's own music engine with `start_music`, `play_music`, `set_music_pulse_table`, `set_music_triangle_table`)
+- **dotnes sample:** `music` (uses dotnes's own music engine with `start_music`, `music_tick`, `set_music_pulse_table`, `set_music_triangle_table`)
 - **Missing Features:** The 8bitworkshop version uses direct APU register macros (`APU_PULSE_DECAY`, `APU_TRIANGLE_LENGTH`, etc.) which dotnes does not support, but dotnes has its own equivalent music system.
 
 ### tint.c
