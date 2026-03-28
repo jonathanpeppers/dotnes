@@ -5228,4 +5228,99 @@ public class RoslynTests
         // Must contain CPX #$02 (E002) for hi byte comparison against 512 (hi=0x02)
         Assert.Contains("E002", hex);
     }
+
+    [Fact]
+    public void ByteUshortVarExtraction_NoPushaLeak()
+    {
+        // Regression: (byte)ushort_var patterns inside stelem_i1 must not leave
+        // unmatched JSR pusha calls in the generated code. Each pusha must have
+        // a corresponding popa or incsp1, otherwise the cc65 stack leaks.
+        // This mimics the climber sample's draw_entire_stage init pattern with
+        // preceding array stores that set LastLDA = true before word local loads.
+        var (program, _) = BuildProgram(
+            """
+            byte[] arr_lo = new byte[8];
+            byte[] arr_hi = new byte[8];
+            byte[] arr_state = new byte[8];
+            byte[] arr_x = new byte[8];
+            byte[] ypos = new byte[8];
+            ypos[0] = 10; ypos[1] = 20; ypos[2] = 30; ypos[3] = 40;
+            for (byte i = 0; i < 4; i++)
+            {
+                arr_state[i] = 1;
+                arr_x[i] = rand8();
+                byte aypos = ypos[i];
+                ushort ayy = (ushort)(aypos * 8 + 16);
+                arr_lo[i] = (byte)ayy;
+                arr_hi[i] = (byte)(ayy >> 8);
+            }
+            ppu_on_all();
+            while (true) ;
+            """);
+
+        // Count JSR pusha and JSR popa/incsp1 in the main block
+        var mainBlock = program.GetBlock("main");
+        Assert.NotNull(mainBlock);
+
+        int pushaCount = 0, popaCount = 0;
+        foreach (var (instruction, _) in mainBlock.InstructionsWithLabels)
+        {
+            if (instruction.Opcode == Opcode.JSR && instruction.Operand is LabelOperand lbl)
+            {
+                if (lbl.Label == "pusha") pushaCount++;
+                if (lbl.Label == "popa" || lbl.Label == "incsp1") popaCount++;
+            }
+        }
+
+        _logger.WriteLine($"Main block: pusha={pushaCount}, popa/incsp1={popaCount}");
+
+        // The (byte)ushort_var stelem pattern must not leave any unmatched pusha
+        // calls in the main block — HandleStelemI1 removes and re-emits the
+        // entire sequence, so every pusha must be balanced by popa or incsp1.
+        Assert.True(pushaCount <= popaCount,
+            $"Unmatched pusha calls detected: pusha={pushaCount}, popa/incsp1={popaCount}. " +
+            "Each pusha must be balanced by popa or incsp1 to prevent cc65 stack leaks.");
+    }
+
+    [Fact]
+    public void ByteUshortVarExtraction_Stloc_NoPushaLeak()
+    {
+        // Test the stloc variant: byte lo = (byte)ushort_var where the result is
+        // stored to a byte local (not an array). This goes through WriteStloc
+        // instead of HandleStelemI1.
+        var (program, _) = BuildProgram(
+            """
+            byte[] ypos = new byte[8];
+            ypos[0] = 10;
+            for (byte f = 0; f < 4; f++)
+            {
+                byte pypos = ypos[f];
+                ushort floor_yy = (ushort)(pypos * 8 + 16);
+                byte fyy_lo = (byte)floor_yy;
+                byte fyy_hi = (byte)(floor_yy >> 8);
+                pal_col(fyy_lo, fyy_hi);
+            }
+            ppu_on_all();
+            while (true) ;
+            """);
+
+        var mainBlock = program.GetBlock("main");
+        Assert.NotNull(mainBlock);
+
+        int pushaCount = 0, popaCount = 0;
+        foreach (var (instruction, _) in mainBlock.InstructionsWithLabels)
+        {
+            if (instruction.Opcode == Opcode.JSR && instruction.Operand is LabelOperand lbl)
+            {
+                if (lbl.Label == "pusha") pushaCount++;
+                if (lbl.Label == "popa" || lbl.Label == "incsp1") popaCount++;
+            }
+        }
+
+        _logger.WriteLine($"Stloc variant - Main block: pusha={pushaCount}, popa/incsp1={popaCount}");
+
+        Assert.True(pushaCount <= popaCount,
+            $"Unmatched pusha calls detected: pusha={pushaCount}, popa/incsp1={popaCount}. " +
+            "Each pusha must be balanced by popa or incsp1 to prevent cc65 stack leaks.");
+    }
 }

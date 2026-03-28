@@ -250,4 +250,73 @@ public class TranspilerTests
         _logger.WriteLine($"{name} ({configuration}): LocalCount={locals}, MainSize={sizeOfMain}");
         Assert.Equal(expectedLocals, locals);
     }
+
+    [Theory]
+    [InlineData("climber", true)]
+    [InlineData("climber", false)]
+    public void ClimberPushaPopaBalanced(string name, bool debug)
+    {
+        // Regression: The climber sample must not have unmatched JSR pusha calls
+        // that leak cc65 stack bytes. Every pusha must be balanced by a matching
+        // popa, incsp1, or be a function argument consumed by the callee.
+        var configuration = debug ? "debug" : "release";
+
+        var assemblyReaders = new List<AssemblyReader>();
+        var chrStream = typeof(Utilities).Assembly.GetManifestResourceStream($"chr_{name}.s")
+            ?? Utilities.GetResource("chr_generic.s");
+        assemblyReaders.Add(new AssemblyReader(new StreamReader(chrStream)));
+
+        var famiDir = Path.Combine(AppContext.BaseDirectory, "Data", "fami");
+        if (Directory.Exists(famiDir))
+        {
+            foreach (var sFile in Directory.GetFiles(famiDir, "*.s").OrderBy(f => f))
+                assemblyReaders.Add(new AssemblyReader(sFile));
+        }
+
+        using var dll = Utilities.GetResource($"{name}.{configuration}.dll");
+        using var transpiler = new Transpiler(dll, assemblyReaders, _logger);
+        var program = transpiler.BuildProgram6502(out _, out _);
+
+        var mainBlock = program.GetBlock("main");
+        Assert.NotNull(mainBlock);
+
+        // Count pusha/popa/incsp in the main block.
+        // Function-argument pushas are consumed by the callee (popa inside the
+        // callee's block, not main). Detect them by checking if a JSR to a
+        // library/user function follows within a short window.
+        int leakedPusha = 0, funcArgPusha = 0, popaCount = 0;
+        var instrs = mainBlock.InstructionsWithLabels.ToList();
+        for (int i = 0; i < instrs.Count; i++)
+        {
+            var (instruction, _) = instrs[i];
+            if (instruction.Opcode != ObjectModel.Opcode.JSR || instruction.Operand is not ObjectModel.LabelOperand lbl)
+                continue;
+            if (lbl.Label is "popa" or "incsp1" or "incsp2") popaCount++;
+            if (lbl.Label != "pusha") continue;
+
+            // Check if this pusha is for a function argument
+            bool isForFuncCall = false;
+            for (int j = i + 1; j < Math.Min(i + 8, instrs.Count); j++)
+            {
+                var next = instrs[j].Instruction;
+                if (next.Opcode == ObjectModel.Opcode.JSR && next.Operand is ObjectModel.LabelOperand callLbl
+                    && callLbl.Label is not "pusha" and not "pushax" and not "popa"
+                       and not "popax" and not "incsp1" and not "incsp2")
+                {
+                    isForFuncCall = true;
+                    break;
+                }
+            }
+            if (isForFuncCall) funcArgPusha++;
+            else leakedPusha++;
+        }
+
+        _logger.WriteLine($"{name} ({configuration}): funcArgPusha={funcArgPusha}, leakedPusha={leakedPusha}, popa={popaCount}");
+
+        // Non-argument pusha calls must be balanced by popa/incsp in the same block
+        Assert.True(leakedPusha <= popaCount,
+            $"Unmatched state-saving pusha calls in {name} ({configuration}): " +
+            $"stateSave={leakedPusha}, popa={popaCount}. " +
+            $"Deficit: {leakedPusha - popaCount} bytes leaked per execution.");
+    }
 }

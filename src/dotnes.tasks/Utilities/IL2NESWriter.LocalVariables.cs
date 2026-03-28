@@ -250,6 +250,7 @@ partial class IL2NESWriter
         // In unit-test mode (no Instructions), save unconditionally when both
         // values are words.
         bool needSaveUshort = false;
+        bool wasUshortInAX = _ushortInAX;
         if (_ushortInAX && local.Address.HasValue && local.IsWord)
         {
             if (Instructions is not null && Index + 1 < Instructions.Length)
@@ -301,15 +302,24 @@ partial class IL2NESWriter
             }
             else if (local.Value <= byte.MaxValue)
             {
-                if (_runtimeValueInA && !LastLDA)
+                // When _ushortInAX was true (from a preceding WriteLdc(ushort)), the
+                // ushort constant is already tracked on the Stack and will be consumed
+                // directly by arithmetic/logical operations (e.g., HandleAddSub's
+                // _ushortInAX path). Don't emit pusha here — it would save only the
+                // low byte of the ushort and never be consumed, leaking a cc65 stack
+                // byte on every execution.
+                if (!wasUshortInAX)
                 {
-                    Emit(Opcode.STA, AddressMode.ZeroPage, (byte)NESConstants.TEMP);
-                    _savedRuntimeToTemp = true;
-                }
-                else if (LastLDA)
-                {
-                    EmitJSR("pusha");
-                    _savedConstantViaPusha = true;
+                    if (_runtimeValueInA && !LastLDA)
+                    {
+                        Emit(Opcode.STA, AddressMode.ZeroPage, (byte)NESConstants.TEMP);
+                        _savedRuntimeToTemp = true;
+                    }
+                    else if (LastLDA)
+                    {
+                        EmitJSR("pusha");
+                        _savedConstantViaPusha = true;
+                    }
                 }
                 Emit(Opcode.LDA, AddressMode.Absolute, (ushort)local.Address);
                 _immediateInA = null;
