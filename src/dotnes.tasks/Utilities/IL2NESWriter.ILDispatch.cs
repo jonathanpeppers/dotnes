@@ -1235,36 +1235,41 @@ partial class IL2NESWriter
                     }
 
                     if (!EmitBranchCompare(cmpVal))
-                        throw new TranspileException($"Branch comparison value {cmpVal} exceeds byte range.", MethodName);
-                    
-                    // If the last instruction is INC/DEC (from x++ pattern),
-                    // A doesn't have the variable's value. Re-emit LDA to reload it.
-                    var bneBlock = CurrentBlock!;
-                    if (bneBlock.Count > 0)
                     {
-                        var lastInstr = bneBlock[bneBlock.Count - 1];
-                        if (lastInstr.Opcode is Opcode.INC or Opcode.DEC
-                            && lastInstr.Operand is AbsoluteOperand absOp)
-                            Emit(Opcode.LDA, AddressMode.Absolute, absOp.Address);
+                        // Overflow: byte != 256+ is always true → unconditional branch
+                        EmitWithLabel(Opcode.JMP, AddressMode.Absolute, labelName);
                     }
-
-                    // In a dup cascade, save A to DUP_TEMP after CMP so subsequent
-                    // checks can reload it. STA does NOT affect processor flags,
-                    // so the branch instruction still sees the CMP result.
-                    // Only save on the branch that immediately follows dup+ldc
-                    // (not on unrelated branches inside the if-body).
-                    if (_dupPendingSave)
-                    {
-                        Emit(Opcode.STA, AddressMode.ZeroPage, TEMP_HI);
-                        _dupPendingSave = false;
-                    }
-                    
-                    if (instruction.OpCode == ILOpCode.Bne_un_s)
-                        EmitWithLabel(Opcode.BNE, AddressMode.Relative, labelName);
                     else
                     {
-                        Emit(Opcode.BEQ, AddressMode.Relative, 3);
-                        EmitWithLabel(Opcode.JMP, AddressMode.Absolute, labelName);
+                        // If the last instruction is INC/DEC (from x++ pattern),
+                        // A doesn't have the variable's value. Re-emit LDA to reload it.
+                        var bneBlock = CurrentBlock!;
+                        if (bneBlock.Count > 0)
+                        {
+                            var lastInstr = bneBlock[bneBlock.Count - 1];
+                            if (lastInstr.Opcode is Opcode.INC or Opcode.DEC
+                                && lastInstr.Operand is AbsoluteOperand absOp)
+                                Emit(Opcode.LDA, AddressMode.Absolute, absOp.Address);
+                        }
+
+                        // In a dup cascade, save A to DUP_TEMP after CMP so subsequent
+                        // checks can reload it. STA does NOT affect processor flags,
+                        // so the branch instruction still sees the CMP result.
+                        // Only save on the branch that immediately follows dup+ldc
+                        // (not on unrelated branches inside the if-body).
+                        if (_dupPendingSave)
+                        {
+                            Emit(Opcode.STA, AddressMode.ZeroPage, TEMP_HI);
+                            _dupPendingSave = false;
+                        }
+                    
+                        if (instruction.OpCode == ILOpCode.Bne_un_s)
+                            EmitWithLabel(Opcode.BNE, AddressMode.Relative, labelName);
+                        else
+                        {
+                            Emit(Opcode.BEQ, AddressMode.Relative, 3);
+                            EmitWithLabel(Opcode.JMP, AddressMode.Absolute, labelName);
+                        }
                     }
                     _runtimeValueInA = false;
                 }
@@ -1289,20 +1294,24 @@ partial class IL2NESWriter
                     }
 
                     if (!EmitBranchCompare(cmpVal))
-                        throw new TranspileException($"Branch comparison value {cmpVal} exceeds byte range.", MethodName);
-
-                    if (_dupPendingSave)
                     {
-                        Emit(Opcode.STA, AddressMode.ZeroPage, TEMP_HI);
-                        _dupPendingSave = false;
+                        // Overflow: byte == 256+ is always false → skip branch (no-op)
                     }
-
-                    if (instruction.OpCode == ILOpCode.Beq_s)
-                        EmitWithLabel(Opcode.BEQ, AddressMode.Relative, labelName);
                     else
                     {
-                        Emit(Opcode.BNE, AddressMode.Relative, 3);
-                        EmitWithLabel(Opcode.JMP, AddressMode.Absolute, labelName);
+                        if (_dupPendingSave)
+                        {
+                            Emit(Opcode.STA, AddressMode.ZeroPage, TEMP_HI);
+                            _dupPendingSave = false;
+                        }
+
+                        if (instruction.OpCode == ILOpCode.Beq_s)
+                            EmitWithLabel(Opcode.BEQ, AddressMode.Relative, labelName);
+                        else
+                        {
+                            Emit(Opcode.BNE, AddressMode.Relative, 3);
+                            EmitWithLabel(Opcode.JMP, AddressMode.Absolute, labelName);
+                        }
                     }
                     _runtimeValueInA = false;
                 }
@@ -1349,8 +1358,11 @@ partial class IL2NESWriter
                     }
 
                     if (!EmitBranchCompare(cmpVal))
-                        throw new TranspileException($"Branch comparison value {cmpVal} exceeds byte range.", MethodName);
-                    if (isShort)
+                    {
+                        // Overflow: byte < 256+ is always true → unconditional branch
+                        EmitWithLabel(Opcode.JMP, AddressMode.Absolute, labelName);
+                    }
+                    else if (isShort)
                         EmitWithLabel(Opcode.BCC, AddressMode.Relative, labelName);
                     else
                     {
@@ -1421,8 +1433,10 @@ partial class IL2NESWriter
                     }
 
                     if (!EmitBranchCompare(cmpVal))
-                        throw new TranspileException($"Branch comparison value {cmpVal} exceeds byte range.", MethodName);
-                    if (isShort)
+                    {
+                        // Overflow: byte >= 256+ is always false → skip branch (no-op)
+                    }
+                    else if (isShort)
                         EmitWithLabel(Opcode.BCS, AddressMode.Relative, labelName);
                     else
                     {
