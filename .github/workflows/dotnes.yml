@@ -59,8 +59,9 @@ jobs:
 
   smoke-test:
     needs: build
+    timeout-minutes: 5
     strategy:
-      fail-fast: false
+      fail-fast: true
       matrix:
         os: [windows-latest, macos-latest, ubuntu-latest]
     runs-on: ${{ matrix.os }}
@@ -73,6 +74,9 @@ jobs:
       uses: actions/setup-dotnet@v5
       with:
         dotnet-version: 10.x
+    - name: install SDL2 (Linux)
+      if: runner.os == 'Linux'
+      run: sudo apt-get update -qq && sudo apt-get install -y -qq libsdl2-2.0-0
     - name: download nupkgs
       uses: actions/download-artifact@v4
       with:
@@ -95,8 +99,6 @@ jobs:
         # Create a minimal config so it skips the wizard and reaches --testrunner.
         if [ "$RUNNER_OS" = "Windows" ]; then
           CONFIG_DIR="$USERPROFILE/Documents/Mesen2"
-        elif [ "$RUNNER_OS" = "macOS" ]; then
-          CONFIG_DIR="$HOME/.config/Mesen2"
         else
           CONFIG_DIR="$HOME/.config/Mesen2"
         fi
