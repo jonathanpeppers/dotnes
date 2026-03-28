@@ -264,18 +264,6 @@ partial class IL2NESWriter
                     }
                     break;
                 }
-                case ILOpCode.Call:
-                {
-                    // Handle property getter call as standalone argument (e.g., get_oam_off)
-                    if (il.String == "get_oam_off")
-                    {
-                        argInfos.Add((false, 0, 0, false, 0, false, 0, 0,
-                            false, 0, ILOpCode.Nop, 0, 0, true, nameof(NESLib.oam_off), null));
-                        needed--;
-                        firstArgIlIdx = ilIdx;
-                    }
-                    break;
-                }
                 default:
                     break;
             }
