@@ -40,3 +40,15 @@ public static class OAM
     public const byte FLIP_H = 0x40;
     public const byte BEHIND = 0x20;
 }
+
+/// <summary>
+/// MMC1 mirroring modes (bits 0-1 of the Control register).
+/// Cast to <c>byte</c> and OR with PRG/CHR mode bits for <see cref="NESLib.mmc1_set_mirroring(byte)"/>.
+/// </summary>
+public enum MMC1Mirror : byte
+{
+    OneLower = 0,
+    OneUpper = 1,
+    Vertical = 2,
+    Horizontal = 3,
+}
