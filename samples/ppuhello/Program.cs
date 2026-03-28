@@ -40,6 +40,6 @@ poke(PPU_ADDR, 0x20);
 poke(PPU_ADDR, 0x00);
 
 // Turn on screen
-poke(PPU_MASK, (byte)(MASK.BG | MASK.SPR | MASK.EDGE_BG | MASK.EDGE_SPR));
+poke(PPU_MASK, MASK.BG | MASK.SPR | MASK.EDGE_BG | MASK.EDGE_SPR);
 
 while (true) ;
