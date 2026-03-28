@@ -67,7 +67,7 @@ These match the neslib.h "vibes" perfectly but could be more idiomatic C#. Lower
 | `ppu_system()` returns `byte` | "0 for PAL, not 0 for NTSC" | `VideoSystem` enum or `bool IsNtsc` |
 | `MMC1_MIRROR_*` constants | `const byte` | `MMC1Mirror` enum |
 | `music_pause(byte)` | "0 unpause, 1 pause" | `bool` |
-| `oam_off` field | public mutable field | property |
+| `oam_off` ~~field~~ | ~~public mutable field~~ | ~~property~~ ✅ Done |
 
 ## Recommendation
 
