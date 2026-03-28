@@ -1236,7 +1236,7 @@ partial class IL2NESWriter
 
                     if (!EmitBranchCompare(cmpVal))
                     {
-                        // Overflow: byte != 256+ is always true → unconditional branch
+                        // Overflow (8-bit fallback): value in A can never equal 256+ → unconditional branch
                         EmitWithLabel(Opcode.JMP, AddressMode.Absolute, labelName);
                     }
                     else
@@ -1295,7 +1295,7 @@ partial class IL2NESWriter
 
                     if (!EmitBranchCompare(cmpVal))
                     {
-                        // Overflow: byte == 256+ is always false → skip branch (no-op)
+                        // Overflow (8-bit fallback): value in A can never equal 256+ → skip branch (no-op)
                     }
                     else
                     {
@@ -1359,7 +1359,7 @@ partial class IL2NESWriter
 
                     if (!EmitBranchCompare(cmpVal))
                     {
-                        // Overflow: byte < 256+ is always true → unconditional branch
+                        // Overflow (8-bit fallback): value in A is always < 256+ → unconditional branch
                         EmitWithLabel(Opcode.JMP, AddressMode.Absolute, labelName);
                     }
                     else if (isShort)
@@ -1434,7 +1434,7 @@ partial class IL2NESWriter
 
                     if (!EmitBranchCompare(cmpVal))
                     {
-                        // Overflow: byte >= 256+ is always false → skip branch (no-op)
+                        // Overflow (8-bit fallback): value in A is never >= 256+ → skip branch (no-op)
                     }
                     else if (isShort)
                         EmitWithLabel(Opcode.BCS, AddressMode.Relative, labelName);
