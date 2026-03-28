@@ -29,3 +29,15 @@ public static class MASK
     public const byte TINT_GREEN = 0x40;
     public const byte TINT_BLUE = 0x80;
 }
+
+/// <summary>
+/// MMC1 mirroring modes (bits 0-1 of the Control register).
+/// Used with <see cref="NESLib.mmc1_set_mirroring(MMC1Mirror)"/>.
+/// </summary>
+public enum MMC1Mirror : byte
+{
+    OneLower = 0,
+    OneUpper = 1,
+    Vertical = 2,
+    Horizontal = 3,
+}

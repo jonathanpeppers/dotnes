@@ -35,10 +35,11 @@ const NES.NESLib.MMC1_CHR_BANK0 = 40960 -> ushort
 const NES.NESLib.MMC1_CHR_BANK1 = 49152 -> ushort
 const NES.NESLib.MMC1_CHR_4K = 16 -> byte
 const NES.NESLib.MMC1_CONTROL = 32768 -> ushort
-const NES.NESLib.MMC1_MIRROR_HORIZONTAL = 3 -> byte
-const NES.NESLib.MMC1_MIRROR_ONE_LOWER = 0 -> byte
-const NES.NESLib.MMC1_MIRROR_ONE_UPPER = 1 -> byte
-const NES.NESLib.MMC1_MIRROR_VERTICAL = 2 -> byte
+NES.MMC1Mirror
+NES.MMC1Mirror.Horizontal = 3 -> NES.MMC1Mirror
+NES.MMC1Mirror.OneLower = 0 -> NES.MMC1Mirror
+NES.MMC1Mirror.OneUpper = 1 -> NES.MMC1Mirror
+NES.MMC1Mirror.Vertical = 2 -> NES.MMC1Mirror
 const NES.NESLib.MMC1_PRG_BANK = 57344 -> ushort
 const NES.NESLib.MMC1_PRG_FIX_LAST = 12 -> byte
 const NES.NESLib.NT_UPD_EOF = 255 -> byte
@@ -64,7 +65,7 @@ static NES.NESLib.famitone_init(string! musicDataLabel) -> void
 static NES.NESLib.irq_set_callback(delegate*<void> callback) -> void
 static NES.NESLib.memfill(ushort addr, byte value, uint len) -> void
 static NES.NESLib.mmc1_set_chr_bank(byte bank0, byte bank1) -> void
-static NES.NESLib.mmc1_set_mirroring(byte mode) -> void
+static NES.NESLib.mmc1_set_mirroring(NES.MMC1Mirror mode) -> void
 static NES.NESLib.mmc1_set_prg_bank(byte bank) -> void
 static NES.NESLib.mmc1_write(ushort addr, byte value) -> void
 static NES.NESLib.set_chr_mode(byte reg, byte bank) -> void
