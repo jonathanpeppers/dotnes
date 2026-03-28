@@ -554,7 +554,7 @@ public static class NESLib
     /// R2-R5 (reg 2-5): 1KB CHR banks at PPU $1000/$1400/$1800/$1C00.
     /// R6-R7 (reg 6-7): PRG banks (not CHR).</param>
     /// <param name="bank">Bank number to select. Can be a constant or local variable.</param>
-    public static void set_chr_mode(byte reg, byte bank) => throw null!;
+    public static void mmc3_set_chr_bank(byte reg, byte bank) => throw null!;
 
     // MMC1 mapper register addresses for serial shift register writes via mmc1_write()
     public const ushort MMC1_CONTROL = 0x8000;
