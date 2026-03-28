@@ -304,9 +304,10 @@ partial class IL2NESWriter
             {
                 // When _ushortInAX was true (from a preceding WriteLdc(ushort)), the
                 // ushort constant is already tracked on the Stack and will be consumed
-                // directly by HandleAddSub's _ushortInAX path. Don't emit pusha here —
-                // it would save only the low byte of the ushort and never be consumed,
-                // leaking a cc65 stack byte on every execution.
+                // directly by arithmetic/logical operations (e.g., HandleAddSub's
+                // _ushortInAX path). Don't emit pusha here — it would save only the
+                // low byte of the ushort and never be consumed, leaking a cc65 stack
+                // byte on every execution.
                 if (wasUshortInAX)
                 {
                     // Skip pusha — the ushort value is on the Stack

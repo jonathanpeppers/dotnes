@@ -311,7 +311,7 @@ public class TranspilerTests
             else leakedPusha++;
         }
 
-        _logger.WriteLine($"{name} ({configuration}): funcArgPusha={funcArgPusha}, stateSavePusha={leakedPusha}, popa={popaCount}");
+        _logger.WriteLine($"{name} ({configuration}): funcArgPusha={funcArgPusha}, leakedPusha={leakedPusha}, popa={popaCount}");
 
         // State-saving pusha calls must be balanced by popa/incsp1 in the same block
         Assert.True(leakedPusha <= popaCount,
