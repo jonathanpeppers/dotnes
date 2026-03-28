@@ -6,9 +6,12 @@ on:
   pull_request:
     branches: [ main ]
 
+permissions:
+  contents: read
+
 jobs:
   build:
-    runs-on: macos-latest
+    runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v6
     - name: install .NET
@@ -17,18 +20,14 @@ jobs:
         dotnet-version: 10.x
     - name: cache ANESE downloads
       uses: ./.github/workflows/cache-anese
+    - name: cache Mesen downloads
+      uses: ./.github/workflows/cache-mesen
     - name: build
       run: dotnet build -bl:build-debug.binlog && dotnet build -c Release -bl:build-release.binlog
     - name: test
       run: dotnet test --no-build --verbosity normal && dotnet test --no-build --verbosity normal -c Release
     - name: samples
       run: dotnet build samples/samples.sln -bl:samples-debug.binlog && dotnet build samples/samples.sln -c Release -bl:samples-release.binlog
-    - name: templates
-      run: |
-        dotnet new install bin/Release/dotnes.templates.*.nupkg && \
-        dotnet new nes --output samples/foo && \
-        dotnet build samples/foo/foo.csproj -bl:foo-debug.binlog && \
-        dotnet build samples/foo/foo.csproj -c Release -bl:foo-release.binlog
     - name: shutdown (best effort)
       if: always()
       run: dotnet build-server shutdown
@@ -57,3 +56,40 @@ jobs:
         path: |
           bin/Release/*.nupkg
         if-no-files-found: error
+
+  smoke-test:
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+    - uses: actions/checkout@v6
+      with:
+        sparse-checkout: scripts/smoke-test.lua
+        sparse-checkout-cone-mode: false
+    - name: install .NET
+      uses: actions/setup-dotnet@v5
+      with:
+        dotnet-version: 10.x
+    - name: download nupkgs
+      uses: actions/download-artifact@v7
+      with:
+        name: nupkgs
+        path: nupkgs
+    - name: add local NuGet source
+      run: dotnet nuget add source "${{ github.workspace }}/nupkgs" --name local
+    - name: install template
+      shell: bash
+      run: dotnet new install nupkgs/dotnes.templates.*.nupkg
+    - name: create project
+      run: dotnet new nes --output smoketest
+    - name: build project
+      run: dotnet build smoketest/smoketest.csproj
+    - name: run smoke test
+      shell: bash
+      run: |
+        dotnet run --project smoketest/smoketest.csproj --no-build \
+          "-p:MesenRunArguments=--testrunner --doNotSaveSettings --timeout=10 ${{ github.workspace }}/scripts/smoke-test.lua"
+

@@ -36,7 +36,7 @@
   <!-- Set RunCommand so 'dotnet run' launches the ROM in Mesen -->
   <PropertyGroup Condition="'$(_MesenExe)' != ''">
     <RunCommand>$(_MesenExe)</RunCommand>
-    <RunArguments>&quot;$(TargetName).nes&quot;</RunArguments>
+    <RunArguments>&quot;$(TargetName).nes&quot; $(MesenRunArguments)</RunArguments>
     <RunWorkingDirectory>$(OutputPath)</RunWorkingDirectory>
   </PropertyGroup>
 

@@ -130,6 +130,31 @@ read and write save data.
 </PropertyGroup>
 ```
 
+### `MesenRunArguments`
+
+Extra command-line arguments appended to the Mesen invocation when running
+`dotnet run`. Useful for headless CI smoke tests or passing Lua scripts.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Default** | *(empty)* |
+
+The value is appended after the ROM path in the `RunArguments` property used by
+`dotnet run`. Any Mesen-supported flags can be passed here.
+
+```xml
+<PropertyGroup>
+  <MesenRunArguments>--testrunner --doNotSaveSettings --timeout=10 smoke-test.lua</MesenRunArguments>
+</PropertyGroup>
+```
+
+Example using `dotnet run` on the command line:
+
+```bash
+dotnet run -p:MesenRunArguments="--testrunner --doNotSaveSettings --timeout=10 smoke-test.lua"
+```
+
 ## Item Groups
 
 ### `NESAssembly`
