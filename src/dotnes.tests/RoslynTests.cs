@@ -1506,6 +1506,31 @@ public class RoslynTests
     }
 
     [Fact]
+    public void RuntimeValueInA_ThenWordLocal_EmitsPusha()
+    {
+        // Regression: when _runtimeValueInA is true (e.g., from nesclock())
+        // followed by ldloc of a ushort local, must emit JSR pusha to save A
+        // before the word local clobbers it.
+        var (program, _) = BuildProgram(
+            """
+            ushort total = 100;
+            byte val = nesclock();
+            ushort result = (ushort)(val + total);
+            pal_col(0, (byte)result);
+            ppu_on_all();
+            while (true) ;
+            """);
+
+        // Scan all blocks for JSR pusha
+        bool hasPusha = program.Blocks.Any(b =>
+            b.InstructionsWithLabels.Any(il =>
+                il.Instruction.Opcode == Opcode.JSR &&
+                il.Instruction.Operand is LabelOperand lbl && lbl.Label == "pusha"));
+        Assert.True(hasPusha, "Expected JSR pusha to save A before word local load. " +
+            $"Blocks: {string.Join(", ", program.Blocks.Select(b => b.Label ?? "(no label)"))}");
+    }
+
+    [Fact]
     public void WaitvsyncEmitsJsr()
     {
         // waitvsync() should emit JSR to waitvsync subroutine
