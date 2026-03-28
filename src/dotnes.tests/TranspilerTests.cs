@@ -254,8 +254,11 @@ public class TranspilerTests
     [Theory]
     [InlineData("climber", true)]
     [InlineData("climber", false)]
-    public void ClimberPushaPopaBananced(string name, bool debug)
+    public void ClimberPushaPopaBalanced(string name, bool debug)
     {
+        // Regression: The climber sample must not have unmatched JSR pusha calls
+        // that leak cc65 stack bytes. Every pusha must be balanced by a matching
+        // popa, incsp1, or be a function argument consumed by the callee.
         var configuration = debug ? "debug" : "release";
 
         var assemblyReaders = new List<AssemblyReader>();
@@ -277,51 +280,43 @@ public class TranspilerTests
         var mainBlock = program.GetBlock("main");
         Assert.NotNull(mainBlock);
 
-        // Dump context around each pusha to identify leaks
+        // Count pusha/popa/incsp in the main block.
+        // Function-argument pushas are consumed by the callee (popa inside the
+        // callee's block, not main). Detect them by checking if a JSR to a
+        // library/user function follows within a short window.
+        int leakedPusha = 0, funcArgPusha = 0, popaCount = 0;
         var instrs = mainBlock.InstructionsWithLabels.ToList();
-        int pushaNum = 0;
-        var leakedContexts = new List<string>();
         for (int i = 0; i < instrs.Count; i++)
         {
             var (instruction, _) = instrs[i];
-            if (instruction.Opcode == ObjectModel.Opcode.JSR && instruction.Operand is ObjectModel.LabelOperand lbl && lbl.Label == "pusha")
-            {
-                pushaNum++;
-                // Check if followed by a JSR function call (not stack ops)
-                bool isForFuncCall = false;
-                for (int j = i + 1; j < Math.Min(i + 8, instrs.Count); j++)
-                {
-                    var next = instrs[j].Instruction;
-                    if (next.Opcode == ObjectModel.Opcode.JSR && next.Operand is ObjectModel.LabelOperand callLbl)
-                    {
-                        if (callLbl.Label is not "pusha" and not "pushax" and not "popa" and not "popax" and not "incsp1" and not "incsp2")
-                        {
-                            isForFuncCall = true;
-                        }
-                        break;
-                    }
-                }
+            if (instruction.Opcode != ObjectModel.Opcode.JSR || instruction.Operand is not ObjectModel.LabelOperand lbl)
+                continue;
+            if (lbl.Label == "popa" || lbl.Label == "incsp1") popaCount++;
+            if (lbl.Label != "pusha") continue;
 
-                if (!isForFuncCall)
+            // Check if this pusha is for a function argument
+            bool isForFuncCall = false;
+            for (int j = i + 1; j < Math.Min(i + 8, instrs.Count); j++)
+            {
+                var next = instrs[j].Instruction;
+                if (next.Opcode == ObjectModel.Opcode.JSR && next.Operand is ObjectModel.LabelOperand callLbl
+                    && callLbl.Label is not "pusha" and not "pushax" and not "popa"
+                       and not "popax" and not "incsp1" and not "incsp2")
                 {
-                    // Show context: 2 before, the pusha, and 25 after
-                    var ctx = new StringBuilder();
-                    ctx.AppendLine($"  LEAKED pusha #{pushaNum} at index {i}:");
-                    int start = Math.Max(0, i - 2);
-                    int end = Math.Min(instrs.Count - 1, i + 25);
-                    for (int j = start; j <= end; j++)
-                    {
-                        var mark = (j == i) ? " >>> " : "     ";
-                        ctx.AppendLine($"{mark}[{j}] {instrs[j].Instruction}");
-                    }
-                    leakedContexts.Add(ctx.ToString());
+                    isForFuncCall = true;
+                    break;
                 }
             }
+            if (isForFuncCall) funcArgPusha++;
+            else leakedPusha++;
         }
 
-        foreach (var ctx in leakedContexts)
-            _logger.WriteLine($"{ctx}");
+        _logger.WriteLine($"{name} ({configuration}): funcArgPusha={funcArgPusha}, stateSavePusha={leakedPusha}, popa={popaCount}");
 
-        _logger.WriteLine($"{name} ({configuration}): total pusha={pushaNum}, leaked contexts={leakedContexts.Count}");
+        // State-saving pusha calls must be balanced by popa/incsp1 in the same block
+        Assert.True(leakedPusha <= popaCount,
+            $"Unmatched state-saving pusha calls in {name} ({configuration}): " +
+            $"stateSave={leakedPusha}, popa={popaCount}. " +
+            $"Deficit: {leakedPusha - popaCount} bytes leaked per execution.");
     }
 }
