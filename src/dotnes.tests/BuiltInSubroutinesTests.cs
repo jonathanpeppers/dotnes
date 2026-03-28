@@ -730,6 +730,49 @@ public class BuiltInSubroutinesTests
         Assert.Equal("copydata", BuiltInSubroutines.Copydata().Label);
         Assert.Equal("zerobss", BuiltInSubroutines.Zerobss().Label);
         Assert.Equal("pad_poll", BuiltInSubroutines.PadPoll().Label);
+        Assert.Equal("srand", BuiltInSubroutines.SRand().Label);
+        Assert.Equal("rand16", BuiltInSubroutines.Rand().Label);
+    }
+
+    [Fact]
+    public void Rand_HasCorrectInstructions()
+    {
+        // cc65 LCG rand16: 16 instructions
+        var block = BuiltInSubroutines.Rand();
+        Assert.Equal("rand16", block.Label);
+        Assert.Equal(16, block.Count);
+
+        // CLC
+        Assert.Equal(Opcode.CLC, block[0].Opcode);
+        // LDA RAND_STATE
+        Assert.Equal(Opcode.LDA, block[1].Opcode);
+        Assert.Equal(AddressMode.ZeroPage, block[1].Mode);
+        // ADC #$B3
+        Assert.Equal(Opcode.ADC, block[2].Opcode);
+        Assert.Equal(AddressMode.Immediate, block[2].Mode);
+        // Last instruction is RTS
+        Assert.Equal(Opcode.RTS, block[15].Opcode);
+    }
+
+    [Fact]
+    public void SRand_HasCorrectInstructions()
+    {
+        // srand stores seed in 4 zero-page bytes.
+        // No RTS: falls through to rand16 (ordering enforced in Program6502.ForEachOptionalBuiltIn).
+        var block = BuiltInSubroutines.SRand();
+        Assert.Equal("srand", block.Label);
+        Assert.Equal(4, block.Count);
+
+        // STA RAND_STATE
+        Assert.Equal(Opcode.STA, block[0].Opcode);
+        Assert.Equal(AddressMode.ZeroPage, block[0].Mode);
+        // STX RAND_STATE+1
+        Assert.Equal(Opcode.STX, block[1].Opcode);
+        Assert.Equal(AddressMode.ZeroPage, block[1].Mode);
+        // STA RAND_STATE+2
+        Assert.Equal(Opcode.STA, block[2].Opcode);
+        // STX RAND_STATE+3
+        Assert.Equal(Opcode.STX, block[3].Opcode);
     }
 
     #endregion
