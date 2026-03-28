@@ -1,5 +1,6 @@
 #nullable enable
 NES.MASK
+NES.OAM
 NES.MASK.BG = 8 -> NES.MASK
 NES.MASK.EDGE_BG = 2 -> NES.MASK
 NES.MASK.EDGE_SPR = 4 -> NES.MASK
@@ -8,6 +9,9 @@ NES.MASK.SPR = 16 -> NES.MASK
 NES.MASK.TINT_BLUE = 128 -> NES.MASK
 NES.MASK.TINT_GREEN = 64 -> NES.MASK
 NES.MASK.TINT_RED = 32 -> NES.MASK
+const NES.OAM.BEHIND = 32 -> byte
+const NES.OAM.FLIP_H = 64 -> byte
+const NES.OAM.FLIP_V = 128 -> byte
 const NES.NESLib.APU_NOISE_CTRL = 16396 -> ushort
 const NES.NESLib.APU_NOISE_LENGTH = 16399 -> ushort
 const NES.NESLib.APU_NOISE_PERIOD = 16398 -> ushort
@@ -35,10 +39,11 @@ const NES.NESLib.MMC1_CHR_BANK0 = 40960 -> ushort
 const NES.NESLib.MMC1_CHR_BANK1 = 49152 -> ushort
 const NES.NESLib.MMC1_CHR_4K = 16 -> byte
 const NES.NESLib.MMC1_CONTROL = 32768 -> ushort
-const NES.NESLib.MMC1_MIRROR_HORIZONTAL = 3 -> byte
-const NES.NESLib.MMC1_MIRROR_ONE_LOWER = 0 -> byte
-const NES.NESLib.MMC1_MIRROR_ONE_UPPER = 1 -> byte
-const NES.NESLib.MMC1_MIRROR_VERTICAL = 2 -> byte
+NES.MMC1Mirror
+NES.MMC1Mirror.Horizontal = 3 -> NES.MMC1Mirror
+NES.MMC1Mirror.OneLower = 0 -> NES.MMC1Mirror
+NES.MMC1Mirror.OneUpper = 1 -> NES.MMC1Mirror
+NES.MMC1Mirror.Vertical = 2 -> NES.MMC1Mirror
 const NES.NESLib.MMC1_PRG_BANK = 57344 -> ushort
 const NES.NESLib.MMC1_PRG_FIX_LAST = 12 -> byte
 const NES.NESLib.NT_UPD_EOF = 255 -> byte
