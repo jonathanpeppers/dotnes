@@ -13,15 +13,18 @@ string romPath = args.Length > 0 ? args[0] : throw new Exception("Usage: dotnet 
 int delayMs = args.Length > 1 ? int.Parse(args[1]) : 3000;
 string outputPath = args.Length > 2 ? args[2] : "screenshot.png";
 
-// Find Mesen
+// Find Mesen by querying MSBuild for the RunCommand property
 string repoRoot = Path.GetFullPath(".");
-string mesenPath = Path.Combine(repoRoot, "src", "dotnes.mesen", "bin",
-    OperatingSystem.IsWindows() ? "Mesen.exe" :
-    OperatingSystem.IsMacOS() ? Path.Combine("Mesen.app", "Contents", "MacOS", "Mesen") :
-    "Mesen");
+string sampleCsproj = Directory.GetFiles(Path.Combine(repoRoot, "samples", "hello"), "*.csproj").FirstOrDefault()
+    ?? throw new FileNotFoundException("Could not find a sample csproj to resolve Mesen path");
+var msbuildProc = Process.Start(new ProcessStartInfo("dotnet", $"msbuild \"{sampleCsproj}\" -restore -getProperty:RunCommand")
+    { RedirectStandardOutput = true, UseShellExecute = false })!;
+string mesenPath = msbuildProc.StandardOutput.ReadToEnd().Trim();
+msbuildProc.WaitForExit();
 if (!File.Exists(mesenPath))
 {
     Console.Error.WriteLine($"ERROR: Mesen not found at {mesenPath}");
+    Console.Error.WriteLine("Try building a sample first: dotnet build samples/hello");
     return;
 }
 
