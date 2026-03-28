@@ -1469,7 +1469,7 @@ class Decompiler
             "oam_size" => $"oam_size({aValue?.ToString() ?? "0"});",
             "oam_hide_rest" => $"oam_hide_rest({aValue?.ToString() ?? "0"});",
             "vram_put" => $"vram_put(0x{aValue ?? 0:X2});",
-            "vram_inc" => $"vram_inc(0x{aValue ?? 0:X2});",
+            "vram_inc" => $"vram_inc({((aValue ?? 0) != 0 ? "VramIncrement.By32" : "VramIncrement.By1")});",
             "bank_spr" => $"bank_spr({aValue?.ToString() ?? "0"});",
             "bank_bg" => $"bank_bg({aValue?.ToString() ?? "0"});",
             "delay" => $"delay({aValue?.ToString() ?? "1"});",

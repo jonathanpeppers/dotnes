@@ -320,9 +320,9 @@ public static class NESLib
     public static void vram_fill(byte n, uint len) => throw null!;
 
     /// <summary>
-    /// set vram autoincrement, 0 for +1 and not 0 for +32
+    /// Set VRAM auto-increment mode: <see cref="VramIncrement.By1"/> for +1 or <see cref="VramIncrement.By32"/> for +32
     /// </summary>
-    public static void vram_inc(byte n) => throw null!;
+    public static void vram_inc(VramIncrement mode) => throw null!;
 
     /// <summary>
     /// write a block to current address of vram, works only when rendering is turned off
