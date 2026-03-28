@@ -80,7 +80,8 @@ static NES.NESLib.nmi_set_callback(delegate*<void> callback) -> void
 static NES.NESLib.oam_clear_fast() -> void
 static NES.NESLib.oam_meta_spr_clip(int x, byte y, byte[]! metasprite) -> void
 static NES.NESLib.oam_meta_spr_pal(byte x, byte y, byte pal, byte[]! data) -> void
-static NES.NESLib.oam_off -> byte
+static NES.NESLib.oam_off.get -> byte
+static NES.NESLib.oam_off.set -> void
 static NES.NESLib.pad_state(byte pad) -> NES.PAD
 static NES.NESLib.pad_trigger(byte pad) -> NES.PAD
 static NES.NESLib.peek(ushort addr) -> byte

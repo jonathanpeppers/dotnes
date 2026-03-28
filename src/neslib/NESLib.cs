@@ -277,7 +277,7 @@ public static class NESLib
     /// <summary>
     /// OAM buffer offset, used by oam_meta_spr_pal
     /// </summary>
-    public static byte oam_off;
+    public static byte oam_off { get; set; }
 
     /// <summary>
     /// set sprite display mode, 0 for 8x8 sprites, 1 for 8x16 sprites
