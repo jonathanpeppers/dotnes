@@ -25,12 +25,13 @@ Compared against the original [neslib.h](https://github.com/clbr/neslib/blob/mas
 `PAD` is already a `[Flags]` enum. `MASK` should follow the same pattern — these are bitflags meant to be OR'd together (`MASK.BG | MASK.SPR`). A `[Flags] enum` gives type safety and lets `ppu_mask()` accept `MASK` instead of raw `byte`.
 
 ```csharp
-// Current (C-style)
-ppu_mask(MASK.BG | MASK.SPR);  // MASK members are byte constants, no type safety
+// Current (C-style) — requires an explicit cast because byte | byte promotes to int
+ppu_mask((byte)(MASK.BG | MASK.SPR));
 
-// Better (C#-style)
+// Better (C#-style) — [Flags] enum lets | work naturally
 [Flags] public enum MASK : byte { ... }
 public static void ppu_mask(MASK mask);
+ppu_mask(MASK.BG | MASK.SPR);  // compiles cleanly, type-safe
 ```
 
 ### 2. `set_chr_mode` should be `mmc3_set_chr_bank`
