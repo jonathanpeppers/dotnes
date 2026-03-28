@@ -5096,4 +5096,111 @@ public class RoslynTests
         // Must contain CMP #$05 (C905) for lo byte comparison (lo of 5 is 0x05)
         Assert.Contains("C905", hex);
     }
+
+    [Fact]
+    public void UshortLessThan256_16BitComparison()
+    {
+        // Regression test: ushort local < 256 should emit 16-bit comparison
+        // (256 exceeds byte range, so WriteLdc(ushort 256) is called).
+        // Previously this threw "Branch comparison value 256 exceeds byte range."
+        var bytes = GetProgramBytes(
+            """
+            ushort y = rand16();
+            if (y < 256)
+            {
+                pal_col(0, 0x30);
+            }
+            pal_col(0, 0);
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"UshortLT256 hex: {hex}");
+
+        // Must contain CPX #$01 (E001) for hi byte comparison against 256 (hi=0x01)
+        Assert.Contains("E001", hex);
+        // Must contain CMP #$00 (C900) for lo byte comparison against 256 (lo=0x00)
+        Assert.Contains("C900", hex);
+    }
+
+    [Fact]
+    public void UshortLessThan256_WithIncrement()
+    {
+        // Regression test: ushort local incremented in a loop, then compared < 256.
+        // This is closer to the scroll_yy pattern in the climber sample.
+        var bytes = GetProgramBytes(
+            """
+            ushort scroll_yy = 0;
+            pal_col(0, 0x30);
+            ppu_on_all();
+            while (true)
+            {
+                scroll_yy = (ushort)(scroll_yy + 1);
+                if (scroll_yy < 256)
+                {
+                    pal_col(0, 0x20);
+                }
+            }
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"UshortLT256_Inc hex: {hex}");
+
+        // Must contain CPX #$01 (E001) for hi byte comparison against 256 (hi=0x01)
+        Assert.Contains("E001", hex);
+    }
+
+    [Fact]
+    public void UshortLessThan256_AfterArithmetic()
+    {
+        // Regression test: ushort local used in arithmetic, then compared < 256.
+        // Tests that _ushortInAX survives through add + conv.u2 + stloc + ldloc.
+        var bytes = GetProgramBytes(
+            """
+            ushort x = rand16();
+            ushort y = (ushort)(x + 100);
+            if (y < 256)
+            {
+                pal_col(0, 0x30);
+            }
+            pal_col(0, 0);
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"UshortLT256_Arith hex: {hex}");
+
+        // Must contain CPX #$01 (E001) for hi byte comparison against 256 (hi=0x01)
+        Assert.Contains("E001", hex);
+    }
+
+    [Fact]
+    public void UshortLessThan512_16BitComparison()
+    {
+        // Test with a different boundary value (512 = 0x0200)
+        var bytes = GetProgramBytes(
+            """
+            ushort y = rand16();
+            if (y < 512)
+            {
+                pal_col(0, 0x30);
+            }
+            pal_col(0, 0);
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"UshortLT512 hex: {hex}");
+
+        // Must contain CPX #$02 (E002) for hi byte comparison against 512 (hi=0x02)
+        Assert.Contains("E002", hex);
+    }
 }
