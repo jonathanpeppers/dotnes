@@ -103,24 +103,33 @@ public class EnsureMesenInstalled : Microsoft.Build.Utilities.Task, ICancelableT
         }
     }
 
+    static readonly HttpClient s_http = new(new HttpClientHandler { AllowAutoRedirect = true })
+    {
+        Timeout = TimeSpan.FromMinutes(10),
+    };
+
     void DownloadWithRetries(string url, string dest)
     {
+        DownloadWithRetriesAsync(url, dest).GetAwaiter().GetResult();
+    }
+
+    async System.Threading.Tasks.Task DownloadWithRetriesAsync(string url, string dest)
+    {
+        var token = _cts.Token;
         for (int attempt = 1; attempt <= Retries; attempt++)
         {
-            _cts.Token.ThrowIfCancellationRequested();
+            token.ThrowIfCancellationRequested();
             try
             {
                 Log.LogMessage(MessageImportance.High, "Downloading {0} (attempt {1}/{2})...", url, attempt, Retries);
-                using var handler = new HttpClientHandler { AllowAutoRedirect = true };
-                using var http = new HttpClient(handler) { Timeout = TimeSpan.FromMinutes(10) };
-                using var response = http.GetAsync(url, _cts.Token).GetAwaiter().GetResult();
+                using var response = await s_http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, token);
                 response.EnsureSuccessStatusCode();
                 Log.LogMessage(MessageImportance.Normal, "Response: {0}, Content-Length: {1}",
                     response.StatusCode, response.Content.Headers.ContentLength);
 
-                using var content = response.Content.ReadAsStreamAsync().GetAwaiter().GetResult();
+                using var content = await response.Content.ReadAsStreamAsync();
                 using var fs = File.Create(dest);
-                content.CopyTo(fs);
+                await content.CopyToAsync(fs, 81920, token);
                 Log.LogMessage(MessageImportance.Normal, "Downloaded {0} bytes to {1}.", fs.Length, dest);
                 return;
             }
