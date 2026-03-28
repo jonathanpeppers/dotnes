@@ -88,19 +88,9 @@ jobs:
     - name: build project
       run: dotnet build smoketest/smoketest.csproj
     - name: run smoke test
-      shell: bash
-      run: |
-        # Locate the Mesen binary installed by dotnes.mesen during build
-        NUGET_DIR="$HOME/.nuget/packages"
-        if [ "$RUNNER_OS" = "Windows" ]; then
-          NUGET_DIR="$USERPROFILE/.nuget/packages"
-          MESEN="$NUGET_DIR/dotnes.mesen/2.1.1/bin/Mesen.exe"
-        elif [ "$RUNNER_OS" = "macOS" ]; then
-          MESEN="$NUGET_DIR/dotnes.mesen/2.1.1/bin/Mesen.app/Contents/MacOS/Mesen"
-        else
-          MESEN="$NUGET_DIR/dotnes.mesen/2.1.1/bin/Mesen"
-        fi
-        ROM="smoketest/bin/Debug/net10.0/smoketest.nes"
-        "$MESEN" "$ROM" --testrunner --doNotSaveSettings --timeout=10 \
-          "${{ github.workspace }}/scripts/smoke-test.lua"
+      run: >
+        dotnet run --project smoketest/smoketest.csproj
+        -p:MesenTestRunner=true
+        -p:MesenTimeout=10
+        "-p:MesenLuaScript=${{ github.workspace }}/scripts/smoke-test.lua"
 

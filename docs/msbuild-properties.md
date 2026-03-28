@@ -130,29 +130,56 @@ read and write save data.
 </PropertyGroup>
 ```
 
-### `MesenRunArguments`
+### `MesenTestRunner`
 
-Extra command-line arguments appended to the Mesen invocation when running
-`dotnet run`. Useful for headless CI smoke tests or passing Lua scripts.
+Run Mesen in headless test-runner mode (`--testrunner --doNotSaveSettings`).
+Useful for CI smoke tests.
 
 | | |
 |---|---|
-| **Type** | `string` |
-| **Default** | *(empty)* |
-
-The value is appended after the ROM path in the `RunArguments` property used by
-`dotnet run`. Any Mesen-supported flags can be passed here.
+| **Type** | `bool` |
+| **Default** | `false` |
 
 ```xml
 <PropertyGroup>
-  <MesenRunArguments>--testrunner --doNotSaveSettings --timeout=10 smoke-test.lua</MesenRunArguments>
+  <MesenTestRunner>true</MesenTestRunner>
+</PropertyGroup>
+```
+
+### `MesenTimeout`
+
+Auto-exit Mesen after this many seconds. Only meaningful in test-runner mode.
+
+| | |
+|---|---|
+| **Type** | `int` (seconds) |
+| **Default** | *(empty — uses Mesen default of 100)* |
+
+```xml
+<PropertyGroup>
+  <MesenTimeout>10</MesenTimeout>
+</PropertyGroup>
+```
+
+### `MesenLuaScript`
+
+Path to a Lua script to load when running Mesen.
+
+| | |
+|---|---|
+| **Type** | `string` (file path) |
+| **Default** | *(empty)* |
+
+```xml
+<PropertyGroup>
+  <MesenLuaScript>scripts/smoke-test.lua</MesenLuaScript>
 </PropertyGroup>
 ```
 
 Example using `dotnet run` on the command line:
 
 ```bash
-dotnet run -p:MesenRunArguments="--testrunner --doNotSaveSettings --timeout=10 smoke-test.lua"
+dotnet run -p:MesenTestRunner=true -p:MesenTimeout=10 -p:MesenLuaScript=smoke-test.lua
 ```
 
 ## Item Groups
