@@ -87,6 +87,21 @@ jobs:
       run: dotnet nuget add source "${{ github.workspace }}/nupkgs" --name local
     - name: build project
       run: dotnet build smoketest/smoketest.csproj -bl:smoketest-build.binlog
+    - name: create Mesen config
+      shell: bash
+      run: |
+        # Mesen checks for settings.json before checking --testrunner.
+        # On first run without a config file, it launches the setup wizard (GUI).
+        # Create a minimal config so it skips the wizard and reaches --testrunner.
+        if [ "$RUNNER_OS" = "Windows" ]; then
+          CONFIG_DIR="$USERPROFILE/Documents/Mesen2"
+        elif [ "$RUNNER_OS" = "macOS" ]; then
+          CONFIG_DIR="$HOME/.config/Mesen2"
+        else
+          CONFIG_DIR="$HOME/.config/Mesen2"
+        fi
+        mkdir -p "$CONFIG_DIR"
+        echo '{}' > "$CONFIG_DIR/settings.json"
     - name: run smoke test
       run: >
         dotnet run --project smoketest/smoketest.csproj
