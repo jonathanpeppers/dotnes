@@ -12,6 +12,9 @@ NES.PAD.UP = 16 -> NES.PAD
 NES.VideoSystem
 NES.VideoSystem.NTSC = 128 -> NES.VideoSystem
 NES.VideoSystem.PAL = 0 -> NES.VideoSystem
+NES.VramIncrement
+NES.VramIncrement.By1 = 0 -> NES.VramIncrement
+NES.VramIncrement.By32 = 1 -> NES.VramIncrement
 const NES.NESLib.NAMETABLE_A = 8192 -> ushort
 const NES.NESLib.NAMETABLE_B = 9216 -> ushort
 const NES.NESLib.NAMETABLE_C = 10240 -> ushort
@@ -57,7 +60,7 @@ static NES.NESLib.set_vram_update(byte[]! buf) -> void
 static NES.NESLib.split(int x, int y) -> void
 static NES.NESLib.vram_adr(ushort adr) -> void
 static NES.NESLib.vram_fill(byte n, uint len) -> void
-static NES.NESLib.vram_inc(byte n) -> void
+static NES.NESLib.vram_inc(NES.VramIncrement mode) -> void
 static NES.NESLib.vram_put(byte n) -> void
 static NES.NESLib.vram_unrle(byte[]! data) -> void
 static NES.NESLib.vram_write(byte[]! src) -> void

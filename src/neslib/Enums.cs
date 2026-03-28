@@ -16,6 +16,22 @@ public enum PAD : byte
 }
 
 /// <summary>
+/// VRAM auto-increment mode for <see cref="NESLib.vram_inc(VramIncrement)"/>
+/// </summary>
+public enum VramIncrement : byte
+{
+    /// <summary>
+    /// Increment VRAM address by 1 after each write (horizontal)
+    /// </summary>
+    By1 = 0,
+
+    /// <summary>
+    /// Increment VRAM address by 32 after each write (vertical)
+    /// </summary>
+    By32 = 1,
+}
+
+/// <summary>
 /// Return value of <see cref="NESLib.ppu_system()"/>
 /// </summary>
 public enum VideoSystem : byte
