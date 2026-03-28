@@ -1862,6 +1862,28 @@ partial class IL2NESWriter
                             argsAlreadyPopped = true;
                         }
                         break;
+                    case "get_oam_off":
+                        // Property getter: load OAM_OFF from zero page
+                        Emit(Opcode.LDA, AddressMode.ZeroPage, (byte)NESConstants.OAM_OFF);
+                        _runtimeValueInA = true;
+                        _immediateInA = null;
+                        argsAlreadyPopped = true;
+                        break;
+                    case "set_oam_off":
+                        // Property setter: store value to OAM_OFF zero page
+                        if (_runtimeValueInA)
+                        {
+                            Emit(Opcode.STA, AddressMode.ZeroPage, (byte)NESConstants.OAM_OFF);
+                        }
+                        else if (_immediateInA != null)
+                        {
+                            Emit(Opcode.LDA, AddressMode.Immediate, (byte)_immediateInA);
+                            Emit(Opcode.STA, AddressMode.ZeroPage, (byte)NESConstants.OAM_OFF);
+                        }
+                        _runtimeValueInA = false;
+                        _immediateInA = null;
+                        argsAlreadyPopped = true;
+                        break;
                     case nameof(NESLib.pad_poll):
                     case nameof(NESLib.pad_trigger):
                         // pad_poll/pad_trigger returns result in A — store to dynamically allocated temp

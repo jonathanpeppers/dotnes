@@ -1485,6 +1485,27 @@ public class RoslynTests
     }
 
     [Fact]
+    public void OamOff_PropertyAccessTranspiles()
+    {
+        // oam_off is now a property — get/set emit LDA/STA to zero page $1B
+        var bytes = GetProgramBytes(
+            """
+            oam_off = 0;
+            oam_off = oam_spr(10, 20, 0x01, 0, oam_off);
+            oam_hide_rest(oam_off);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        Assert.Contains("A900", hex);    // LDA #$00 (oam_off = 0)
+        Assert.Contains("851B", hex);    // STA $1B (store to OAM_OFF zero page)
+        Assert.Contains("A51B", hex);    // LDA $1B (load from OAM_OFF zero page)
+    }
+
+    [Fact]
     public void WaitvsyncEmitsJsr()
     {
         // waitvsync() should emit JSR to waitvsync subroutine
