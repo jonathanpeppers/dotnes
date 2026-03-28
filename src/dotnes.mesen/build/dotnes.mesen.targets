@@ -1,0 +1,75 @@
+<Project>
+  <PropertyGroup>
+    <MesenVersion>2.1.1</MesenVersion>
+    <_MesenBaseUrl>https://github.com/SourMesen/Mesen2/releases/download/$(MesenVersion)</_MesenBaseUrl>
+    <_MesenLicenseUrl>https://raw.githubusercontent.com/SourMesen/Mesen2/$(MesenVersion)/LICENSE</_MesenLicenseUrl>
+    <_MesenDir>$(BaseIntermediateOutputPath)mesen/</_MesenDir>
+    <!-- Skip on CI — Mesen is a local dev tool, not redistributed -->
+    <_SkipMesenDownload Condition="'$(CI)' == 'true'">true</_SkipMesenDownload>
+    <_SkipMesenDownload Condition="'$(GITHUB_ACTIONS)' == 'true'">true</_SkipMesenDownload>
+    <_SkipMesenDownload Condition="'$(TF_BUILD)' == 'true'">true</_SkipMesenDownload>
+  </PropertyGroup>
+
+  <!-- Detect OS and architecture to pick the right Mesen release asset -->
+  <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('windows'))">
+    <_MesenZipName>Mesen_$(MesenVersion)_Windows.zip</_MesenZipName>
+    <_MesenExe>$(_MesenDir)Mesen.exe</_MesenExe>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('linux')) And '$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)' == 'X64'">
+    <_MesenZipName>Mesen_$(MesenVersion)_Linux_x64.zip</_MesenZipName>
+    <_MesenExe>$(_MesenDir)Mesen</_MesenExe>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('linux')) And '$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)' == 'Arm64'">
+    <_MesenZipName>Mesen_$(MesenVersion)_Linux_ARM64.zip</_MesenZipName>
+    <_MesenExe>$(_MesenDir)Mesen</_MesenExe>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('osx')) And '$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)' == 'X64'">
+    <_MesenZipName>Mesen_$(MesenVersion)_macOS_x64_Intel.zip</_MesenZipName>
+    <_MesenExe>$(_MesenDir)Mesen</_MesenExe>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('osx')) And '$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)' == 'Arm64'">
+    <_MesenZipName>Mesen_$(MesenVersion)_macOS_ARM64_AppleSilicon.zip</_MesenZipName>
+    <_MesenExe>$(_MesenDir)Mesen</_MesenExe>
+  </PropertyGroup>
+
+  <!-- Set RunCommand so 'dotnet run' launches the ROM in Mesen -->
+  <PropertyGroup Condition="'$(_MesenExe)' != ''">
+    <RunCommand>$(_MesenExe)</RunCommand>
+    <RunArguments>&quot;$(TargetName).nes&quot;</RunArguments>
+    <RunWorkingDirectory>$(OutputPath)</RunWorkingDirectory>
+  </PropertyGroup>
+
+  <!-- Download Mesen from GitHub releases (skipped on CI) -->
+  <Target Name="_MesenDownload" BeforeTargets="Build"
+      Condition="'$(_SkipMesenDownload)' != 'true' And '$(_MesenZipName)' != '' And !Exists('$(_MesenExe)')">
+    <Message Importance="high" Text="Downloading Mesen $(MesenVersion)..." />
+    <DownloadFile
+        SourceUrl="$(_MesenBaseUrl)/$(_MesenZipName)"
+        DestinationFolder="$(BaseIntermediateOutputPath)"
+        DestinationFileName="$(_MesenZipName)"
+        Retries="3" RetryDelayMilliseconds="2000" />
+    <DownloadFile
+        SourceUrl="$(_MesenLicenseUrl)"
+        DestinationFolder="$(_MesenDir)"
+        DestinationFileName="LICENSE"
+        Retries="3" RetryDelayMilliseconds="2000" />
+  </Target>
+
+  <!-- Unzip after download -->
+  <Target Name="_MesenUnzip" AfterTargets="_MesenDownload"
+      Condition="'$(_SkipMesenDownload)' != 'true' And '$(_MesenZipName)' != '' And !Exists('$(_MesenExe)')">
+    <Unzip SourceFiles="$(BaseIntermediateOutputPath)$(_MesenZipName)" DestinationFolder="$(_MesenDir)" />
+    <Exec Condition="!$([MSBuild]::IsOSPlatform('windows'))" Command="chmod +x &quot;$(_MesenExe)&quot;" />
+    <Message Importance="high" Text="Mesen $(MesenVersion) ready at $(_MesenExe)" />
+  </Target>
+
+  <!-- Informational messages -->
+  <Target Name="_MesenSkipMessage" BeforeTargets="Build"
+      Condition="'$(_SkipMesenDownload)' == 'true'">
+    <Message Importance="normal" Text="Skipping Mesen download (CI detected)" />
+  </Target>
+  <Target Name="_MesenUnsupportedMessage" BeforeTargets="Build"
+      Condition="'$(_SkipMesenDownload)' != 'true' And '$(_MesenZipName)' == ''">
+    <Warning Text="Mesen is not available for this platform/architecture." />
+  </Target>
+</Project>

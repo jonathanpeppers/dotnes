@@ -9,7 +9,7 @@
 
   <ItemGroup>
     <PackageReference Include="dotnes" Version="0.3.0-beta" />
-    <PackageReference Include="dotnes.anese" Version="0.9.1" />
+    <PackageReference Include="dotnes.mesen" Version="2.1.1" />
   </ItemGroup>
 
 </Project>
