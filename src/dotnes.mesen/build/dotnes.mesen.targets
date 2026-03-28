@@ -3,11 +3,7 @@
     <MesenVersion>2.1.1</MesenVersion>
     <_MesenBaseUrl>https://github.com/SourMesen/Mesen2/releases/download/$(MesenVersion)</_MesenBaseUrl>
     <_MesenLicenseUrl>https://raw.githubusercontent.com/SourMesen/Mesen2/$(MesenVersion)/LICENSE</_MesenLicenseUrl>
-    <_MesenDir>$(BaseIntermediateOutputPath)mesen/</_MesenDir>
-    <!-- Skip on CI — Mesen is a local dev tool, not redistributed -->
-    <_SkipMesenDownload Condition="'$(CI)' == 'true'">true</_SkipMesenDownload>
-    <_SkipMesenDownload Condition="'$(GITHUB_ACTIONS)' == 'true'">true</_SkipMesenDownload>
-    <_SkipMesenDownload Condition="'$(TF_BUILD)' == 'true'">true</_SkipMesenDownload>
+    <_MesenDir>$(MSBuildThisFileDirectory)../bin/</_MesenDir>
   </PropertyGroup>
 
   <!-- Detect OS and architecture to pick the right Mesen release asset -->
@@ -39,13 +35,13 @@
     <RunWorkingDirectory>$(OutputPath)</RunWorkingDirectory>
   </PropertyGroup>
 
-  <!-- Download Mesen from GitHub releases (skipped on CI) -->
+  <!-- Download Mesen from GitHub releases into the NuGet package cache -->
   <Target Name="_MesenDownload" BeforeTargets="Build"
-      Condition="'$(_SkipMesenDownload)' != 'true' And '$(_MesenZipName)' != '' And !Exists('$(_MesenExe)')">
+      Condition="'$(_MesenZipName)' != '' And !Exists('$(_MesenExe)')">
     <Message Importance="high" Text="Downloading Mesen $(MesenVersion)..." />
     <DownloadFile
         SourceUrl="$(_MesenBaseUrl)/$(_MesenZipName)"
-        DestinationFolder="$(BaseIntermediateOutputPath)"
+        DestinationFolder="$(_MesenDir)"
         DestinationFileName="$(_MesenZipName)"
         Retries="3" RetryDelayMilliseconds="2000" />
     <DownloadFile
@@ -57,19 +53,15 @@
 
   <!-- Unzip after download -->
   <Target Name="_MesenUnzip" AfterTargets="_MesenDownload"
-      Condition="'$(_SkipMesenDownload)' != 'true' And '$(_MesenZipName)' != '' And !Exists('$(_MesenExe)')">
-    <Unzip SourceFiles="$(BaseIntermediateOutputPath)$(_MesenZipName)" DestinationFolder="$(_MesenDir)" />
+      Condition="'$(_MesenZipName)' != '' And !Exists('$(_MesenExe)')">
+    <Unzip SourceFiles="$(_MesenDir)$(_MesenZipName)" DestinationFolder="$(_MesenDir)" />
+    <Delete Files="$(_MesenDir)$(_MesenZipName)" />
     <Exec Condition="!$([MSBuild]::IsOSPlatform('windows'))" Command="chmod +x &quot;$(_MesenExe)&quot;" />
     <Message Importance="high" Text="Mesen $(MesenVersion) ready at $(_MesenExe)" />
   </Target>
 
-  <!-- Informational messages -->
-  <Target Name="_MesenSkipMessage" BeforeTargets="Build"
-      Condition="'$(_SkipMesenDownload)' == 'true'">
-    <Message Importance="normal" Text="Skipping Mesen download (CI detected)" />
-  </Target>
   <Target Name="_MesenUnsupportedMessage" BeforeTargets="Build"
-      Condition="'$(_SkipMesenDownload)' != 'true' And '$(_MesenZipName)' == ''">
+      Condition="'$(_MesenZipName)' == ''">
     <Warning Text="Mesen is not available for this platform/architecture." />
   </Target>
 </Project>
