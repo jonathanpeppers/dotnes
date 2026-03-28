@@ -3755,7 +3755,7 @@ public class RoslynTests
     }
 
     [Fact]
-    public void SetChrMode_SupportsLocalBankArg()
+    public void Mmc3SetChrBank_SupportsLocalBankArg()
     {
         // mmc3_set_chr_bank with bank from a local variable should emit
         // LDA #reg, STA $8000, LDA $bank_addr, STA $8001.
@@ -3770,7 +3770,7 @@ public class RoslynTests
         Assert.NotEmpty(bytes);
 
         var hex = Convert.ToHexString(bytes);
-        _logger.WriteLine($"SetChrMode local bank hex: {hex}");
+        _logger.WriteLine($"Mmc3SetChrBank local bank hex: {hex}");
 
         // LDA #$02, STA $8000 (register select)
         Assert.Contains("A9028D0080", hex);
