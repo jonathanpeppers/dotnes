@@ -20,29 +20,17 @@ Compared against the original [neslib.h](https://github.com/clbr/neslib/blob/mas
 
 ## Issues
 
-### 1. `MASK` should be a `[Flags] enum`, not a static class
+### 1. ~~`MASK` should be a `[Flags] enum`, not a static class~~ ✅ Resolved
 
-`PAD` is already a `[Flags]` enum. `MASK` should follow the same pattern — these are bitflags meant to be OR'd together (`MASK.BG | MASK.SPR`). A `[Flags] enum` gives type safety and lets `ppu_mask()` accept `MASK` instead of raw `byte`.
-
-```csharp
-// Current (C-style) — requires an explicit cast because byte | byte promotes to int
-ppu_mask((byte)(MASK.BG | MASK.SPR));
-
-// Better (C#-style) — [Flags] enum lets | work naturally
-[Flags] public enum MASK : byte { ... }
-public static void ppu_mask(MASK mask);
-ppu_mask(MASK.BG | MASK.SPR);  // compiles cleanly, type-safe
-```
+`MASK` is now a `[Flags] enum` and `ppu_mask()` accepts `MASK` instead of raw `byte`.
 
 ### 2. ~~`set_chr_mode` should be `mmc3_set_chr_bank`~~ ✅ Resolved
 
 Renamed to `mmc3_set_chr_bank` for naming consistency across mapper APIs.
 
-### 3. `memfill(object dst, ...)` uses wrong parameter type
+### 3. ~~`memfill(object dst, ...)` uses wrong parameter type~~ ✅ Resolved
 
-The C original is `void *dst`, but NES has no managed objects. `object` is semantically wrong for a hardware memory fill. This should be either:
-- `memfill(ushort addr, byte value, uint len)` — address-based, matching `poke`/`peek`
-- `memfill(byte[] dst, byte value, uint len)` — buffer-based
+Changed to `memfill(ushort addr, byte value, uint len)` to match `poke`/`peek`.
 
 ### 4. ~~`music_play(byte)` vs `play_music()` naming confusion~~ ✅ Resolved
 
@@ -50,9 +38,9 @@ Resolved: `play_music()` has been renamed to `music_tick()`. The names are now c
 - `music_play(byte song)` — FamiTone (from neslib.h)
 - `music_tick()` — dotnes custom music engine (advances one frame)
 
-### 5. Missing `OAM_FLIP_V`, `OAM_FLIP_H`, `OAM_BEHIND` constants
+### 5. ~~Missing `OAM_FLIP_V`, `OAM_FLIP_H`, `OAM_BEHIND` constants~~ ✅ Resolved
 
-These are defined in the original neslib.h (`0x80`, `0x40`, `0x20`) and are commonly needed for sprite attribute manipulation. They are absent from both shipped and unshipped APIs.
+Added as `OAM.FLIP_V`, `OAM.FLIP_H`, `OAM.BEHIND` in `Enums.cs`.
 
 ## C#-ification Opportunities
 
@@ -62,11 +50,11 @@ These match the neslib.h "vibes" perfectly but could be more idiomatic C#. Lower
 |---|---|---|
 | ~~`oam_size(byte)`~~ | ~~"0 for 8x8, 1 for 8x16"~~ | ~~`SpriteSize` enum~~ ✅ Done |
 | ~~`vram_inc(byte)`~~ | ~~"0 for +1, not 0 for +32"~~ | ~~`bool` or enum~~ ✅ Done — now `vram_inc(VramIncrement)` |
-| `ppu_system()` returns `byte` | "0 for PAL, not 0 for NTSC" | `VideoSystem` enum or `bool IsNtsc` ✅ |
-| `MMC1_MIRROR_*` constants | `const byte` | `MMC1Mirror` enum ✅ |
-| `music_pause(byte)` | "0 unpause, 1 pause" | `bool` |
+| ~~`ppu_system()` returns `byte`~~ | ~~"0 for PAL, not 0 for NTSC"~~ | ~~`VideoSystem` enum~~ ✅ Done |
+| ~~`MMC1_MIRROR_*` constants~~ | ~~`const byte`~~ | ~~`MMC1Mirror` enum~~ ✅ Done |
+| ~~`music_pause(byte)`~~ | ~~"0 unpause, 1 pause"~~ | ~~`bool`~~ ✅ Done |
 | `oam_off` ~~field~~ | ~~public mutable field~~ | ~~property~~ ✅ Done |
 
 ## Recommendation
 
-Fix the five issues above before shipping these APIs. The C#-ification table is more stylistic — keeping APIs C-like preserves the "NES programming in C#" vibe, but `MASK` as a static class (issue 1) is inconsistent with the existing `PAD` enum precedent and should definitely change.
+All five issues and all C#-ification items have been resolved. The unshipped API is ready to ship.
