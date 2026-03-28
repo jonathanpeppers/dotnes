@@ -1,4 +1,4 @@
-﻿using System.Collections.Immutable;
+using System.Collections.Immutable;
 using System.Reflection.Metadata;
 using dotnes.ObjectModel;
 using Xunit.Abstractions;
@@ -434,6 +434,255 @@ public class IL2NESWriterTests
             }
         }
         Assert.True(foundEorZp, "Expected EOR ZeroPage instruction for runtime-runtime XOR");
+    }
+
+    /// <summary>
+    /// Test that 16-bit AND with ushort mask 0xFF00 emits AND #$00 on the low byte,
+    /// and that the high-byte AND #$FF is treated as an identity and optimized away.
+    /// Pattern: rand16() &amp; 0xFF00
+    /// </summary>
+    [Fact]
+    public void And_16Bit_EmitsAndOnBothBytes()
+    {
+        using var writer = GetWriter();
+        writer.Labels["rand16"] = 0x8400;
+
+        // rand16() & 0xFF00 → low byte AND #$00, high byte AND #$FF (no-op)
+        writer.Write(new ILInstruction(ILOpCode.Call), nameof(rand16));
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4), 0xFF00);
+        writer.Write(new ILInstruction(ILOpCode.And));
+
+        var block = writer.CurrentBlock!;
+        bool foundAndImm = false;
+        for (int i = 0; i < block.Count; i++)
+        {
+            if (block[i].Opcode == Opcode.AND && block[i].Mode == AddressMode.Immediate
+                && block[i].Operand is ImmediateOperand andOp)
+            {
+                foundAndImm = true;
+                Assert.Equal(0x00, andOp.Value);
+                break;
+            }
+        }
+        Assert.True(foundAndImm, "Expected AND Immediate #$00 for low byte of 16-bit AND with 0xFF00");
+    }
+
+    /// <summary>
+    /// Test that 16-bit OR with ushort mask emits ORA only for non-identity bytes
+    /// (skips low-byte ORA #$00, emits ORA #$80 on the high byte).
+    /// Pattern: rand16() | 0x8000
+    /// </summary>
+    [Fact]
+    public void Or_16Bit_EmitsOraOnBothBytes()
+    {
+        using var writer = GetWriter();
+        writer.Labels["rand16"] = 0x8400;
+
+        // rand16() | 0x8000 → low byte ORA #$00 (no-op), high byte needs ORA #$80
+        writer.Write(new ILInstruction(ILOpCode.Call), nameof(rand16));
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4), 0x8000);
+        writer.Write(new ILInstruction(ILOpCode.Or));
+
+        var block = writer.CurrentBlock!;
+        // Low byte ORA #$00 is a no-op, so should NOT be emitted.
+        // High byte ORA #$80 requires TXA/ORA/TAX sequence.
+        bool foundTxa = false;
+        bool foundOraImm = false;
+        for (int i = 0; i < block.Count; i++)
+        {
+            if (block[i].Opcode == Opcode.TXA)
+                foundTxa = true;
+            if (foundTxa && block[i].Opcode == Opcode.ORA && block[i].Mode == AddressMode.Immediate
+                && block[i].Operand is ImmediateOperand oraOp)
+            {
+                foundOraImm = true;
+                Assert.Equal(0x80, oraOp.Value);
+                break;
+            }
+        }
+        Assert.True(foundTxa, "Expected TXA for high byte of 16-bit OR");
+        Assert.True(foundOraImm, "Expected ORA Immediate #$80 for high byte of 16-bit OR with 0x8000");
+    }
+
+    /// <summary>
+    /// Test that 16-bit XOR with ushort mask emits EOR on both bytes.
+    /// Pattern: rand16() ^ 0xFFFF
+    /// </summary>
+    [Fact]
+    public void Xor_16Bit_EmitsEorOnBothBytes()
+    {
+        using var writer = GetWriter();
+        writer.Labels["rand16"] = 0x8400;
+
+        // rand16() ^ 0xFFFF → low byte EOR #$FF, high byte EOR #$FF
+        writer.Write(new ILInstruction(ILOpCode.Call), nameof(rand16));
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4), 0xFFFF);
+        writer.Write(new ILInstruction(ILOpCode.Xor));
+
+        var block = writer.CurrentBlock!;
+        bool foundEorLo = false;
+        bool foundTxa = false;
+        bool foundEorHi = false;
+        for (int i = 0; i < block.Count; i++)
+        {
+            if (!foundEorLo && block[i].Opcode == Opcode.EOR && block[i].Mode == AddressMode.Immediate
+                && block[i].Operand is ImmediateOperand eorLoOp && eorLoOp.Value == 0xFF)
+            {
+                foundEorLo = true;
+            }
+            else if (foundEorLo && block[i].Opcode == Opcode.TXA)
+            {
+                foundTxa = true;
+            }
+            else if (foundTxa && block[i].Opcode == Opcode.EOR && block[i].Mode == AddressMode.Immediate
+                && block[i].Operand is ImmediateOperand eorHiOp && eorHiOp.Value == 0xFF)
+            {
+                foundEorHi = true;
+                break;
+            }
+        }
+        Assert.True(foundEorLo, "Expected EOR Immediate #$FF for low byte of 16-bit XOR with 0xFFFF");
+        Assert.True(foundTxa, "Expected TXA for high byte of 16-bit XOR");
+        Assert.True(foundEorHi, "Expected EOR Immediate #$FF for high byte of 16-bit XOR with 0xFFFF");
+    }
+
+        /// <summary>
+    /// Test that ushort division by a power-of-2 emits 16-bit right shifts.
+    /// Pattern: rand16() / 4
+    /// </summary>
+    [Fact]
+    public void Div_UshortByPow2_Emits16BitRightShift()
+    {
+        using var writer = GetWriter();
+        writer.Labels["rand16"] = 0x8500;
+
+        // Set up Instructions array so WriteLdc lookahead detects Div
+        var instructions = new ILInstruction[]
+        {
+            new(ILOpCode.Call),
+            new(ILOpCode.Ldc_i4_4),
+            new(ILOpCode.Div),
+        };
+        writer.Instructions = instructions;
+
+        // rand16() / 4  (shift by 2)
+        writer.Index = 0;
+        writer.Write(instructions[0], nameof(rand16));
+        writer.Index = 1;
+        writer.Write(instructions[1]);
+        writer.Index = 2;
+        writer.Write(instructions[2]);
+
+        // Should emit 16-bit right shift: STX TEMP, LSR TEMP, ROR A, LDX TEMP (├ù2)
+        var block = writer.CurrentBlock!;
+        int lsrZpCount = 0;
+        int rorAccCount = 0;
+        for (int i = 0; i < block.Count; i++)
+        {
+            if (block[i].Opcode == Opcode.LSR && block[i].Mode == AddressMode.ZeroPage)
+                lsrZpCount++;
+            if (block[i].Opcode == Opcode.ROR && block[i].Mode == AddressMode.Accumulator)
+                rorAccCount++;
+        }
+        Assert.Equal(2, lsrZpCount); // div by 4 = 2 shifts
+        Assert.Equal(2, rorAccCount);
+    }
+
+    /// <summary>
+    /// Test that ushort division by a large power-of-2 (ΓëÑ256) moves hi byte to A.
+    /// Pattern: rand16() / 256
+    /// </summary>
+    [Fact]
+    public void Div_UshortByPow2_LargeShift_EmitsTxaAndLsr()
+    {
+        using var writer = GetWriter();
+        writer.Labels["rand16"] = 0x8500;
+
+        // Set up Instructions array so WriteLdc(ushort) lookahead detects Div
+        var instructions = new ILInstruction[]
+        {
+            new(ILOpCode.Call),
+            new(ILOpCode.Ldc_i4, Integer: 256),
+            new(ILOpCode.Div),
+        };
+        writer.Instructions = instructions;
+
+        // rand16() / 256  (shift by 8: just move hi byte to A)
+        writer.Index = 0;
+        writer.Write(instructions[0], nameof(rand16));
+        writer.Index = 1;
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4), 256);
+        writer.Index = 2;
+        writer.Write(instructions[2]);
+
+        var block = writer.CurrentBlock!;
+        bool foundTxa = false;
+        bool foundLdxZero = false;
+        for (int i = 0; i < block.Count; i++)
+        {
+            if (block[i].Opcode == Opcode.TXA)
+                foundTxa = true;
+            if (block[i].Opcode == Opcode.LDX && block[i].Mode == AddressMode.Immediate
+                && block[i].Operand is ImmediateOperand op && op.Value == 0)
+                foundLdxZero = true;
+        }
+        Assert.True(foundTxa, "Expected TXA to move hi byte to A for div by 256");
+        Assert.True(foundLdxZero, "Expected LDX #0 to clear hi byte for div by 256");
+    }
+
+    /// <summary>
+    /// Test that ushort division by a non-power-of-2 emits 16-bit binary long division.
+    /// Pattern: rand16() / 10
+    /// </summary>
+    [Fact]
+    public void Div_UshortByNonPow2_Emits16BitBinaryDivision()
+    {
+        using var writer = GetWriter();
+        writer.Labels["rand16"] = 0x8500;
+
+        // Set up Instructions array so WriteLdc lookahead detects Div
+        var instructions = new ILInstruction[]
+        {
+            new(ILOpCode.Call),
+            new(ILOpCode.Ldc_i4_s),
+            new(ILOpCode.Div),
+        };
+        writer.Instructions = instructions;
+
+        // rand16() / 10
+        writer.Index = 0;
+        writer.Write(instructions[0], nameof(rand16));
+        writer.Index = 1;
+        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_s), 10);
+        writer.Index = 2;
+        writer.Write(instructions[2]);
+
+        // Should emit 16-bit binary long division with:
+        // - LDY #16 (16-bit counter)
+        // - ASL TEMP (shift dividend)
+        // - ROL accumulator (shift carry into remainder)
+        // - BNE loop
+        var block = writer.CurrentBlock!;
+        bool foundLdy16 = false;
+        bool foundAslZp = false;
+        bool foundRolAcc = false;
+        bool foundBne = false;
+        for (int i = 0; i < block.Count; i++)
+        {
+            if (block[i].Opcode == Opcode.LDY && block[i].Mode == AddressMode.Immediate
+                && block[i].Operand is ImmediateOperand op && op.Value == 16)
+                foundLdy16 = true;
+            if (block[i].Opcode == Opcode.ASL && block[i].Mode == AddressMode.ZeroPage)
+                foundAslZp = true;
+            if (block[i].Opcode == Opcode.ROL && block[i].Mode == AddressMode.Accumulator)
+                foundRolAcc = true;
+            if (block[i].Opcode == Opcode.BNE)
+                foundBne = true;
+        }
+        Assert.True(foundLdy16, "Expected LDY #16 for 16-bit division loop counter");
+        Assert.True(foundAslZp, "Expected ASL ZeroPage to shift dividend");
+        Assert.True(foundRolAcc, "Expected ROL Accumulator to shift carry into remainder");
+        Assert.True(foundBne, "Expected BNE for division loop back-branch");
     }
 
     /// <summary>
