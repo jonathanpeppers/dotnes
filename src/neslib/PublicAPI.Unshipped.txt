@@ -1,13 +1,13 @@
 #nullable enable
 NES.MASK
-const NES.MASK.BG = 8 -> byte
-const NES.MASK.EDGE_BG = 2 -> byte
-const NES.MASK.EDGE_SPR = 4 -> byte
-const NES.MASK.MONO = 1 -> byte
-const NES.MASK.SPR = 16 -> byte
-const NES.MASK.TINT_BLUE = 128 -> byte
-const NES.MASK.TINT_GREEN = 64 -> byte
-const NES.MASK.TINT_RED = 32 -> byte
+NES.MASK.BG = 8 -> NES.MASK
+NES.MASK.EDGE_BG = 2 -> NES.MASK
+NES.MASK.EDGE_SPR = 4 -> NES.MASK
+NES.MASK.MONO = 1 -> NES.MASK
+NES.MASK.SPR = 16 -> NES.MASK
+NES.MASK.TINT_BLUE = 128 -> NES.MASK
+NES.MASK.TINT_GREEN = 64 -> NES.MASK
+NES.MASK.TINT_RED = 32 -> NES.MASK
 const NES.NESLib.APU_NOISE_CTRL = 16396 -> ushort
 const NES.NESLib.APU_NOISE_LENGTH = 16399 -> ushort
 const NES.NESLib.APU_NOISE_PERIOD = 16398 -> ushort

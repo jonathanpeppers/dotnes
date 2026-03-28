@@ -37,7 +37,7 @@ static NES.NESLib.pal_clear() -> void
 static NES.NESLib.pal_col(byte index, byte color) -> void
 static NES.NESLib.pal_spr(byte[]! data) -> void
 static NES.NESLib.pal_spr_bright(byte bright) -> void
-static NES.NESLib.ppu_mask(byte mask) -> void
+static NES.NESLib.ppu_mask(NES.MASK mask) -> void
 static NES.NESLib.ppu_off() -> void
 static NES.NESLib.ppu_on_all() -> void
 static NES.NESLib.ppu_on_bg() -> void

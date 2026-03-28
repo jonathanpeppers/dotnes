@@ -240,7 +240,7 @@ public static class NESLib
     /// <summary>
     /// set PPU_MASK directly
     /// </summary>
-    public static void ppu_mask(byte mask) => throw null!;
+    public static void ppu_mask(MASK mask) => throw null!;
 
     /// <summary>
     /// get current video system, 0 for PAL, not 0 for NTSC
