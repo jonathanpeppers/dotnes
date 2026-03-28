@@ -308,19 +308,18 @@ partial class IL2NESWriter
                 // _ushortInAX path). Don't emit pusha here — it would save only the
                 // low byte of the ushort and never be consumed, leaking a cc65 stack
                 // byte on every execution.
-                if (wasUshortInAX)
+                if (!wasUshortInAX)
                 {
-                    // Skip pusha — the ushort value is on the Stack
-                }
-                else if (_runtimeValueInA && !LastLDA)
-                {
-                    Emit(Opcode.STA, AddressMode.ZeroPage, (byte)NESConstants.TEMP);
-                    _savedRuntimeToTemp = true;
-                }
-                else if (LastLDA)
-                {
-                    EmitJSR("pusha");
-                    _savedConstantViaPusha = true;
+                    if (_runtimeValueInA && !LastLDA)
+                    {
+                        Emit(Opcode.STA, AddressMode.ZeroPage, (byte)NESConstants.TEMP);
+                        _savedRuntimeToTemp = true;
+                    }
+                    else if (LastLDA)
+                    {
+                        EmitJSR("pusha");
+                        _savedConstantViaPusha = true;
+                    }
                 }
                 Emit(Opcode.LDA, AddressMode.Absolute, (ushort)local.Address);
                 _immediateInA = null;

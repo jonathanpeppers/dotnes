@@ -5274,9 +5274,9 @@ public class RoslynTests
 
         _logger.WriteLine($"Main block: pusha={pushaCount}, popa/incsp1={popaCount}");
 
-        // The (byte)ushort_var stelem pattern should not emit any pusha in the
-        // main block — HandleStelemI1 removes and re-emits the entire sequence.
-        // Any remaining pusha without matching popa is a stack leak.
+        // The (byte)ushort_var stelem pattern must not leave any unmatched pusha
+        // calls in the main block — HandleStelemI1 removes and re-emits the
+        // entire sequence, so every pusha must be balanced by popa or incsp1.
         Assert.True(pushaCount <= popaCount,
             $"Unmatched pusha calls detected: pusha={pushaCount}, popa/incsp1={popaCount}. " +
             "Each pusha must be balanced by popa or incsp1 to prevent cc65 stack leaks.");
@@ -5286,7 +5286,7 @@ public class RoslynTests
     public void ByteUshortVarExtraction_Stloc_NoPushaLeak()
     {
         // Test the stloc variant: byte lo = (byte)ushort_var where the result is
-        // stored to a byte local (not an array). This goes through WriteSstloc
+        // stored to a byte local (not an array). This goes through WriteStloc
         // instead of HandleStelemI1.
         var (program, _) = BuildProgram(
             """

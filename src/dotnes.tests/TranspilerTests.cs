@@ -291,7 +291,7 @@ public class TranspilerTests
             var (instruction, _) = instrs[i];
             if (instruction.Opcode != ObjectModel.Opcode.JSR || instruction.Operand is not ObjectModel.LabelOperand lbl)
                 continue;
-            if (lbl.Label == "popa" || lbl.Label == "incsp1") popaCount++;
+            if (lbl.Label is "popa" or "incsp1" or "incsp2") popaCount++;
             if (lbl.Label != "pusha") continue;
 
             // Check if this pusha is for a function argument
@@ -313,7 +313,7 @@ public class TranspilerTests
 
         _logger.WriteLine($"{name} ({configuration}): funcArgPusha={funcArgPusha}, leakedPusha={leakedPusha}, popa={popaCount}");
 
-        // State-saving pusha calls must be balanced by popa/incsp1 in the same block
+        // Non-argument pusha calls must be balanced by popa/incsp in the same block
         Assert.True(leakedPusha <= popaCount,
             $"Unmatched state-saving pusha calls in {name} ({configuration}): " +
             $"stateSave={leakedPusha}, popa={popaCount}. " +
