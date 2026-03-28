@@ -16,18 +16,19 @@ public enum PAD : byte
 }
 
 /// <summary>
-/// PPU mask bits for <see cref="NESLib.ppu_mask(byte)"/>
+/// PPU mask bits for <see cref="NESLib.ppu_mask(MASK)"/>
 /// </summary>
-public static class MASK
+[Flags]
+public enum MASK : byte
 {
-    public const byte MONO = 0x01;
-    public const byte EDGE_BG = 0x02;
-    public const byte EDGE_SPR = 0x04;
-    public const byte BG = 0x08;
-    public const byte SPR = 0x10;
-    public const byte TINT_RED = 0x20;
-    public const byte TINT_GREEN = 0x40;
-    public const byte TINT_BLUE = 0x80;
+    MONO = 0x01,
+    EDGE_BG = 0x02,
+    EDGE_SPR = 0x04,
+    BG = 0x08,
+    SPR = 0x10,
+    TINT_RED = 0x20,
+    TINT_GREEN = 0x40,
+    TINT_BLUE = 0x80,
 }
 
 /// <summary>

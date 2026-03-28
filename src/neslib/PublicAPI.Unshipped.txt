@@ -1,14 +1,14 @@
 #nullable enable
 NES.MASK
 NES.OAM
-const NES.MASK.BG = 8 -> byte
-const NES.MASK.EDGE_BG = 2 -> byte
-const NES.MASK.EDGE_SPR = 4 -> byte
-const NES.MASK.MONO = 1 -> byte
-const NES.MASK.SPR = 16 -> byte
-const NES.MASK.TINT_BLUE = 128 -> byte
-const NES.MASK.TINT_GREEN = 64 -> byte
-const NES.MASK.TINT_RED = 32 -> byte
+NES.MASK.BG = 8 -> NES.MASK
+NES.MASK.EDGE_BG = 2 -> NES.MASK
+NES.MASK.EDGE_SPR = 4 -> NES.MASK
+NES.MASK.MONO = 1 -> NES.MASK
+NES.MASK.SPR = 16 -> NES.MASK
+NES.MASK.TINT_BLUE = 128 -> NES.MASK
+NES.MASK.TINT_GREEN = 64 -> NES.MASK
+NES.MASK.TINT_RED = 32 -> NES.MASK
 const NES.OAM.BEHIND = 32 -> byte
 const NES.OAM.FLIP_H = 64 -> byte
 const NES.OAM.FLIP_V = 128 -> byte
@@ -83,7 +83,7 @@ static NES.NESLib.oam_off -> byte
 static NES.NESLib.pad_state(byte pad) -> NES.PAD
 static NES.NESLib.pad_trigger(byte pad) -> NES.PAD
 static NES.NESLib.peek(ushort addr) -> byte
-static NES.NESLib.play_music() -> void
+static NES.NESLib.music_tick() -> void
 static NES.NESLib.poke(ushort addr, byte value) -> void
 static NES.NESLib.sample_play(byte sample) -> void
 static NES.NESLib.sei() -> void
