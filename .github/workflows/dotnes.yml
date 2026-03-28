@@ -87,9 +87,16 @@ jobs:
       run: dotnet new nes --output smoketest
     - name: build project
       run: dotnet build smoketest/smoketest.csproj
+    - name: install xvfb (Linux)
+      if: runner.os == 'Linux'
+      run: sudo apt-get update -qq && sudo apt-get install -y -qq xvfb
     - name: run smoke test
       shell: bash
       run: |
-        dotnet run --project smoketest/smoketest.csproj --no-build \
-          "-p:MesenRunArguments=--testrunner --doNotSaveSettings --timeout=10 ${{ github.workspace }}/scripts/smoke-test.lua"
+        ARGS="-p:MesenRunArguments=--testrunner --doNotSaveSettings --timeout=10 ${{ github.workspace }}/scripts/smoke-test.lua"
+        PREFIX=""
+        if [ "$RUNNER_OS" = "Linux" ]; then
+          PREFIX="xvfb-run --auto-servernum"
+        fi
+        $PREFIX dotnet run --project smoketest/smoketest.csproj --no-build "$ARGS"
 
