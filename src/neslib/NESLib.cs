@@ -250,9 +250,9 @@ public static class NESLib
     public static void ppu_mask(MASK mask) => throw null!;
 
     /// <summary>
-    /// get current video system, 0 for PAL, not 0 for NTSC
+    /// Get the current video system (PAL or NTSC).
     /// </summary>
-    public static byte ppu_system() => throw null!;
+    public static VideoSystem ppu_system() => throw null!;
 
     /// <summary>
     /// Return an 8-bit counter incremented at each vblank
@@ -277,7 +277,7 @@ public static class NESLib
     /// <summary>
     /// OAM buffer offset, used by oam_meta_spr_pal
     /// </summary>
-    public static byte oam_off;
+    public static byte oam_off { get; set; }
 
     /// <summary>
     /// set sprite display mode, 8x8 or 8x16 sprites
@@ -327,9 +327,9 @@ public static class NESLib
     public static void vram_fill(byte n, uint len) => throw null!;
 
     /// <summary>
-    /// set vram autoincrement, 0 for +1 and not 0 for +32
+    /// Set VRAM auto-increment mode: <see cref="VramIncrement.By1"/> for +1 or <see cref="VramIncrement.By32"/> for +32
     /// </summary>
-    public static void vram_inc(byte n) => throw null!;
+    public static void vram_inc(VramIncrement mode) => throw null!;
 
     /// <summary>
     /// write a block to current address of vram, works only when rendering is turned off

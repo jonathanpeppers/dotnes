@@ -35,15 +35,15 @@ vram_put(0x2B);            // '+' lower-right corner
 
 // Left vertical line (rows 1..28)
 vram_adr(NTADR_A(0, 1));
-vram_inc(1);               // +32 increment for vertical writing
+vram_inc(VramIncrement.By32);               // +32 increment for vertical writing
 vram_fill(0x7C, 28);       // '|' vertical line
-vram_inc(0);               // restore +1 increment
+vram_inc(VramIncrement.By1);               // restore +1 increment
 
 // Right vertical line (rows 1..28)
 vram_adr(NTADR_A(31, 1));
-vram_inc(1);               // +32 increment
+vram_inc(VramIncrement.By32);               // +32 increment
 vram_fill(0x7C, 28);       // '|' vertical line
-vram_inc(0);               // restore +1 increment
+vram_inc(VramIncrement.By1);               // restore +1 increment
 
 // Write "Hello world!" centered on screen
 // x = (32 - 12) / 2 = 10, y = 30 / 2 = 15

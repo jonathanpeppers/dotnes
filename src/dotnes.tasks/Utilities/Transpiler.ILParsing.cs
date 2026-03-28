@@ -180,7 +180,7 @@ partial class Transpiler
                                     break;
                                 }
                             }
-                            // Non-RVA fields (e.g., oam_off) are passed as string operands
+                            // Non-RVA fields are passed as string operands
                             stringValue = fieldName;
                             break;
                     }
@@ -243,6 +243,19 @@ partial class Transpiler
                     break;
                 default:
                     throw new NotSupportedException($"{opCode}, OperandType={operandType} is not supported.");
+            }
+
+            // Normalize property accessor calls to field operations:
+            // Call get_oam_off → Ldsfld oam_off, Call set_oam_off → Stsfld oam_off
+            if (opCode == ILOpCode.Call && stringValue == "get_oam_off")
+            {
+                opCode = ILOpCode.Ldsfld;
+                stringValue = nameof(NESLib.oam_off);
+            }
+            else if (opCode == ILOpCode.Call && stringValue == "set_oam_off")
+            {
+                opCode = ILOpCode.Stsfld;
+                stringValue = nameof(NESLib.oam_off);
             }
 
             yield return new ILInstruction(opCode, offset, intValue, stringValue, byteValue);
