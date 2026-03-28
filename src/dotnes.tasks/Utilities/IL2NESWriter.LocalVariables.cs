@@ -289,7 +289,7 @@ partial class IL2NESWriter
             // This is actually a local variable
             if (local.IsWord)
             {
-                if (LastLDA)
+                if (LastLDA || _runtimeValueInA)
                 {
                     EmitJSR("pusha");
                     _savedConstantViaPusha = true;
