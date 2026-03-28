@@ -171,9 +171,9 @@ public static class NESLib
     public static void vram_unlz4(byte[] input, byte[] output, uint uncompressedSize) => throw null!;
 
     /// <summary>
-    /// fill memory
+    /// fill memory at an absolute address
     /// </summary>
-    public static void memfill(object dst, byte value, uint len) => throw null!;
+    public static void memfill(ushort addr, byte value, uint len) => throw null!;
 
     /// <summary>
     /// clear OAM buffer fast
