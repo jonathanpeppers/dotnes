@@ -1986,9 +1986,9 @@ partial class IL2NESWriter
                         _immediateInA = null;
                         _pokeLastValue = null;
                         break;
-                    case nameof(NESLib.set_chr_mode):
+                    case nameof(NESLib.mmc3_set_chr_bank):
                         {
-                            // set_chr_mode(byte reg, byte bank) -> STA $8000 (reg), STA $8001 (bank)
+                            // mmc3_set_chr_bank(byte reg, byte bank) -> STA $8000 (reg), STA $8001 (bank)
                             // MMC3 CHR bank switching: write register number to $8000, then bank number to $8001.
                             // reg must be a compile-time constant (register selector 0-7).
                             if (Stack.Count >= 2)
@@ -2004,7 +2004,7 @@ partial class IL2NESWriter
                                     || block[block.Count - 3].Mode != AddressMode.Immediate)
                                 {
                                     throw new TranspileException(
-                                        "set_chr_mode: first argument (reg) must be a compile-time constant.",
+                                        "mmc3_set_chr_bank: first argument (reg) must be a compile-time constant.",
                                         MethodName);
                                 }
 

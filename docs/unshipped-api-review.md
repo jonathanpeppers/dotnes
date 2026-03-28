@@ -34,9 +34,9 @@ public static void ppu_mask(MASK mask);
 ppu_mask(MASK.BG | MASK.SPR);  // compiles cleanly, type-safe
 ```
 
-### 2. `set_chr_mode` should be `mmc3_set_chr_bank`
+### 2. ~~`set_chr_mode` should be `mmc3_set_chr_bank`~~ ✅ Resolved
 
-The method writes to MMC3-specific registers (`$8000`/`$8001`) but has a generic name. The `mmc1_*` family uses consistent `mmc1_` prefixes. This should be `mmc3_set_chr_bank` for naming consistency across mapper APIs.
+Renamed to `mmc3_set_chr_bank` for naming consistency across mapper APIs.
 
 ### 3. `memfill(object dst, ...)` uses wrong parameter type
 
