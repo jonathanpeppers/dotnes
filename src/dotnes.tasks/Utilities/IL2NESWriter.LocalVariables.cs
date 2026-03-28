@@ -201,7 +201,9 @@ partial class IL2NESWriter
                 Instructions[Index + 1].OpCode is ILOpCode.Add or ILOpCode.Sub;
             bool nextIsDivRem = _runtimeValueInA && Instructions is not null && Index + 1 < Instructions.Length &&
                 Instructions[Index + 1].OpCode is ILOpCode.Div or ILOpCode.Rem;
-            if (nextIsShift || nextIsAddSub || nextIsDivRem || NextIsBranchComparison())
+            bool nextIsBitwise = Instructions is not null && Index + 1 < Instructions.Length &&
+                Instructions[Index + 1].OpCode is ILOpCode.And or ILOpCode.Or or ILOpCode.Xor;
+            if (nextIsShift || nextIsAddSub || nextIsDivRem || nextIsBitwise || NextIsBranchComparison())
             {
                 // Keep A:X intact — the operator/branch will handle the 16-bit value
                 Stack.Push(operand);
@@ -290,6 +292,7 @@ partial class IL2NESWriter
                 if (LastLDA)
                 {
                     EmitJSR("pusha");
+                    _savedConstantViaPusha = true;
                 }
                 Emit(Opcode.LDA, AddressMode.Absolute, (ushort)local.Address);
                 Emit(Opcode.LDX, AddressMode.Absolute, (ushort)(local.Address + 1));
