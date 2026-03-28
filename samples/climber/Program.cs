@@ -117,9 +117,8 @@ while (true)
     byte[] actor_pal = new byte[MAX_ACTORS];
     byte[] actor_onscreen = new byte[MAX_ACTORS];
 
-    // Scroll state (16-bit as lo/hi)
-    byte scroll_yy_lo = 0;
-    byte scroll_yy_hi = 0;
+    // Scroll state
+    ushort scroll_yy = 0;
     byte scroll_tile_y = 0;
     byte player_screen_y = 0;
     byte score = 0;
@@ -382,9 +381,11 @@ while (true)
                 continue;
             }
             // screen_y = SCREEN_Y_BOTTOM - (actor_yy - scroll_yy), byte arithmetic
-            byte rel_lo = (byte)(actor_yy_lo[ai] - scroll_yy_lo);
-            byte rel_hi = (byte)(actor_yy_hi[ai] - scroll_yy_hi);
-            if (actor_yy_lo[ai] < scroll_yy_lo) rel_hi = (byte)(rel_hi - 1);
+            byte syy_lo = (byte)scroll_yy;
+            byte syy_hi = (byte)(scroll_yy >> 8);
+            byte rel_lo = (byte)(actor_yy_lo[ai] - syy_lo);
+            byte rel_hi = (byte)(actor_yy_hi[ai] - syy_hi);
+            if (actor_yy_lo[ai] < syy_lo) rel_hi = (byte)(rel_hi - 1);
             if (rel_hi != 0) { actor_onscreen[ai] = 0; continue; }
             byte screen_y = (byte)(SCREEN_Y_BOTTOM - rel_lo);
             if (screen_y > 224) { actor_onscreen[ai] = 0; continue; }
@@ -754,25 +755,21 @@ while (true)
                 byte scrolled = 0; // 1=up, 2=down
                 if (player_screen_y < ACTOR_SCROLL_UP_Y)
                 {
-                    byte new_lo = (byte)(scroll_yy_lo + 1);
-                    if (new_lo == 0) scroll_yy_hi = (byte)(scroll_yy_hi + 1);
-                    scroll_yy_lo = new_lo;
+                    scroll_yy = (ushort)(scroll_yy + 1);
                     scrolled = 1;
                 }
-                if (player_screen_y > ACTOR_SCROLL_DOWN_Y && (scroll_yy_lo != 0 || scroll_yy_hi != 0))
+                if (player_screen_y > ACTOR_SCROLL_DOWN_Y && scroll_yy != 0)
                 {
-                    if (scroll_yy_lo == 0) scroll_yy_hi = (byte)(scroll_yy_hi - 1);
-                    scroll_yy_lo = (byte)(scroll_yy_lo - 1);
+                    scroll_yy = (ushort)(scroll_yy - 1);
                     scrolled = 2;
                 }
 
                 // Redraw offscreen row on every tile boundary (every 8 pixels)
-                if (scrolled != 0 && (scroll_yy_lo & 7) == 0)
+                byte syy = (byte)scroll_yy;
+                if (scrolled != 0 && (syy & 7) == 0)
                 {
                     // Update scroll_tile_y
-                    scroll_tile_y = (byte)(scroll_yy_lo >> 3);
-                    if (scroll_yy_hi != 0)
-                        scroll_tile_y = (byte)(scroll_tile_y + (byte)(scroll_yy_hi * 32));
+                    scroll_tile_y = (byte)(scroll_yy >> 3);
 
                     // Compute which row to redraw
                     byte draw_rh;
@@ -1005,37 +1002,18 @@ while (true)
             pal_bright(vbright);
         }
 
-        // Set scroll registers: scroll(0, 479 - ((yy + 224) % 480))
-        // Computed using byte-level arithmetic (yy = scroll_yy_hi:scroll_yy_lo)
+        // Set scroll registers: scroll(0, 479 - ((scroll_yy + 224) % 480))
         {
-            byte sv_lo;
-            byte sv_hi;
-            if (scroll_yy_hi == 0)
+            if (scroll_yy < 256)
             {
-                // yy < 256: yy + 224 < 480, so no modulo needed
-                // scroll_val = 255 - scroll_yy_lo
-                sv_lo = (byte)(255 - scroll_yy_lo);
-                sv_hi = 0;
+                // yy < 256: no modulo needed, scroll_val = 255 - yy
+                byte syy2 = (byte)scroll_yy;
+                scroll(0, (byte)(255 - syy2));
             }
             else
             {
-                // yy >= 256: yy + 224 >= 480, subtract 480
-                // scroll_val = 735 - yy (735 = 0x02DF)
-                sv_lo = (byte)(0xDF - scroll_yy_lo);
-                sv_hi = 2;
-                if (scroll_yy_lo > 0xDF) sv_hi = (byte)(sv_hi - 1);
-                sv_hi = (byte)(sv_hi - scroll_yy_hi);
-            }
-            // Pass to scroll: x=0, y=sv_hi:sv_lo (16-bit)
-            // Construct ushort: sv_lo + sv_hi * 256
-            if (sv_hi == 0)
-            {
-                scroll(0, sv_lo);
-            }
-            else
-            {
-                // byte + ushort constant produces 16-bit result
-                ushort scroll_val = (ushort)(sv_lo + 256);
+                // yy >= 256: scroll_val = 735 - yy (735 = 0x02DF)
+                ushort scroll_val = (ushort)(735 - scroll_yy);
                 scroll(0, scroll_val);
             }
         }
