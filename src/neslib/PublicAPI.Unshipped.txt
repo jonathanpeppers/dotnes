@@ -65,7 +65,7 @@ static NES.NESLib.famitone_init(string! musicDataLabel) -> void
 static NES.NESLib.irq_set_callback(delegate*<void> callback) -> void
 static NES.NESLib.memfill(ushort addr, byte value, uint len) -> void
 static NES.NESLib.mmc1_set_chr_bank(byte bank0, byte bank1) -> void
-static NES.NESLib.mmc1_set_mirroring(NES.MMC1Mirror mode) -> void
+static NES.NESLib.mmc1_set_mirroring(byte mode) -> void
 static NES.NESLib.mmc1_set_prg_bank(byte bank) -> void
 static NES.NESLib.mmc1_write(ushort addr, byte value) -> void
 static NES.NESLib.set_chr_mode(byte reg, byte bank) -> void

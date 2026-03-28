@@ -588,7 +588,7 @@ public static class NESLib
     /// mode bits. Writing only a mirror constant (e.g., <see cref="MMC1Mirror.Vertical"/>)
     /// resets PRG/CHR modes to zero — combine with your desired mode bits.
     /// </summary>
-    public static void mmc1_set_mirroring(MMC1Mirror mode) => throw null!;
+    public static void mmc1_set_mirroring(byte mode) => throw null!;
 
     // TODO: Macros below should be computed at compile-time and methods removed
 

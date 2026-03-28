@@ -3825,10 +3825,10 @@ public class RoslynTests
     public void Mmc1SetMirroring_EmitsWriteTo8000()
     {
         // mmc1_set_mirroring writes the full Control register — use mirror + PRG/CHR mode bits
-        // MMC1Mirror.Vertical | (MMC1Mirror)MMC1_PRG_FIX_LAST = 0x02 | 0x0C = 0x0E
+        // (byte)MMC1Mirror.Vertical | MMC1_PRG_FIX_LAST = 0x02 | 0x0C = 0x0E
         var bytes = GetProgramBytes(
             """
-            mmc1_set_mirroring(MMC1Mirror.Vertical | (MMC1Mirror)MMC1_PRG_FIX_LAST);
+            mmc1_set_mirroring((byte)MMC1Mirror.Vertical | MMC1_PRG_FIX_LAST);
             ppu_on_all();
             while (true) ;
             """);
