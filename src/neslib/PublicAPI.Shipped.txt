@@ -10,7 +10,7 @@ NES.PAD.SELECT = 4 -> NES.PAD
 NES.PAD.START = 8 -> NES.PAD
 NES.PAD.UP = 16 -> NES.PAD
 NES.VideoSystem
-NES.VideoSystem.NTSC = 1 -> NES.VideoSystem
+NES.VideoSystem.NTSC = 128 -> NES.VideoSystem
 NES.VideoSystem.PAL = 0 -> NES.VideoSystem
 const NES.NESLib.NAMETABLE_A = 8192 -> ushort
 const NES.NESLib.NAMETABLE_B = 9216 -> ushort
@@ -40,7 +40,7 @@ static NES.NESLib.pal_clear() -> void
 static NES.NESLib.pal_col(byte index, byte color) -> void
 static NES.NESLib.pal_spr(byte[]! data) -> void
 static NES.NESLib.pal_spr_bright(byte bright) -> void
-static NES.NESLib.ppu_mask(byte mask) -> void
+static NES.NESLib.ppu_mask(NES.MASK mask) -> void
 static NES.NESLib.ppu_off() -> void
 static NES.NESLib.ppu_on_all() -> void
 static NES.NESLib.ppu_on_bg() -> void
