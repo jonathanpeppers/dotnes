@@ -57,6 +57,15 @@ public enum MASK : byte
 }
 
 /// <summary>
+/// Sprite size for <see cref="NESLib.oam_size(SpriteSize)"/>
+/// </summary>
+public enum SpriteSize : byte
+{
+    Size8x8 = 0,
+    Size8x16 = 1,
+}
+
+/// <summary>
 /// Sprite attribute flags for <see cref="NESLib.oam_spr(byte, byte, byte, byte, byte)"/>
 /// </summary>
 public static class OAM

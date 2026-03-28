@@ -9,6 +9,9 @@ NES.PAD.RIGHT = 128 -> NES.PAD
 NES.PAD.SELECT = 4 -> NES.PAD
 NES.PAD.START = 8 -> NES.PAD
 NES.PAD.UP = 16 -> NES.PAD
+NES.SpriteSize
+NES.SpriteSize.Size8x16 = 1 -> NES.SpriteSize
+NES.SpriteSize.Size8x8 = 0 -> NES.SpriteSize
 NES.VideoSystem
 NES.VideoSystem.NTSC = 128 -> NES.VideoSystem
 NES.VideoSystem.PAL = 0 -> NES.VideoSystem
@@ -32,7 +35,7 @@ static NES.NESLib.nesclock() -> byte
 static NES.NESLib.oam_clear() -> void
 static NES.NESLib.oam_hide_rest(byte sprid) -> void
 static NES.NESLib.oam_meta_spr(byte x, byte y, byte sprid, byte[]! data) -> byte
-static NES.NESLib.oam_size(byte size) -> void
+static NES.NESLib.oam_size(NES.SpriteSize size) -> void
 static NES.NESLib.oam_spr(byte x, byte y, byte chrnum, byte attr, byte sprid) -> byte
 static NES.NESLib.pad_poll(byte pad) -> NES.PAD
 static NES.NESLib.pal_all(byte[]! data) -> void

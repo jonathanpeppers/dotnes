@@ -896,4 +896,15 @@ public class DecompilerTests
         // hello sample has no user-defined functions
         Assert.DoesNotContain("static void func_", code);
     }
+
+    [Fact]
+    public void Decompiler_Bigsprites_RecognizesOamSize()
+    {
+        var romBytes = GetVerifiedRom("bigsprites");
+        var rom = new NESRomReader(romBytes);
+        var decompiler = new Decompiler(rom, _logger);
+        var code = decompiler.Decompile();
+
+        Assert.Contains("oam_size(SpriteSize.Size8x16);", code);
+    }
 }
