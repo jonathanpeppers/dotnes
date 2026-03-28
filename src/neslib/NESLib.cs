@@ -203,11 +203,6 @@ public static class NESLib
     public static void poke(ushort addr, byte value) => throw null!;
 
     /// <summary>
-    /// write a MASK value to an absolute memory address (convenience overload for PPU_MASK)
-    /// </summary>
-    public static void poke(ushort addr, MASK value) => poke(addr, (byte)value);
-
-    /// <summary>
     /// read a byte value from an absolute memory address
     /// </summary>
     public static byte peek(ushort addr) => throw null!;
