@@ -8,7 +8,7 @@ Methods declared in `NESLib.cs` that do not yet have a transpiler implementation
 |--------|-------------|
 | `music_play(byte)` | Start/resume music playback |
 | `music_stop()` | Stop music playback |
-| `music_pause(byte)` | Pause/unpause music |
+| `music_pause(bool)` | Pause/unpause music |
 | `famitone_init(byte[])` | Initialize FamiTone engine |
 | `sfx_init(byte[])` | Initialize SFX engine |
 | `sfx_play(byte, byte)` | Play a sound effect |

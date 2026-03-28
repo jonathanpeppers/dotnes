@@ -68,7 +68,7 @@ public static class NESLib
     /// <summary>
     /// pause music (FamiTone)
     /// </summary>
-    public static void music_pause(byte pause) => throw null!;
+    public static void music_pause(bool pause) => throw null!;
 
     /// <summary>
     /// initialize the APU (Audio Processing Unit)
