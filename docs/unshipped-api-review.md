@@ -64,7 +64,6 @@ These match the neslib.h "vibes" perfectly but could be more idiomatic C#. Lower
 |---|---|---|
 | `oam_size(byte)` | "0 for 8x8, 1 for 8x16" | `SpriteSize` enum |
 | `vram_inc(byte)` | "0 for +1, not 0 for +32" | `bool` or enum |
-| `ppu_system()` returns `byte` | "0 for PAL, not 0 for NTSC" | `VideoSystem` enum or `bool IsNtsc` |
 | `MMC1_MIRROR_*` constants | `const byte` | `MMC1Mirror` enum |
 | `music_pause(byte)` | "0 unpause, 1 pause" | `bool` |
 | `oam_off` field | public mutable field | property |

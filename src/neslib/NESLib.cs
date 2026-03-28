@@ -243,9 +243,9 @@ public static class NESLib
     public static void ppu_mask(byte mask) => throw null!;
 
     /// <summary>
-    /// get current video system, 0 for PAL, not 0 for NTSC
+    /// Get the current video system (PAL or NTSC).
     /// </summary>
-    public static byte ppu_system() => throw null!;
+    public static VideoSystem ppu_system() => throw null!;
 
     /// <summary>
     /// Return an 8-bit counter incremented at each vblank
