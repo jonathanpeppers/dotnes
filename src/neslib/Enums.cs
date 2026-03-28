@@ -16,6 +16,15 @@ public enum PAD : byte
 }
 
 /// <summary>
+/// Return value of <see cref="NESLib.ppu_system()"/>
+/// </summary>
+public enum VideoSystem : byte
+{
+    PAL = 0x00,
+    NTSC = 0x80,
+}
+
+/// <summary>
 /// PPU mask bits for <see cref="NESLib.ppu_mask(MASK)"/>
 /// </summary>
 [Flags]
