@@ -9,12 +9,3 @@ runs:
     with:
       path: src/dotnes.mesen/bin
       key: mesen-${{ runner.os }}-${{ hashFiles('src/dotnes.mesen/build/dotnes.mesen.targets') }}
-  - name: Touch cached files
-    shell: bash
-    run: |
-      # Touch cached files so MSBuild sees them as newer than the targets file.
-      # Without this, git checkout gives the targets a fresh timestamp that defeats
-      # MSBuild's Exists() check, causing re-downloads every build.
-      if [ -d src/dotnes.mesen/bin ]; then
-        find src/dotnes.mesen/bin -type f -exec touch {} +
-      fi

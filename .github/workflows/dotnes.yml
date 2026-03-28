@@ -25,7 +25,7 @@ jobs:
     - name: build
       run: dotnet build -bl:build-debug.binlog && dotnet build -c Release -bl:build-release.binlog
     - name: test
-      run: dotnet test --no-build --verbosity normal && dotnet test --no-build --verbosity normal -c Release
+      run: dotnet test --verbosity normal && dotnet test --verbosity normal -c Release
     - name: samples
       run: dotnet build samples/samples.sln -bl:samples-debug.binlog && dotnet build samples/samples.sln -c Release -bl:samples-release.binlog
     - name: shutdown (best effort)
@@ -74,22 +74,33 @@ jobs:
       with:
         dotnet-version: 10.x
     - name: download nupkgs
-      uses: actions/download-artifact@v7
+      uses: actions/download-artifact@v4
       with:
         name: nupkgs
         path: nupkgs
-    - name: add local NuGet source
-      run: dotnet nuget add source "${{ github.workspace }}/nupkgs" --name local
     - name: install template
       shell: bash
       run: dotnet new install nupkgs/dotnes.templates.*.nupkg
     - name: create project
       run: dotnet new nes --output smoketest
+    - name: add local NuGet source
+      run: dotnet nuget add source "${{ github.workspace }}/nupkgs" --name local
     - name: build project
       run: dotnet build smoketest/smoketest.csproj
     - name: run smoke test
       shell: bash
       run: |
-        dotnet run --project smoketest/smoketest.csproj \
-          "-p:MesenRunArguments=--testrunner --doNotSaveSettings --timeout=10 ${{ github.workspace }}/scripts/smoke-test.lua"
+        # Locate the Mesen binary installed by dotnes.mesen during build
+        NUGET_DIR="$HOME/.nuget/packages"
+        if [ "$RUNNER_OS" = "Windows" ]; then
+          NUGET_DIR="$USERPROFILE/.nuget/packages"
+          MESEN="$NUGET_DIR/dotnes.mesen/2.1.1/bin/Mesen.exe"
+        elif [ "$RUNNER_OS" = "macOS" ]; then
+          MESEN="$NUGET_DIR/dotnes.mesen/2.1.1/bin/Mesen.app/Contents/MacOS/Mesen"
+        else
+          MESEN="$NUGET_DIR/dotnes.mesen/2.1.1/bin/Mesen"
+        fi
+        ROM="smoketest/bin/Debug/net10.0/smoketest.nes"
+        "$MESEN" "$ROM" --testrunner --doNotSaveSettings --timeout=10 \
+          "${{ github.workspace }}/scripts/smoke-test.lua"
 
