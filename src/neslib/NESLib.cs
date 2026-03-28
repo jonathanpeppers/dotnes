@@ -56,7 +56,11 @@ public static class NESLib
     public static void pal_bg_bright(byte bright) => throw null!;
 
     /// <summary>
-    /// play music (FamiTone)
+    /// play music (FamiTone2 library).
+    /// Starts or resumes playback of a song by index from FamiTone2 music data.
+    /// <para><b>⚠️ Not to be confused with <see cref="music_tick"/>.</b>
+    /// This method is for the FamiTone2 external music library.
+    /// <see cref="music_tick"/> is for the dotnes built-in music engine.</para>
     /// </summary>
     public static void music_play(byte song) => throw null!;
 
@@ -97,10 +101,13 @@ public static class NESLib
     public static void start_music(byte[] data) => throw null!;
 
     /// <summary>
-    /// play one frame of music, call once per vblank
-    /// processes music data and writes to APU registers
+    /// advance one frame of music playback (dotnes built-in music engine).
+    /// Call once per vblank/NMI to process music data and write to APU registers.
+    /// <para><b>⚠️ Not to be confused with <see cref="music_play"/>.</b>
+    /// <see cref="music_play"/> is for the FamiTone2 external library.
+    /// This method is for the dotnes built-in music engine.</para>
     /// </summary>
-    public static void play_music() => throw null!;
+    public static void music_tick() => throw null!;
 
     /// <summary>
     /// register a ushort[] note table for pulse channel playback
@@ -555,11 +562,8 @@ public static class NESLib
     public const ushort MMC1_CHR_BANK1 = 0xC000;
     public const ushort MMC1_PRG_BANK = 0xE000;
 
-    // MMC1 mirroring modes (bits 0-1 of the Control register)
-    public const byte MMC1_MIRROR_ONE_LOWER = 0;
-    public const byte MMC1_MIRROR_ONE_UPPER = 1;
-    public const byte MMC1_MIRROR_VERTICAL = 2;
-    public const byte MMC1_MIRROR_HORIZONTAL = 3;
+    // MMC1 Control register PRG/CHR mode bits: use mirror | (MMC1Mirror)prg_chr_bits
+    // when combining mirroring with PRG/CHR modes in mmc1_set_mirroring().
 
     // MMC1 Control register PRG/CHR mode bits (OR with mirroring constants)
     /// <summary>PRG mode: fix last bank at $C000, switch 16KB bank at $8000 (bits 2-3 = 11).</summary>
@@ -587,8 +591,8 @@ public static class NESLib
     /// <summary>
     /// Write the full MMC1 Control register ($8000) via the serial shift register.
     /// The value contains: mirroring mode (bits 0-1), PRG bank mode (bits 2-3),
-    /// and CHR bank mode (bit 4). Use MMC1_MIRROR_* constants OR'd with PRG/CHR
-    /// mode bits. Writing only a mirror constant (e.g., MMC1_MIRROR_VERTICAL)
+    /// and CHR bank mode (bit 4). Use <see cref="MMC1Mirror"/> values OR'd with PRG/CHR
+    /// mode bits. Writing only a mirror constant (e.g., <see cref="MMC1Mirror.Vertical"/>)
     /// resets PRG/CHR modes to zero — combine with your desired mode bits.
     /// </summary>
     public static void mmc1_set_mirroring(byte mode) => throw null!;

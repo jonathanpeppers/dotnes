@@ -8,7 +8,7 @@ Uses NESMapper=1 in the project file.
 
 // Configure MMC1 Control register:
 // Horizontal mirroring + fix last PRG bank at $C000 + 8KB CHR mode
-mmc1_set_mirroring(MMC1_MIRROR_HORIZONTAL | MMC1_PRG_FIX_LAST);
+mmc1_set_mirroring((byte)MMC1Mirror.Horizontal | MMC1_PRG_FIX_LAST);
 
 // Select PRG bank 0 at $8000-$BFFF
 mmc1_set_prg_bank(0);

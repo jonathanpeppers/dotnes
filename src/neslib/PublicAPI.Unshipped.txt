@@ -35,10 +35,11 @@ const NES.NESLib.MMC1_CHR_BANK0 = 40960 -> ushort
 const NES.NESLib.MMC1_CHR_BANK1 = 49152 -> ushort
 const NES.NESLib.MMC1_CHR_4K = 16 -> byte
 const NES.NESLib.MMC1_CONTROL = 32768 -> ushort
-const NES.NESLib.MMC1_MIRROR_HORIZONTAL = 3 -> byte
-const NES.NESLib.MMC1_MIRROR_ONE_LOWER = 0 -> byte
-const NES.NESLib.MMC1_MIRROR_ONE_UPPER = 1 -> byte
-const NES.NESLib.MMC1_MIRROR_VERTICAL = 2 -> byte
+NES.MMC1Mirror
+NES.MMC1Mirror.Horizontal = 3 -> NES.MMC1Mirror
+NES.MMC1Mirror.OneLower = 0 -> NES.MMC1Mirror
+NES.MMC1Mirror.OneUpper = 1 -> NES.MMC1Mirror
+NES.MMC1Mirror.Vertical = 2 -> NES.MMC1Mirror
 const NES.NESLib.MMC1_PRG_BANK = 57344 -> ushort
 const NES.NESLib.MMC1_PRG_FIX_LAST = 12 -> byte
 const NES.NESLib.NT_UPD_EOF = 255 -> byte
@@ -79,7 +80,7 @@ static NES.NESLib.oam_off -> byte
 static NES.NESLib.pad_state(byte pad) -> NES.PAD
 static NES.NESLib.pad_trigger(byte pad) -> NES.PAD
 static NES.NESLib.peek(ushort addr) -> byte
-static NES.NESLib.play_music() -> void
+static NES.NESLib.music_tick() -> void
 static NES.NESLib.poke(ushort addr, byte value) -> void
 static NES.NESLib.sample_play(byte sample) -> void
 static NES.NESLib.sei() -> void

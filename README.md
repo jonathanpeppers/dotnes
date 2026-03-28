@@ -143,7 +143,7 @@ start_music(music1);
 while (true)
 {
     ppu_wait_nmi();
-    play_music();
+    music_tick();
 }
 ```
 
