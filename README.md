@@ -13,23 +13,35 @@
 | **shoot2** ⬇️ | **pong** ⬇️ |
 | ![shoot2](samples/shoot2/shoot2.gif) | ![pong](samples/pong/pong.gif) |
 | **climber** ⬇️ | **procgen** ⬇️ |
-| ![climber](samples/climber/climber.gif) | ![procgen](samples/procgen/procgen.png) |
+| ![climber](samples/climber/climber.gif) | ![procgen](samples/procgen/procgen.gif) |
 | **snake** ⬇️ | **siegegame** ⬇️ |
-| ![snake](samples/snake/snake.png) | ![siegegame](samples/siegegame/siegegame.png) |
+| ![snake](samples/snake/snake.gif) | ![siegegame](samples/siegegame/siegegame.gif) |
 | **metasprites** ⬇️ | **animation** ⬇️ |
 | ![metasprites](samples/metasprites/metasprites.gif) | ![animation](samples/animation/animation.gif) |
+| **scoreboard** ⬇️ | **bigsprites** ⬇️ |
+| ![scoreboard](samples/scoreboard/scoreboard.gif) | ![bigsprites](samples/bigsprites/bigsprites.gif) |
 | **sprites** ⬇️ | **horizscroll** ⬇️ |
 | ![sprites](samples/sprites/sprites.gif) | ![horizscroll](samples/horizscroll/horizscroll.gif) |
-| **vertscroll** ⬇️ | **fade** ⬇️ |
-| ![vertscroll](samples/vertscroll/vertscroll.gif) | ![fade](samples/fade/fade.gif) |
+| **vertscroll** ⬇️ | **scroll** ⬇️ |
+| ![vertscroll](samples/vertscroll/vertscroll.gif) | ![scroll](samples/scroll/scroll.gif) |
+| **fade** ⬇️ | **slideshow** ⬇️ |
+| ![fade](samples/fade/fade.gif) | ![slideshow](samples/slideshow/slideshow.gif) |
 | **monobitmap** ⬇️ | **music** ⬇️ |
-| ![monobitmap](samples/monobitmap/monobitmap.png) | ![music](samples/music/music.png) |
-| **fami** ⬇️ | **rletitle** ⬇️ |
-| ![fami](samples/fami/fami.gif) | ![rletitle](samples/rletitle/rletitle.png) |
-| **attributetable** ⬇️ | **flicker** ⬇️ |
-| ![attributetable](samples/attributetable/attributetable.png) | ![flicker](samples/flicker/flicker.gif) |
-| **statusbar** ⬇️ | |
-| ![statusbar](samples/statusbar/statusbar.gif) | |
+| ![monobitmap](samples/monobitmap/monobitmap.gif) | ![music](samples/music/music.gif) |
+| **fami** ⬇️ | **conio** ⬇️ |
+| ![fami](samples/fami/fami.gif) | ![conio](samples/conio/conio.gif) |
+| **metacursor** ⬇️ | **metatrigger** ⬇️ |
+| ![metacursor](samples/metacursor/metacursor.gif) | ![metatrigger](samples/metatrigger/metatrigger.gif) |
+| **horizmask** ⬇️ | **statusbar** ⬇️ |
+| ![horizmask](samples/horizmask/horizmask.gif) | ![statusbar](samples/statusbar/statusbar.gif) |
+| **peekpoke** ⬇️ | **irq** ⬇️ |
+| ![peekpoke](samples/peekpoke/peekpoke.gif) | ![irq](samples/irq/irq.gif) |
+| **rletitle** ⬇️ | **attributetable** ⬇️ |
+| ![rletitle](samples/rletitle/rletitle.png) | ![attributetable](samples/attributetable/attributetable.png) |
+| **tileset1** ⬇️ | **hello** ⬇️ |
+| ![tileset1](samples/tileset1/tileset1.png) | ![hello](samples/hello/hello.png) |
+| **tint** ⬇️ | **flicker** ⬇️ |
+| ![tint](samples/tint/tint.png) | ![flicker](samples/flicker/flicker.gif) |
 
 > See the [samples/](samples/) folder for all 46 sample projects. Generate images with `dotnet run scripts/record-all-samples.cs`.
 
