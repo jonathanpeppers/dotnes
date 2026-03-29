@@ -71,6 +71,7 @@ jobs:
     - uses: actions/checkout@v6
       with:
         sparse-checkout: |
+          .github/workflows/cache-mesen
           scripts/smoke-test.lua
           src/dotnes.mesen/build/dotnes.mesen.targets
         sparse-checkout-cone-mode: false
