@@ -1,6 +1,6 @@
 /*
 Big sprites demo.
-Display 8x16 sprites using the NES PPU's 8x16 sprite mode via oam_size(1).
+Display 8x16 sprites using the NES PPU's 8x16 sprite mode via oam_size(SpriteSize.Size8x16).
 Shows double-height sprites moving around the screen (wrapping via byte overflow).
 Based on: https://github.com/sehugg/8bitworkshop/blob/master/presets/nes/sprites.c
 */
@@ -35,7 +35,7 @@ for (byte i = 0; i < 8; i = (byte)(i + 1))
 // setup PPU
 oam_clear();
 pal_all(PALETTE);
-oam_size(1);     // enable 8x16 sprite mode
+oam_size(SpriteSize.Size8x16);     // enable 8x16 sprite mode
 bank_spr(0);
 ppu_on_all();
 

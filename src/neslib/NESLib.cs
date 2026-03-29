@@ -56,7 +56,11 @@ public static class NESLib
     public static void pal_bg_bright(byte bright) => throw null!;
 
     /// <summary>
-    /// play music (FamiTone)
+    /// play music (FamiTone2 library).
+    /// Starts or resumes playback of a song by index from FamiTone2 music data.
+    /// <para><b>⚠️ Not to be confused with <see cref="music_tick"/>.</b>
+    /// This method is for the FamiTone2 external music library.
+    /// <see cref="music_tick"/> is for the dotnes built-in music engine.</para>
     /// </summary>
     public static void music_play(byte song) => throw null!;
 
@@ -68,7 +72,7 @@ public static class NESLib
     /// <summary>
     /// pause music (FamiTone)
     /// </summary>
-    public static void music_pause(byte pause) => throw null!;
+    public static void music_pause(bool pause) => throw null!;
 
     /// <summary>
     /// initialize the APU (Audio Processing Unit)
@@ -97,10 +101,13 @@ public static class NESLib
     public static void start_music(byte[] data) => throw null!;
 
     /// <summary>
-    /// play one frame of music, call once per vblank
-    /// processes music data and writes to APU registers
+    /// advance one frame of music playback (dotnes built-in music engine).
+    /// Call once per vblank/NMI to process music data and write to APU registers.
+    /// <para><b>⚠️ Not to be confused with <see cref="music_play"/>.</b>
+    /// <see cref="music_play"/> is for the FamiTone2 external library.
+    /// This method is for the dotnes built-in music engine.</para>
     /// </summary>
-    public static void play_music() => throw null!;
+    public static void music_tick() => throw null!;
 
     /// <summary>
     /// register a ushort[] note table for pulse channel playback
@@ -171,9 +178,9 @@ public static class NESLib
     public static void vram_unlz4(byte[] input, byte[] output, uint uncompressedSize) => throw null!;
 
     /// <summary>
-    /// fill memory
+    /// fill memory at an absolute address
     /// </summary>
-    public static void memfill(object dst, byte value, uint len) => throw null!;
+    public static void memfill(ushort addr, byte value, uint len) => throw null!;
 
     /// <summary>
     /// clear OAM buffer fast
@@ -240,12 +247,12 @@ public static class NESLib
     /// <summary>
     /// set PPU_MASK directly
     /// </summary>
-    public static void ppu_mask(byte mask) => throw null!;
+    public static void ppu_mask(MASK mask) => throw null!;
 
     /// <summary>
-    /// get current video system, 0 for PAL, not 0 for NTSC
+    /// Get the current video system (PAL or NTSC).
     /// </summary>
-    public static byte ppu_system() => throw null!;
+    public static VideoSystem ppu_system() => throw null!;
 
     /// <summary>
     /// Return an 8-bit counter incremented at each vblank
@@ -270,12 +277,12 @@ public static class NESLib
     /// <summary>
     /// OAM buffer offset, used by oam_meta_spr_pal
     /// </summary>
-    public static byte oam_off;
+    public static byte oam_off { get; set; }
 
     /// <summary>
-    /// set sprite display mode, 0 for 8x8 sprites, 1 for 8x16 sprites
+    /// set sprite display mode, 8x8 or 8x16 sprites
     /// </summary>
-    public static void oam_size(byte size) => throw null!;
+    public static void oam_size(SpriteSize size) => throw null!;
 
     /// <summary>
     /// set sprite in OAM buffer, chrnum is tile, attr is attribute, sprid is offset in OAM in bytes
@@ -320,9 +327,9 @@ public static class NESLib
     public static void vram_fill(byte n, uint len) => throw null!;
 
     /// <summary>
-    /// set vram autoincrement, 0 for +1 and not 0 for +32
+    /// Set VRAM auto-increment mode: <see cref="VramIncrement.By1"/> for +1 or <see cref="VramIncrement.By32"/> for +32
     /// </summary>
-    public static void vram_inc(byte n) => throw null!;
+    public static void vram_inc(VramIncrement mode) => throw null!;
 
     /// <summary>
     /// write a block to current address of vram, works only when rendering is turned off
@@ -547,7 +554,7 @@ public static class NESLib
     /// R2-R5 (reg 2-5): 1KB CHR banks at PPU $1000/$1400/$1800/$1C00.
     /// R6-R7 (reg 6-7): PRG banks (not CHR).</param>
     /// <param name="bank">Bank number to select. Can be a constant or local variable.</param>
-    public static void set_chr_mode(byte reg, byte bank) => throw null!;
+    public static void mmc3_set_chr_bank(byte reg, byte bank) => throw null!;
 
     // MMC1 mapper register addresses for serial shift register writes via mmc1_write()
     public const ushort MMC1_CONTROL = 0x8000;
@@ -555,11 +562,8 @@ public static class NESLib
     public const ushort MMC1_CHR_BANK1 = 0xC000;
     public const ushort MMC1_PRG_BANK = 0xE000;
 
-    // MMC1 mirroring modes (bits 0-1 of the Control register)
-    public const byte MMC1_MIRROR_ONE_LOWER = 0;
-    public const byte MMC1_MIRROR_ONE_UPPER = 1;
-    public const byte MMC1_MIRROR_VERTICAL = 2;
-    public const byte MMC1_MIRROR_HORIZONTAL = 3;
+    // MMC1 Control register PRG/CHR mode bits: use mirror | (MMC1Mirror)prg_chr_bits
+    // when combining mirroring with PRG/CHR modes in mmc1_set_mirroring().
 
     // MMC1 Control register PRG/CHR mode bits (OR with mirroring constants)
     /// <summary>PRG mode: fix last bank at $C000, switch 16KB bank at $8000 (bits 2-3 = 11).</summary>
@@ -587,8 +591,8 @@ public static class NESLib
     /// <summary>
     /// Write the full MMC1 Control register ($8000) via the serial shift register.
     /// The value contains: mirroring mode (bits 0-1), PRG bank mode (bits 2-3),
-    /// and CHR bank mode (bit 4). Use MMC1_MIRROR_* constants OR'd with PRG/CHR
-    /// mode bits. Writing only a mirror constant (e.g., MMC1_MIRROR_VERTICAL)
+    /// and CHR bank mode (bit 4). Use <see cref="MMC1Mirror"/> values OR'd with PRG/CHR
+    /// mode bits. Writing only a mirror constant (e.g., <see cref="MMC1Mirror.Vertical"/>)
     /// resets PRG/CHR modes to zero — combine with your desired mode bits.
     /// </summary>
     public static void mmc1_set_mirroring(byte mode) => throw null!;
@@ -651,7 +655,12 @@ public static class NESLib
          * .byte <palBrightTable3,<palBrightTable4,<palBrightTable5
          * .byte <palBrightTable6,<palBrightTable7,<palBrightTable8
          */
-        0x34, 0x44, 0x54, 0x64, 0x74, 0x84, 0x94, 0xA4, 0xB4, 0x84, 0x84, 0x84, 0x84, 0x84, 0x84, 0x84, 0x84, 0x84
+        0x34, 0x44, 0x54, 0x64, 0x74, 0x84, 0x94, 0xA4, 0xB4
+    ];
+
+    internal static readonly byte[] palBrightTableH =
+    [
+        0x84, 0x84, 0x84, 0x84, 0x84, 0x84, 0x84, 0x84, 0x84
     ];
 
     internal static readonly byte[] palBrightTable0 =

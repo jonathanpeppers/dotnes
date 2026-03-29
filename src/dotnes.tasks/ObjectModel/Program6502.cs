@@ -528,7 +528,6 @@ public class Program6502
         program.DefineExternalLabel("zerobss", 0);
         program.DefineExternalLabel("copydata", 0);
         program.DefineExternalLabel("main", 0);
-        program.DefineExternalLabel("updName", NESConstants.updName);
 
         // Add all standard built-in subroutines (same order as NESWriter.WriteBuiltIns)
         program.AddBlock(BuiltInSubroutines.Exit());
@@ -584,7 +583,8 @@ public class Program6502
         program.AddBlock(BuiltInSubroutines.Delay());
 
         // Add palette brightness tables as raw data
-        program.AddRawData(NESLib.palBrightTableL);
+        program.AddRawData(NESLib.palBrightTableL, nameof(NESLib.palBrightTableL));
+        program.AddRawData(NESLib.palBrightTableH, nameof(NESLib.palBrightTableH));
         program.AddRawData(NESLib.palBrightTable0);
         program.AddRawData(NESLib.palBrightTable1);
         program.AddRawData(NESLib.palBrightTable2);
@@ -739,7 +739,7 @@ public class Program6502
     }
 
     /// <summary>
-    /// Calculates the size of music subroutines (play_music + start_music).
+    /// Calculates the size of music subroutines (music_tick + start_music).
     /// These are emitted before main() to match cc65's ROM layout.
     /// </summary>
     public static int CalculateMusicSubroutinesSize(HashSet<string>? usedMethods = null)
@@ -747,8 +747,8 @@ public class Program6502
         int size = 0;
         if (usedMethods != null)
         {
-            if (usedMethods.Contains("play_music"))
-                size += BuiltInSubroutines.PlayMusic().Size;
+            if (usedMethods.Contains("music_tick"))
+                size += BuiltInSubroutines.MusicTick().Size;
             if (usedMethods.Contains("start_music"))
                 size += BuiltInSubroutines.StartMusic().Size;
         }
@@ -756,15 +756,15 @@ public class Program6502
     }
 
     /// <summary>
-    /// Adds music subroutines (play_music + start_music) before main().
+    /// Adds music subroutines (music_tick + start_music) before main().
     /// Matches cc65's ROM layout where music code precedes main().
     /// </summary>
     public void AddMusicSubroutines(HashSet<string>? usedMethods = null)
     {
         if (usedMethods != null)
         {
-            if (usedMethods.Contains("play_music"))
-                AddBlock(BuiltInSubroutines.PlayMusic());
+            if (usedMethods.Contains("music_tick"))
+                AddBlock(BuiltInSubroutines.MusicTick());
             if (usedMethods.Contains("start_music"))
                 AddBlock(BuiltInSubroutines.StartMusic());
         }

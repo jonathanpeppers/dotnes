@@ -6,9 +6,12 @@ on:
   pull_request:
     branches: [ main ]
 
+permissions:
+  contents: read
+
 jobs:
   build:
-    runs-on: macos-latest
+    runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v6
     - name: install .NET
@@ -17,18 +20,14 @@ jobs:
         dotnet-version: 10.x
     - name: cache ANESE downloads
       uses: ./.github/workflows/cache-anese
+    - name: cache Mesen downloads
+      uses: ./.github/workflows/cache-mesen
     - name: build
       run: dotnet build -bl:build-debug.binlog && dotnet build -c Release -bl:build-release.binlog
     - name: test
       run: dotnet test --no-build --verbosity normal && dotnet test --no-build --verbosity normal -c Release
     - name: samples
       run: dotnet build samples/samples.sln -bl:samples-debug.binlog && dotnet build samples/samples.sln -c Release -bl:samples-release.binlog
-    - name: templates
-      run: |
-        dotnet new install bin/Release/dotnes.templates.*.nupkg && \
-        dotnet new nes --output samples/foo && \
-        dotnet build samples/foo/foo.csproj -bl:foo-debug.binlog && \
-        dotnet build samples/foo/foo.csproj -c Release -bl:foo-release.binlog
     - name: shutdown (best effort)
       if: always()
       run: dotnet build-server shutdown
@@ -57,3 +56,74 @@ jobs:
         path: |
           bin/Release/*.nupkg
         if-no-files-found: error
+
+  smoke-test:
+    needs: build
+    timeout-minutes: 5
+    strategy:
+      fail-fast: true
+      matrix:
+        os: [windows-latest, macos-latest]
+        # Ubuntu excluded: Mesen native core crashes with std::bad_cast on
+        # headless Linux even with SDL2 installed (upstream Mesen issue)
+    runs-on: ${{ matrix.os }}
+    steps:
+    - uses: actions/checkout@v6
+      with:
+        sparse-checkout: |
+          .github/workflows/cache-mesen
+          scripts/smoke-test.lua
+          src/dotnes.mesen/build/dotnes.mesen.targets
+        sparse-checkout-cone-mode: false
+    - name: install .NET
+      uses: actions/setup-dotnet@v5
+      with:
+        dotnet-version: 10.x
+    - name: install SDL2 (macOS)
+      if: runner.os == 'macOS'
+      run: brew install sdl2
+    - name: cache Mesen downloads
+      uses: ./.github/workflows/cache-mesen
+    - name: download nupkgs
+      uses: actions/download-artifact@v4
+      with:
+        name: nupkgs
+        path: nupkgs
+    - name: install template
+      shell: bash
+      run: dotnet new install nupkgs/dotnes.templates.*.nupkg
+    - name: create project
+      run: dotnet new nes --output smoketest
+    - name: add local NuGet source
+      run: dotnet nuget add source "${{ github.workspace }}/nupkgs" --name local
+    - name: build project
+      run: dotnet build smoketest/smoketest.csproj -bl:smoketest-build.binlog
+    - name: create Mesen config
+      shell: bash
+      run: |
+        # Mesen checks for settings.json before checking --testrunner.
+        # On first run without a config file, it launches the setup wizard (GUI).
+        # Create a minimal config so it skips the wizard and reaches --testrunner.
+        if [ "$RUNNER_OS" = "Windows" ]; then
+          CONFIG_DIR="$USERPROFILE/Documents/Mesen2"
+        elif [ "$RUNNER_OS" = "macOS" ]; then
+          CONFIG_DIR="$HOME/Library/Application Support/Mesen2"
+        else
+          CONFIG_DIR="$HOME/.config/Mesen2"
+        fi
+        mkdir -p "$CONFIG_DIR"
+        echo '{}' > "$CONFIG_DIR/settings.json"
+    - name: run smoke test
+      run: >
+        dotnet run --project smoketest/smoketest.csproj
+        -p:MesenTestRunner=true
+        -p:MesenTimeout=10
+        "-p:MesenLuaScript=${{ github.workspace }}/scripts/smoke-test.lua"
+        -bl:smoketest-run.binlog
+    - name: upload smoke test logs
+      if: always()
+      uses: actions/upload-artifact@v7
+      with:
+        name: smoke-test-logs-${{ matrix.os }}
+        path: '*.binlog'
+

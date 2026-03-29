@@ -51,6 +51,17 @@ cd samples/hello && dotnet run  # Build + run in emulator
 - `dotnet run scripts/record-all-samples.cs` — Builds all samples and records PNG/GIF for each into `samples/{name}/{name}.png` or `.gif`
 - `python scripts/gen_chr_tileset1.py` — One-time generator that created the `tileset1` CHR ROM `.s` files. Use as a template when adding new samples with custom CHR tilesets.
 
+### MSBuild Binary Logs
+
+Use `dotnet build -bl:output.binlog` to capture binary logs for debugging MSBuild evaluation issues. Analyze with the `binlogtool` .NET global tool:
+
+```bash
+dotnet tool install --global binlogtool     # Install once
+binlogtool search output.binlog "term"      # Search for properties, items, messages
+binlogtool listproperties output.binlog     # List all evaluated properties
+binlogtool savestrings output.binlog out.txt # Extract all strings
+```
+
 ## MSBuild Integration
 - [bin/Debug/dotnes.props](bin/Debug/dotnes.props) - Disables BCL (`NoStdLib=true`), forces `Optimize=true`
 - [bin/Debug/dotnes.targets](bin/Debug/dotnes.targets) - Runs `TranspileToNES` task after Build

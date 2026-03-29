@@ -1235,36 +1235,46 @@ partial class IL2NESWriter
                     }
 
                     if (!EmitBranchCompare(cmpVal))
-                        throw new TranspileException($"Branch comparison value {cmpVal} exceeds byte range.", MethodName);
-                    
-                    // If the last instruction is INC/DEC (from x++ pattern),
-                    // A doesn't have the variable's value. Re-emit LDA to reload it.
-                    var bneBlock = CurrentBlock!;
-                    if (bneBlock.Count > 0)
                     {
-                        var lastInstr = bneBlock[bneBlock.Count - 1];
-                        if (lastInstr.Opcode is Opcode.INC or Opcode.DEC
-                            && lastInstr.Operand is AbsoluteOperand absOp)
-                            Emit(Opcode.LDA, AddressMode.Absolute, absOp.Address);
+                        // Overflow (8-bit fallback): value in A can never equal 256+ → unconditional branch
+                        if (_dupPendingSave)
+                        {
+                            Emit(Opcode.STA, AddressMode.ZeroPage, TEMP_HI);
+                            _dupPendingSave = false;
+                        }
+                        EmitWithLabel(Opcode.JMP, AddressMode.Absolute, labelName);
                     }
-
-                    // In a dup cascade, save A to DUP_TEMP after CMP so subsequent
-                    // checks can reload it. STA does NOT affect processor flags,
-                    // so the branch instruction still sees the CMP result.
-                    // Only save on the branch that immediately follows dup+ldc
-                    // (not on unrelated branches inside the if-body).
-                    if (_dupPendingSave)
-                    {
-                        Emit(Opcode.STA, AddressMode.ZeroPage, TEMP_HI);
-                        _dupPendingSave = false;
-                    }
-                    
-                    if (instruction.OpCode == ILOpCode.Bne_un_s)
-                        EmitWithLabel(Opcode.BNE, AddressMode.Relative, labelName);
                     else
                     {
-                        Emit(Opcode.BEQ, AddressMode.Relative, 3);
-                        EmitWithLabel(Opcode.JMP, AddressMode.Absolute, labelName);
+                        // If the last instruction is INC/DEC (from x++ pattern),
+                        // A doesn't have the variable's value. Re-emit LDA to reload it.
+                        var bneBlock = CurrentBlock!;
+                        if (bneBlock.Count > 0)
+                        {
+                            var lastInstr = bneBlock[bneBlock.Count - 1];
+                            if (lastInstr.Opcode is Opcode.INC or Opcode.DEC
+                                && lastInstr.Operand is AbsoluteOperand absOp)
+                                Emit(Opcode.LDA, AddressMode.Absolute, absOp.Address);
+                        }
+
+                        // In a dup cascade, save A to DUP_TEMP after CMP so subsequent
+                        // checks can reload it. STA does NOT affect processor flags,
+                        // so the branch instruction still sees the CMP result.
+                        // Only save on the branch that immediately follows dup+ldc
+                        // (not on unrelated branches inside the if-body).
+                        if (_dupPendingSave)
+                        {
+                            Emit(Opcode.STA, AddressMode.ZeroPage, TEMP_HI);
+                            _dupPendingSave = false;
+                        }
+                    
+                        if (instruction.OpCode == ILOpCode.Bne_un_s)
+                            EmitWithLabel(Opcode.BNE, AddressMode.Relative, labelName);
+                        else
+                        {
+                            Emit(Opcode.BEQ, AddressMode.Relative, 3);
+                            EmitWithLabel(Opcode.JMP, AddressMode.Absolute, labelName);
+                        }
                     }
                     _runtimeValueInA = false;
                 }
@@ -1289,20 +1299,29 @@ partial class IL2NESWriter
                     }
 
                     if (!EmitBranchCompare(cmpVal))
-                        throw new TranspileException($"Branch comparison value {cmpVal} exceeds byte range.", MethodName);
-
-                    if (_dupPendingSave)
                     {
-                        Emit(Opcode.STA, AddressMode.ZeroPage, TEMP_HI);
-                        _dupPendingSave = false;
+                        // Overflow (8-bit fallback): value in A can never equal 256+ → skip branch (no-op)
+                        if (_dupPendingSave)
+                        {
+                            Emit(Opcode.STA, AddressMode.ZeroPage, TEMP_HI);
+                            _dupPendingSave = false;
+                        }
                     }
-
-                    if (instruction.OpCode == ILOpCode.Beq_s)
-                        EmitWithLabel(Opcode.BEQ, AddressMode.Relative, labelName);
                     else
                     {
-                        Emit(Opcode.BNE, AddressMode.Relative, 3);
-                        EmitWithLabel(Opcode.JMP, AddressMode.Absolute, labelName);
+                        if (_dupPendingSave)
+                        {
+                            Emit(Opcode.STA, AddressMode.ZeroPage, TEMP_HI);
+                            _dupPendingSave = false;
+                        }
+
+                        if (instruction.OpCode == ILOpCode.Beq_s)
+                            EmitWithLabel(Opcode.BEQ, AddressMode.Relative, labelName);
+                        else
+                        {
+                            Emit(Opcode.BNE, AddressMode.Relative, 3);
+                            EmitWithLabel(Opcode.JMP, AddressMode.Absolute, labelName);
+                        }
                     }
                     _runtimeValueInA = false;
                 }
@@ -1312,6 +1331,13 @@ partial class IL2NESWriter
                 {
                     operand = (sbyte)(byte)operand;
                     var labelName = InstructionLabel(instruction.Offset + operand + 2);
+                    if (_ushortInAX)
+                    {
+                        // 16-bit zero check: combine A (lo) and X (hi) via ORA
+                        Emit(Opcode.STX, AddressMode.ZeroPage, TEMP);
+                        Emit(Opcode.ORA, AddressMode.ZeroPage, TEMP);
+                        _ushortInAX = false;
+                    }
                     EmitWithLabel(Opcode.BEQ, AddressMode.Relative, labelName);
                     if (Stack.Count > 0)
                         Stack.Pop();
@@ -1323,6 +1349,13 @@ partial class IL2NESWriter
                 {
                     operand = (sbyte)(byte)operand;
                     var labelName = InstructionLabel(instruction.Offset + operand + 2);
+                    if (_ushortInAX)
+                    {
+                        // 16-bit non-zero check: combine A (lo) and X (hi) via ORA
+                        Emit(Opcode.STX, AddressMode.ZeroPage, TEMP);
+                        Emit(Opcode.ORA, AddressMode.ZeroPage, TEMP);
+                        _ushortInAX = false;
+                    }
                     EmitWithLabel(Opcode.BNE, AddressMode.Relative, labelName);
                     if (Stack.Count > 0)
                         Stack.Pop();
@@ -1349,8 +1382,11 @@ partial class IL2NESWriter
                     }
 
                     if (!EmitBranchCompare(cmpVal))
-                        throw new TranspileException($"Branch comparison value {cmpVal} exceeds byte range.", MethodName);
-                    if (isShort)
+                    {
+                        // Overflow (8-bit fallback): value in A is always < 256+ → unconditional branch
+                        EmitWithLabel(Opcode.JMP, AddressMode.Absolute, labelName);
+                    }
+                    else if (isShort)
                         EmitWithLabel(Opcode.BCC, AddressMode.Relative, labelName);
                     else
                     {
@@ -1421,8 +1457,10 @@ partial class IL2NESWriter
                     }
 
                     if (!EmitBranchCompare(cmpVal))
-                        throw new TranspileException($"Branch comparison value {cmpVal} exceeds byte range.", MethodName);
-                    if (isShort)
+                    {
+                        // Overflow (8-bit fallback): value in A is never >= 256+ → skip branch (no-op)
+                    }
+                    else if (isShort)
                         EmitWithLabel(Opcode.BCS, AddressMode.Relative, labelName);
                     else
                     {
@@ -1476,6 +1514,13 @@ partial class IL2NESWriter
                 // Long-form branch if non-zero — use trampoline: BEQ +3, JMP target
                 {
                     var labelName = InstructionLabel(instruction.Offset + operand + 5);
+                    if (_ushortInAX)
+                    {
+                        // 16-bit non-zero check: combine A (lo) and X (hi) via ORA
+                        Emit(Opcode.STX, AddressMode.ZeroPage, TEMP);
+                        Emit(Opcode.ORA, AddressMode.ZeroPage, TEMP);
+                        _ushortInAX = false;
+                    }
                     Emit(Opcode.BEQ, AddressMode.Relative, 3); // skip JMP if zero
                     EmitWithLabel(Opcode.JMP, AddressMode.Absolute, labelName);
                     if (Stack.Count > 0)
@@ -1487,6 +1532,13 @@ partial class IL2NESWriter
                 // Long-form branch if zero — use trampoline: BNE +3, JMP target
                 {
                     var labelName = InstructionLabel(instruction.Offset + operand + 5);
+                    if (_ushortInAX)
+                    {
+                        // 16-bit zero check: combine A (lo) and X (hi) via ORA
+                        Emit(Opcode.STX, AddressMode.ZeroPage, TEMP);
+                        Emit(Opcode.ORA, AddressMode.ZeroPage, TEMP);
+                        _ushortInAX = false;
+                    }
                     Emit(Opcode.BNE, AddressMode.Relative, 3); // skip JMP if non-zero
                     EmitWithLabel(Opcode.JMP, AddressMode.Absolute, labelName);
                     if (Stack.Count > 0)
@@ -1986,9 +2038,9 @@ partial class IL2NESWriter
                         _immediateInA = null;
                         _pokeLastValue = null;
                         break;
-                    case nameof(NESLib.set_chr_mode):
+                    case nameof(NESLib.mmc3_set_chr_bank):
                         {
-                            // set_chr_mode(byte reg, byte bank) -> STA $8000 (reg), STA $8001 (bank)
+                            // mmc3_set_chr_bank(byte reg, byte bank) -> STA $8000 (reg), STA $8001 (bank)
                             // MMC3 CHR bank switching: write register number to $8000, then bank number to $8001.
                             // reg must be a compile-time constant (register selector 0-7).
                             if (Stack.Count >= 2)
@@ -2004,7 +2056,7 @@ partial class IL2NESWriter
                                     || block[block.Count - 3].Mode != AddressMode.Immediate)
                                 {
                                     throw new TranspileException(
-                                        "set_chr_mode: first argument (reg) must be a compile-time constant.",
+                                        "mmc3_set_chr_bank: first argument (reg) must be a compile-time constant.",
                                         MethodName);
                                 }
 

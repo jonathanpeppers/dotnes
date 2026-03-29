@@ -15,7 +15,7 @@ The `samples/conio/` port uses equivalent NES VRAM functions instead.
 | `cputc(ch)` | Write single character | `vram_put(ch)` |
 | `cprintf(fmt, ...)` | Formatted console print | `vram_write("literal")` (no format strings) |
 | `chline(len)` | Draw horizontal line | `vram_fill(0x2D, len)` |
-| `cvlinexy(x, y, len)` | Draw vertical line at position | `vram_adr(NTADR_A(x, y)); vram_inc(1); vram_fill(tile, len); vram_inc(0)` |
+| `cvlinexy(x, y, len)` | Draw vertical line at position | `vram_adr(NTADR_A(x, y)); vram_inc(VramIncrement.By32); vram_fill(tile, len); vram_inc(VramIncrement.By1)` |
 
 ### What cannot be ported
 

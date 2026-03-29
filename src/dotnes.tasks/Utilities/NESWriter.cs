@@ -17,16 +17,17 @@ class NESWriter : IDisposable
         _writer = new(stream, Encoding, leaveOpen);
         _logger = logger ?? new NullLogger();
 
-        // Pre-initialize labels that are referenced before their blocks are written
-        // These are forward references used by IL2NESWriter and BuiltInSubroutines
+        // Pre-initialize labels that are referenced before their blocks are written.
+        // These are placeholder values (0) that get overwritten by Program6502.ResolveAddresses()
+        // during the two-pass build. NESWriterTests that use WriteBlock() directly must
+        // seed correct values in their test setup.
         Labels["popa"] = 0;
         Labels["popax"] = 0;
         Labels["pusha"] = 0;
         Labels["pushax"] = 0;
         Labels["zerobss"] = 0;
         Labels["copydata"] = 0;
-        // Fixed address label (referenced by FlushVramUpdate)
-        Labels["updName"] = NESConstants.updName;
+        Labels["updName"] = 0;
     }
 
     /// <summary>

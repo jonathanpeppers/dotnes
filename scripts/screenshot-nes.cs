@@ -13,12 +13,24 @@ string romPath = args.Length > 0 ? args[0] : throw new Exception("Usage: dotnet 
 int delayMs = args.Length > 1 ? int.Parse(args[1]) : 3000;
 string outputPath = args.Length > 2 ? args[2] : "screenshot.png";
 
-// Find anese.exe
-string repoRoot = Path.GetFullPath(".");
-string anesePath = Path.Combine(repoRoot, "src", "dotnes.anese", "obj", "Debug", "win", "anese.exe");
-if (!File.Exists(anesePath))
+if (!OperatingSystem.IsWindows())
 {
-    Console.Error.WriteLine($"ERROR: anese.exe not found at {anesePath}");
+    Console.Error.WriteLine("ERROR: This script requires Windows (uses Win32 APIs for window capture).");
+    return;
+}
+
+// Find Mesen by querying MSBuild for the RunCommand property
+string repoRoot = Path.GetFullPath(".");
+string sampleCsproj = Directory.GetFiles(Path.Combine(repoRoot, "samples", "hello"), "*.csproj").FirstOrDefault()
+    ?? throw new FileNotFoundException("Could not find a sample csproj to resolve Mesen path");
+var msbuildProc = Process.Start(new ProcessStartInfo("dotnet", $"msbuild \"{sampleCsproj}\" -restore -getProperty:RunCommand")
+    { RedirectStandardOutput = true, UseShellExecute = false })!;
+string mesenPath = msbuildProc.StandardOutput.ReadToEnd().Trim();
+msbuildProc.WaitForExit();
+if (!File.Exists(mesenPath))
+{
+    Console.Error.WriteLine($"ERROR: Mesen not found at {mesenPath}");
+    Console.Error.WriteLine("Try building a sample first: dotnet build samples/hello");
     return;
 }
 
@@ -29,8 +41,8 @@ if (!File.Exists(romPath))
     return;
 }
 
-Console.WriteLine($"Launching ANESE with {romPath}...");
-var proc = Process.Start(new ProcessStartInfo(anesePath, $"\"{romPath}\"") { UseShellExecute = false })!;
+Console.WriteLine($"Launching Mesen with {romPath}...");
+var proc = Process.Start(new ProcessStartInfo(mesenPath, $"--doNotSaveSettings \"{romPath}\"") { UseShellExecute = false })!;
 
 Console.WriteLine($"Waiting {delayMs}ms for emulator to render...");
 Thread.Sleep(delayMs);
@@ -55,7 +67,7 @@ for (int attempt = 0; attempt < 20 && hwnd == IntPtr.Zero; attempt++)
 
 if (hwnd == IntPtr.Zero)
 {
-    Console.Error.WriteLine("ERROR: Could not find ANESE window");
+    Console.Error.WriteLine("ERROR: Could not find Mesen window");
     proc.Kill();
     return;
 }

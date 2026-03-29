@@ -201,7 +201,9 @@ partial class IL2NESWriter
                 Instructions[Index + 1].OpCode is ILOpCode.Add or ILOpCode.Sub;
             bool nextIsDivRem = _runtimeValueInA && Instructions is not null && Index + 1 < Instructions.Length &&
                 Instructions[Index + 1].OpCode is ILOpCode.Div or ILOpCode.Rem;
-            if (nextIsShift || nextIsAddSub || nextIsDivRem || NextIsBranchComparison())
+            bool nextIsBitwise = Instructions is not null && Index + 1 < Instructions.Length &&
+                Instructions[Index + 1].OpCode is ILOpCode.And or ILOpCode.Or or ILOpCode.Xor;
+            if (nextIsShift || nextIsAddSub || nextIsDivRem || nextIsBitwise || NextIsBranchComparison())
             {
                 // Keep A:X intact — the operator/branch will handle the 16-bit value
                 Stack.Push(operand);
@@ -287,9 +289,10 @@ partial class IL2NESWriter
             // This is actually a local variable
             if (local.IsWord)
             {
-                if (LastLDA)
+                if (LastLDA || _runtimeValueInA)
                 {
                     EmitJSR("pusha");
+                    _savedConstantViaPusha = true;
                 }
                 Emit(Opcode.LDA, AddressMode.Absolute, (ushort)local.Address);
                 Emit(Opcode.LDX, AddressMode.Absolute, (ushort)(local.Address + 1));
@@ -298,6 +301,12 @@ partial class IL2NESWriter
             }
             else if (local.Value <= byte.MaxValue)
             {
+                // NOTE: #371 added a wasUshortInAX guard here to skip pusha when a
+                // ushort constant was previously loaded into A:X. That guard was too
+                // broad and broke all samples (blue screen). Reverted until a more
+                // targeted fix can distinguish cases where pusha is truly unnecessary
+                // (ushort tracked on stack, consumed by HandleAddSub) from cases where
+                // it IS needed (A holds a value that will be clobbered by this LDA).
                 if (_runtimeValueInA && !LastLDA)
                 {
                     Emit(Opcode.STA, AddressMode.ZeroPage, (byte)NESConstants.TEMP);

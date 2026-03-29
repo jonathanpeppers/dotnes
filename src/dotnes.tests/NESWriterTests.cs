@@ -132,6 +132,7 @@ public class NESWriterTests
     public void Write_ppu_onoff()
     {
         using var writer = GetWriter();
+        writer.Labels["ppu_wait_nmi"] = 0x82F0;
         writer.WriteBlock(BuiltInSubroutines.PpuOnOff());
         writer.Flush();
         AssertInstructions("8512 4CF082");
