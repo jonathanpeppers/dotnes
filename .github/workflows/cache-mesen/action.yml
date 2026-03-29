@@ -7,5 +7,5 @@ runs:
   - name: Cache Mesen downloads
     uses: actions/cache@v5
     with:
-      path: src/dotnes.mesen/bin
+      path: ~/.nuget/packages/dotnes.mesen/*/bin
       key: mesen-${{ runner.os }}-${{ hashFiles('src/dotnes.mesen/build/dotnes.mesen.targets') }}
