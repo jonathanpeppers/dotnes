@@ -59,7 +59,7 @@ jobs:
 
   smoke-test:
     needs: build
-    timeout-minutes: 10
+    timeout-minutes: 5
     strategy:
       fail-fast: true
       matrix:
