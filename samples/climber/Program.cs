@@ -48,6 +48,15 @@ static byte rndint(byte a, byte b)
     return (byte)((r % range) + a);
 }
 
+// Check if a ladder/object at tile position x overlaps a gap
+static byte ladder_in_gap(byte x, byte gap)
+{
+    // Match original: gap && x >= gap && x < gap+GAPSIZE*2
+    if (gap != 0 && x >= gap && x < (byte)(gap + GAPSIZE * 2))
+        return 1;
+    return 0;
+}
+
 // Setup sounds
 static void setup_sounds()
 {
@@ -149,22 +158,48 @@ while (true)
     // --- make_floors ---
     {
         byte y = BOTTOM_FLOOR_Y;
+        byte prev_ladder1 = 0;
+        byte prev_ladder2 = 0;
         for (byte i = 0; i < MAX_FLOORS; i++)
         {
             floor_height[i] = (byte)(rndint(2, 5) * 2);
+            // Re-roll gap until it doesn't overlap previous floor's ladders
             if (i >= 5)
-                floor_gap[i] = rndint(0, 13);
+            {
+                while (true)
+                {
+                    floor_gap[i] = rndint(0, 13);
+                    if (ladder_in_gap(prev_ladder1, floor_gap[i]) == 0 &&
+                        ladder_in_gap(prev_ladder2, floor_gap[i]) == 0)
+                        break;
+                }
+            }
             else
                 floor_gap[i] = 0;
-            floor_ladder1[i] = rndint(1, 14);
-            floor_ladder2[i] = rndint(1, 14);
+            // Re-roll ladders until they don't overlap this floor's gap
+            while (true)
+            {
+                floor_ladder1[i] = rndint(1, 14);
+                floor_ladder2[i] = rndint(1, 14);
+                if (ladder_in_gap(floor_ladder1[i], floor_gap[i]) == 0 &&
+                    ladder_in_gap(floor_ladder2[i], floor_gap[i]) == 0)
+                    break;
+            }
             if (i > 0)
             {
                 floor_objtype[i] = rndint(1, 4);
-                floor_objpos[i] = rndint(1, 14);
+                // Re-roll object position until it doesn't overlap gap
+                while (true)
+                {
+                    floor_objpos[i] = rndint(1, 14);
+                    if (ladder_in_gap(floor_objpos[i], floor_gap[i]) == 0)
+                        break;
+                }
             }
             floor_ypos[i] = y;
             y = (byte)(y + floor_height[i]);
+            prev_ladder1 = floor_ladder1[i];
+            prev_ladder2 = floor_ladder2[i];
         }
         floor_height[MAX_FLOORS - 1] = 15;
         floor_gap[MAX_FLOORS - 1] = 0;
@@ -437,16 +472,17 @@ while (true)
                 else
                 {
                     byte frame = (byte)((actor_x[ai] >> 1) & 7);
+                    byte runIdx = (byte)(frame % 3);
                     if (dir != 0)
                     {
-                        if (frame < 3) oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerLRun1);
-                        else if (frame < 6) oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerLRun2);
+                        if (runIdx == 0) oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerLRun1);
+                        else if (runIdx == 1) oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerLRun2);
                         else oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerLRun3);
                     }
                     else
                     {
-                        if (frame < 3) oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerRRun1);
-                        else if (frame < 6) oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerRRun2);
+                        if (runIdx == 0) oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerRRun1);
+                        else if (runIdx == 1) oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerRRun2);
                         else oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerRRun3);
                     }
                 }
@@ -477,12 +513,10 @@ while (true)
 
         // --- Player movement ---
         PAD joy = pad_poll(0);
-        byte player_was_moving = 0; // Track if player was standing/walking at frame start
         {
             byte pi = 0;
             byte pf = actor_floor[pi];
             byte ps = actor_state[pi];
-            if (ps <= WALKING) player_was_moving = 1;
             byte pfypos = floor_ypos[pf];
             ushort floor_yy = (ushort)(pfypos * 8 + 16);
             byte fyy_lo = (byte)floor_yy;
@@ -810,17 +844,18 @@ while (true)
                 // Redraw offscreen row on every tile boundary (every 8 pixels)
                 if (scrolled != 0 && (scroll_yy_lo & 7) == 0)
                 {
-                    // Update scroll_tile_y
-                    scroll_tile_y = (byte)(scroll_yy_lo >> 3);
-                    if (scroll_yy_hi != 0)
-                        scroll_tile_y = (byte)(scroll_tile_y + (byte)(scroll_yy_hi * 32));
-
-                    // Compute which row to redraw
+                    // Compute which row to redraw BEFORE updating scroll_tile_y
+                    // (matches original set_scroll_pixel_yy which draws first)
                     byte draw_rh;
                     if (scrolled == 1)
                         draw_rh = (byte)(scroll_tile_y + 30); // row above viewport
                     else
                         draw_rh = scroll_tile_y; // row below viewport
+
+                    // Now update scroll_tile_y
+                    scroll_tile_y = (byte)(scroll_yy_lo >> 3);
+                    if (scroll_yy_hi != 0)
+                        scroll_tile_y = (byte)(scroll_tile_y + (byte)(scroll_yy_hi * 32));
 
                     // --- Inline draw_floor_line for draw_rh ---
                     Array.Fill(buf, (byte)0);
@@ -1008,8 +1043,9 @@ while (true)
             }
         }
 
-        // --- Collision check — only if player was standing/walking at start of frame ---
-        if (player_was_moving != 0 && actor_floor[0] > 0)
+        // --- Collision check — matches original: skip if falling or floor 0 ---
+        byte ps_now = actor_state[0];
+        if (ps_now != FALLING && actor_floor[0] > 0)
         {
             byte collided = 0;
             for (byte ci = 1; ci < MAX_ACTORS; ci++)
