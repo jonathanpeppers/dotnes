@@ -59,12 +59,11 @@ jobs:
 
   smoke-test:
     needs: build
-    timeout-minutes: 5
+    timeout-minutes: 10
     strategy:
       fail-fast: true
       matrix:
-        os: [windows-latest]
-        # macOS excluded: Mesen hangs in --testrunner mode (native core issue)
+        os: [windows-latest, macos-latest]
         # Ubuntu excluded: MesenCore.so crashes with std::bad_cast headless
     runs-on: ${{ matrix.os }}
     steps:
