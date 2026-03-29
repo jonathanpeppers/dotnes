@@ -70,7 +70,9 @@ jobs:
     steps:
     - uses: actions/checkout@v6
       with:
-        sparse-checkout: scripts/smoke-test.lua
+        sparse-checkout: |
+          scripts/smoke-test.lua
+          src/dotnes.mesen/build/dotnes.mesen.targets
         sparse-checkout-cone-mode: false
     - name: install .NET
       uses: actions/setup-dotnet@v5
@@ -79,6 +81,11 @@ jobs:
     - name: install SDL2 (macOS)
       if: runner.os == 'macOS'
       run: brew install sdl2
+    - name: cache Mesen downloads
+      uses: actions/cache@v5
+      with:
+        path: ~/.nuget/packages/dotnes.mesen/*/bin
+        key: mesen-smoke-${{ runner.os }}-${{ hashFiles('src/dotnes.mesen/build/dotnes.mesen.targets') }}
     - name: download nupkgs
       uses: actions/download-artifact@v4
       with:
