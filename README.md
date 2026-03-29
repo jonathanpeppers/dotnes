@@ -34,8 +34,8 @@
 | ![metacursor](samples/metacursor/metacursor.gif) | ![metatrigger](samples/metatrigger/metatrigger.gif) |
 | **horizmask** ⬇️ | **statusbar** ⬇️ |
 | ![horizmask](samples/horizmask/horizmask.gif) | ![statusbar](samples/statusbar/statusbar.gif) |
-| **battery** ⬇️ | **irq** ⬇️ |
-| ![battery](samples/battery/battery.gif) | ![irq](samples/irq/irq.gif) |
+| **peekpoke** ⬇️ | **irq** ⬇️ |
+| ![peekpoke](samples/peekpoke/peekpoke.gif) | ![irq](samples/irq/irq.gif) |
 | **rletitle** ⬇️ | **attributetable** ⬇️ |
 | ![rletitle](samples/rletitle/rletitle.png) | ![attributetable](samples/attributetable/attributetable.png) |
 | **tileset1** ⬇️ | **hello** ⬇️ |
