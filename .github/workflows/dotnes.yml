@@ -97,6 +97,8 @@ jobs:
         # Create a minimal config so it skips the wizard and reaches --testrunner.
         if [ "$RUNNER_OS" = "Windows" ]; then
           CONFIG_DIR="$USERPROFILE/Documents/Mesen2"
+        elif [ "$RUNNER_OS" = "macOS" ]; then
+          CONFIG_DIR="$HOME/Library/Application Support/Mesen2"
         else
           CONFIG_DIR="$HOME/.config/Mesen2"
         fi
