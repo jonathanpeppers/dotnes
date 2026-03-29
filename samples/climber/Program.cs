@@ -469,7 +469,6 @@ while (true)
             if (st == PACING)
                 oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], personToSave);
             actor_onscreen[ai] = 1;
-            if (ai == 0) player_screen_y = screen_y;
         }
         // Scoreboard
         oam_off = oam_spr(24, 24, (byte)(0x30 + (score >> 4)), 2, oam_off);
