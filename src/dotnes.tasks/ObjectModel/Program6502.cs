@@ -528,7 +528,6 @@ public class Program6502
         program.DefineExternalLabel("zerobss", 0);
         program.DefineExternalLabel("copydata", 0);
         program.DefineExternalLabel("main", 0);
-        program.DefineExternalLabel("updName", NESConstants.updName);
 
         // Add all standard built-in subroutines (same order as NESWriter.WriteBuiltIns)
         program.AddBlock(BuiltInSubroutines.Exit());
@@ -584,7 +583,8 @@ public class Program6502
         program.AddBlock(BuiltInSubroutines.Delay());
 
         // Add palette brightness tables as raw data
-        program.AddRawData(NESLib.palBrightTableL);
+        program.AddRawData(NESLib.palBrightTableL, nameof(NESLib.palBrightTableL));
+        program.AddRawData(NESLib.palBrightTableH, nameof(NESLib.palBrightTableH));
         program.AddRawData(NESLib.palBrightTable0);
         program.AddRawData(NESLib.palBrightTable1);
         program.AddRawData(NESLib.palBrightTable2);

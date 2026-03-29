@@ -250,7 +250,6 @@ partial class IL2NESWriter
         // In unit-test mode (no Instructions), save unconditionally when both
         // values are words.
         bool needSaveUshort = false;
-        bool wasUshortInAX = _ushortInAX;
         if (_ushortInAX && local.Address.HasValue && local.IsWord)
         {
             if (Instructions is not null && Index + 1 < Instructions.Length)
@@ -302,24 +301,21 @@ partial class IL2NESWriter
             }
             else if (local.Value <= byte.MaxValue)
             {
-                // When _ushortInAX was true (from a preceding WriteLdc(ushort)), the
-                // ushort constant is already tracked on the Stack and will be consumed
-                // directly by arithmetic/logical operations (e.g., HandleAddSub's
-                // _ushortInAX path). Don't emit pusha here — it would save only the
-                // low byte of the ushort and never be consumed, leaking a cc65 stack
-                // byte on every execution.
-                if (!wasUshortInAX)
+                // NOTE: #371 added a wasUshortInAX guard here to skip pusha when a
+                // ushort constant was previously loaded into A:X. That guard was too
+                // broad and broke all samples (blue screen). Reverted until a more
+                // targeted fix can distinguish cases where pusha is truly unnecessary
+                // (ushort tracked on stack, consumed by HandleAddSub) from cases where
+                // it IS needed (A holds a value that will be clobbered by this LDA).
+                if (_runtimeValueInA && !LastLDA)
                 {
-                    if (_runtimeValueInA && !LastLDA)
-                    {
-                        Emit(Opcode.STA, AddressMode.ZeroPage, (byte)NESConstants.TEMP);
-                        _savedRuntimeToTemp = true;
-                    }
-                    else if (LastLDA)
-                    {
-                        EmitJSR("pusha");
-                        _savedConstantViaPusha = true;
-                    }
+                    Emit(Opcode.STA, AddressMode.ZeroPage, (byte)NESConstants.TEMP);
+                    _savedRuntimeToTemp = true;
+                }
+                else if (LastLDA)
+                {
+                    EmitJSR("pusha");
+                    _savedConstantViaPusha = true;
                 }
                 Emit(Opcode.LDA, AddressMode.Absolute, (ushort)local.Address);
                 _immediateInA = null;

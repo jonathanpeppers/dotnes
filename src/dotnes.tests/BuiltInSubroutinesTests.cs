@@ -80,12 +80,13 @@ public class BuiltInSubroutinesTests
     {
         var block = BuiltInSubroutines.Irq();
         var program = new Program6502 { BaseAddress = 0x8000 };
+        program.DefineExternalLabel("skipNtsc", 0x81F9);
         program.AddBlock(block);
         program.ResolveAddresses();
 
         var bytes = program.ToBytes();
 
-        // PHA, TXA, PHA, TYA, PHA, LDA #$FF, JMP $81F9 (skipNtsc constant)
+        // PHA, TXA, PHA, TYA, PHA, LDA #$FF, JMP skipNtsc
         Assert.Equal([0x48, 0x8A, 0x48, 0x98, 0x48, 0xA9, 0xFF, 0x4C, 0xF9, 0x81], bytes);
     }
 
@@ -187,12 +188,14 @@ public class BuiltInSubroutinesTests
     {
         var block = BuiltInSubroutines.PalSprBright();
         var program = new Program6502 { BaseAddress = 0x8000 };
+        program.DefineExternalLabel("palBrightTableL", 0x8422);
+        program.DefineExternalLabel("palBrightTableH", 0x842B);
         program.AddBlock(block);
         program.ResolveAddresses();
 
         var bytes = program.ToBytes();
 
-        // TAX, LDA $8422,X, STA $0A, LDA $842B,X, STA $0B, STA $07, RTS
+        // TAX, LDA palBrightTableL,X, STA $0A, LDA palBrightTableH,X, STA $0B, STA $07, RTS
         Assert.Equal(
             [0xAA, 0xBD, 0x22, 0x84, 0x85, 0x0A, 0xBD, 0x2B, 0x84, 0x85, 0x0B, 0x85, 0x07, 0x60],
             bytes);
@@ -203,12 +206,14 @@ public class BuiltInSubroutinesTests
     {
         var block = BuiltInSubroutines.PalBgBright();
         var program = new Program6502 { BaseAddress = 0x8000 };
+        program.DefineExternalLabel("palBrightTableL", 0x8422);
+        program.DefineExternalLabel("palBrightTableH", 0x842B);
         program.AddBlock(block);
         program.ResolveAddresses();
 
         var bytes = program.ToBytes();
 
-        // TAX, LDA $8422,X, STA $08, LDA $842B,X, STA $09, STA $07, RTS
+        // TAX, LDA palBrightTableL,X, STA $08, LDA palBrightTableH,X, STA $09, STA $07, RTS
         Assert.Equal(
             [0xAA, 0xBD, 0x22, 0x84, 0x85, 0x08, 0xBD, 0x2B, 0x84, 0x85, 0x09, 0x85, 0x07, 0x60],
             bytes);
@@ -540,13 +545,13 @@ public class BuiltInSubroutinesTests
     {
         var block = BuiltInSubroutines.Nmi();
         var program = new Program6502 { BaseAddress = 0x8000 };
+        program.DefineExternalLabel("skipAll", 0x81E6);
         program.AddBlock(block);
         program.ResolveAddresses();
 
         var bytes = program.ToBytes();
 
-        // NESWriter: 48 8A 48 98 48 A512 2918 D003 4CE681
-        // PHA, TXA, PHA, TYA, PHA, LDA $12, AND #$18, BNE +3, JMP $81E6
+        // PHA, TXA, PHA, TYA, PHA, LDA $12, AND #$18, BNE +3, JMP skipAll
         Assert.Equal([0x48, 0x8A, 0x48, 0x98, 0x48, 0xA5, 0x12, 0x29, 0x18, 0xD0, 0x03, 0x4C, 0xE6, 0x81], bytes);
     }
 
