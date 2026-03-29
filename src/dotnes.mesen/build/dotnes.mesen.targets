@@ -36,16 +36,19 @@
   <!-- Set RunCommand so 'dotnet run' launches the ROM in Mesen -->
   <PropertyGroup Condition="'$(_MesenExe)' != ''">
     <RunCommand>$(_MesenExe)</RunCommand>
-    <RunArguments>&quot;$(TargetName).nes&quot;</RunArguments>
+    <_MesenTestRunnerArgs Condition="'$(MesenTestRunner)' == 'true'">--testrunner --doNotSaveSettings</_MesenTestRunnerArgs>
+    <_MesenTimeoutArgs Condition="'$(MesenTimeout)' != ''">--timeout=$(MesenTimeout)</_MesenTimeoutArgs>
+    <RunArguments>$(TargetName).nes $(_MesenTestRunnerArgs) $(_MesenTimeoutArgs) $(MesenLuaScript)</RunArguments>
     <RunWorkingDirectory>$(OutputPath)</RunWorkingDirectory>
   </PropertyGroup>
 
   <!-- Use the compiled task from dotnes.tasks.dll -->
   <UsingTask TaskName="dotnes.EnsureMesenInstalled" AssemblyFile="$(MSBuildThisFileDirectory)dotnes.tasks.dll" />
 
-  <!-- Download, verify, and unzip Mesen (mutex-protected, safe for parallel builds) -->
+  <!-- Download, verify, and unzip Mesen (mutex-protected, safe for parallel builds).
+       Skip when building dotnes.mesen.csproj itself (it only packages the targets file). -->
   <Target Name="_MesenEnsureInstalled" BeforeTargets="Build"
-      Condition="'$(_MesenZipName)' != '' And !Exists('$(_MesenExe)')">
+      Condition="'$(_MesenZipName)' != '' And !Exists('$(_MesenExe)') And '$(PackageId)' != 'dotnes.mesen'">
     <EnsureMesenInstalled
         MesenExe="$(_MesenExe)"
         DownloadUrl="$(_MesenBaseUrl)/$(_MesenZipName)"
