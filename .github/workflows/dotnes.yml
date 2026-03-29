@@ -63,8 +63,7 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        os: [windows-latest, macos-latest]
-        # Ubuntu excluded: MesenCore.so crashes with std::bad_cast headless
+        os: [windows-latest, macos-latest, ubuntu-latest]
     runs-on: ${{ matrix.os }}
     steps:
     - uses: actions/checkout@v6
@@ -75,6 +74,14 @@ jobs:
       uses: actions/setup-dotnet@v5
       with:
         dotnet-version: 10.x
+    - name: install SDL2 (Mesen native dependency)
+      shell: bash
+      run: |
+        if [ "$RUNNER_OS" = "macOS" ]; then
+          brew install sdl2
+        elif [ "$RUNNER_OS" = "Linux" ]; then
+          sudo apt-get update -qq && sudo apt-get install -y -qq libsdl2-2.0-0
+        fi
     - name: download nupkgs
       uses: actions/download-artifact@v4
       with:
