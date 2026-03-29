@@ -437,16 +437,17 @@ while (true)
                 else
                 {
                     byte frame = (byte)((actor_x[ai] >> 1) & 7);
+                    byte runIdx = (byte)(frame % 3);
                     if (dir != 0)
                     {
-                        if (frame < 3) oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerLRun1);
-                        else if (frame < 6) oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerLRun2);
+                        if (runIdx == 0) oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerLRun1);
+                        else if (runIdx == 1) oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerLRun2);
                         else oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerLRun3);
                     }
                     else
                     {
-                        if (frame < 3) oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerRRun1);
-                        else if (frame < 6) oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerRRun2);
+                        if (runIdx == 0) oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerRRun1);
+                        else if (runIdx == 1) oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerRRun2);
                         else oam_meta_spr_pal(actor_x[ai], screen_y, actor_pal[ai], playerRRun3);
                     }
                 }
@@ -808,17 +809,18 @@ while (true)
                 // Redraw offscreen row on every tile boundary (every 8 pixels)
                 if (scrolled != 0 && (scroll_yy_lo & 7) == 0)
                 {
-                    // Update scroll_tile_y
-                    scroll_tile_y = (byte)(scroll_yy_lo >> 3);
-                    if (scroll_yy_hi != 0)
-                        scroll_tile_y = (byte)(scroll_tile_y + (byte)(scroll_yy_hi * 32));
-
-                    // Compute which row to redraw
+                    // Compute which row to redraw BEFORE updating scroll_tile_y
+                    // (matches original set_scroll_pixel_yy which draws first)
                     byte draw_rh;
                     if (scrolled == 1)
                         draw_rh = (byte)(scroll_tile_y + 30); // row above viewport
                     else
                         draw_rh = scroll_tile_y; // row below viewport
+
+                    // Now update scroll_tile_y
+                    scroll_tile_y = (byte)(scroll_yy_lo >> 3);
+                    if (scroll_yy_hi != 0)
+                        scroll_tile_y = (byte)(scroll_tile_y + (byte)(scroll_yy_hi * 32));
 
                     // --- Inline draw_floor_line for draw_rh ---
                     Array.Fill(buf, (byte)0);
