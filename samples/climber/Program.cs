@@ -628,6 +628,24 @@ while (true)
                     actor_yy_lo[pi] = land_lo;
                     actor_yy_hi[pi] = land_hi;
                     actor_state[pi] = STANDING;
+                    // After landing from a fall, nudge player out of any gap on the
+                    // landing floor to prevent cascading through aligned gaps
+                    byte landed_fl = actor_floor[pi];
+                    byte lgap = floor_gap[landed_fl];
+                    if (lgap != 0)
+                    {
+                        byte lgx1 = (byte)(lgap * 16 + 4);
+                        byte lgx2 = (byte)(lgx1 + GAPSIZE * 8 - 4);
+                        if (actor_x[pi] > lgx1 && actor_x[pi] < lgx2)
+                        {
+                            // Push player to the nearest edge of the gap
+                            byte mid = (byte)((lgx1 + lgx2) >> 1);
+                            if (actor_x[pi] < mid)
+                                actor_x[pi] = lgx1;
+                            else
+                                actor_x[pi] = lgx2;
+                        }
+                    }
                 }
             }
 
@@ -635,11 +653,15 @@ while (true)
             if (actor_x[pi] > ACTOR_MAX_X) actor_x[pi] = ACTOR_MAX_X;
             if (actor_x[pi] < ACTOR_MIN_X) actor_x[pi] = ACTOR_MIN_X;
 
-            // Check gap fall — only if player was standing/walking at start of frame
-            // (not if they just landed from a fall this frame)
+            // Check gap fall — only if player was standing/walking at start of frame.
+            // The ps check prevents cascade: if player was JUMPING/FALLING and just
+            // landed (state changed to STANDING mid-frame), ps still holds the old
+            // state so this block is skipped. On the NEXT frame, use the current
+            // floor's gap data (not the old pf from frame start).
             if (ps == STANDING || ps == WALKING)
             {
-                byte gap = floor_gap[pf];
+                byte cur_pf = actor_floor[pi];
+                byte gap = floor_gap[cur_pf];
                 if (gap != 0)
                 {
                     byte gx1 = (byte)(gap * 16 + 4);
