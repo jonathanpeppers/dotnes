@@ -477,12 +477,10 @@ while (true)
 
         // --- Player movement ---
         PAD joy = pad_poll(0);
-        byte player_was_moving = 0; // Track if player was standing/walking at frame start
         {
             byte pi = 0;
             byte pf = actor_floor[pi];
             byte ps = actor_state[pi];
-            if (ps <= WALKING) player_was_moving = 1;
             byte pfypos = floor_ypos[pf];
             ushort floor_yy = (ushort)(pfypos * 8 + 16);
             byte fyy_lo = (byte)floor_yy;
@@ -986,8 +984,9 @@ while (true)
             }
         }
 
-        // --- Collision check — only if player was standing/walking at start of frame ---
-        if (player_was_moving != 0 && actor_floor[0] > 0)
+        // --- Collision check — only if player is currently standing/walking ---
+        byte ps_now = actor_state[0];
+        if ((ps_now == STANDING || ps_now == WALKING) && actor_floor[0] > 0)
         {
             byte collided = 0;
             for (byte ci = 1; ci < MAX_ACTORS; ci++)
