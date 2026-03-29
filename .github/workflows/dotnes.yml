@@ -20,8 +20,6 @@ jobs:
         dotnet-version: 10.x
     - name: cache ANESE downloads
       uses: ./.github/workflows/cache-anese
-    - name: cache Mesen downloads
-      uses: ./.github/workflows/cache-mesen
     - name: build
       run: dotnet build -bl:build-debug.binlog && dotnet build -c Release -bl:build-release.binlog
     - name: test

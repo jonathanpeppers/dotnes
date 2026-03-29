@@ -45,9 +45,10 @@
   <!-- Use the compiled task from dotnes.tasks.dll -->
   <UsingTask TaskName="dotnes.EnsureMesenInstalled" AssemblyFile="$(MSBuildThisFileDirectory)dotnes.tasks.dll" />
 
-  <!-- Download, verify, and unzip Mesen (mutex-protected, safe for parallel builds) -->
+  <!-- Download, verify, and unzip Mesen (mutex-protected, safe for parallel builds).
+       Skip when building dotnes.mesen.csproj itself (it only packages the targets file). -->
   <Target Name="_MesenEnsureInstalled" BeforeTargets="Build"
-      Condition="'$(_MesenZipName)' != '' And !Exists('$(_MesenExe)')">
+      Condition="'$(_MesenZipName)' != '' And !Exists('$(_MesenExe)') And '$(PackageId)' != 'dotnes.mesen'">
     <EnsureMesenInstalled
         MesenExe="$(_MesenExe)"
         DownloadUrl="$(_MesenBaseUrl)/$(_MesenZipName)"
