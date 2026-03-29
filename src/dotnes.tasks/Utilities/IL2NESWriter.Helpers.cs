@@ -76,6 +76,27 @@ partial class IL2NESWriter
     };
 
     /// <summary>
+    /// Returns true if the next IL instruction is a branch comparison opcode
+    /// (Bne, Beq, Blt, Ble, Bge, Bgt in both short and long forms).
+    /// Used by WriteLdc to preserve A:X for 16-bit comparisons.
+    /// </summary>
+    bool NextIsBranchComparison()
+    {
+        return Instructions is not null && Index + 1 < Instructions.Length &&
+            Instructions[Index + 1].OpCode is
+                ILOpCode.Bne_un_s or ILOpCode.Bne_un or
+                ILOpCode.Beq_s or ILOpCode.Beq or
+                ILOpCode.Blt_s or ILOpCode.Blt or
+                ILOpCode.Blt_un_s or ILOpCode.Blt_un or
+                ILOpCode.Ble_s or ILOpCode.Ble or
+                ILOpCode.Ble_un_s or ILOpCode.Ble_un or
+                ILOpCode.Bge_s or ILOpCode.Bge or
+                ILOpCode.Bge_un_s or ILOpCode.Bge_un or
+                ILOpCode.Bgt_s or ILOpCode.Bgt or
+                ILOpCode.Bgt_un_s or ILOpCode.Bgt_un;
+    }
+
+    /// <summary>
     /// Returns a user-friendly error message for an unsupported IL opcode, explaining
     /// what C# pattern likely generated it and what to use instead.
     /// </summary>

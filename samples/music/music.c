@@ -29,7 +29,7 @@ byte cur_duration = 0;
 const byte music1[]; // forward declaration -- data at end of file
 const byte* music_ptr = music1;
 
-void play_music() {
+void music_tick() {
   static byte chs = 0;
   if (music_ptr) {
     while (cur_duration == 0) {
@@ -103,7 +103,7 @@ void main(void)
 
   while (1) {
     ppu_wait_nmi();
-    play_music();
+    music_tick();
   }
 }
 

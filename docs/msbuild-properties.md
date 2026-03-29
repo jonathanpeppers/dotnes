@@ -130,6 +130,58 @@ read and write save data.
 </PropertyGroup>
 ```
 
+### `MesenTestRunner`
+
+Run Mesen in headless test-runner mode (`--testrunner --doNotSaveSettings`).
+Useful for CI smoke tests.
+
+| | |
+|---|---|
+| **Type** | `bool` |
+| **Default** | `false` |
+
+```xml
+<PropertyGroup>
+  <MesenTestRunner>true</MesenTestRunner>
+</PropertyGroup>
+```
+
+### `MesenTimeout`
+
+Auto-exit Mesen after this many seconds. Only meaningful in test-runner mode.
+
+| | |
+|---|---|
+| **Type** | `int` (seconds) |
+| **Default** | *(empty — uses Mesen default of 100)* |
+
+```xml
+<PropertyGroup>
+  <MesenTimeout>10</MesenTimeout>
+</PropertyGroup>
+```
+
+### `MesenLuaScript`
+
+Path to a Lua script to load when running Mesen.
+
+| | |
+|---|---|
+| **Type** | `string` (file path) |
+| **Default** | *(empty)* |
+
+```xml
+<PropertyGroup>
+  <MesenLuaScript>scripts/smoke-test.lua</MesenLuaScript>
+</PropertyGroup>
+```
+
+Example using `dotnet run` on the command line:
+
+```bash
+dotnet run -p:MesenTestRunner=true -p:MesenTimeout=10 -p:MesenLuaScript=smoke-test.lua
+```
+
 ## Item Groups
 
 ### `NESAssembly`

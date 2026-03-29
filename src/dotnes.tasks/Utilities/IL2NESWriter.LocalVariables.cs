@@ -155,6 +155,30 @@ partial class IL2NESWriter
             Stack.Push(operand);
             return;
         }
+        // When A:X holds a ushort and next instruction is Div/Rem, preserve A:X
+        if (_ushortInAX && Instructions is not null && Index + 1 < Instructions.Length &&
+            Instructions[Index + 1].OpCode is ILOpCode.Div or ILOpCode.Rem)
+        {
+            Stack.Push(operand);
+            return;
+        }
+
+        if (_runtimeValueInA)
+        {
+            // Don't emit LDX/LDA — the runtime value in A (and possibly X) must be preserved.
+            // The constant is tracked on the Stack for the next operation (AND, OR, XOR, Add, Sub, etc.)
+            Stack.Push(operand);
+            return;
+        }
+
+        // When A:X already hold a 16-bit value (from a word local load) and the next
+        // instruction is a branch comparison, keep A:X intact so the branch handler
+        // can emit a proper 16-bit comparison sequence.
+        if (_ushortInAX && NextIsBranchComparison())
+        {
+            Stack.Push(operand);
+            return;
+        }
 
         if (LastLDA)
         {
@@ -175,9 +199,13 @@ partial class IL2NESWriter
                 Instructions[Index + 1].OpCode is ILOpCode.Shr or ILOpCode.Shr_un or ILOpCode.Shl;
             bool nextIsAddSub = _runtimeValueInA && Instructions is not null && Index + 1 < Instructions.Length &&
                 Instructions[Index + 1].OpCode is ILOpCode.Add or ILOpCode.Sub;
-            if (nextIsShift || nextIsAddSub)
+            bool nextIsDivRem = _runtimeValueInA && Instructions is not null && Index + 1 < Instructions.Length &&
+                Instructions[Index + 1].OpCode is ILOpCode.Div or ILOpCode.Rem;
+            bool nextIsBitwise = Instructions is not null && Index + 1 < Instructions.Length &&
+                Instructions[Index + 1].OpCode is ILOpCode.And or ILOpCode.Or or ILOpCode.Xor;
+            if (nextIsShift || nextIsAddSub || nextIsDivRem || nextIsBitwise || NextIsBranchComparison())
             {
-                // Keep A:X intact — the operator will handle the 16-bit value
+                // Keep A:X intact — the operator/branch will handle the 16-bit value
                 Stack.Push(operand);
                 return;
             }
@@ -216,9 +244,34 @@ partial class IL2NESWriter
 
     void WriteLdloc(Local local)
     {
+        // Save the current ushort (A:X) when loading another word local that will
+        // be used for 16-bit arithmetic. In single-pass mode, only save when the
+        // next IL opcode is Add/Sub to avoid breaking call pattern-matching.
+        // In unit-test mode (no Instructions), save unconditionally when both
+        // values are words.
+        bool needSaveUshort = false;
+        if (_ushortInAX && local.Address.HasValue && local.IsWord)
+        {
+            if (Instructions is not null && Index + 1 < Instructions.Length)
+            {
+                var nextOp = Instructions[Index + 1].OpCode;
+                if (nextOp is ILOpCode.Add or ILOpCode.Sub)
+                    needSaveUshort = true;
+            }
+            else if (Instructions is null)
+            {
+                needSaveUshort = true;
+            }
+        }
         _ushortInAX = false;
         _savedConstantViaPusha = false;
         _lastStaticFieldAddress = null;
+        if (needSaveUshort)
+        {
+            Emit(Opcode.STA, AddressMode.ZeroPage, (byte)NESConstants.TEMP);
+            Emit(Opcode.STX, AddressMode.ZeroPage, (byte)NESConstants.TEMP2);
+            _savedUshortToTemp = true;
+        }
         if (local.LabelName is not null)
         {
             // This local holds a byte array label reference
@@ -236,9 +289,10 @@ partial class IL2NESWriter
             // This is actually a local variable
             if (local.IsWord)
             {
-                if (LastLDA)
+                if (LastLDA || _runtimeValueInA)
                 {
                     EmitJSR("pusha");
+                    _savedConstantViaPusha = true;
                 }
                 Emit(Opcode.LDA, AddressMode.Absolute, (ushort)local.Address);
                 Emit(Opcode.LDX, AddressMode.Absolute, (ushort)(local.Address + 1));
@@ -247,6 +301,12 @@ partial class IL2NESWriter
             }
             else if (local.Value <= byte.MaxValue)
             {
+                // NOTE: #371 added a wasUshortInAX guard here to skip pusha when a
+                // ushort constant was previously loaded into A:X. That guard was too
+                // broad and broke all samples (blue screen). Reverted until a more
+                // targeted fix can distinguish cases where pusha is truly unnecessary
+                // (ushort tracked on stack, consumed by HandleAddSub) from cases where
+                // it IS needed (A holds a value that will be clobbered by this LDA).
                 if (_runtimeValueInA && !LastLDA)
                 {
                     Emit(Opcode.STA, AddressMode.ZeroPage, (byte)NESConstants.TEMP);

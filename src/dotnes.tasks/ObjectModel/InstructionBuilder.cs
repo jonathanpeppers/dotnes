@@ -256,6 +256,9 @@ public static class Asm
     public static Instruction LDA_abs_X(ushort address) =>
         new(Opcode.LDA, AddressMode.AbsoluteX, new AbsoluteOperand(address));
 
+    public static Instruction LDA_abs_X(string label) =>
+        new(Opcode.LDA, AddressMode.AbsoluteX, new LabelOperand(label, OperandSize.Word));
+
     public static Instruction LDY_abs_X(ushort address) =>
         new(Opcode.LDY, AddressMode.AbsoluteX, new AbsoluteOperand(address));
 

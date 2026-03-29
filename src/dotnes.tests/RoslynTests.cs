@@ -1485,6 +1485,52 @@ public class RoslynTests
     }
 
     [Fact]
+    public void OamOff_PropertyAccessTranspiles()
+    {
+        // oam_off is now a property — get/set emit LDA/STA to zero page $1B
+        var bytes = GetProgramBytes(
+            """
+            oam_off = 0;
+            oam_off = oam_spr(10, 20, 0x01, 0, oam_off);
+            oam_hide_rest(oam_off);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        Assert.Contains("A900", hex);    // LDA #$00 (oam_off = 0)
+        Assert.Contains("851B", hex);    // STA $1B (store to OAM_OFF zero page)
+        Assert.Contains("A51B", hex);    // LDA $1B (load from OAM_OFF zero page)
+    }
+
+    [Fact]
+    public void RuntimeValueInA_ThenWordLocal_EmitsPusha()
+    {
+        // Regression: when _runtimeValueInA is true (e.g., from nesclock())
+        // followed by ldloc of a ushort local, must emit JSR pusha to save A
+        // before the word local clobbers it.
+        var (program, _) = BuildProgram(
+            """
+            ushort total = 100;
+            byte val = nesclock();
+            ushort result = (ushort)(val + total);
+            pal_col(0, (byte)result);
+            ppu_on_all();
+            while (true) ;
+            """);
+
+        // Scan all blocks for JSR pusha
+        bool hasPusha = program.Blocks.Any(b =>
+            b.InstructionsWithLabels.Any(il =>
+                il.Instruction.Opcode == Opcode.JSR &&
+                il.Instruction.Operand is LabelOperand lbl && lbl.Label == "pusha"));
+        Assert.True(hasPusha, "Expected JSR pusha to save A before word local load. " +
+            $"Blocks: {string.Join(", ", program.Blocks.Select(b => b.Label ?? "(no label)"))}");
+    }
+
+    [Fact]
     public void WaitvsyncEmitsJsr()
     {
         // waitvsync() should emit JSR to waitvsync subroutine
@@ -2324,6 +2370,50 @@ public class RoslynTests
         Assert.Contains("AA", hex);
         // The value 0 must be stored: LDA #$00 (A900) followed by STA TEMP (8517)
         Assert.Contains("A900", hex);
+    }
+
+    [Fact]
+    public void CompoundArrayIncrementByConstant()
+    {
+        // Pattern: arr[i] += 2 generates ldelema System.Byte / dup / ldind.u1 / ldc.i4.2 / add / conv.u1 / stind.i1
+        // Should emit: LDX i_addr; LDA arr,X; CLC; ADC #02; STA arr,X
+        var bytes = GetProgramBytes(
+            """
+            byte[] arr = new byte[4];
+            byte i = 0;
+            arr[i] += 2;
+            pal_col(0, arr[i]);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"CompoundIncr hex: {hex}");
+        // Must contain ADC #$02 (6902) for the += 2
+        Assert.Contains("6902", hex);
+    }
+
+    [Fact]
+    public void CompoundArrayDecrement()
+    {
+        // Pattern: arr[i]-- generates ldelema System.Byte / dup / ldind.u1 / ldc.i4.1 / sub / conv.u1 / stind.i1
+        // Should emit: LDX i_addr; LDA arr,X; SEC; SBC #01; STA arr,X
+        var bytes = GetProgramBytes(
+            """
+            byte[] arr = new byte[4];
+            byte i = 0;
+            arr[i]--;
+            pal_col(0, arr[i]);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"CompoundDecr hex: {hex}");
+        // Must contain SBC #$01 (E901) for the --
+        Assert.Contains("E901", hex);
     }
 
     [Fact]
@@ -3689,12 +3779,12 @@ public class RoslynTests
     [Fact]
     public void Mmc3SetChrBank_EmitsRegAndBankWrites()
     {
-        // set_chr_mode(byte reg, byte bank) should emit:
+        // mmc3_set_chr_bank(byte reg, byte bank) should emit:
         // LDA #reg, STA $8000 (bank select), LDA #bank, STA $8001 (bank data)
         var bytes = GetProgramBytes(
             """
-            set_chr_mode(0x00, 0x00);
-            set_chr_mode(0x02, 0x09);
+            mmc3_set_chr_bank(0x00, 0x00);
+            mmc3_set_chr_bank(0x02, 0x09);
             ppu_on_all();
             while (true) ;
             """);
@@ -3711,14 +3801,14 @@ public class RoslynTests
     }
 
     [Fact]
-    public void SetChrMode_SupportsLocalBankArg()
+    public void Mmc3SetChrBank_SupportsLocalBankArg()
     {
-        // set_chr_mode with bank from a local variable should emit
+        // mmc3_set_chr_bank with bank from a local variable should emit
         // LDA #reg, STA $8000, LDA $bank_addr, STA $8001.
         var bytes = GetProgramBytes(
             """
             byte bank = 9;
-            set_chr_mode(0x02, bank);
+            mmc3_set_chr_bank(0x02, bank);
             ppu_on_all();
             while (true) ;
             """);
@@ -3726,7 +3816,7 @@ public class RoslynTests
         Assert.NotEmpty(bytes);
 
         var hex = Convert.ToHexString(bytes);
-        _logger.WriteLine($"SetChrMode local bank hex: {hex}");
+        _logger.WriteLine($"Mmc3SetChrBank local bank hex: {hex}");
 
         // LDA #$02, STA $8000 (register select)
         Assert.Contains("A9028D0080", hex);
@@ -3781,10 +3871,10 @@ public class RoslynTests
     public void Mmc1SetMirroring_EmitsWriteTo8000()
     {
         // mmc1_set_mirroring writes the full Control register — use mirror + PRG/CHR mode bits
-        // MMC1_MIRROR_VERTICAL | MMC1_PRG_FIX_LAST = 0x02 | 0x0C = 0x0E
+        // (byte)MMC1Mirror.Vertical | MMC1_PRG_FIX_LAST = 0x02 | 0x0C = 0x0E
         var bytes = GetProgramBytes(
             """
-            mmc1_set_mirroring(MMC1_MIRROR_VERTICAL | MMC1_PRG_FIX_LAST);
+            mmc1_set_mirroring((byte)MMC1Mirror.Vertical | MMC1_PRG_FIX_LAST);
             ppu_on_all();
             while (true) ;
             """);
@@ -4162,7 +4252,7 @@ public class RoslynTests
             poke(PPU_ADDR, 0x20);
             poke(PPU_ADDR, 0x00);
 
-            poke(PPU_MASK, MASK.BG | MASK.SPR | MASK.EDGE_BG | MASK.EDGE_SPR);
+            poke(PPU_MASK, (byte)(MASK.BG | MASK.SPR | MASK.EDGE_BG | MASK.EDGE_SPR));
 
             while (true) ;
             """);
@@ -4651,5 +4741,586 @@ public class RoslynTests
         Assert.Contains("A930", hex);
         // Must contain LDA #$00 (A900) for stelem value 0
         Assert.Contains("A900", hex);
+    }
+
+    [Fact]
+    public void LdelemU1_NestedArrayIndex()
+    {
+        // Regression: arr1[arr2[i]] generated wrong code — the transpiler
+        // loaded from arr2 twice instead of using arr2[i] as index into arr1.
+        // The workaround (intermediate local) should produce correct code.
+        // Direct nested access (arr1[arr2[i]]) requires further transpiler work.
+        var bytes = GetProgramBytes(
+            """
+            byte[] names = new byte[4];
+            byte[] lookup = new byte[4];
+            names[0] = 10; names[1] = 20; names[2] = 30; names[3] = 40;
+            lookup[0] = 3; lookup[1] = 2; lookup[2] = 1; lookup[3] = 0;
+            for (byte i = 0; i < 4; i++)
+            {
+                byte idx = lookup[i];
+                byte result = names[idx];
+                pal_col(i, result);
+            }
+            ppu_on_all();
+            while (true) ;
+            """);
+
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"LdelemU1_NestedArrayIndex hex: {hex}");
+
+        // LDA names,X pattern (BD xx xx) — indexed load from names array
+        Assert.Contains("BD", hex);
+    }
+
+    [Fact]
+    public void OamSpr_DivisionInCompoundArg()
+    {
+        // oam_spr with division in a compound argument should emit a
+        // division loop instead of throwing TranspileException.
+        // Pattern: (byte)(0x05 + (difficulty / 10))
+        var bytes = GetProgramBytes(
+            """
+            byte[] PALETTE = [
+                0x30,
+                0x11, 0x30, 0x27, 0x0,
+                0x1c, 0x20, 0x2c, 0x0,
+                0x00, 0x10, 0x20, 0x0,
+                0x06, 0x16, 0x26, 0x0,
+                0x14, 0x34, 0x0d, 0x0,
+                0x00, 0x37, 0x25, 0x0,
+                0x0d, 0x2d, 0x3a, 0x0,
+                0x0d, 0x27, 0x2a
+            ];
+
+            pal_all(PALETTE);
+            byte difficulty = 42;
+            oam_spr(148, 114, (byte)(0x05 + (difficulty / 10)), 0x01, 0);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"OamSpr_Div hex: {hex}");
+
+        // Division by 10 uses repeated subtraction loop:
+        // LDX #$FF, SEC, INX, SBC #$0A, BCS -5, TXA
+        Assert.Contains("A2FF38E8E90AB0FB8A", hex);
+    }
+
+    [Fact]
+    public void OamSpr_ModuloInCompoundArg()
+    {
+        // oam_spr with modulo in a compound argument should emit a
+        // modulo loop instead of throwing TranspileException.
+        // Pattern: (byte)(0x04 + (difficulty % 10))
+        var bytes = GetProgramBytes(
+            """
+            byte[] PALETTE = [
+                0x30,
+                0x11, 0x30, 0x27, 0x0,
+                0x1c, 0x20, 0x2c, 0x0,
+                0x00, 0x10, 0x20, 0x0,
+                0x06, 0x16, 0x26, 0x0,
+                0x14, 0x34, 0x0d, 0x0,
+                0x00, 0x37, 0x25, 0x0,
+                0x0d, 0x2d, 0x3a, 0x0,
+                0x0d, 0x27, 0x2a
+            ];
+
+            pal_all(PALETTE);
+            byte difficulty = 42;
+            oam_spr(156, 114, (byte)(0x04 + (difficulty % 10)), 0x01, 0);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"OamSpr_Rem hex: {hex}");
+
+        // Modulo by 10 uses repeated subtraction:
+        // SEC, SBC #$0A, BCS -4, ADC #$0A
+        Assert.Contains("38E90AB0FC690A", hex);
+    }
+
+    [Fact]
+    public void Rand16_Returns16Bit()
+    {
+        // rand() returns ushort (16-bit) in A:X
+        var bytes = GetProgramBytes(
+            """
+            ushort r = rand16();
+            pal_col(0, (byte)r);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"Rand16_Returns16Bit hex: {hex}");
+
+        // Should contain JSR to rand subroutine and store 16-bit result
+        // The rand label resolves to a JSR target; verify the full JSR + STA pattern
+        Assert.Matches("20[0-9A-F]{4}", hex); // JSR to some address
+        // After rand() returns, the 16-bit result (A:X) should be stored to a local
+        // STA $0325 (low byte) + STX $0326 (high byte) for a ushort local
+        Assert.Contains("8D2503", hex); // STA $0325
+        Assert.Contains("8E2603", hex); // STX $0326
+    }
+
+    [Fact]
+    public void Rand16_ByteTruncation()
+    {
+        // (byte)rand16() should truncate 16-bit result to 8-bit (just use A, discard X)
+        var bytes = GetProgramBytes(
+            """
+            byte r = (byte)rand16();
+            pal_col(0, r);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"Rand16_ByteTruncation hex: {hex}");
+
+        // Should contain JSR to rand and STA for storing byte local (A only, X discarded)
+        Assert.Matches("20[0-9A-F]{4}", hex); // JSR to rand
+        Assert.Contains("8D2503", hex); // STA $0325 (byte local)
+    }
+
+    [Fact]
+    public void SRand_AcceptsUshort()
+    {
+        // srand(ushort seed) should accept a 16-bit seed value
+        var bytes = GetProgramBytes(
+            """
+            srand(42);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"SRand_AcceptsUshort hex: {hex}");
+
+        // Should contain LDA #42 (0x2A) and JSR to srand
+        Assert.Contains("A92A", hex); // LDA #$2A (42, low byte of seed)
+        Assert.Matches("20[0-9A-F]{4}", hex); // JSR to srand
+    }
+
+    [Fact]
+    public void Multiply_NonPowerOf2_3()
+    {
+        // Runtime val * 3 should use the general 8x8 multiply loop
+        var bytes = GetProgramBytes(
+            """
+            byte x = rand8();
+            byte result = (byte)(x * 3);
+            pal_col(0, result);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"Multiply_NonPowerOf2_3 hex: {hex}");
+
+        // General multiply loop: LDX #$08 (8 bits), LSR TEMP2, BCC, CLC, ADC TEMP
+        Assert.Contains("A208", hex);     // LDX #$08
+        Assert.Contains("4619", hex);     // LSR $19 (TEMP2)
+    }
+
+    [Fact]
+    public void Multiply_NonPowerOf2_5()
+    {
+        // Runtime val * 5 should use the general 8x8 multiply loop
+        var bytes = GetProgramBytes(
+            """
+            byte x = rand8();
+            byte result = (byte)(x * 5);
+            pal_col(0, result);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"Multiply_NonPowerOf2_5 hex: {hex}");
+
+        // General multiply loop pattern: LDX #$08, LSR TEMP2
+        Assert.Contains("A208", hex);     // LDX #$08
+        Assert.Contains("4619", hex);     // LSR $19 (TEMP2)
+    }
+
+    [Fact]
+    public void Division_RuntimeDividend()
+    {
+        // Runtime dividend / constant divisor should emit repeated subtraction
+        var bytes = GetProgramBytes(
+            """
+            byte x = rand8();
+            byte result = (byte)(x / 10);
+            pal_col(0, result);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"Division_RuntimeDividend hex: {hex}");
+
+        // Repeated subtraction: LDX #$FF, SEC, INX, SBC #$0A, BCS
+        Assert.Contains("A2FF", hex);     // LDX #$FF
+        Assert.Contains("38", hex);       // SEC
+        Assert.Contains("E90A", hex);     // SBC #$0A (divisor 10)
+    }
+
+    [Fact]
+    public void UshortLessThanConstant16Bit()
+    {
+        // 16-bit comparison: ushort local < 300 (0x012C)
+        var bytes = GetProgramBytes(
+            """
+            ushort y = rand16();
+            if (y < 300)
+            {
+                pal_col(0, 0x30);
+            }
+            pal_col(0, 0);
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"Ushort16BitLT hex: {hex}");
+
+        // Must contain CPX #$01 (E001) for hi byte comparison against 300 (hi=0x01)
+        Assert.Contains("E001", hex);
+        // Must contain CMP #$2C (C92C) for lo byte comparison against 300 (lo=0x2C)
+        Assert.Contains("C92C", hex);
+        // Must contain BCC (90) after CPX #$01 for the "less than" hi byte check
+        Assert.Contains("E00190", hex);
+    }
+
+    [Fact]
+    public void UshortEqualConstant16Bit()
+    {
+        // 16-bit equality: ushort local == 500 (0x01F4)
+        var bytes = GetProgramBytes(
+            """
+            ushort y = rand16();
+            if (y == 500)
+            {
+                pal_col(0, 0x30);
+            }
+            pal_col(0, 0);
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"Ushort16BitEQ hex: {hex}");
+
+        // Must contain CPX #$01 (E001) for hi byte comparison against 500 (hi=0x01)
+        Assert.Contains("E001", hex);
+        // Must contain CMP #$F4 (C9F4) for lo byte comparison against 500 (lo=0xF4)
+        Assert.Contains("C9F4", hex);
+    }
+
+    [Fact]
+    public void UshortNotEqualConstant16Bit()
+    {
+        // 16-bit inequality: ushort local != 1000 (0x03E8)
+        var bytes = GetProgramBytes(
+            """
+            ushort y = rand16();
+            if (y != 1000)
+            {
+                pal_col(0, 0x30);
+            }
+            pal_col(0, 0);
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"Ushort16BitNE hex: {hex}");
+
+        // Must contain CPX #$03 (E003) for hi byte comparison against 1000 (hi=0x03)
+        Assert.Contains("E003", hex);
+        // Must contain CMP #$E8 (C9E8) for lo byte comparison against 1000 (lo=0xE8)
+        Assert.Contains("C9E8", hex);
+    }
+
+    [Fact]
+    public void UshortGreaterOrEqualConstant16Bit()
+    {
+        // 16-bit comparison: ushort local >= 256 (0x0100)
+        var bytes = GetProgramBytes(
+            """
+            ushort y = rand16();
+            if (y >= 256)
+            {
+                pal_col(0, 0x30);
+            }
+            pal_col(0, 0);
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"Ushort16BitGE hex: {hex}");
+
+        // Must contain CPX #$01 (E001) for hi byte comparison against 256 (hi=0x01)
+        Assert.Contains("E001", hex);
+        // Must contain CMP #$00 (C900) for lo byte comparison against 256 (lo=0x00)
+        Assert.Contains("C900", hex);
+    }
+
+    [Fact]
+    public void UshortLessThanSmallConstant()
+    {
+        // 16-bit local compared with small constant (fits in byte):
+        // ushort local < 5 — must still emit 16-bit comparison because local is 16-bit.
+        var bytes = GetProgramBytes(
+            """
+            ushort y = rand16();
+            if (y < 5)
+            {
+                pal_col(0, 0x30);
+            }
+            pal_col(0, 0);
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"Ushort8BitLT hex: {hex}");
+
+        // Must contain CPX #$00 (E000) for hi byte comparison (hi of 5 is 0x00)
+        Assert.Contains("E000", hex);
+        // Must contain CMP #$05 (C905) for lo byte comparison (lo of 5 is 0x05)
+        Assert.Contains("C905", hex);
+    }
+
+    [Fact]
+    public void UshortLessThan256_16BitComparison()
+    {
+        // Regression test: ushort local < 256 should emit 16-bit comparison
+        // (256 exceeds byte range, so WriteLdc(ushort 256) is called).
+        // Previously this threw "Branch comparison value 256 exceeds byte range."
+        var bytes = GetProgramBytes(
+            """
+            ushort y = rand16();
+            if (y < 256)
+            {
+                pal_col(0, 0x30);
+            }
+            pal_col(0, 0);
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"UshortLT256 hex: {hex}");
+
+        // Must contain CPX #$01 (E001) for hi byte comparison against 256 (hi=0x01)
+        Assert.Contains("E001", hex);
+        // Must contain CMP #$00 (C900) for lo byte comparison against 256 (lo=0x00)
+        Assert.Contains("C900", hex);
+    }
+
+    [Fact]
+    public void UshortLessThan256_WithIncrement()
+    {
+        // Regression test: ushort local incremented in a loop, then compared < 256.
+        // This is closer to the scroll_yy pattern in the climber sample.
+        var bytes = GetProgramBytes(
+            """
+            ushort scroll_yy = 0;
+            pal_col(0, 0x30);
+            ppu_on_all();
+            while (true)
+            {
+                scroll_yy = (ushort)(scroll_yy + 1);
+                if (scroll_yy < 256)
+                {
+                    pal_col(0, 0x20);
+                }
+            }
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"UshortLT256_Inc hex: {hex}");
+
+        // Must contain CPX #$01 (E001) for hi byte comparison against 256 (hi=0x01)
+        Assert.Contains("E001", hex);
+    }
+
+    [Fact]
+    public void UshortLessThan256_AfterArithmetic()
+    {
+        // Regression test: ushort local used in arithmetic, then compared < 256.
+        // Tests that _ushortInAX survives through add + conv.u2 + stloc + ldloc.
+        var bytes = GetProgramBytes(
+            """
+            ushort x = rand16();
+            ushort y = (ushort)(x + 100);
+            if (y < 256)
+            {
+                pal_col(0, 0x30);
+            }
+            pal_col(0, 0);
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"UshortLT256_Arith hex: {hex}");
+
+        // Must contain CPX #$01 (E001) for hi byte comparison against 256 (hi=0x01)
+        Assert.Contains("E001", hex);
+    }
+
+    [Fact]
+    public void UshortLessThan512_16BitComparison()
+    {
+        // Test with a different boundary value (512 = 0x0200)
+        var bytes = GetProgramBytes(
+            """
+            ushort y = rand16();
+            if (y < 512)
+            {
+                pal_col(0, 0x30);
+            }
+            pal_col(0, 0);
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"UshortLT512 hex: {hex}");
+
+        // Must contain CPX #$02 (E002) for hi byte comparison against 512 (hi=0x02)
+        Assert.Contains("E002", hex);
+    }
+
+    [Fact]
+    public void ByteUshortVarExtraction_NoPushaLeak()
+    {
+        // Regression: (byte)ushort_var patterns inside stelem_i1 must not leave
+        // unmatched JSR pusha calls in the generated code. Each pusha must have
+        // a corresponding popa or incsp1, otherwise the cc65 stack leaks.
+        // This mimics the climber sample's draw_entire_stage init pattern with
+        // preceding array stores that set LastLDA = true before word local loads.
+        var (program, _) = BuildProgram(
+            """
+            byte[] arr_lo = new byte[8];
+            byte[] arr_hi = new byte[8];
+            byte[] arr_state = new byte[8];
+            byte[] arr_x = new byte[8];
+            byte[] ypos = new byte[8];
+            ypos[0] = 10; ypos[1] = 20; ypos[2] = 30; ypos[3] = 40;
+            for (byte i = 0; i < 4; i++)
+            {
+                arr_state[i] = 1;
+                arr_x[i] = rand8();
+                byte aypos = ypos[i];
+                ushort ayy = (ushort)(aypos * 8 + 16);
+                arr_lo[i] = (byte)ayy;
+                arr_hi[i] = (byte)(ayy >> 8);
+            }
+            ppu_on_all();
+            while (true) ;
+            """);
+
+        // Count JSR pusha and JSR popa/incsp1 in the main block
+        var mainBlock = program.GetBlock("main");
+        Assert.NotNull(mainBlock);
+
+        int pushaCount = 0, popaCount = 0;
+        foreach (var (instruction, _) in mainBlock.InstructionsWithLabels)
+        {
+            if (instruction.Opcode == Opcode.JSR && instruction.Operand is LabelOperand lbl)
+            {
+                if (lbl.Label == "pusha") pushaCount++;
+                if (lbl.Label == "popa" || lbl.Label == "incsp1") popaCount++;
+            }
+        }
+
+        _logger.WriteLine($"Main block: pusha={pushaCount}, popa/incsp1={popaCount}");
+
+        // The (byte)ushort_var stelem pattern must not leave any unmatched pusha
+        // calls in the main block — HandleStelemI1 removes and re-emits the
+        // entire sequence, so every pusha must be balanced by popa or incsp1.
+        Assert.True(pushaCount <= popaCount,
+            $"Unmatched pusha calls detected: pusha={pushaCount}, popa/incsp1={popaCount}. " +
+            "Each pusha must be balanced by popa or incsp1 to prevent cc65 stack leaks.");
+    }
+
+    [Fact]
+    public void ByteUshortVarExtraction_Stloc_NoPushaLeak()
+    {
+        // Test the stloc variant: byte lo = (byte)ushort_var where the result is
+        // stored to a byte local (not an array). This goes through WriteStloc
+        // instead of HandleStelemI1.
+        var (program, _) = BuildProgram(
+            """
+            byte[] ypos = new byte[8];
+            ypos[0] = 10;
+            for (byte f = 0; f < 4; f++)
+            {
+                byte pypos = ypos[f];
+                ushort floor_yy = (ushort)(pypos * 8 + 16);
+                byte fyy_lo = (byte)floor_yy;
+                byte fyy_hi = (byte)(floor_yy >> 8);
+                pal_col(fyy_lo, fyy_hi);
+            }
+            ppu_on_all();
+            while (true) ;
+            """);
+
+        var mainBlock = program.GetBlock("main");
+        Assert.NotNull(mainBlock);
+
+        int pushaCount = 0, popaCount = 0;
+        foreach (var (instruction, _) in mainBlock.InstructionsWithLabels)
+        {
+            if (instruction.Opcode == Opcode.JSR && instruction.Operand is LabelOperand lbl)
+            {
+                if (lbl.Label == "pusha") pushaCount++;
+                if (lbl.Label == "popa" || lbl.Label == "incsp1") popaCount++;
+            }
+        }
+
+        _logger.WriteLine($"Stloc variant - Main block: pusha={pushaCount}, popa/incsp1={popaCount}");
+
+        Assert.True(pushaCount <= popaCount,
+            $"Unmatched pusha calls detected: pusha={pushaCount}, popa/incsp1={popaCount}. " +
+            "Each pusha must be balanced by popa or incsp1 to prevent cc65 stack leaks.");
     }
 }

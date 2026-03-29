@@ -241,6 +241,8 @@ partial class IL2NESWriter : NESWriter
         None,
         /// <summary>Runtime value was saved to TEMP ($17).</summary>
         ToTemp,
+        /// <summary>Runtime 16-bit ushort was saved to TEMP ($17) lo + TEMP2 ($19) hi.</summary>
+        UshortToTemp,
         /// <summary>Compile-time constant was pushed via JSR pusha.</summary>
         ViaPusha,
     }
@@ -266,6 +268,17 @@ partial class IL2NESWriter : NESWriter
     {
         get => _savedState == SavedValueState.ViaPusha;
         set => _savedState = value ? SavedValueState.ViaPusha : SavedValueState.None;
+    }
+
+    /// <summary>
+    /// True when a runtime 16-bit ushort (A:X) was saved to TEMP ($17, lo) and TEMP2 ($19, hi)
+    /// because a subsequent Ldloc of a Word local needed to clobber A and X.
+    /// Used by HandleAddSub for 16-bit runtime-runtime arithmetic.
+    /// </summary>
+    bool _savedUshortToTemp
+    {
+        get => _savedState == SavedValueState.UshortToTemp;
+        set => _savedState = value ? SavedValueState.UshortToTemp : SavedValueState.None;
     }
 
     /// <summary>
@@ -399,6 +412,13 @@ partial class IL2NESWriter : NESWriter
     PendingStructElement? _pendingStructElement;
 
     /// <summary>
+    /// Pending byte array element access state from ldelema System.Byte.
+    /// Null when no byte array ldelema is pending.
+    /// Used for compound assignments: arr[i]++, arr[i] += expr, etc.
+    /// </summary>
+    PendingByteArrayElement? _pendingByteArrayElement;
+
+    /// <summary>
     /// State for a pending struct array element access (from ldelema).
     /// </summary>
     readonly record struct PendingStructElement(
@@ -408,6 +428,16 @@ partial class IL2NESWriter : NESWriter
         ushort? ConstantBase,
         /// <summary>When true, X holds the runtime element offset; use AbsoluteX addressing.</summary>
         bool RuntimeIndex
+    );
+
+    /// <summary>
+    /// State for a pending byte array element access (from ldelema System.Byte).
+    /// </summary>
+    readonly record struct PendingByteArrayElement(
+        /// <summary>Array base address for AbsoluteX addressing (runtime index).</summary>
+        ushort ArrayBase,
+        /// <summary>Element address for constant-index access; null for runtime-index.</summary>
+        ushort? ConstantElementAddress
     );
 
     /// <summary>

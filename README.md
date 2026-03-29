@@ -143,7 +143,7 @@ start_music(music1);
 while (true)
 {
     ppu_wait_nmi();
-    play_music();
+    music_tick();
 }
 ```
 
@@ -315,10 +315,3 @@ To learn more about NES development, I found the following useful:
 * [6502 Instruction Set][6502-instructions]
 * [HxD Hex Editor](https://mh-nexus.de/en/hxd/)
 
-## ANESE License
-
-I needed a simple, small NES emulator to redistribute with .NES that runs on Mac
-and Windows. Special thanks to [@daniel5151 and
-ANESE](https://github.com/daniel5151/ANESE). This is the default NES emulator
-used in the `dotnet.anese` package, [license
-here](https://github.com/daniel5151/ANESE/blob/8ae814d615479b1496c98033a1f5bc4da5921c6f/LICENSE).

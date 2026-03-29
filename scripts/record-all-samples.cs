@@ -59,8 +59,8 @@ foreach (var sampleDir in sampleDirs)
 
     Thread.Sleep(5000); // Wait for build + emulator boot
 
-    // Find the ANESE emulator window (child process of dotnet run)
-    IntPtr hwnd = FindAneseWindow();
+    // Find the Mesen emulator window (spawned by running the sample)
+    IntPtr hwnd = FindMesenWindow();
     if (hwnd == IntPtr.Zero)
     {
         Console.WriteLine("FAILED (couldn't find emulator window)");
@@ -119,8 +119,8 @@ foreach (var sampleDir in sampleDirs)
     }
     finally
     {
-        // Kill the ANESE emulator process (grandchild of dotnet run)
-        KillAneseProcess();
+        // Kill the Mesen emulator process (grandchild of dotnet run)
+        KillMesenProcess();
         try { proc.Kill(); } catch { }
         try { proc.WaitForExit(3000); } catch { }
     }
@@ -147,9 +147,9 @@ Bitmap? CaptureWindow(IntPtr window)
     return bmp;
 }
 
-IntPtr FindAneseWindow()
+IntPtr FindMesenWindow()
 {
-    // ANESE window title contains "ANESE" — find it regardless of parent PID
+    // Mesen window title contains "Mesen" — find it regardless of parent PID
     // since dotnet run spawns it as a grandchild process
     IntPtr found = IntPtr.Zero;
     for (int attempt = 0; attempt < 20 && found == IntPtr.Zero; attempt++)
@@ -164,7 +164,7 @@ IntPtr FindAneseWindow()
                     var sb = new System.Text.StringBuilder(len + 1);
                     NativeMethods.GetWindowText(h, sb, sb.Capacity);
                     string title = sb.ToString();
-                    if (title.Contains("ANESE", StringComparison.OrdinalIgnoreCase))
+                    if (title.Contains("Mesen", StringComparison.OrdinalIgnoreCase))
                         found = h;
                 }
             }
@@ -175,13 +175,13 @@ IntPtr FindAneseWindow()
     return found;
 }
 
-void KillAneseProcess()
+void KillMesenProcess()
 {
     foreach (var p in Process.GetProcesses())
     {
         try
         {
-            if (p.ProcessName.Contains("anese", StringComparison.OrdinalIgnoreCase))
+            if (p.ProcessName.Contains("Mesen", StringComparison.OrdinalIgnoreCase))
                 p.Kill();
         }
         catch { }

@@ -115,7 +115,7 @@ internal static class BuiltInSubroutines
              .Emit(LDA_zpg(PPU_MASK_VAR))
              .Emit(AND(0x18))
              .Emit(BNE(3))           // if rendering enabled, continue
-             .Emit(JMP_abs(0x81E6)); // JMP to @skipAll (address is layout dependent)
+             .Emit(JMP_abs(nameof(skipAll)));
         return block;
     }
 
@@ -131,7 +131,7 @@ internal static class BuiltInSubroutines
              .Emit(TYA())
              .Emit(PHA())
              .Emit(LDA(0xFF))
-             .Emit(JMP_abs(skipNtsc));  // Use constant address
+             .Emit(JMP_abs(nameof(skipNtsc)));
         return block;
     }
 
@@ -244,9 +244,9 @@ internal static class BuiltInSubroutines
     {
         var block = new Block(nameof(NESLib.pal_spr_bright));
         block.Emit(TAX())
-             .Emit(LDA_abs_X(palBrightTableL))
+             .Emit(LDA_abs_X(nameof(NESLib.palBrightTableL)))
              .Emit(STA_zpg(PAL_SPR_PTR))
-             .Emit(LDA_abs_X(palBrightTableH))
+             .Emit(LDA_abs_X(nameof(NESLib.palBrightTableH)))
              .Emit(STA_zpg(PAL_SPR_PTR + 1))
              .Emit(STA_zpg(PAL_UPDATE))
              .Emit(RTS());
@@ -260,9 +260,9 @@ internal static class BuiltInSubroutines
     {
         var block = new Block(nameof(NESLib.pal_bg_bright));
         block.Emit(TAX())
-             .Emit(LDA_abs_X(palBrightTableL))
+             .Emit(LDA_abs_X(nameof(NESLib.palBrightTableL)))
              .Emit(STA_zpg(PAL_BG_PTR))
-             .Emit(LDA_abs_X(palBrightTableH))
+             .Emit(LDA_abs_X(nameof(NESLib.palBrightTableH)))
              .Emit(STA_zpg(PAL_BG_PTR + 1))
              .Emit(STA_zpg(PAL_UPDATE))
              .Emit(RTS());
@@ -275,9 +275,9 @@ internal static class BuiltInSubroutines
     public static Block PalBright()
     {
         var block = new Block(nameof(NESLib.pal_bright));
-        block.Emit(JSR(pal_spr_bright))
+        block.Emit(JSR(nameof(NESLib.pal_spr_bright)))
              .Emit(TXA())
-             .Emit(JMP_abs(pal_bg_bright));
+             .Emit(JMP_abs(nameof(NESLib.pal_bg_bright)));
         return block;
     }
 
@@ -307,7 +307,7 @@ internal static class BuiltInSubroutines
         block.Emit(LDA_zpg(PPU_MASK_VAR))
              .Emit(AND(0xE7))
              .Emit(STA_zpg(PPU_MASK_VAR))
-             .Emit(JMP_abs(ppu_wait_nmi));
+             .Emit(JMP_abs(nameof(NESLib.ppu_wait_nmi)));
         return block;
     }
 
@@ -331,7 +331,7 @@ internal static class BuiltInSubroutines
     {
         var block = new Block(nameof(NESLib.ppu_onoff));
         block.Emit(STA_zpg(PPU_MASK_VAR))
-             .Emit(JMP_abs(ppu_wait_nmi));  // Uses constant since ppu_wait_nmi is emitted later
+             .Emit(JMP_abs(nameof(NESLib.ppu_wait_nmi)));
         return block;
     }
 
@@ -533,12 +533,62 @@ internal static class BuiltInSubroutines
     }
 
     /// <summary>
-    /// _set_rand - Set random seed
+    /// _set_rand - Set random seed for 8-bit LFSR PRNG
     /// </summary>
     public static Block SetRand()
     {
         var block = new Block(nameof(NESLib.set_rand));
         block.Emit(STA_zpg(RAND_SEED))
+             .Emit(RTS());
+        return block;
+    }
+
+    /// <summary>
+    /// _srand - Set random seed for cc65-compatible 16-bit PRNG
+    /// Entry: seed in A(lo)/X(hi)
+    /// Stores seed in RAND_STATE, then falls through to Rand() to shuffle.
+    /// IMPORTANT: Must be emitted immediately before Rand() in ROM layout.
+    /// This ordering is enforced in Program6502.ForEachOptionalBuiltIn().
+    /// Source: https://github.com/cc65/cc65/blob/master/libsrc/common/rand.s
+    /// </summary>
+    public static Block SRand()
+    {
+        // No RTS: falls through to Rand() which immediately follows
+        var block = new Block(nameof(NESLib.srand));
+        block.Emit(STA_zpg(RAND_STATE))
+             .Emit(STX_zpg(RAND_STATE + 1))
+             .Emit(STA_zpg(RAND_STATE + 2))
+             .Emit(STX_zpg(RAND_STATE + 3));
+        // Falls through to Rand() to sufficiently shuffle first result
+        return block;
+    }
+
+    /// <summary>
+    /// _rand - Get random number 0..32767 using cc65 LCG
+    /// 32-bit LCG: state = state * $01010101 + $B3B3B3B3 (mod 2^32)
+    /// Returns bits 16-31 XOR'd with bits 0-15, bit 15 cleared.
+    /// Exit: result in A(lo)/X(hi), range 0..32767
+    /// Uses RAND_STATE ($3D-$40) zero-page variables.
+    /// Source: https://github.com/cc65/cc65/blob/master/libsrc/common/rand.s
+    /// </summary>
+    public static Block Rand()
+    {
+        var block = new Block(nameof(NESLib.rand16));
+        block.Emit(CLC())
+             .Emit(LDA_zpg(RAND_STATE))
+             .Emit(ADC(0xB3))
+             .Emit(STA_zpg(RAND_STATE))
+             .Emit(ADC_zpg(RAND_STATE + 1))
+             .Emit(STA_zpg(RAND_STATE + 1))
+             .Emit(ADC_zpg(RAND_STATE + 2))
+             .Emit(STA_zpg(RAND_STATE + 2))
+             .Emit(EOR_zpg(RAND_STATE))
+             .Emit(AND(0x7F))
+             .Emit(TAX())
+             .Emit(LDA_zpg(RAND_STATE + 2))
+             .Emit(ADC_zpg(RAND_STATE + 3))
+             .Emit(STA_zpg(RAND_STATE + 3))
+             .Emit(EOR_zpg(RAND_STATE + 1))
              .Emit(RTS());
         return block;
     }
@@ -1344,13 +1394,14 @@ internal static class BuiltInSubroutines
     {
         var block = new Block(nameof(NESLib.flush_vram_update));
         
-        // 837F: STA NAME_UPD_ADR, STX NAME_UPD_ADR+1, LDY #$00
+        // 837F: STA NAME_UPD_ADR, STX NAME_UPD_ADR+1
         block.Emit(STA_zpg(NAME_UPD_ADR))
-             .Emit(STX_zpg(NAME_UPD_ADR + 1))
-             .Emit(LDY(0x00));
+             .Emit(STX_zpg(NAME_UPD_ADR + 1));
         
-        // @updName (8385): Main update loop start
-        block.Emit(LDA_ind_Y(NAME_UPD_ADR), "@updName")
+        // updName: Entry point for external callers (sets Y=0 first)
+        block.Emit(LDY(0x00), "updName");
+        // @updLoop: Internal loop target (Y already set)
+        block.Emit(LDA_ind_Y(NAME_UPD_ADR), "@updLoop")
              .Emit(INY())
              .Emit(CMP(0x40))
              .Emit(BCS(0x12))  // BCS @updNotSeq
@@ -1361,7 +1412,7 @@ internal static class BuiltInSubroutines
              .Emit(LDA_ind_Y(NAME_UPD_ADR))
              .Emit(INY())
              .Emit(STA_abs(PPU_DATA))
-             .Emit(JMP(nameof(NESConstants.updName)));  // JMP @updName - uses global label
+             .Emit(JMP("@updLoop"));  // loop back without resetting Y
         
         // @updNotSeq (839E)
         block.Emit(TAX())
@@ -1399,7 +1450,7 @@ internal static class BuiltInSubroutines
         
         block.Emit(LDA_zpg(PRG_FILEOFFS))
              .Emit(STA_abs(PPU_CTRL))
-             .Emit(JMP(nameof(NESConstants.updName)));  // JMP @updName - uses global label
+             .Emit(JMP("@updLoop"));  // loop back without resetting Y
         
         // @updDone (83D3)
         block.Emit(RTS());
@@ -1436,7 +1487,7 @@ internal static class BuiltInSubroutines
         // 8420 RTS
         var block = new Block(nameof(NESLib.delay));
         block.Emit(TAX())
-             .Emit(JSR(ppu_wait_nmi), "@1")
+             .Emit(JSR(nameof(NESLib.ppu_wait_nmi)), "@1")
              .Emit(DEX())
              .Emit(BNE(-6))  // branch back to @1
              .Emit(RTS());
@@ -1833,7 +1884,7 @@ internal static class BuiltInSubroutines
              .Emit(LDA_abs(PPU_STATUS))
              .Emit(AND(0x80))
              .Emit(STA_zpg(0x00))
-             .Emit(JSR(0x8280))  // ppu_wait_frame
+             .Emit(JSR(nameof(NESLib.ppu_off)))  // turn off rendering
              .Emit(LDA(0x00))
              .Emit(STA_abs(PPU_SCROLL))
              .Emit(STA_abs(PPU_SCROLL))
@@ -1852,7 +1903,7 @@ internal static class BuiltInSubroutines
              .Emit(STA_abs(PPU_OAM_DMA))
              .Emit(LDA_zpg(PAL_UPDATE))
              .Emit(BNE(3))             // branch to updPal
-             .Emit(JMP_abs(0x81C0));   // updVRAM
+             .Emit(JMP_abs(nameof(updVRAM)));   // updVRAM
         return block;
     }
 
@@ -1916,7 +1967,7 @@ internal static class BuiltInSubroutines
              .Emit(STA_zpg(VRAM_UPDATE))
              .Emit(LDA_zpg(NAME_UPD_ENABLE))
              .Emit(BEQ(3))         // 0x03 - skip to skipUpd
-             .Emit(JSR(0x8383));   // _flush_vram_update_nmi
+             .Emit(JSR(nameof(NESConstants.updName)));   // _flush_vram_update_nmi
         return block;
     }
 
@@ -1991,16 +2042,16 @@ internal static class BuiltInSubroutines
              .Emit(INX())
              .Emit(BNE(-26))       // 0xE6 - back to @loop
              .Emit(LDA(0x04))
-             .Emit(JSR(0x8279))    // pal_bright
-             .Emit(JSR(0x824E))    // pal_clear
-             .Emit(JSR(0x82AE))    // oam_clear
+             .Emit(JSR(nameof(NESLib.pal_bright)))    // pal_bright
+             .Emit(JSR(nameof(NESLib.pal_clear)))    // pal_clear
+             .Emit(JSR(nameof(NESLib.oam_clear)))    // oam_clear
              .Emit(JSR(nameof(zerobss)))
              .Emit(JSR(nameof(copydata)))
              .Emit(LDA(0x00))
              .Emit(STA_zpg(sp))
              .Emit(LDA(PAL_BG_PTR))  // 0x08 = stack high byte
              .Emit(STA_zpg(sp + 1))
-             .Emit(JSR(0x84F4))    // initlib
+             .Emit(JSR(nameof(initlib)))    // initlib
              .Emit(LDA(0x4C))      // JMP opcode
              .Emit(STA_zpg(NMI_CALLBACK))
              .Emit(LDA(0x10))      // low byte of callback
@@ -2144,13 +2195,13 @@ internal static class BuiltInSubroutines
     const byte BASS_NOTE = 36; // 0x24
 
     /// <summary>
-    /// play_music - Play one frame of music. Matches cc65's compiled output exactly.
+    /// music_tick - Play one frame of music. Matches cc65's compiled output exactly.
     /// Uses $0300+ absolute addressing for state (cc65 BSS layout).
     /// Uses interleaved 16-bit note tables with ASL+TAY indexing.
     /// </summary>
-    public static Block PlayMusic()
+    public static Block MusicTick()
     {
-        var block = new Block(nameof(NESLib.play_music));
+        var block = new Block(nameof(NESLib.music_tick));
 
         // Check if music_ptr is NULL (both bytes zero = no music playing)
         block.Emit(LDA_abs(MUSIC_PTR))            // LDA $0301

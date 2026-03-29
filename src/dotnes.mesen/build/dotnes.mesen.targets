@@ -1,0 +1,69 @@
+<Project>
+  <PropertyGroup>
+    <MesenVersion>2.1.1</MesenVersion>
+    <_MesenBaseUrl>https://github.com/SourMesen/Mesen2/releases/download/$(MesenVersion)</_MesenBaseUrl>
+    <_MesenLicenseUrl>https://raw.githubusercontent.com/SourMesen/Mesen2/$(MesenVersion)/LICENSE</_MesenLicenseUrl>
+    <_MesenDir>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)../bin/'))</_MesenDir>
+  </PropertyGroup>
+
+  <!-- Detect OS and architecture to pick the right Mesen release asset -->
+  <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('windows'))">
+    <_MesenZipName>Mesen_$(MesenVersion)_Windows.zip</_MesenZipName>
+    <_MesenZipSha256>23ccc2bc060b663c68dad3a8c5d6da7d23a50f872d04f135bafa2b04ff7d5cbe</_MesenZipSha256>
+    <_MesenExe>$(_MesenDir)Mesen.exe</_MesenExe>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('linux')) And '$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)' == 'X64'">
+    <_MesenZipName>Mesen_$(MesenVersion)_Linux_x64.zip</_MesenZipName>
+    <_MesenZipSha256>7a9947575cc198209f743fef83fb2b702b786ea705506bdf3f2aea01ab7c1ce9</_MesenZipSha256>
+    <_MesenExe>$(_MesenDir)Mesen</_MesenExe>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('linux')) And '$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)' == 'Arm64'">
+    <_MesenZipName>Mesen_$(MesenVersion)_Linux_ARM64.zip</_MesenZipName>
+    <_MesenZipSha256>b0e028f616ab61ae3247f720a80cbe696a29fcbbf01aec0f0103b3b66b3f4dad</_MesenZipSha256>
+    <_MesenExe>$(_MesenDir)Mesen</_MesenExe>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('osx')) And '$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)' == 'X64'">
+    <_MesenZipName>Mesen_$(MesenVersion)_macOS_x64_Intel.zip</_MesenZipName>
+    <_MesenZipSha256>538f3d072891b1546c961e53f8deb0718d7b273573b16e3318db8f1e9b1ac96d</_MesenZipSha256>
+    <_MesenExe>$(_MesenDir)Mesen.app/Contents/MacOS/Mesen</_MesenExe>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('osx')) And '$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)' == 'Arm64'">
+    <_MesenZipName>Mesen_$(MesenVersion)_macOS_ARM64_AppleSilicon.zip</_MesenZipName>
+    <_MesenZipSha256>c16068b3d934f7b993b782a0652b8f0e7fc0cde7464862fea91d5e76b68a813f</_MesenZipSha256>
+    <_MesenExe>$(_MesenDir)Mesen.app/Contents/MacOS/Mesen</_MesenExe>
+  </PropertyGroup>
+
+  <!-- Set RunCommand so 'dotnet run' launches the ROM in Mesen -->
+  <PropertyGroup Condition="'$(_MesenExe)' != ''">
+    <RunCommand>$(_MesenExe)</RunCommand>
+    <_MesenTestRunnerArgs Condition="'$(MesenTestRunner)' == 'true'">--testrunner --doNotSaveSettings</_MesenTestRunnerArgs>
+    <_MesenTimeoutArgs Condition="'$(MesenTimeout)' != ''">--timeout=$(MesenTimeout)</_MesenTimeoutArgs>
+    <RunArguments>$(TargetName).nes $(_MesenTestRunnerArgs) $(_MesenTimeoutArgs) $(MesenLuaScript)</RunArguments>
+    <RunWorkingDirectory>$(OutputPath)</RunWorkingDirectory>
+  </PropertyGroup>
+
+  <!-- Use the compiled task from dotnes.tasks.dll -->
+  <UsingTask TaskName="dotnes.EnsureMesenInstalled" AssemblyFile="$(MSBuildThisFileDirectory)dotnes.tasks.dll" />
+
+  <!-- Download, verify, and unzip Mesen (mutex-protected, safe for parallel builds).
+       Skip when building dotnes.mesen.csproj itself (it only packages the targets file). -->
+  <Target Name="_MesenEnsureInstalled" BeforeTargets="Build"
+      Condition="'$(_MesenZipName)' != '' And !Exists('$(_MesenExe)') And '$(PackageId)' != 'dotnes.mesen'">
+    <EnsureMesenInstalled
+        MesenExe="$(_MesenExe)"
+        DownloadUrl="$(_MesenBaseUrl)/$(_MesenZipName)"
+        LicenseUrl="$(_MesenLicenseUrl)"
+        DestDir="$(_MesenDir)"
+        ZipName="$(_MesenZipName)"
+        ExpectedHash="$(_MesenZipSha256)"
+        Retries="3"
+        RetryDelayMilliseconds="2000" />
+    <!-- Make executable on Unix -->
+    <Exec Condition="!$([MSBuild]::IsOSPlatform('windows')) And Exists('$(_MesenExe)')" Command="chmod +x &quot;$(_MesenExe)&quot;" />
+  </Target>
+
+  <Target Name="_MesenUnsupportedMessage" BeforeTargets="Build"
+      Condition="'$(_MesenZipName)' == ''">
+    <Warning Text="Mesen is not available for this platform/architecture." />
+  </Target>
+</Project>

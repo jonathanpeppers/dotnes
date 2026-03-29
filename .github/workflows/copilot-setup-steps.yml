@@ -12,8 +12,6 @@ jobs:
       uses: actions/setup-dotnet@v5
       with:
         dotnet-version: '10.x'
-    - name: Cache ANESE downloads
-      uses: ./.github/workflows/cache-anese
     - name: Build the project
       run: dotnet build -bl
     - name: Upload msbuild.binlog on failure

@@ -221,15 +221,25 @@ partial class IL2NESWriter
     }
 
     /// <summary>
-    /// Handles ldelema: load the address of a struct array element.
-    /// IL pattern: ldloc_N (array), ldc_i4 (index), ldelema TypeName
+    /// Handles ldelema: load the address of an array element.
+    /// For struct arrays: IL pattern: ldloc_N (array), ldc_i4 (index), ldelema TypeName
     /// Sets pending state for the subsequent stfld/ldfld.
+    /// For byte arrays: IL pattern: ldloc/ldsfld (array), ldloc/ldsfld/ldc (index), ldelema System.Byte
+    /// Sets pending state for the subsequent dup/ldind.u1/.../stind.i1 compound assignment.
     /// </summary>
     void HandleLdelema(ILInstruction instruction)
     {
         string? structType = instruction.String;
         if (structType == null)
             throw new TranspileException("Arrays are not supported for this element type. Only byte[], ushort[], and struct arrays are supported.", MethodName);
+
+        // Byte arrays: compound assignment pattern (arr[i]++, arr[i] += expr)
+        if (structType == "Byte")
+        {
+            HandleLdelemaByte();
+            return;
+        }
+
         if (!StructLayouts.ContainsKey(structType))
             throw new TranspileException($"Arrays of type '{structType}' are not supported. Only byte[], ushort[], and struct arrays are supported.", MethodName);
 
@@ -308,6 +318,140 @@ partial class IL2NESWriter
 
         _runtimeValueInA = false;
         _lastLoadedLocalIndex = null;
+    }
+
+    /// <summary>
+    /// Handles ldelema System.Byte: sets up array+index addressing for compound
+    /// byte array assignments (arr[i]++, arr[i] += expr, etc.).
+    /// The subsequent dup/ldind.u1/.../stind.i1 sequence uses the pending state
+    /// to emit LDA array,X (read) and STA array,X (write-back).
+    /// </summary>
+    void HandleLdelemaByte()
+    {
+        // Pop index and array ref from IL evaluation stack
+        if (Stack.Count > 0) Stack.Pop(); // index
+        if (Stack.Count > 0) Stack.Pop(); // array ref
+
+        if (Instructions == null || Index < 2)
+            throw new InvalidOperationException("ldelema System.Byte requires at least 2 preceding instructions");
+
+        var indexInstr = Instructions[Index - 1];
+        var arrayInstr = Instructions[Index - 2];
+
+        // Resolve array local (same patterns as HandleLdelemU1)
+        int? arrayLocalIdx = GetLdlocIndex(arrayInstr);
+        Local? arrayLocalFromField = null;
+        if (arrayLocalIdx == null)
+            arrayLocalFromField = TryResolveArrayLocal(arrayInstr);
+
+        if (arrayLocalIdx == null && arrayLocalFromField == null)
+            throw new TranspileException("Compound byte array assignment requires the array to be stored in a local variable or static field.", MethodName);
+
+        var arrayLocal = arrayLocalIdx != null ? Locals[arrayLocalIdx.Value] : arrayLocalFromField!;
+        if (arrayLocal.Address == null)
+            throw new TranspileException("Compound byte array assignment failed: the array variable has no allocated address.", MethodName);
+        ushort arrayBase = (ushort)arrayLocal.Address;
+
+        // Resolve index
+        int? constantIndex = GetLdcValue(indexInstr);
+        int? indexLocalIdx = GetLdlocIndex(indexInstr);
+        int? indexLocalFromField = null;
+        if (indexLocalIdx == null && constantIndex == null && indexInstr.OpCode == ILOpCode.Ldsfld && indexInstr.String != null)
+        {
+            var sfLocal = TryResolveArrayLocal(indexInstr);
+            if (sfLocal?.Address != null)
+                indexLocalFromField = sfLocal.Address;
+        }
+
+        // Remove previously emitted LDA instructions from WriteLdloc/WriteLdc
+        int arrayILOffset = arrayInstr.Offset;
+        if (_blockCountAtILOffset.TryGetValue(arrayILOffset, out int blockCountAtArray))
+        {
+            int instrToRemove = GetBufferedBlockCount() - blockCountAtArray;
+            if (instrToRemove > 0)
+            {
+                RemoveLastInstructions(instrToRemove);
+                _savedRuntimeToTemp = false;
+            }
+        }
+
+        // Set up X register with the index for AbsoluteX addressing
+        if (constantIndex != null)
+        {
+            if (constantIndex.Value == 0)
+            {
+                // Constant index 0: use direct Absolute addressing
+                _pendingByteArrayElement = new PendingByteArrayElement(arrayBase, arrayBase);
+            }
+            else
+            {
+                Emit(Opcode.LDX, AddressMode.Immediate, (byte)constantIndex.Value);
+                _pendingByteArrayElement = new PendingByteArrayElement(arrayBase, ConstantElementAddress: null);
+            }
+        }
+        else
+        {
+            Local? indexLocal = indexLocalIdx != null ? Locals[indexLocalIdx.Value] : null;
+            if (indexLocal?.Address is not null)
+                Emit(Opcode.LDX, AddressMode.Absolute, (ushort)indexLocal.Address);
+            else if (indexLocalFromField != null)
+                Emit(Opcode.LDX, AddressMode.Absolute, (ushort)indexLocalFromField);
+            else
+                throw new TranspileException("Compound byte array assignment requires the index to be a constant or local variable.", MethodName);
+
+            _pendingByteArrayElement = new PendingByteArrayElement(arrayBase, ConstantElementAddress: null);
+        }
+
+        // ldelema pushes a managed reference onto the eval stack
+        Stack.Push(0);
+        _runtimeValueInA = false;
+        _lastLoadedLocalIndex = null;
+    }
+
+    /// <summary>
+    /// Handles ldind.u1: load a byte through a pointer/reference.
+    /// Used after ldelema System.Byte to read the current array element value.
+    /// </summary>
+    void HandleLdindU1()
+    {
+        if (_pendingByteArrayElement is not { } pending)
+            throw new TranspileException("ldind.u1 without preceding ldelema System.Byte is not supported.", MethodName);
+
+        // Pop the address reference from the eval stack
+        if (Stack.Count > 0) Stack.Pop();
+
+        if (pending.ConstantElementAddress is { } addr)
+            Emit(Opcode.LDA, AddressMode.Absolute, addr);
+        else
+            Emit(Opcode.LDA, AddressMode.AbsoluteX, pending.ArrayBase);
+
+        // Push the loaded byte value
+        Stack.Push(0);
+        _runtimeValueInA = true;
+        _immediateInA = null;
+        _lastLoadedLocalIndex = null;
+    }
+
+    /// <summary>
+    /// Handles stind.i1: store a byte through a pointer/reference.
+    /// Used after ldelema System.Byte to write back the modified array element.
+    /// </summary>
+    void HandleStindI1()
+    {
+        if (_pendingByteArrayElement is not { } pending)
+            throw new TranspileException("stind.i1 without preceding ldelema System.Byte is not supported.", MethodName);
+
+        // Pop the value and address reference from the eval stack
+        if (Stack.Count > 0) Stack.Pop(); // value
+        if (Stack.Count > 0) Stack.Pop(); // address
+
+        if (pending.ConstantElementAddress is { } addr)
+            Emit(Opcode.STA, AddressMode.Absolute, addr);
+        else
+            Emit(Opcode.STA, AddressMode.AbsoluteX, pending.ArrayBase);
+
+        _pendingByteArrayElement = null;
+        _runtimeValueInA = false;
     }
 
     bool IsConsumedByAdd(int idx)
@@ -519,6 +663,7 @@ partial class IL2NESWriter
                 case ILOpCode.And: case ILOpCode.Or: case ILOpCode.Xor:
                 case ILOpCode.Shr: case ILOpCode.Shr_un: case ILOpCode.Shl:
                 case ILOpCode.Rem: case ILOpCode.Rem_un:
+                case ILOpCode.Ldelem_u1: // nested ldelem: pops array+index, pushes result
                     pop = 2; push = 1; break;
                 case ILOpCode.Conv_u1: case ILOpCode.Conv_u2: case ILOpCode.Conv_u4:
                 case ILOpCode.Conv_i1: case ILOpCode.Conv_i2: case ILOpCode.Conv_i4:

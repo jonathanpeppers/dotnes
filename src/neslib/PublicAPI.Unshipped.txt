@@ -1,13 +1,17 @@
 #nullable enable
 NES.MASK
-const NES.MASK.BG = 8 -> byte
-const NES.MASK.EDGE_BG = 2 -> byte
-const NES.MASK.EDGE_SPR = 4 -> byte
-const NES.MASK.MONO = 1 -> byte
-const NES.MASK.SPR = 16 -> byte
-const NES.MASK.TINT_BLUE = 128 -> byte
-const NES.MASK.TINT_GREEN = 64 -> byte
-const NES.MASK.TINT_RED = 32 -> byte
+NES.OAM
+NES.MASK.BG = 8 -> NES.MASK
+NES.MASK.EDGE_BG = 2 -> NES.MASK
+NES.MASK.EDGE_SPR = 4 -> NES.MASK
+NES.MASK.MONO = 1 -> NES.MASK
+NES.MASK.SPR = 16 -> NES.MASK
+NES.MASK.TINT_BLUE = 128 -> NES.MASK
+NES.MASK.TINT_GREEN = 64 -> NES.MASK
+NES.MASK.TINT_RED = 32 -> NES.MASK
+const NES.OAM.BEHIND = 32 -> byte
+const NES.OAM.FLIP_H = 64 -> byte
+const NES.OAM.FLIP_V = 128 -> byte
 const NES.NESLib.APU_NOISE_CTRL = 16396 -> ushort
 const NES.NESLib.APU_NOISE_LENGTH = 16399 -> ushort
 const NES.NESLib.APU_NOISE_PERIOD = 16398 -> ushort
@@ -35,10 +39,11 @@ const NES.NESLib.MMC1_CHR_BANK0 = 40960 -> ushort
 const NES.NESLib.MMC1_CHR_BANK1 = 49152 -> ushort
 const NES.NESLib.MMC1_CHR_4K = 16 -> byte
 const NES.NESLib.MMC1_CONTROL = 32768 -> ushort
-const NES.NESLib.MMC1_MIRROR_HORIZONTAL = 3 -> byte
-const NES.NESLib.MMC1_MIRROR_ONE_LOWER = 0 -> byte
-const NES.NESLib.MMC1_MIRROR_ONE_UPPER = 1 -> byte
-const NES.NESLib.MMC1_MIRROR_VERTICAL = 2 -> byte
+NES.MMC1Mirror
+NES.MMC1Mirror.Horizontal = 3 -> NES.MMC1Mirror
+NES.MMC1Mirror.OneLower = 0 -> NES.MMC1Mirror
+NES.MMC1Mirror.OneUpper = 1 -> NES.MMC1Mirror
+NES.MMC1Mirror.Vertical = 2 -> NES.MMC1Mirror
 const NES.NESLib.MMC1_PRG_BANK = 57344 -> ushort
 const NES.NESLib.MMC1_PRG_FIX_LAST = 12 -> byte
 const NES.NESLib.NT_UPD_EOF = 255 -> byte
@@ -62,24 +67,25 @@ static NES.NESLib.cli() -> void
 static NES.NESLib.cnrom_set_chr_bank(byte bank) -> void
 static NES.NESLib.famitone_init(string! musicDataLabel) -> void
 static NES.NESLib.irq_set_callback(delegate*<void> callback) -> void
-static NES.NESLib.memfill(object! dst, byte value, uint len) -> void
+static NES.NESLib.memfill(ushort addr, byte value, uint len) -> void
 static NES.NESLib.mmc1_set_chr_bank(byte bank0, byte bank1) -> void
 static NES.NESLib.mmc1_set_mirroring(byte mode) -> void
 static NES.NESLib.mmc1_set_prg_bank(byte bank) -> void
 static NES.NESLib.mmc1_write(ushort addr, byte value) -> void
-static NES.NESLib.set_chr_mode(byte reg, byte bank) -> void
-static NES.NESLib.music_pause(byte pause) -> void
+static NES.NESLib.mmc3_set_chr_bank(byte reg, byte bank) -> void
+static NES.NESLib.music_pause(bool pause) -> void
 static NES.NESLib.music_play(byte song) -> void
 static NES.NESLib.music_stop() -> void
 static NES.NESLib.nmi_set_callback(delegate*<void> callback) -> void
 static NES.NESLib.oam_clear_fast() -> void
 static NES.NESLib.oam_meta_spr_clip(int x, byte y, byte[]! metasprite) -> void
 static NES.NESLib.oam_meta_spr_pal(byte x, byte y, byte pal, byte[]! data) -> void
-static NES.NESLib.oam_off -> byte
+static NES.NESLib.oam_off.get -> byte
+static NES.NESLib.oam_off.set -> void
 static NES.NESLib.pad_state(byte pad) -> NES.PAD
 static NES.NESLib.pad_trigger(byte pad) -> NES.PAD
 static NES.NESLib.peek(ushort addr) -> byte
-static NES.NESLib.play_music() -> void
+static NES.NESLib.music_tick() -> void
 static NES.NESLib.poke(ushort addr, byte value) -> void
 static NES.NESLib.sample_play(byte sample) -> void
 static NES.NESLib.sei() -> void
@@ -89,6 +95,7 @@ static NES.NESLib.set_rand(byte seed) -> void
 static NES.NESLib.set_vram_update(ushort addr) -> void
 static NES.NESLib.sfx_init(string! soundDataLabel) -> void
 static NES.NESLib.sfx_play(byte sound, byte channel) -> void
+static NES.NESLib.srand(ushort seed) -> void
 static NES.NESLib.start_music(byte[]! data) -> void
 static NES.NESLib.vram_read(byte[]! dst, uint size) -> void
 static NES.NESLib.vram_unlz4(byte[]! input, byte[]! output, uint uncompressedSize) -> void
