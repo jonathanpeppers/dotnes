@@ -63,9 +63,9 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        os: [windows-latest, macos-latest]
-        # Ubuntu excluded: Mesen's native core (MesenCore.so) crashes with
-        # std::bad_cast on headless runners even in --testrunner mode.
+        os: [windows-latest]
+        # macOS excluded: Mesen hangs in --testrunner mode (native core issue)
+        # Ubuntu excluded: MesenCore.so crashes with std::bad_cast headless
     runs-on: ${{ matrix.os }}
     steps:
     - uses: actions/checkout@v6
