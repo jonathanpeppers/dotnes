@@ -1,6 +1,6 @@
 <Project>
   <PropertyGroup>
-    <Version>0.3.0</Version>
+    <Version>0.3.1</Version>
     <PackageVersion>$(Version)-beta</PackageVersion>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <DownloadFileRetries>3</DownloadFileRetries>
