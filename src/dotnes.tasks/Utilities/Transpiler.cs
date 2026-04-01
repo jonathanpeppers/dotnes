@@ -171,13 +171,20 @@ partial class Transpiler : IDisposable
             writer.Write((byte)0);
 
         // Write vectors: NMI, RESET, IRQ (little-endian) at end of last PRG bank
-        // Resolve vector addresses from program labels for correct layout
+        // Resolve vector addresses from program labels (always present as built-in blocks)
         var labels = program.GetLabels();
-        ushort nmi_data = labels.TryGetValue(NESConstants._nmi, out var nmiAddr) ? nmiAddr : (ushort)0x80BC;
+        if (!labels.TryGetValue(NESConstants._nmi, out var nmiAddr))
+            throw new InvalidOperationException($"Required label '{NESConstants._nmi}' not found in resolved program labels.");
+        ushort nmi_data = nmiAddr;
         ushort reset_data = NESConstants.PrgRomStart;
         // Use irq_with_callback handler when irq_set_callback is used, otherwise default _irq handler
-        ushort irq_data = labels.TryGetValue(NESConstants.irq_with_callback, out var irqCbAddr) ? irqCbAddr
-            : labels.TryGetValue(NESConstants._irq, out var irqAddr) ? irqAddr : (ushort)0x8202;
+        if (!labels.TryGetValue(NESConstants.irq_with_callback, out var irqCbAddr))
+            irqCbAddr = 0;
+        if (!labels.TryGetValue(NESConstants._irq, out var irqAddr))
+            irqAddr = 0;
+        ushort irq_data = irqCbAddr != 0 ? irqCbAddr
+            : irqAddr != 0 ? irqAddr
+            : throw new InvalidOperationException($"Required label '{NESConstants._irq}' not found in resolved program labels.");
         writer.Write((byte)(nmi_data & 0xFF));
         writer.Write((byte)(nmi_data >> 8));
         writer.Write((byte)(reset_data & 0xFF));
@@ -509,15 +516,12 @@ partial class Transpiler : IDisposable
             }
         }
 
-        // totalSize is used for donelib/copydata - points past the data tables
-        // PRG_LAST already accounts for the standard final built-ins size (donelib, copydata, popax,
-        // incsp2, popa, pusha, pushax, zerobss with 0 locals). When optional methods change the
-        // final built-ins composition, we must add the size delta.
-        const ushort PRG_LAST = 0x85AE;
-        int standardSize = Program6502.CalculateFinalBuiltInsSize(0, null);
-        int actualSize = Program6502.CalculateFinalBuiltInsSize(locals, UsedMethods);
-        int finalBuiltInsOffset = actualSize - standardSize;
-        ushort totalSize = (ushort)(PRG_LAST.GetAddressAfterMain(sizeOfMain) + finalBuiltInsOffset + musicSubroutinesSize + userMethodsTotalSize + externBlocksTotalSize + byteArrayTableSize + stringTableSize);
+        // totalSize is used for donelib/copydata - points past the data tables.
+        // All sizes are computed from actual block sizes so the layout adjusts automatically
+        // if subroutines change.
+        int preMainSize = Program6502.GetBuiltInSize();
+        int finalBuiltInsSize = Program6502.CalculateFinalBuiltInsSize(locals, UsedMethods);
+        ushort totalSize = (ushort)(NESConstants.PrgRomStart + preMainSize + sizeOfMain + finalBuiltInsSize + musicSubroutinesSize + userMethodsTotalSize + externBlocksTotalSize + byteArrayTableSize + stringTableSize);
         
         program.AddFinalBuiltIns(totalSize, locals, UsedMethods);
 
