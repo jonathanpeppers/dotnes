@@ -257,7 +257,43 @@ public class Program6502
             }
         }
 
+        PatchPalBrightTables();
+
         _addressesValid = true;
+    }
+
+    /// <summary>
+    /// Computes palBrightTableL/H data from the resolved addresses of palBrightTable0-8.
+    /// This replaces the previously hardcoded address bytes, making the palette table
+    /// references correct regardless of block layout changes.
+    /// </summary>
+    void PatchPalBrightTables()
+    {
+        Block? tableL = null, tableH = null;
+        foreach (var block in _blocks)
+        {
+            if (block.Label == nameof(NESLib.palBrightTableL)) tableL = block;
+            else if (block.Label == nameof(NESLib.palBrightTableH)) tableH = block;
+        }
+
+        if (tableL?.RawData == null || tableH?.RawData == null)
+            return;
+
+        string[] tableNames =
+        [
+            nameof(NESLib.palBrightTable0), nameof(NESLib.palBrightTable1), nameof(NESLib.palBrightTable2),
+            nameof(NESLib.palBrightTable3), nameof(NESLib.palBrightTable4), nameof(NESLib.palBrightTable5),
+            nameof(NESLib.palBrightTable6), nameof(NESLib.palBrightTable7), nameof(NESLib.palBrightTable8)
+        ];
+
+        for (int i = 0; i < tableNames.Length; i++)
+        {
+            if (_labels.TryResolve(tableNames[i], out ushort addr))
+            {
+                tableL.RawData[i] = (byte)(addr & 0xFF);
+                tableH.RawData[i] = (byte)(addr >> 8);
+            }
+        }
     }
 
     /// <summary>
@@ -583,17 +619,19 @@ public class Program6502
         program.AddBlock(BuiltInSubroutines.Delay());
 
         // Add palette brightness tables as raw data
-        program.AddRawData(NESLib.palBrightTableL, nameof(NESLib.palBrightTableL));
-        program.AddRawData(NESLib.palBrightTableH, nameof(NESLib.palBrightTableH));
-        program.AddRawData(NESLib.palBrightTable0);
-        program.AddRawData(NESLib.palBrightTable1);
-        program.AddRawData(NESLib.palBrightTable2);
-        program.AddRawData(NESLib.palBrightTable3);
-        program.AddRawData(NESLib.palBrightTable4);
-        program.AddRawData(NESLib.palBrightTable5);
-        program.AddRawData(NESLib.palBrightTable6);
-        program.AddRawData(NESLib.palBrightTable7);
-        program.AddRawData(NESLib.palBrightTable8);
+        // palBrightTableL/H use placeholder arrays; actual values are computed
+        // from resolved palBrightTable0-8 addresses in PatchPalBrightTables()
+        program.AddRawData(new byte[9], nameof(NESLib.palBrightTableL));
+        program.AddRawData(new byte[9], nameof(NESLib.palBrightTableH));
+        program.AddRawData(NESLib.palBrightTable0, nameof(NESLib.palBrightTable0));
+        program.AddRawData(NESLib.palBrightTable1, nameof(NESLib.palBrightTable1));
+        program.AddRawData(NESLib.palBrightTable2, nameof(NESLib.palBrightTable2));
+        program.AddRawData(NESLib.palBrightTable3, nameof(NESLib.palBrightTable3));
+        program.AddRawData(NESLib.palBrightTable4, nameof(NESLib.palBrightTable4));
+        program.AddRawData(NESLib.palBrightTable5, nameof(NESLib.palBrightTable5));
+        program.AddRawData(NESLib.palBrightTable6, nameof(NESLib.palBrightTable6));
+        program.AddRawData(NESLib.palBrightTable7, nameof(NESLib.palBrightTable7));
+        program.AddRawData(NESLib.palBrightTable8, nameof(NESLib.palBrightTable8));
 
         program.AddBlock(BuiltInSubroutines.Initlib());
 
