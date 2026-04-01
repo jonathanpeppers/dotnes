@@ -35,7 +35,7 @@
 
   <!-- Mesen config directory per platform (used to create settings.json on first run) -->
   <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('windows'))">
-    <_MesenConfigDir>$([System.Environment]::GetFolderPath(System.Environment.SpecialFolder.MyDocuments))\Mesen2</_MesenConfigDir>
+    <_MesenConfigDir>$([System.Environment]::GetEnvironmentVariable('USERPROFILE'))\Documents\Mesen2</_MesenConfigDir>
   </PropertyGroup>
   <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('osx'))">
     <_MesenConfigDir>$([System.Environment]::GetEnvironmentVariable('HOME'))/Library/Application Support/Mesen2</_MesenConfigDir>
