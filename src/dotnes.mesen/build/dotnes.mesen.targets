@@ -33,6 +33,20 @@
     <_MesenExe>$(_MesenDir)Mesen.app/Contents/MacOS/Mesen</_MesenExe>
   </PropertyGroup>
 
+  <!-- Mesen config directory per platform (used to create settings.json on first run) -->
+  <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('windows'))">
+    <_MesenConfigDir>$([System.Environment]::GetFolderPath(System.Environment.SpecialFolder.MyDocuments))\Mesen2</_MesenConfigDir>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('osx'))">
+    <_MesenConfigDir>$([System.Environment]::GetEnvironmentVariable('HOME'))/Library/Application Support/Mesen2</_MesenConfigDir>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('linux'))">
+    <_MesenConfigDir>$([System.Environment]::GetEnvironmentVariable('HOME'))/.config/Mesen2</_MesenConfigDir>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(_MesenConfigDir)' != ''">
+    <_MesenSettingsJson>$(_MesenConfigDir)/settings.json</_MesenSettingsJson>
+  </PropertyGroup>
+
   <!-- Set RunCommand so 'dotnet run' launches the ROM in Mesen -->
   <PropertyGroup Condition="'$(_MesenExe)' != ''">
     <RunCommand>$(_MesenExe)</RunCommand>
@@ -65,5 +79,15 @@
   <Target Name="_MesenUnsupportedMessage" BeforeTargets="Build"
       Condition="'$(_MesenZipName)' == ''">
     <Warning Text="Mesen is not available for this platform/architecture." />
+  </Target>
+
+  <!-- Mesen checks for settings.json before checking - -testrunner.
+       On first run without a config file, it launches the setup wizard (GUI).
+       Create a minimal config so it skips the wizard. -->
+  <Target Name="_MesenEnsureConfigured" BeforeTargets="Build"
+      Condition="'$(_MesenSettingsJson)' != '' And !Exists('$(_MesenSettingsJson)') And '$(PackageId)' != 'dotnes.mesen'">
+    <MakeDir Directories="$(_MesenConfigDir)" />
+    <WriteLinesToFile File="$(_MesenSettingsJson)" Lines="{}" Overwrite="true" />
+    <Message Importance="high" Text="Created Mesen config at $(_MesenSettingsJson) to skip first-run wizard." />
   </Target>
 </Project>
