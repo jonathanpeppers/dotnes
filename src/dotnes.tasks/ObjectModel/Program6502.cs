@@ -279,6 +279,11 @@ public class Program6502
         if (tableL?.RawData == null || tableH?.RawData == null)
             return;
 
+        const int expectedLength = 9;
+        if (tableL.RawData.Length < expectedLength || tableH.RawData.Length < expectedLength)
+            throw new InvalidOperationException(
+                $"palBrightTableL/H RawData must have at least {expectedLength} elements, got L={tableL.RawData.Length}, H={tableH.RawData.Length}.");
+
         string[] tableNames =
         [
             nameof(NESLib.palBrightTable0), nameof(NESLib.palBrightTable1), nameof(NESLib.palBrightTable2),
