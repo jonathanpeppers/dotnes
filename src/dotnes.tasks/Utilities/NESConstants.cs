@@ -92,20 +92,9 @@ internal static class NESConstants
     public const ushort MUSIC_TRI_PERIOD_LO = 0x0307; // 1 byte: triangle period low
     public const ushort MUSIC_TRI_PERIOD_HI = 0x0308; // 1 byte: triangle period high
 
-    // Built-in subroutine addresses (resolved after linking)
-    public const ushort skipNtsc = 0x81F9;
-    public const ushort pal_col = 0x823E;
-    public const ushort pal_spr_bright = 0x825D;
-    public const ushort pal_bg_bright = 0x826B;
-    public const ushort vram_adr = 0x83D4;
-    public const ushort vram_write = 0x834F;
-    public const ushort ppu_on_all = 0x8289;
-    public const ushort ppu_wait_nmi = 0x82F0;
-    public const ushort updName = 0x8385;
+    // Palette brightness table addresses (special handling - see #384)
     public const ushort palBrightTableL = 0x8422;
     public const ushort palBrightTableH = 0x842B;
-    public const ushort popax = 0x8539;
-    public const ushort popa = 0x854F;
 
     #region Label name constants (for nameof() usage in code generation)
     // cc65 runtime - use nameof(pusha) etc.
@@ -115,6 +104,8 @@ internal static class NESConstants
     public const string incsp2 = nameof(incsp2);
     public const string addysp = nameof(addysp);
     public const string decsp4 = nameof(decsp4);
+    public const string popax = nameof(popax);
+    public const string popa = nameof(popa);
     
     // NMI/Update labels
     public const string updPal = nameof(updPal);
@@ -122,6 +113,8 @@ internal static class NESConstants
     public const string doUpdate = nameof(doUpdate);
     public const string skipUpd = nameof(skipUpd);
     public const string skipAll = nameof(skipAll);
+    public const string updName = nameof(updName);
+    public const string skipNtsc = nameof(skipNtsc);
     
     // Initialization labels
     public const string clearRAM = nameof(clearRAM);
