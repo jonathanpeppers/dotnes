@@ -33,6 +33,24 @@
     <_MesenExe>$(_MesenDir)Mesen.app/Contents/MacOS/Mesen</_MesenExe>
   </PropertyGroup>
 
+  <!-- Mesen config directory per platform (used to create settings.json on first run) -->
+  <PropertyGroup>
+    <_MesenUserProfile>$([System.Environment]::GetEnvironmentVariable('USERPROFILE'))</_MesenUserProfile>
+    <_MesenHome>$([System.Environment]::GetEnvironmentVariable('HOME'))</_MesenHome>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('windows')) And '$(_MesenUserProfile)' != ''">
+    <_MesenConfigDir>$(_MesenUserProfile)\Documents\Mesen2</_MesenConfigDir>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('osx')) And '$(_MesenHome)' != ''">
+    <_MesenConfigDir>$(_MesenHome)/Library/Application Support/Mesen2</_MesenConfigDir>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('linux')) And '$(_MesenHome)' != ''">
+    <_MesenConfigDir>$(_MesenHome)/.config/Mesen2</_MesenConfigDir>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(_MesenConfigDir)' != ''">
+    <_MesenSettingsJson>$([System.IO.Path]::Combine('$(_MesenConfigDir)', 'settings.json'))</_MesenSettingsJson>
+  </PropertyGroup>
+
   <!-- Set RunCommand so 'dotnet run' launches the ROM in Mesen -->
   <PropertyGroup Condition="'$(_MesenExe)' != ''">
     <RunCommand>$(_MesenExe)</RunCommand>
@@ -65,5 +83,19 @@
   <Target Name="_MesenUnsupportedMessage" BeforeTargets="Build"
       Condition="'$(_MesenZipName)' == ''">
     <Warning Text="Mesen is not available for this platform/architecture." />
+  </Target>
+
+  <!-- Mesen checks for settings.json before checking - -testrunner.
+       On first run without a config file, it launches the setup wizard (GUI).
+       Create a minimal config so it skips the wizard. -->
+  <Target Name="_MesenEnsureConfigured" BeforeTargets="Build"
+      Condition="'$(_MesenSettingsJson)' != '' And '$(PackageId)' != 'dotnes.mesen'">
+    <MakeDir Directories="$(_MesenConfigDir)" />
+    <WriteLinesToFile
+        Condition="!Exists('$(_MesenSettingsJson)')"
+        File="$(_MesenSettingsJson)"
+        Lines="{}"
+        Overwrite="false" />
+    <Message Importance="high" Condition="Exists('$(_MesenSettingsJson)')" Text="Ensured Mesen config exists at $(_MesenSettingsJson) to skip first-run wizard." />
   </Target>
 </Project>
