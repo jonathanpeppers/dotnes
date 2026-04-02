@@ -14,6 +14,30 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v6
+    - name: check for junk files
+      shell: bash
+      run: |
+        found=0
+
+        # Detect 0-byte files (excluding .gitkeep and build output dirs)
+        while IFS= read -r f; do
+          echo "::error file=$f::Zero-byte file detected: $f"
+          found=1
+        done < <(find . -not -path './.git/*' -not -path '*/bin/*' -not -path '*/obj/*' \
+          -type f -empty -not -name '.gitkeep')
+
+        # Detect common junk / temp files
+        while IFS= read -r f; do
+          echo "::error file=$f::Junk file detected: $f"
+          found=1
+        done < <(find . -not -path './.git/*' -not -path '*/bin/*' -not -path '*/obj/*' \
+          -type f \( -name '*.tmp' -o -name '*.bak' -o -name '*~' -o -name '*.orig' \
+             -o -name '*.swp' -o -name '*.swo' -o -name '.DS_Store' -o -name 'Thumbs.db' \))
+
+        if [ "$found" -ne 0 ]; then
+          echo "::error::Junk files found in the repository. Please remove them."
+          exit 1
+        fi
     - name: install .NET
       uses: actions/setup-dotnet@v5
       with:
