@@ -178,13 +178,15 @@ partial class Transpiler : IDisposable
         ushort nmi_data = nmiAddr;
         ushort reset_data = NESConstants.PrgRomStart;
         // Use irq_with_callback handler when irq_set_callback is used, otherwise default _irq handler
-        if (!labels.TryGetValue(NESConstants.irq_with_callback, out var irqCbAddr))
-            irqCbAddr = 0;
-        if (!labels.TryGetValue(NESConstants._irq, out var irqAddr))
-            irqAddr = 0;
-        ushort irq_data = irqCbAddr != 0 ? irqCbAddr
-            : irqAddr != 0 ? irqAddr
-            : throw new InvalidOperationException($"Required label '{NESConstants._irq}' not found in resolved program labels.");
+        bool hasIrqCb = labels.TryGetValue(NESConstants.irq_with_callback, out var irqCbAddr);
+        bool hasIrq = labels.TryGetValue(NESConstants._irq, out var irqAddr);
+        ushort irq_data;
+        if (hasIrqCb)
+            irq_data = irqCbAddr;
+        else if (hasIrq)
+            irq_data = irqAddr;
+        else
+            throw new InvalidOperationException($"Required label '{NESConstants._irq}' not found in resolved program labels.");
         writer.Write((byte)(nmi_data & 0xFF));
         writer.Write((byte)(nmi_data >> 8));
         writer.Write((byte)(reset_data & 0xFF));
