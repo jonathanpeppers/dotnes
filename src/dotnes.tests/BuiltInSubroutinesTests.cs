@@ -219,6 +219,37 @@ public class BuiltInSubroutinesTests
             bytes);
     }
 
+    [Fact]
+    public void PalBrightTableLH_ComputedFromResolvedAddresses()
+    {
+        var program = new Program6502 { BaseAddress = 0x8000 };
+        // Use placeholder arrays for L/H (values will be computed)
+        program.AddRawData(new byte[9], nameof(NESLib.palBrightTableL));
+        program.AddRawData(new byte[9], nameof(NESLib.palBrightTableH));
+        program.AddRawData(NESLib.palBrightTable0, nameof(NESLib.palBrightTable0));
+        program.AddRawData(NESLib.palBrightTable1, nameof(NESLib.palBrightTable1));
+        program.AddRawData(NESLib.palBrightTable2, nameof(NESLib.palBrightTable2));
+        program.AddRawData(NESLib.palBrightTable3, nameof(NESLib.palBrightTable3));
+        program.AddRawData(NESLib.palBrightTable4, nameof(NESLib.palBrightTable4));
+        program.AddRawData(NESLib.palBrightTable5, nameof(NESLib.palBrightTable5));
+        program.AddRawData(NESLib.palBrightTable6, nameof(NESLib.palBrightTable6));
+        program.AddRawData(NESLib.palBrightTable7, nameof(NESLib.palBrightTable7));
+        program.AddRawData(NESLib.palBrightTable8, nameof(NESLib.palBrightTable8));
+
+        var bytes = program.ToBytes();
+
+        // palBrightTableL starts at 0x8000, palBrightTableH at 0x8009
+        // palBrightTable0 starts at 0x8012 (after 9+9 = 18 bytes of L/H)
+        // Each table is 16 bytes except palBrightTable8 which is 64 bytes
+        // Expected addresses: 0x8012, 0x8022, 0x8032, 0x8042, 0x8052, 0x8062, 0x8072, 0x8082, 0x8092
+        byte[] expectedL = [0x12, 0x22, 0x32, 0x42, 0x52, 0x62, 0x72, 0x82, 0x92];
+        byte[] expectedH = [0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80];
+
+        // First 9 bytes = palBrightTableL, next 9 bytes = palBrightTableH
+        Assert.Equal(expectedL, bytes[..9]);
+        Assert.Equal(expectedH, bytes[9..18]);
+    }
+
     #endregion
 
     #region PPU Control Subroutines
