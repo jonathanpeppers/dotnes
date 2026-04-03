@@ -118,11 +118,11 @@ public class NESAnalyzer : DiagnosticAnalyzer
     static readonly DiagnosticDescriptor NES011Rule = new(
         NES011,
         "Exception handling is not supported",
-        "try/catch/finally is not supported on the NES",
+        "try/catch is not supported on the NES; only try/finally is allowed (for 'using' statements)",
         Category,
         DiagnosticSeverity.Error,
         isEnabledByDefault: true,
-        description: "The NES 6502 CPU has no exception handling mechanism. Use conditional checks instead.");
+        description: "The NES 6502 CPU has no exception handling mechanism. try/finally is allowed because it lowers to sequential code. try/catch is not supported.");
 
     static readonly DiagnosticDescriptor NES012Rule = new(
         NES012,
@@ -527,7 +527,12 @@ public class NESAnalyzer : DiagnosticAnalyzer
 
     static void AnalyzeTryCatchFinally(SyntaxNodeAnalysisContext context)
     {
-        context.ReportDiagnostic(Diagnostic.Create(NES011Rule, context.Node.GetLocation()));
+        var tryStatement = (TryStatementSyntax)context.Node;
+
+        // try/finally (no catch) is allowed — it lowers to inline code on the NES.
+        // Only report an error if there are catch clauses.
+        if (tryStatement.Catches.Count > 0)
+            context.ReportDiagnostic(Diagnostic.Create(NES011Rule, context.Node.GetLocation()));
     }
 
     static void AnalyzePropertyDeclaration(SyntaxNodeAnalysisContext context)

@@ -10,6 +10,12 @@ using Local = dotnes.LocalVariableManager.Local;
 namespace dotnes;
 
 /// <summary>
+/// Represents a try/finally region parsed from IL method body metadata.
+/// Used by Leave/Leave_s/Endfinally opcode handlers to inline finally blocks.
+/// </summary>
+internal record struct TryFinallyRegion(int TryOffset, int TryLength, int HandlerOffset, int HandlerLength);
+
+/// <summary>
 /// Transpiles .NET IL instructions into 6502 assembly for the NES.
 /// This is the core class containing fields, properties, and the public API surface.
 /// The IL dispatch, code emission, and optimization logic are in partial class files.
@@ -521,6 +527,36 @@ partial class IL2NESWriter : NESWriter
     /// </summary>
     string InstructionLabel(int offset) =>
         MethodName is null ? $"instruction_{offset:X2}" : $"{MethodName}_instruction_{offset:X2}";
+
+    /// <summary>
+    /// Exception regions (try/finally) parsed from the method body.
+    /// Used by Leave/Leave_s/Endfinally opcode handlers.
+    /// </summary>
+    internal TryFinallyRegion[]? TryFinallyRegions { get; set; }
+
+    /// <summary>
+    /// Finds the try/finally region whose try block contains the given IL offset.
+    /// </summary>
+    TryFinallyRegion? FindEnclosingTryRegion(int offset)
+    {
+        if (TryFinallyRegions == null) return null;
+        foreach (var r in TryFinallyRegions)
+            if (offset >= r.TryOffset && offset < r.TryOffset + r.TryLength)
+                return r;
+        return null;
+    }
+
+    /// <summary>
+    /// Finds the try/finally region whose handler (finally) block contains the given IL offset.
+    /// </summary>
+    TryFinallyRegion? FindEnclosingHandlerRegion(int offset)
+    {
+        if (TryFinallyRegions == null) return null;
+        foreach (var r in TryFinallyRegions)
+            if (offset >= r.HandlerOffset && offset < r.HandlerOffset + r.HandlerLength)
+                return r;
+        return null;
+    }
 
     /// <summary>
     /// Merges a string table entry from a user method writer into this writer.

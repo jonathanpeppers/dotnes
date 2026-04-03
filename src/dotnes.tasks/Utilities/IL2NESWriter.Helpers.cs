@@ -133,10 +133,9 @@ partial class IL2NESWriter
         ILOpCode.Throw or ILOpCode.Rethrow =>
             $"The IL opcode '{opCode}' is not supported. " +
             "Exception handling ('throw', 'try/catch') is not supported on the NES.",
-        ILOpCode.Leave or ILOpCode.Leave_s or ILOpCode.Endfinally or ILOpCode.Endfilter =>
+        ILOpCode.Endfilter =>
             $"The IL opcode '{opCode}' is not supported. " +
-            "This is typically caused by 'try/catch/finally' blocks. " +
-            "Exception handling is not supported on the NES.",
+            "Exception filters are not supported on the NES.",
         ILOpCode.Newobj =>
             $"The IL opcode '{opCode}' is not supported. " +
             "This is typically caused by creating an object with 'new' (e.g., 'new List<byte>()'), " +

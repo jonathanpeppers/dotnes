@@ -1094,6 +1094,22 @@ partial class IL2NESWriter
                 // Pattern: Ldloc_N (array), Ldloc_M (index), Ldelem_u1
                 HandleLdelemU1();
                 break;
+            case ILOpCode.Endfinally:
+                {
+                    // End of a finally block — jump to the instruction after the handler,
+                    // or fall through if it's already the next instruction.
+                    var region = FindEnclosingHandlerRegion(instruction.Offset);
+                    if (region != null)
+                    {
+                        int afterHandler = region.Value.HandlerOffset + region.Value.HandlerLength;
+                        int nextOffset = instruction.Offset + 1; // endfinally is 1 byte
+                        if (nextOffset != afterHandler)
+                            EmitJMP(InstructionLabel(afterHandler));
+                    }
+                    Stack.Clear();
+                    _accState = AccumulatorState.Empty;
+                }
+                break;
             default:
                 throw new TranspileException(GetUnsupportedOpcodeMessage(instruction.OpCode), MethodName);
         }
@@ -1149,6 +1165,47 @@ partial class IL2NESWriter
                 {
                     var labelName = InstructionLabel(instruction.Offset + operand + 5);
                     EmitJMP(labelName);
+                }
+                break;
+            case ILOpCode.Leave_s:
+                // Exit try block (short form) — jump to finally handler start,
+                // or fall through if the handler is the next instruction.
+                {
+                    var region = FindEnclosingTryRegion(instruction.Offset);
+                    if (region != null)
+                    {
+                        int nextOffset = instruction.Offset + 2; // leave.s is 2 bytes
+                        if (nextOffset != region.Value.HandlerOffset)
+                            EmitJMP(InstructionLabel(region.Value.HandlerOffset));
+                    }
+                    else
+                    {
+                        // No try/finally context — treat as unconditional branch
+                        operand = (sbyte)(byte)operand;
+                        EmitJMP(InstructionLabel(instruction.Offset + operand + 2));
+                    }
+                    Stack.Clear();
+                    _accState = AccumulatorState.Empty;
+                }
+                break;
+            case ILOpCode.Leave:
+                // Exit try block (long form) — jump to finally handler start,
+                // or fall through if the handler is the next instruction.
+                {
+                    var region = FindEnclosingTryRegion(instruction.Offset);
+                    if (region != null)
+                    {
+                        int nextOffset = instruction.Offset + 5; // leave is 5 bytes
+                        if (nextOffset != region.Value.HandlerOffset)
+                            EmitJMP(InstructionLabel(region.Value.HandlerOffset));
+                    }
+                    else
+                    {
+                        // No try/finally context — treat as unconditional branch
+                        EmitJMP(InstructionLabel(instruction.Offset + operand + 5));
+                    }
+                    Stack.Clear();
+                    _accState = AccumulatorState.Empty;
                 }
                 break;
             case ILOpCode.Newarr:
