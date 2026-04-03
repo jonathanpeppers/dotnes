@@ -13,12 +13,14 @@ namespace dotnes;
 partial class IL2NESWriter
 {
     /// <summary>
-    /// Handles stloc after newarr: allocates a runtime array (byte[] or struct[]).
+    /// Handles stloc after newarr: allocates a runtime array (byte[], ushort[], or struct[]).
     /// For struct arrays, allocates count * structSize bytes and records the struct type.
+    /// For ushort arrays, allocates count * 2 bytes and marks the local as a word array.
     /// </summary>
     void HandleStlocAfterNewarr(int localIdx)
     {
         bool isStructArray = _pendingArrayType != null && StructLayouts.ContainsKey(_pendingArrayType);
+        bool isUshortArray = _pendingArrayType is "UInt16";
         if (isStructArray)
         {
             int count = _pendingStructArrayCount;
@@ -31,6 +33,17 @@ partial class IL2NESWriter
             Locals[localIdx] = new Local(count, arrayAddr, ArraySize: totalBytes, StructArrayType: _pendingArrayType);
             _pendingStructArrayCount = 0;
             _pendingStructArrayBase = null;
+        }
+        else if (isUshortArray)
+        {
+            int count = _pendingUshortArrayCount;
+            int totalBytes = count * 2;
+            ushort arrayAddr = _pendingUshortArrayBase ?? (ushort)(local + LocalCount);
+            if (_pendingUshortArrayBase == null)
+                LocalCount += totalBytes;
+            Locals[localIdx] = new Local(count, arrayAddr, ArraySize: totalBytes, IsWord: true);
+            _pendingUshortArrayCount = 0;
+            _pendingUshortArrayBase = null;
         }
         else
         {
