@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using System.Reflection.Metadata;
 using dotnes.ObjectModel;
 using static NES.NESLib;
@@ -1763,5 +1764,103 @@ partial class IL2NESWriter
         _lastLoadedLocalIndex = null;
         _runtimeValueInA = false;
         _savedRuntimeToTemp = false;
+    }
+
+    /// <summary>
+    /// Handles meta_spr_2x2 / meta_spr_2x2_flip transpiler intrinsics.
+    /// Reads 5 constant arguments from the IL stack, constructs the 17-byte metasprite
+    /// array, and registers it as ROM data (same as Ldtoken handler).
+    /// </summary>
+    void HandleMetaSpr2x2(bool flip)
+    {
+        // Pop 5 constants from Stack (reverse order): attr, bottomRight, topRight, bottomLeft, topLeft
+        int attr = Stack.Count > 0 ? Stack.Pop() : 0;
+        int bottomRight = Stack.Count > 0 ? Stack.Pop() : 0;
+        int topRight = Stack.Count > 0 ? Stack.Pop() : 0;
+        int bottomLeft = Stack.Count > 0 ? Stack.Pop() : 0;
+        int topLeft = Stack.Count > 0 ? Stack.Pop() : 0;
+
+        if (flip)
+            attr |= 0x40; // Set horizontal flip bit
+
+        // Remove previously emitted LDA instructions for the 5 arguments
+        // Scan back through IL instructions to find the first ldc that pushed our arguments
+        if (Instructions != null)
+        {
+            int argsToFind = 5;
+            int firstArgILOffset = -1;
+            for (int scan = Index - 1; scan >= 0 && argsToFind > 0; scan--)
+            {
+                if (GetLdcValue(Instructions[scan]) != null)
+                {
+                    firstArgILOffset = Instructions[scan].Offset;
+                    argsToFind--;
+                }
+            }
+
+            if (firstArgILOffset >= 0 && _blockCountAtILOffset.TryGetValue(firstArgILOffset, out int blockCount))
+            {
+                int instrToRemove = GetBufferedBlockCount() - blockCount;
+                if (instrToRemove > 0)
+                    RemoveLastInstructions(instrToRemove);
+            }
+        }
+
+        // Construct the 17-byte metasprite array
+        byte[] data;
+        if (flip)
+        {
+            // Flipped: swap L/R columns (topLeft→x=8, topRight→x=0)
+            data = new byte[]
+            {
+                8, 0, (byte)topLeft, (byte)attr,
+                8, 8, (byte)bottomLeft, (byte)attr,
+                0, 0, (byte)topRight, (byte)attr,
+                0, 8, (byte)bottomRight, (byte)attr,
+                128
+            };
+        }
+        else
+        {
+            data = new byte[]
+            {
+                0, 0, (byte)topLeft, (byte)attr,
+                0, 8, (byte)bottomLeft, (byte)attr,
+                8, 0, (byte)topRight, (byte)attr,
+                8, 8, (byte)bottomRight, (byte)attr,
+                128
+            };
+        }
+
+        // Register as byte array data (same lifecycle as Ldtoken handler)
+        string byteArrayLabel = $"bytearray_{_byteArrayLabelIndex}";
+        _byteArrayLabelIndex++;
+        _byteArrayAddressEmitted = false;
+
+        // If next instruction is a Call that consumes this array, emit address now
+        if (Instructions is not null && Index + 1 < Instructions.Length
+            && Instructions[Index + 1].OpCode == ILOpCode.Call)
+        {
+            var nextCallName = Instructions[Index + 1].String;
+            bool nextCallConsumesArray = nextCallName != null
+                && _reflectionCache.GetNumberOfArguments(nextCallName) > 0;
+            if (nextCallConsumesArray)
+            {
+                EmitWithLabel(Opcode.LDA, AddressMode.Immediate_LowByte, byteArrayLabel);
+                EmitWithLabel(Opcode.LDX, AddressMode.Immediate_HighByte, byteArrayLabel);
+                _byteArrayAddressEmitted = true;
+            }
+        }
+
+        _byteArrays.Add(data.ToImmutableArray());
+
+        // Set state for subsequent Stloc to capture as byte array label
+        _lastByteArrayLabel = byteArrayLabel;
+        _lastByteArraySize = data.Length;
+        Stack.Push(-(_byteArrayLabelIndex)); // Negative marker (same as Ldtoken)
+        _pendingByteArrayFromIntrinsic = true;
+
+        _immediateInA = null;
+        _runtimeValueInA = false;
     }
 }

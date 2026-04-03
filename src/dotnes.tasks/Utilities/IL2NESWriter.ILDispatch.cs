@@ -152,11 +152,12 @@ partial class IL2NESWriter
                     Locals[0] = new Local(Stack.Pop(), Locals[0].Address, IsWord: Locals[0].IsWord);
                     _pendingIncDecLocal = null;
                 }
-                else if (previous == ILOpCode.Ldtoken)
+                else if (previous == ILOpCode.Ldtoken || _pendingByteArrayFromIntrinsic)
                 {
                     // Capture label for byte array reference
                     Locals[0] = new Local(_lastByteArraySize, LabelName: _lastByteArrayLabel);
                     _lastByteArrayLabel = null;
+                    _pendingByteArrayFromIntrinsic = false;
                     _stloc0IsLdtokenPath = true;
                     Stack.Pop(); // Discard marker
                 }
@@ -177,10 +178,11 @@ partial class IL2NESWriter
                     Locals[1] = new Local(Stack.Pop(), Locals[1].Address, IsWord: Locals[1].IsWord);
                     _pendingIncDecLocal = null;
                 }
-                else if (previous == ILOpCode.Ldtoken)
+                else if (previous == ILOpCode.Ldtoken || _pendingByteArrayFromIntrinsic)
                 {
                     Locals[1] = new Local(_lastByteArraySize, LabelName: _lastByteArrayLabel);
                     _lastByteArrayLabel = null;
+                    _pendingByteArrayFromIntrinsic = false;
                     Stack.Pop();
                 }
                 else if (previous == ILOpCode.Newarr)
@@ -200,10 +202,11 @@ partial class IL2NESWriter
                     Locals[2] = new Local(Stack.Pop(), Locals[2].Address, IsWord: Locals[2].IsWord);
                     _pendingIncDecLocal = null;
                 }
-                else if (previous == ILOpCode.Ldtoken)
+                else if (previous == ILOpCode.Ldtoken || _pendingByteArrayFromIntrinsic)
                 {
                     Locals[2] = new Local(_lastByteArraySize, LabelName: _lastByteArrayLabel);
                     _lastByteArrayLabel = null;
+                    _pendingByteArrayFromIntrinsic = false;
                     Stack.Pop();
                 }
                 else if (previous == ILOpCode.Newarr)
@@ -223,10 +226,11 @@ partial class IL2NESWriter
                     Locals[3] = new Local(Stack.Pop(), Locals[3].Address, IsWord: Locals[3].IsWord);
                     _pendingIncDecLocal = null;
                 }
-                else if (previous == ILOpCode.Ldtoken)
+                else if (previous == ILOpCode.Ldtoken || _pendingByteArrayFromIntrinsic)
                 {
                     Locals[3] = new Local(_lastByteArraySize, LabelName: _lastByteArrayLabel);
                     _lastByteArrayLabel = null;
+                    _pendingByteArrayFromIntrinsic = false;
                     Stack.Pop();
                 }
                 else if (previous == ILOpCode.Newarr)
@@ -1200,11 +1204,12 @@ partial class IL2NESWriter
                     {
                         HandleStlocAfterNewarr(localIdx);
                     }
-                    else if (previous == ILOpCode.Ldtoken)
+                    else if (previous == ILOpCode.Ldtoken || _pendingByteArrayFromIntrinsic)
                     {
-                        // Initialized byte array from Ldtoken
+                        // Initialized byte array from Ldtoken or meta_spr_2x2 intrinsic
                         Locals[localIdx] = new Local(_lastByteArraySize, LabelName: _lastByteArrayLabel);
                         _lastByteArrayLabel = null;
+                        _pendingByteArrayFromIntrinsic = false;
                         Stack.Pop();
                     }
                     else
@@ -1943,6 +1948,12 @@ partial class IL2NESWriter
                         break;
                     case nameof(NESLib.oam_meta_spr_pal):
                         EmitOamMetaSprPal();
+                        break;
+                    case nameof(NESLib.meta_spr_2x2):
+                        HandleMetaSpr2x2(flip: false);
+                        break;
+                    case nameof(NESLib.meta_spr_2x2_flip):
+                        HandleMetaSpr2x2(flip: true);
                         break;
                     case nameof(NESLib.set_music_pulse_table):
                     case nameof(NESLib.set_music_triangle_table):
