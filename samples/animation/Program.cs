@@ -1,5 +1,3 @@
-using static NES.NESColor;
-
 /*
 Animation demo - frame-by-frame sprite animation.
 Cycles through metasprite frames using a counter and bit masking

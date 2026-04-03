@@ -1,5 +1,3 @@
-using static NES.NESColor;
-
 /*
 Pong — 2-player game.
 Player 1: controller 1 UP/DOWN.

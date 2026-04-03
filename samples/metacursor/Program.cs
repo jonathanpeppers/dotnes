@@ -1,5 +1,3 @@
-using static NES.NESColor;
-
 /*
 Read from controllers with pad_poll().
 Player 1 and 2 each control a metasprite cursor with the d-pad.

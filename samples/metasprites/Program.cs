@@ -1,5 +1,3 @@
-using static NES.NESColor;
-
 /*
 Metasprites demo - combines several hardware sprites into larger sprites.
 Based on: https://github.com/sehugg/8bitworkshop/blob/master/presets/nes/metasprites.c

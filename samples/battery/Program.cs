@@ -1,5 +1,3 @@
-using static NES.NESColor;
-
 /*
 Demonstrates battery-backed SRAM ($6000-$7FFF).
 A counter is stored in SRAM and survives power cycles.

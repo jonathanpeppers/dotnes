@@ -1,7 +1,6 @@
 // Minimal nested loop test: fill 4 rows of tiles using nested loops + vrambuf_put
 using NES;
 using static NES.NESLib;
-using static NES.NESColor;
 
 // Setup
 setup_sounds();

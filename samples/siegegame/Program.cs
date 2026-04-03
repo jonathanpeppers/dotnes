@@ -1,5 +1,3 @@
-using static NES.NESColor;
-
 /*
 Based on: https://8bitworkshop.com/ (siegegame.c)
 

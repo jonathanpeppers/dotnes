@@ -1,5 +1,3 @@
-using static NES.NESColor;
-
 /*
 Peek-Poke Demo: Direct NES hardware register access.
 The screen scrolls using poke() to write the PPU scroll

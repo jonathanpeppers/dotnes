@@ -1,5 +1,3 @@
-using static NES.NESColor;
-
 // shoot2 — Vertical scrolling shooter
 // Demonstrates: UxROM mapper 2 + CHR RAM, poke() APU sound effects,
 // user-defined functions, structure-of-arrays, collision detection, scoring.

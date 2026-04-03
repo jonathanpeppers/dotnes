@@ -1,5 +1,3 @@
-using static NES.NESColor;
-
 /*
 Port of conio.c from 8bitworkshop.
 Original: https://8bitworkshop.com/ (conio.c)

@@ -1,5 +1,3 @@
-using static NES.NESColor;
-
 /*
 Monochrome Bitmap - UxROM mapper with CHR RAM
 Based on 8bitworkshop monobitmap.c

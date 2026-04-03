@@ -1,5 +1,3 @@
-using static NES.NESColor;
-
 // climber.c port — A platform game with randomly generated stage
 // Uses FamiTone2 library for music and sound effects.
 // Vertical scrolling (horizontal mirroring) with offscreen row updates.

@@ -1,5 +1,3 @@
-using static NES.NESColor;
-
 // Procgen — Procedural maze generation
 // Demonstrates: rand8(), set_rand(), vram_adr(), vram_put(),
 // pad_trigger(), ppu_off(), ppu_on_all()

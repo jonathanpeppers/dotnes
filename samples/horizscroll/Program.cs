@@ -1,5 +1,3 @@
-using static NES.NESColor;
-
 /*
 Horizontal scrolling demo with vrambuf and split.
 Based on: https://github.com/sehugg/8bitworkshop/blob/master/presets/nes/horizscroll.c

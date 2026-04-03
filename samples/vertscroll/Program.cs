@@ -1,5 +1,3 @@
-using static NES.NESColor;
-
 /*
 Vertical scrolling demo.
 Horizontal mirroring (NESMirroring=Horizontal) stacks nametables A and C

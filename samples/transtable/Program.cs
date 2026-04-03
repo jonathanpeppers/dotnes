@@ -1,5 +1,3 @@
-using static NES.NESColor;
-
 // Based on: https://8bitworkshop.com/v3.10.0/?platform=nes&file=transtable.c
 // Demonstrates CHR RAM with tileset data uploaded to PPU at runtime.
 // Instead of using CHR ROM, the tile graphics are stored as a byte array

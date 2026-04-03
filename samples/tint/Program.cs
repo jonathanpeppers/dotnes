@@ -1,5 +1,3 @@
-using static NES.NESColor;
-
 /*
 Demonstrates the PPU's tint and monochrome bits.
 Use the controller to see different combinations.

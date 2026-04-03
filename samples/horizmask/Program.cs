@@ -1,5 +1,3 @@
-using static NES.NESColor;
-
 // Horizontal scrolling with building generation using vertical VRAM writes.
 // Port of 8bitworkshop's horizmask.c sample.
 

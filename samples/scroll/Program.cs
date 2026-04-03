@@ -1,5 +1,3 @@
-using static NES.NESColor;
-
 /*
 Scrolling demo.
 Horizontal mirroring means nametables A and C are stacked vertically.

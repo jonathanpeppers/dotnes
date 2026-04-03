@@ -1,5 +1,3 @@
-using static NES.NESColor;
-
 /*
 Demonstrates pad_trigger() and pad_state() for different input modes.
 pad_trigger() detects newly pressed buttons (edge detection).

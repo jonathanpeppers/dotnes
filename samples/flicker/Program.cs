@@ -1,5 +1,3 @@
-using static NES.NESColor;
-
 /*
 Flicker demo - if you have more objects than will fit into
 the 64 hardware sprites, you can omit some sprites each frame.

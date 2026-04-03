@@ -1,5 +1,3 @@
-using static NES.NESColor;
-
 /*
 Split-screen status bar demo.
 We position sprite 0 at the desired scanline, and when it

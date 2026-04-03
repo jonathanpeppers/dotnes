@@ -1,5 +1,3 @@
-using static NES.NESColor;
-
 /*
 MMC1 (Mapper 1) demo.
 Demonstrates the MMC1 serial shift register API.

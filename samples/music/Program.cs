@@ -1,5 +1,3 @@
-using static NES.NESColor;
-
 //
 // A simple music player.
 // Based on https://github.com/sehugg/8bitworkshop/blob/master/presets/nes/music.c

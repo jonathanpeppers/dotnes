@@ -1,5 +1,4 @@
 using static NES.NESLib;
-using static NES.NESColor;
 
 /// <summary>
 /// Palette setup helpers.

@@ -1,5 +1,3 @@
-using static NES.NESColor;
-
 // fami.c port — Demonstrates FamiTone2 library for music and sound effects
 // Press controller buttons to hear sound effects.
 

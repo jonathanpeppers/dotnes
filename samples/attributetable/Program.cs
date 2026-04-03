@@ -1,5 +1,3 @@
-﻿using static NES.NESColor;
-
 /*
 Based on: https://8bitworkshop.com/v3.10.0/?platform=nes&file=attributes.c
 

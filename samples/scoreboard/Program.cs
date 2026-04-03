@@ -1,5 +1,3 @@
-using static NES.NESColor;
-
 /*
 Scoreboard - press A to increment BCD score.
 Demonstrates vrambuf_put(), pad_trigger(), ppu_wait_nmi().

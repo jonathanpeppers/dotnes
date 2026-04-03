@@ -1,5 +1,3 @@
-using static NES.NESColor;
-
 // APU Test - demonstrates direct APU register manipulation
 // Simplified port from 8bitworkshop aputest.c
 

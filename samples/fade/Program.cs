@@ -1,5 +1,3 @@
-using static NES.NESColor;
-
 /*
 Demonstrates palette brightness fading effects.
 Uses pal_bright(), pal_spr_bright(), and pal_bg_bright()

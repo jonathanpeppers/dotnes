@@ -1,5 +1,3 @@
-using static NES.NESColor;
-
 /*
 Big sprites demo.
 Display 8x16 sprites using the NES PPU's 8x16 sprite mode via oam_size(SpriteSize.Size8x16).

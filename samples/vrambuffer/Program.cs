@@ -1,5 +1,3 @@
-using static NES.NESColor;
-
 // set palette colors
 pal_col(0, DarkBlue);
 pal_col(1, Magenta);

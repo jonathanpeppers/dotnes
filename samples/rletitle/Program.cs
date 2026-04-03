@@ -1,5 +1,3 @@
-using static NES.NESColor;
-
 /*
 Unpacks a RLE-compressed nametable+attribute table into VRAM.
 Also uses the pal_bright() function to fade in the palette.

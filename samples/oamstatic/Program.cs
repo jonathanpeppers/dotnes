@@ -1,5 +1,3 @@
-using static NES.NESColor;
-
 byte[] PALETTE = [
     White,                                     // screen color
 

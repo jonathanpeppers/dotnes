@@ -1,5 +1,3 @@
-using static NES.NESColor;
-
 /*
 Snake — classic snake game.
 D-pad changes direction (edge-triggered).

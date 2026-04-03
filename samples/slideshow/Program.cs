@@ -1,5 +1,3 @@
-using static NES.NESColor;
-
 /*
 Demonstrates CNROM (mapper 3) CHR bank switching.
 Sets the iNES header to mapper 3 with 2 CHR banks (16 KB total).

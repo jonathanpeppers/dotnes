@@ -1,5 +1,3 @@
-using static NES.NESColor;
-
 /*
  * MMC3 Scanline IRQ Demo
  * Port of 8bitworkshop irq.c - demonstrates split-screen scrolling

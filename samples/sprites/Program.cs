@@ -1,5 +1,3 @@
-using static NES.NESColor;
-
 /*
 Sprite demo.
 Animate 32 hardware sprites (reduced from 64 due to zero-page memory constraints).
