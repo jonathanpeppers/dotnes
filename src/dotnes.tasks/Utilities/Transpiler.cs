@@ -400,6 +400,9 @@ partial class Transpiler : IDisposable
             var methodBlock = methodWriter.GetMainBlock(methodName);
             if (methodBlock != null)
             {
+                // Label the epilogue so early 'ret' instructions can JMP here
+                methodBlock.SetNextLabel($"{methodName}_epilogue");
+
                 // Clean up cc65 stack for params, then return
                 // byte[] params take 2 bytes on the cc65 stack, byte params take 1
                 if (paramCount > 0)
