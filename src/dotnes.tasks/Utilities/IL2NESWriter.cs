@@ -584,6 +584,13 @@ partial class IL2NESWriter : NESWriter
     string? _lastByteArrayLabel;
     int _lastByteArraySize;
 
+    /// <summary>
+    /// Set by meta_spr_2x2 / meta_spr_2x2_flip intrinsics to signal the next Stloc
+    /// should treat the result as a byte array label (same as the Ldtoken path).
+    /// Cleared by the Stloc handler after use.
+    /// </summary>
+    bool _pendingByteArrayFromIntrinsic;
+
     public ILInstruction[]? Instructions { get; set; }
 
     public int Index { get; set; }
