@@ -109,37 +109,17 @@ while (true)
     }
 
     // paddle 1 collision (left side)
-    if (ball_x < 24)
+    if (ball_right == 0 && rect_overlap(ball_x, ball_y, 8, 8, 16, p1_y, 8, 24))
     {
-        if (ball_right == 0)
-        {
-            if (ball_y >= p1_y)
-            {
-                byte p1_end = (byte)(p1_y + 24);
-                if (ball_y < p1_end)
-                {
-                    ball_right = 1;
-                    ball_x = 24;
-                }
-            }
-        }
+        ball_right = 1;
+        ball_x = 24;
     }
 
     // paddle 2 collision (right side)
-    if (ball_x > 224)
+    if (ball_right != 0 && rect_overlap(ball_x, ball_y, 8, 8, 232, p2_y, 8, 24))
     {
-        if (ball_right != 0)
-        {
-            if (ball_y >= p2_y)
-            {
-                byte p2_end = (byte)(p2_y + 24);
-                if (ball_y < p2_end)
-                {
-                    ball_right = 0;
-                    ball_x = 224;
-                }
-            }
-        }
+        ball_right = 0;
+        ball_x = 224;
     }
 
     // player 2 scores (ball passed left edge)

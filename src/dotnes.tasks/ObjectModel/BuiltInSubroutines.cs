@@ -678,6 +678,139 @@ internal static class BuiltInSubroutines
     }
 
     /// <summary>
+    /// rect_overlap - AABB collision test for two axis-aligned rectangles.
+    /// Entry: h2 in A (last arg), 7 bytes on cc65 stack:
+    ///   sp+0=w2, sp+1=y2, sp+2=x2, sp+3=h1, sp+4=w1, sp+5=y1, sp+6=x1
+    /// Exit: A=1 (overlap) or A=0 (no overlap)
+    /// Uses: TEMP (h2), TEMP2 (scratch for sums)
+    /// Depends on: addysp (stack cleanup)
+    /// </summary>
+    public static Block RectOverlap()
+    {
+        var block = new Block(nameof(NESLib.rect_overlap));
+        block.Emit(STA_zpg(TEMP))              // Save h2
+             // Test 1: x1 < x2 + w2
+             .Emit(LDY(0x00))
+             .Emit(LDA_ind_Y(sp))              // w2
+             .Emit(STA_zpg(TEMP2))
+             .Emit(LDY(0x02))
+             .Emit(LDA_ind_Y(sp))              // x2
+             .Emit(CLC())
+             .Emit(ADC_zpg(TEMP2))             // x2 + w2
+             .Emit(STA_zpg(TEMP2))
+             .Emit(LDY(0x06))
+             .Emit(LDA_ind_Y(sp))              // x1
+             .Emit(CMP_zpg(TEMP2))             // x1 vs x2+w2
+             .Emit(BCS(67))                    // → no_overlap
+             // Test 2: x2 < x1 + w1
+             .Emit(LDY(0x04))
+             .Emit(LDA_ind_Y(sp))              // w1
+             .Emit(STA_zpg(TEMP2))
+             .Emit(LDY(0x06))
+             .Emit(LDA_ind_Y(sp))              // x1
+             .Emit(CLC())
+             .Emit(ADC_zpg(TEMP2))             // x1 + w1
+             .Emit(STA_zpg(TEMP2))
+             .Emit(LDY(0x02))
+             .Emit(LDA_ind_Y(sp))              // x2
+             .Emit(CMP_zpg(TEMP2))             // x2 vs x1+w1
+             .Emit(BCS(44))                    // → no_overlap
+             // Test 3: y1 < y2 + h2
+             .Emit(LDY(0x01))
+             .Emit(LDA_ind_Y(sp))              // y2
+             .Emit(CLC())
+             .Emit(ADC_zpg(TEMP))              // y2 + h2
+             .Emit(STA_zpg(TEMP2))
+             .Emit(LDY(0x05))
+             .Emit(LDA_ind_Y(sp))              // y1
+             .Emit(CMP_zpg(TEMP2))             // y1 vs y2+h2
+             .Emit(BCS(27))                    // → no_overlap
+             // Test 4: y2 < y1 + h1
+             .Emit(LDY(0x03))
+             .Emit(LDA_ind_Y(sp))              // h1
+             .Emit(STA_zpg(TEMP2))
+             .Emit(LDY(0x05))
+             .Emit(LDA_ind_Y(sp))              // y1
+             .Emit(CLC())
+             .Emit(ADC_zpg(TEMP2))             // y1 + h1
+             .Emit(STA_zpg(TEMP2))
+             .Emit(LDY(0x01))
+             .Emit(LDA_ind_Y(sp))              // y2
+             .Emit(CMP_zpg(TEMP2))             // y2 vs y1+h1
+             .Emit(BCS(4))                     // → no_overlap
+             // Overlap
+             .Emit(LDA(0x01))
+             .Emit(BNE(2))                     // always taken → done
+             // no_overlap:
+             .Emit(LDA(0x00))
+             // done: clean up cc65 stack (pop 7 bytes)
+             .Emit(TAX())                      // save result in X
+             .Emit(LDY(0x07))
+             .Emit(JSR(nameof(addysp)))
+             .Emit(TXA())                      // restore result to A
+             .Emit(RTS());
+        return block;
+    }
+
+    /// <summary>
+    /// sprite_overlap - Distance-based collision test for same-size sprites.
+    /// Entry: threshold in A (last arg), 4 bytes on cc65 stack:
+    ///   sp+0=y2, sp+1=x2, sp+2=y1, sp+3=x1
+    /// Exit: A=1 (overlap) or A=0 (no overlap)
+    /// Tests: |x1-x2| &lt; threshold AND |y1-y2| &lt; threshold
+    /// Uses: TEMP (threshold), TEMP_HI (x1), TEMP2 (y1), TEMP3 (scratch)
+    /// Depends on: addysp (stack cleanup)
+    /// </summary>
+    public static Block SpriteOverlap()
+    {
+        var block = new Block(nameof(NESLib.sprite_overlap));
+        block.Emit(STA_zpg(TEMP))              // Save threshold
+             // Load args from cc65 stack into temps
+             .Emit(LDY(0x03))
+             .Emit(LDA_ind_Y(sp))              // x1
+             .Emit(STA_zpg(TEMP_HI))
+             .Emit(LDY(0x02))
+             .Emit(LDA_ind_Y(sp))              // y1
+             .Emit(STA_zpg(TEMP2))
+             .Emit(LDY(0x01))
+             .Emit(LDA_ind_Y(sp))              // x2
+             .Emit(STA_zpg(TEMP3))
+             // X-axis: |x1 - x2| < threshold
+             .Emit(LDA_zpg(TEMP_HI))           // x1
+             .Emit(SEC())
+             .Emit(SBC_zpg(TEMP3))             // x1 - x2
+             .Emit(BCS(4))                     // positive → skip negation
+             .Emit(EOR(0xFF))                  // negate (one's complement)
+             .Emit(ADC(0x01))                  // two's complement (C=0 from SBC)
+             .Emit(CMP_zpg(TEMP))              // |x1-x2| vs threshold
+             .Emit(BCS(25))                    // → no_overlap
+             // Y-axis: |y1 - y2| < threshold
+             .Emit(LDY(0x00))
+             .Emit(LDA_ind_Y(sp))              // y2
+             .Emit(STA_zpg(TEMP3))
+             .Emit(LDA_zpg(TEMP2))             // y1
+             .Emit(SEC())
+             .Emit(SBC_zpg(TEMP3))             // y1 - y2
+             .Emit(BCS(4))                     // positive → skip negation
+             .Emit(EOR(0xFF))
+             .Emit(ADC(0x01))
+             .Emit(CMP_zpg(TEMP))              // |y1-y2| vs threshold
+             .Emit(BCS(4))                     // → no_overlap
+             // Overlap
+             .Emit(LDA(0x01))
+             .Emit(BNE(2))                     // always taken → done
+             // no_overlap:
+             .Emit(LDA(0x00))
+             // done: clean up cc65 stack (pop 4 bytes)
+             .Emit(TAX())                      // save result in X
+             .Emit(LDY(0x04))
+             .Emit(JSR(nameof(addysp)))
+             .Emit(TXA())                      // restore result to A
+             .Emit(RTS());
+        return block;
+    }
+
+    /// <summary>
     /// _oam_meta_spr - Set metasprite in OAM buffer
     /// Args: A = sprid, data pointer on C stack, x/y pushed before data pointer
     /// Standard neslib convention: A = sprid, (sp) -> y, x, data_lo, data_hi
