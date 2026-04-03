@@ -504,7 +504,7 @@ public class DecompilerTests
     [Fact]
     public void Decompiler_Shoot2_RecoverPadPollResultStorage()
     {
-        // shoot2 calls pad_poll(0) and stores result: LDA #$00 / JSR pad_poll / STA $037F
+        // shoot2 calls pad_poll(0) and stores result: LDA #$00 / JSR pad_poll / STA $0380
         var romBytes = GetVerifiedRom("shoot2");
         var rom = new NESRomReader(romBytes);
         var decompiler = new Decompiler(rom, _logger);
@@ -512,17 +512,17 @@ public class DecompilerTests
         var code = decompiler.Decompile();
 
         // pad_poll result should be stored to a local variable
-        Assert.Contains("var_037F = pad_poll(0);", code);
+        Assert.Contains("var_0380 = pad_poll(0);", code);
         // Variable storing pad_poll should be typed as PAD, not byte
-        Assert.Contains("PAD var_037F = 0;", code);
-        Assert.DoesNotContain("byte var_037F", code);
+        Assert.Contains("PAD var_0380 = 0;", code);
+        Assert.DoesNotContain("byte var_0380", code);
     }
 
     [Fact]
     public void Decompiler_Shoot2_RecoverPadMasking()
     {
-        // shoot2 uses LDA $037F / AND #$01 / BEQ → if ((var_037F & PAD.A) != 0)
-        // and LDA $037F / AND #$40 / BEQ → if ((var_037F & PAD.LEFT) != 0)
+        // shoot2 uses LDA $0380 / AND #$01 / BEQ → if ((var_0380 & PAD.A) != 0)
+        // and LDA $0380 / AND #$40 / BEQ → if ((var_0380 & PAD.LEFT) != 0)
         var romBytes = GetVerifiedRom("shoot2");
         var rom = new NESRomReader(romBytes);
         var decompiler = new Decompiler(rom, _logger);
@@ -530,9 +530,9 @@ public class DecompilerTests
         var code = decompiler.Decompile();
 
         // PAD.A masking (AND #$01)
-        Assert.Contains("if ((var_037F & PAD.A) != 0)", code);
+        Assert.Contains("if ((var_0380 & PAD.A) != 0)", code);
         // PAD.LEFT masking (AND #$40)
-        Assert.Contains("if ((var_037F & PAD.LEFT) != 0)", code);
+        Assert.Contains("if ((var_0380 & PAD.LEFT) != 0)", code);
     }
 
     [Fact]
@@ -852,13 +852,16 @@ public class DecompilerTests
         var decompiler = new Decompiler(rom, _logger);
         var code = decompiler.Decompile();
 
-        // The sfx functions contain poke() calls for APU registers.
-        // At least one user function body should decompile APU poke calls.
-        // func_8C64 is sfx_shoot: poke(APU_PULSE1_CTRL, 0x4A)
-        Assert.Contains("poke(APU_PULSE1_CTRL, 0x4A);", code);
-        Assert.Contains("poke(APU_PULSE1_SWEEP, 0x00);", code);
-        Assert.Contains("poke(APU_PULSE1_TIMER_LO, 0x80);", code);
-        Assert.Contains("poke(APU_PULSE1_TIMER_HI, 0xF9);", code);
+        // The inline set_sounds() code writes APU registers with constant values.
+        // The decompiler should recover these as poke() calls.
+        // poke(APU_PULSE1_CTRL, 0xB6) = duty 50% + constant vol 6 (bullet fire)
+        Assert.Contains("poke(APU_PULSE1_CTRL, 0xB6);", code);
+        // poke(APU_NOISE_CTRL, 0x05) = envelope decay rate 5 (player hit)
+        Assert.Contains("poke(APU_NOISE_CTRL, 0x05);", code);
+        // poke(APU_NOISE_CTRL, 0x02) = envelope decay rate 2 (enemy explosion)
+        Assert.Contains("poke(APU_NOISE_CTRL, 0x02);", code);
+        // poke(APU_TRIANGLE_CTRL, 0xFF) = sustain counter (enemy dive)
+        Assert.Contains("poke(APU_TRIANGLE_CTRL, 0xFF);", code);
     }
 
     [Fact]

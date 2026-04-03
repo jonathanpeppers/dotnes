@@ -1,5 +1,5 @@
 // shoot2 — Vertical scrolling shooter
-// Demonstrates: UxROM mapper 2 + CHR RAM, poke() APU sound effects,
+// Demonstrates: UxROM mapper 2 + CHR RAM, per-frame dynamic APU sound engine,
 // user-defined functions, structure-of-arrays, collision detection, scoring.
 // Based on concepts from: https://8bitworkshop.com/v3.10.0/?platform=nes&file=shoot2.c
 
@@ -209,8 +209,9 @@ byte[] star_speed = new byte[MAX_STARS];
 byte[] exp_x = new byte[MAX_EXPLOSIONS];
 byte[] exp_y = new byte[MAX_EXPLOSIONS];
 byte[] exp_timer = new byte[MAX_EXPLOSIONS];
+byte player_hit_timer = 0;
 
-// Zero-initialize guard arrays (new byte[N] doesn't zero memory on NES)
+// Zero-initialize guard arrays(new byte[N] doesn't zero memory on NES)
 for (byte zi = 0; zi < MAX_BULLETS; zi++) bullet_active[zi] = 0;
 for (byte zi = 0; zi < MAX_ENEMIES; zi++) enemy_active[zi] = 0;
 for (byte zi = 0; zi < MAX_EXPLOSIONS; zi++) exp_timer[zi] = 0;
@@ -247,7 +248,6 @@ while (true)
                     bullet_y[i] = (byte)(player_y - 8);
                     bullet_active[i] = 1;
                     fire_cooldown = FIRE_COOLDOWN;
-                    sfx_shoot();
                     break;
                 }
             }
@@ -337,6 +337,7 @@ while (true)
     {
         if (exp_timer[i] != 0) exp_timer[i] = (byte)(exp_timer[i] - 1);
     }
+    if (player_hit_timer != 0) player_hit_timer = (byte)(player_hit_timer - 1);
 
     // --- Collision: bullets vs enemies ---
     for (byte bi = 0; bi < MAX_BULLETS; bi++)
@@ -370,7 +371,6 @@ while (true)
                         }
                         bullet_active[bi] = 0;
                         enemy_active[ei] = 0;
-                        sfx_hit();
                         // Increment score
                         d5 = (byte)(d5 + 1);
                         if (d5 > 0x0A) { d5 = 0x01; d4 = (byte)(d4 + 1); }
@@ -400,7 +400,12 @@ while (true)
             if (dyc < (2 * HIT_DISTANCE - 1))
             {
                 enemy_active[ei] = 0;
-                sfx_player_die();
+                player_hit_timer = 16;
+                // Kick-start player death sound (plays during flash via hardware decay)
+                poke(APU_NOISE_CTRL, 0x05);
+                poke(APU_NOISE_PERIOD, 0x08);
+                poke(APU_NOISE_LENGTH, 0x0F);
+                poke(APU_STATUS, 0x0B);
                 pal_spr_bright(8);
                 ppu_wait_nmi();
                 ppu_wait_nmi();
@@ -411,6 +416,79 @@ while (true)
             }
         }
     }
+
+    // --- Per-frame dynamic sound (mirrors 8bitworkshop set_sounds) ---
+    // Pulse1: bullet fire — pitch tracks bullet Y position (rising tone as it flies up)
+    // Noise: explosions — decay rate changes with explosion frame counter
+    // Triangle: enemy dive — pitch tracks nearest enemy Y position (descending hum)
+    // APU_STATUS: dynamically enable/disable channels each frame
+    byte snd_enable = 0x0B; // pulse1 + pulse2 + noise always enabled (hardware decay)
+    byte snd_silence = 0xB0; // duty 50% + vol 0 (pulse silence value)
+
+    // Pulse 1: missile/bullet fire sound
+    byte snd_bullet = 0;
+    for (byte si = 0; si < MAX_BULLETS; si++)
+    {
+        if (bullet_active[si] != 0)
+        {
+            // APU_PULSE_SUSTAIN: pitch tracks bullet Y, duty 50%, constant vol 6
+            byte pitch = (byte)(255 - bullet_y[si]);
+            poke(APU_PULSE1_CTRL, 0xB6);
+            poke(APU_PULSE1_TIMER_LO, pitch);
+            poke(APU_PULSE1_TIMER_HI, 0x00);
+            snd_bullet = 1;
+            break;
+        }
+    }
+    if (snd_bullet == 0)
+    {
+        // Silence pulse 1 (use local to ensure correct transpilation after if-check)
+        poke(APU_PULSE1_CTRL, snd_silence);
+    }
+
+    // Noise: explosion and player-hit sounds
+    if (player_hit_timer != 0)
+    {
+        // Player hit: slower decay (rate 5), louder, longer (length 15)
+        byte ph_frame = (byte)(16 - player_hit_timer);
+        byte ph_period = (byte)(8 + ph_frame);
+        poke(APU_NOISE_CTRL, 0x05);
+        poke(APU_NOISE_PERIOD, ph_period);
+        poke(APU_NOISE_LENGTH, 0x0F);
+    }
+    else
+    {
+        for (byte si = 0; si < MAX_EXPLOSIONS; si++)
+        {
+            if (exp_timer[si] != 0)
+            {
+                // Enemy explosion: faster decay (rate 2), quieter, shorter (length 8)
+                byte ex_frame = (byte)(16 - exp_timer[si]);
+                byte ex_period = (byte)(8 + ex_frame);
+                poke(APU_NOISE_CTRL, 0x02);
+                poke(APU_NOISE_PERIOD, ex_period);
+                poke(APU_NOISE_LENGTH, 0x08);
+                break;
+            }
+        }
+    }
+
+    // Triangle: enemy diving sound — pitch tracks nearest enemy Y position
+    for (byte si = 0; si < MAX_ENEMIES; si++)
+    {
+        if (enemy_active[si] != 0)
+        {
+            // APU_TRIANGLE_SUSTAIN(0x100 | y)
+            byte ey = enemy_y[si];
+            poke(APU_TRIANGLE_CTRL, 0xFF);
+            poke(APU_TRIANGLE_TIMER_LO, ey);
+            poke(APU_TRIANGLE_TIMER_HI, 0x01);
+            snd_enable = (byte)(snd_enable | 0x04);
+            break;
+        }
+    }
+
+    poke(APU_STATUS, snd_enable);
 
     // --- Draw sprites ---
     oam_clear();
@@ -473,51 +551,4 @@ static byte rnd_range(byte lo, byte hi)
     byte range = (byte)(hi - lo);
     byte r = rand8();
     return (byte)((byte)(r % range) + lo);
-}
-
-// Sound effect: player fires
-// Pulse1: ctrl=0x4A (duty 01, envelope decay, period 0x0A), sweep=0, timer_lo=0x80, timer_hi=0xF9
-// poke values can be constants or local variables, but not function parameters (ldarg)
-static void sfx_shoot()
-{
-    poke(APU_PULSE1_CTRL, 0x4A);
-    poke(APU_PULSE1_SWEEP, 0x00);
-    poke(APU_PULSE1_TIMER_LO, 0x80);
-    poke(APU_PULSE1_TIMER_HI, 0xF9);
-}
-
-// Sound effect: enemy hit
-// Noise: ctrl=0x0A (envelope decay, period 0x0A), period=4, length=0xF8
-static void sfx_hit()
-{
-    poke(APU_NOISE_CTRL, 0x0A);
-    poke(APU_NOISE_PERIOD, 0x04);
-    poke(APU_NOISE_LENGTH, 0xF8);
-}
-
-// Sound effect: explosion
-// Noise: ctrl=0x0F (envelope decay, period 0x0F), period=6, length=0xF8
-// Triangle: ctrl=0x1F (linear counter=31, ~0.13s thump), timer_lo=0x40, timer_hi=0xF9
-static void sfx_explode()
-{
-    poke(APU_NOISE_CTRL, 0x0F);
-    poke(APU_NOISE_PERIOD, 0x06);
-    poke(APU_NOISE_LENGTH, 0xF8);
-    poke(APU_TRIANGLE_CTRL, 0x1F);
-    poke(APU_TRIANGLE_TIMER_LO, 0x40);
-    poke(APU_TRIANGLE_TIMER_HI, 0xF9);
-}
-
-// Sound effect: player destroyed
-// Pulse1: ctrl=0x8F (duty 10, envelope decay, period 0x0F), sweep=0, timer_lo=0x00, timer_hi=0xFA
-// Noise: ctrl=0x0F (envelope decay, period 0x0F), period=8, length=0xF8
-static void sfx_player_die()
-{
-    poke(APU_PULSE1_CTRL, 0x8F);
-    poke(APU_PULSE1_SWEEP, 0x00);
-    poke(APU_PULSE1_TIMER_LO, 0x00);
-    poke(APU_PULSE1_TIMER_HI, 0xFA);
-    poke(APU_NOISE_CTRL, 0x0F);
-    poke(APU_NOISE_PERIOD, 0x08);
-    poke(APU_NOISE_LENGTH, 0xF8);
 }
