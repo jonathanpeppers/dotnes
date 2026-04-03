@@ -69,8 +69,8 @@ static void setup_graphics()
         DarkRed, Red, LightRed, 0x00,
         Red, PaleRose, LightMagenta, 0x00,
         DarkGray, PaleOrange, LightRose, 0x00,
-        0x0D, MediumGray, PaleGreen, 0x00,
-        0x0D, LightOrange, LightGreen
+        Black, MediumGray, PaleGreen, 0x00,
+        Black, LightOrange, LightGreen
     });
     vram_adr(NAMETABLE_A);
     vram_fill(CH_BLANK, 0x1000);

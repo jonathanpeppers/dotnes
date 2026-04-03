@@ -6,10 +6,10 @@ byte[] PALETTE = [
     DarkGray, Gray, LightGray, 0x0,            // background palette 2
     DarkRed, Red, LightRed, 0x0,               // background palette 3
 
-    Magenta, PaleMagenta, 0x0D, 0x0,           // sprite palette 0
+    Magenta, PaleMagenta, Black, 0x0,           // sprite palette 0
     DarkGray, PaleOrange, LightRose, 0x0,      // sprite palette 1
-    0x0D, MediumGray, PaleGreen, 0x0,          // sprite palette 2
-    0x0D, LightOrange, LightGreen              // sprite palette 3
+    Black, MediumGray, PaleGreen, 0x0,          // sprite palette 2
+    Black, LightOrange, LightGreen              // sprite palette 3
 ];
 
 pal_all(PALETTE);

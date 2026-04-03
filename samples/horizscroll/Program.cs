@@ -13,8 +13,8 @@ byte[] PALETTE = {
     DarkRed, Red, LightRed, 0x00,            // palette 3
     Red, PaleRose, LightMagenta, 0x00,       // sprite palette 0
     DarkGray, PaleOrange, LightRose, 0x00,   // sprite palette 1
-    0x0D, MediumGray, Green, 0x00,           // sprite palette 2
-    0x0D, LightOrange, LightGreen            // sprite palette 3
+    Black, MediumGray, Green, 0x00,           // sprite palette 2
+    Black, LightOrange, LightGreen            // sprite palette 3
 };
 
 // set palette colors

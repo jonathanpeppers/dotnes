@@ -13,8 +13,8 @@ byte[] PALETTE = {
 
     Red, PaleRose, LightMagenta, 0x00,
     DarkGray, PaleOrange, LightRose, 0x00,
-    0x0D, MediumGray, Green, 0x00,
-    0x0D, LightOrange, LightGreen
+    Black, MediumGray, Green, 0x00,
+    Black, LightOrange, LightGreen
 };
 
 void scroll_demo()
