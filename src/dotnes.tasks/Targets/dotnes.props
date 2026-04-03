@@ -24,5 +24,6 @@
     <NESAssembly Include="*.s" />
     <Using Include="NES" />
     <Using Include="NES.NESLib" Static="true" />
+    <Using Include="NES.NESColor" Static="true" />
   </ItemGroup>
 </Project>

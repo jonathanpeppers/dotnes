@@ -2,9 +2,9 @@
 // Simplified port from 8bitworkshop aputest.c
 
 // Set up palette
-pal_col(1, 0x04);
-pal_col(2, 0x20);
-pal_col(3, 0x30);
+pal_col(1, DarkMagenta);
+pal_col(2, LightGray);
+pal_col(3, White);
 
 // Display channel labels
 vram_adr(NTADR_A(2, 2));

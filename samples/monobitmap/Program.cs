@@ -15,13 +15,12 @@ Key concepts:
 */
 
 // Monochrome palette (from 8bitworkshop monobitmap.c)
-// Palette 0 color 1 = white (0x30) for monochrome foreground
 byte[] PALETTE = new byte[] {
-    0x03,
-    0x30, 0x03, 0x30, 0x00,
-    0x03, 0x30, 0x30, 0x00,
-    0x30, 0x03, 0x30, 0x00,
-    0x03, 0x30, 0x30
+    DarkViolet,
+    White, DarkViolet, White, 0x00,
+    DarkViolet, White, White, 0x00,
+    White, DarkViolet, White, 0x00,
+    DarkViolet, White, White
 };
 
 // Tile patterns for CHR RAM (16 bytes per tile: 8 plane 0, 8 plane 1)

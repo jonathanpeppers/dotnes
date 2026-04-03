@@ -62,15 +62,15 @@ static void setup_graphics()
     ppu_off();
     oam_clear();
     pal_all(new byte[] {
-        0x03,
-        0x11, 0x30, 0x27, 0x00,
-        0x1c, 0x20, 0x2c, 0x00,
-        0x00, 0x10, 0x20, 0x00,
-        0x06, 0x16, 0x26, 0x00,
-        0x16, 0x35, 0x24, 0x00,
-        0x00, 0x37, 0x25, 0x00,
-        0x0d, 0x2d, 0x3a, 0x00,
-        0x0d, 0x27, 0x2a
+        DarkViolet,
+        Azure, White, LightOrange, 0x00,
+        Cyan, LightGray, LightCyan, 0x00,
+        DarkGray, Gray, LightGray, 0x00,
+        DarkRed, Red, LightRed, 0x00,
+        Red, PaleRose, LightMagenta, 0x00,
+        DarkGray, PaleOrange, LightRose, 0x00,
+        Black, MediumGray, PaleGreen, 0x00,
+        Black, LightOrange, LightGreen
     });
     vram_adr(NAMETABLE_A);
     vram_fill(CH_BLANK, 0x1000);

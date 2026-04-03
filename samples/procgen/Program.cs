@@ -7,10 +7,10 @@
 
 // Set palette colors
 // Tile $00 = all color index 0, tile $01 = all color index 3
-pal_col(0, 0x0F);   // black (background / paths)
-pal_col(1, 0x05);   // dark red
-pal_col(2, 0x2A);   // green
-pal_col(3, 0x30);   // white (walls and text — tile $01 uses color index 3)
+pal_col(0, Black);
+pal_col(1, DarkRose);
+pal_col(2, LightGreen);
+pal_col(3, White);
 
 // Initial seed
 byte seed = 42;
