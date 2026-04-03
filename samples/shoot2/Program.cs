@@ -366,6 +366,7 @@ while (true)
                                 exp_x[xi] = enemy_x[ei];
                                 exp_y[xi] = enemy_y[ei];
                                 exp_timer[xi] = 16;
+                                sfx_explode();
                                 break;
                             }
                         }
@@ -544,6 +545,15 @@ while (true)
 }
 
 // === User-defined functions (static, no captured variables) ===
+
+// Kick-start explosion noise burst (continued per-frame by dynamic sound section)
+static void sfx_explode()
+{
+    poke(APU_NOISE_CTRL, 0x04);
+    poke(APU_NOISE_PERIOD, 0x06);
+    poke(APU_NOISE_LENGTH, 0x08);
+    poke(APU_STATUS, 0x0B);
+}
 
 // Random number in range [lo, hi)
 static byte rnd_range(byte lo, byte hi)
