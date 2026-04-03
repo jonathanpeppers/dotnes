@@ -422,6 +422,20 @@ public static class NESLib
     public static ushort bcd_add(ushort a, ushort b) => throw null!;
 
     /// <summary>
+    /// Returns true if two axis-aligned rectangles overlap.
+    /// Uses unsigned byte arithmetic; works correctly for NES screen coordinates (0-255).
+    /// AABB test: overlap iff (x1 &lt; x2+w2) &amp;&amp; (x2 &lt; x1+w1) &amp;&amp; (y1 &lt; y2+h2) &amp;&amp; (y2 &lt; y1+h1).
+    /// </summary>
+    public static bool rect_overlap(byte x1, byte y1, byte w1, byte h1, byte x2, byte y2, byte w2, byte h2) => throw null!;
+
+    /// <summary>
+    /// Returns true if two sprites overlap within a given threshold distance on both axes.
+    /// Uses unsigned absolute-difference: overlap iff |x1-x2| &lt; threshold &amp;&amp; |y1-y2| &lt; threshold.
+    /// Suitable for equal-size sprite collision checks (e.g., 8x8 sprites with threshold=8).
+    /// </summary>
+    public static bool sprite_overlap(byte x1, byte y1, byte x2, byte y2, byte threshold) => throw null!;
+
+    /// <summary>
     /// when display is enabled, vram access could only be done with this vram update system
     /// the function sets a pointer to the update buffer that contains data and addresses
     /// in a special format. It allows to write non-sequental bytes, as well as horizontal or
