@@ -5323,4 +5323,79 @@ public class RoslynTests
             $"Unmatched pusha calls detected: pusha={pushaCount}, popa/incsp1={popaCount}. " +
             "Each pusha must be balanced by popa or incsp1 to prevent cc65 stack leaks.");
     }
+
+    [Fact]
+    public void UserFunctionInWhileTrueBreakInsideForLoop()
+    {
+        // Reproduces issue #408: user function with early return (return 1 before return 0)
+        // called inside while(true){...break;} in a for loop.
+        // The IL has two 'ret' instructions. The transpiler treats 'ret' as no-op,
+        // so the early 'return 1' falls through to 'return 0', making the function
+        // always return 0.
+        var (program, transpiler) = BuildProgram(
+            """
+            byte prev1 = 3;
+            byte prev2 = 7;
+            byte[] gaps = new byte[5];
+
+            for (byte i = 0; i < 5; i++)
+            {
+                while (true)
+                {
+                    gaps[i] = rand8();
+                    if (check_overlap(prev1, gaps[i]) == 0 &&
+                        check_overlap(prev2, gaps[i]) == 0)
+                        break;
+                }
+            }
+
+            ppu_on_all();
+            while (true) ;
+
+            static byte check_overlap(byte x, byte gap)
+            {
+                if (gap != 0 && x >= gap && x < (byte)(gap + 8))
+                    return 1;
+                return 0;
+            }
+            """);
+
+        program.ResolveAddresses();
+
+        // Dump the method block instructions
+        var methodBlock = program.GetBlock("check_overlap");
+        Assert.NotNull(methodBlock);
+
+        _logger.WriteLine($"{"=== check_overlap method block ==="}");
+        bool foundLda1 = false;
+        bool earlyReturnHasJmp = false;
+        foreach (var (instruction, label) in methodBlock.InstructionsWithLabels)
+        {
+            _logger.WriteLine($"  {(label != null ? $"[{label}] " : "")}{instruction.Opcode} {instruction.Mode} {instruction.Operand}");
+
+            // Track: after LDA #$01 (return 1), there should be JMP to method end
+            // NOT another LDA #$00 (return 0) -- that would mean fall-through
+            if (instruction.Opcode == Opcode.LDA
+                && instruction.Operand is ImmediateOperand imm1 && imm1.Value == 1)
+            {
+                foundLda1 = true;
+            }
+            else if (foundLda1)
+            {
+                if (instruction.Opcode == Opcode.JMP)
+                    earlyReturnHasJmp = true;
+                else if (instruction.Opcode == Opcode.LDA
+                    && instruction.Operand is ImmediateOperand imm0 && imm0.Value == 0)
+                {
+                    // LDA #$01 followed by LDA #$00 = fall-through bug
+                    _logger.WriteLine($"{"  *** BUG: LDA #$01 falls through to LDA #$00 ***"}");
+                }
+                foundLda1 = false;
+            }
+        }
+
+        Assert.True(earlyReturnHasJmp,
+            "User method with early 'return 1' must JMP to epilogue. " +
+            "Without it, A is overwritten by 'return 0' and the function always returns 0.");
+    }
 }

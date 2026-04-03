@@ -48,8 +48,13 @@ partial class IL2NESWriter
         switch (instruction.OpCode)
         {
             case ILOpCode.Nop:
+                break;
             case ILOpCode.Ret:
-                // Ret is handled at block level (RTS appended to user method blocks)
+                // For user methods with early returns, emit JMP to epilogue.
+                // Without this, early returns fall through to subsequent code.
+                // Skip for the final ret (it naturally falls through to the epilogue).
+                if (MethodName != null && Instructions != null && Index < Instructions.Length - 1)
+                    EmitWithLabel(Opcode.JMP, AddressMode.Absolute, $"{MethodName}_epilogue");
                 break;
             case ILOpCode.Dup:
                 if (Stack.Count > 0)
