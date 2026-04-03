@@ -1,3 +1,5 @@
+using static NES.NESColor;
+
 /*
 Based on: https://8bitworkshop.com/v3.10.0/?platform=nes&file=tileset1.c
 
@@ -7,10 +9,10 @@ The tileset includes ASCII characters and a small climber sprite.
 
 // set palette colors (from tileset1.c palSprites)
 byte[] palette = [
-    0x0f, 0x17, 0x27, 0x37,
-    0x0f, 0x11, 0x21, 0x31,
-    0x0f, 0x15, 0x25, 0x35,
-    0x0f, 0x19, 0x29, 0x39
+    Black, Orange, LightOrange, PaleOrange,
+    Black, Azure, LightAzure, PaleAzure,
+    Black, Rose, LightRose, PaleRose,
+    Black, Lime, LightLime, PaleLime
 ];
 pal_bg(palette);
 

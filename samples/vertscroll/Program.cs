@@ -1,3 +1,5 @@
+using static NES.NESColor;
+
 /*
 Vertical scrolling demo.
 Horizontal mirroring (NESMirroring=Horizontal) stacks nametables A and C
@@ -6,10 +8,10 @@ the byte range 0-255, with the PPU handling the nametable switch.
 */
 
 // set palette colors
-pal_col(0, 0x0F);   // black
-pal_col(1, 0x19);   // green
-pal_col(2, 0x20);   // white
-pal_col(3, 0x31);   // light blue
+pal_col(0, Black);
+pal_col(1, Lime);
+pal_col(2, LightGray);
+pal_col(3, PaleAzure);
 
 // write text to nametable A
 vram_adr(NTADR_A(2, 2));

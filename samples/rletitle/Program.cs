@@ -1,3 +1,5 @@
+using static NES.NESColor;
+
 /*
 Unpacks a RLE-compressed nametable+attribute table into VRAM.
 Also uses the pal_bright() function to fade in the palette.
@@ -6,8 +8,8 @@ Based on: https://github.com/sehugg/8bitworkshop/blob/master/presets/nes/rletitl
 
 // climbr_title palette (16 bytes)
 byte[] climbr_title_pal = [
-    0x0F, 0x11, 0x25, 0x35, 0x0F, 0x01, 0x21, 0x30,
-    0x0F, 0x06, 0x1C, 0x3C, 0x0F, 0x11, 0x27, 0x38
+    Black, Azure, LightRose, PaleRose, Black, DarkAzure, LightAzure, White,
+    Black, DarkRed, Cyan, PaleCyan, Black, Azure, LightOrange, PaleYellow
 ];
 
 // climbr_title RLE-compressed nametable (569 bytes)

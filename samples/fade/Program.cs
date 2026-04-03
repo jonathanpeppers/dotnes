@@ -1,3 +1,5 @@
+using static NES.NESColor;
+
 /*
 Demonstrates palette brightness fading effects.
 Uses pal_bright(), pal_spr_bright(), and pal_bg_bright()
@@ -5,10 +7,10 @@ with delay() for timed transitions.
 */
 
 // set palette colors
-pal_col(0, 0x02);   // dark blue background
-pal_col(1, 0x14);   // fuchsia
-pal_col(2, 0x20);   // grey
-pal_col(3, 0x30);   // white
+pal_col(0, DarkBlue);
+pal_col(1, Magenta);
+pal_col(2, LightGray);
+pal_col(3, White);
 
 // write text to name table
 vram_adr(NTADR_A(2, 2));

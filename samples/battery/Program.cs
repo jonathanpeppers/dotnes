@@ -1,3 +1,5 @@
+using static NES.NESColor;
+
 /*
 Demonstrates battery-backed SRAM ($6000-$7FFF).
 A counter is stored in SRAM and survives power cycles.
@@ -5,8 +7,8 @@ Press A to increment, B to reset.
 */
 
 // set palette colors
-pal_col(0, 0x0F); // black background
-pal_col(1, 0x30); // white text
+pal_col(0, Black);
+pal_col(1, White);
 
 // read saved counter from SRAM
 byte count = peek(SRAM_START);

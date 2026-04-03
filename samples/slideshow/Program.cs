@@ -1,3 +1,5 @@
+using static NES.NESColor;
+
 /*
 Demonstrates CNROM (mapper 3) CHR bank switching.
 Sets the iNES header to mapper 3 with 2 CHR banks (16 KB total).
@@ -6,10 +8,10 @@ showing different tile graphics on screen.
 */
 
 // set palette colors
-pal_col(0, 0x0F);   // black background
-pal_col(1, 0x30);   // white
-pal_col(2, 0x16);   // red
-pal_col(3, 0x12);   // blue
+pal_col(0, Black);
+pal_col(1, White);
+pal_col(2, Red);
+pal_col(3, Blue);
 
 // write text to name table
 vram_adr(NTADR_A(2, 2));

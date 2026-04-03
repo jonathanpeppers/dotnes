@@ -1,3 +1,5 @@
+using static NES.NESColor;
+
 /*
 Scrolling demo.
 Horizontal mirroring means nametables A and C are stacked vertically.
@@ -6,10 +8,10 @@ Based on: https://github.com/sehugg/8bitworkshop/blob/master/presets/nes/scroll.
 */
 
 // set palette colors
-pal_col(0, 0x02);   // dark blue
-pal_col(1, 0x14);   // pink
-pal_col(2, 0x20);   // grey
-pal_col(3, 0x30);   // white
+pal_col(0, DarkBlue);
+pal_col(1, Magenta);
+pal_col(2, LightGray);
+pal_col(3, White);
 
 // write text to nametable A
 vram_adr(NTADR_A(2, 0));

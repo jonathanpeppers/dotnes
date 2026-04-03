@@ -1,3 +1,5 @@
+using static NES.NESColor;
+
 /*
 Pong — 2-player game.
 Player 1: controller 1 UP/DOWN.
@@ -7,15 +9,15 @@ APIs: pad_poll, oam_spr, oam_hide_rest, vrambuf_put, ppu_wait_nmi.
 */
 
 byte[] PALETTE = [
-    0x0F,                    // screen color (black)
-    0x00, 0x10, 0x30, 0x0,  // bg palette 0
-    0x00, 0x10, 0x30, 0x0,  // bg palette 1
-    0x00, 0x10, 0x30, 0x0,  // bg palette 2
-    0x00, 0x10, 0x30, 0x0,  // bg palette 3
-    0x0F, 0x30, 0x30, 0x0,  // spr palette 0 (white)
-    0x0F, 0x30, 0x30, 0x0,  // spr palette 1
-    0x0F, 0x30, 0x30, 0x0,  // spr palette 2
-    0x0F, 0x30, 0x30, 0x0   // spr palette 3
+    Black,                                     // screen color
+    DarkGray, Gray, White, 0x0,                // bg palette 0
+    DarkGray, Gray, White, 0x0,                // bg palette 1
+    DarkGray, Gray, White, 0x0,                // bg palette 2
+    DarkGray, Gray, White, 0x0,                // bg palette 3
+    Black, White, White, 0x0,                  // spr palette 0
+    Black, White, White, 0x0,                  // spr palette 1
+    Black, White, White, 0x0,                  // spr palette 2
+    Black, White, White, 0x0                   // spr palette 3
 ];
 
 // paddle y positions

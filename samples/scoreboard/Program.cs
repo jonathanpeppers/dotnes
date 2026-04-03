@@ -1,3 +1,5 @@
+using static NES.NESColor;
+
 /*
 Scoreboard - press A to increment BCD score.
 Demonstrates vrambuf_put(), pad_trigger(), ppu_wait_nmi().
@@ -5,8 +7,8 @@ Based on: https://github.com/jonathanpeppers/dotnes/issues/121
 */
 
 // palette: dark blue background, white text
-pal_col(0, 0x02);
-pal_col(1, 0x30);
+pal_col(0, DarkBlue);
+pal_col(1, White);
 pal_bright(4);
 
 bank_spr(0);

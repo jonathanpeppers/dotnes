@@ -1,3 +1,5 @@
+using static NES.NESColor;
+
 /*
 Demonstrates the PPU's tint and monochrome bits.
 Use the controller to see different combinations.
@@ -5,15 +7,15 @@ Based on: https://github.com/sehugg/8bitworkshop/blob/master/presets/nes/tint.c
 */
 
 byte[] PALETTE = [
-    0x2D,                    // screen color
-    0x00, 0x30, 0x30, 0x0,   // background palette 0
-    0x0C, 0x20, 0x2C, 0x0,   // background palette 1
-    0x14, 0x10, 0x25, 0x0,   // background palette 2
-    0x17, 0x16, 0x28, 0x0,   // background palette 3
-    0x16, 0x35, 0x24, 0x0,   // sprite palette 0
-    0x00, 0x37, 0x25, 0x0,   // sprite palette 1
-    0x0D, 0x2D, 0x3A, 0x0,   // sprite palette 2
-    0x0D, 0x27, 0x2A          // sprite palette 3
+    MediumGray,                              // screen color
+    DarkGray, White, White, 0x0,             // background palette 0
+    DarkCyan, LightGray, LightCyan, 0x0,     // background palette 1
+    Magenta, Gray, LightRose, 0x0,           // background palette 2
+    Orange, Red, Yellow, 0x0,                // background palette 3
+    Red, PaleRose, LightMagenta, 0x0,        // sprite palette 0
+    DarkGray, PaleOrange, LightRose, 0x0,    // sprite palette 1
+    0x0D, MediumGray, PaleGreen, 0x0,        // sprite palette 2
+    0x0D, LightOrange, LightGreen            // sprite palette 3
 ];
 
 // setup

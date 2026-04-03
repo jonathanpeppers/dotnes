@@ -1,4 +1,6 @@
-﻿/*
+﻿using static NES.NESColor;
+
+/*
 Based on: https://8bitworkshop.com/v3.10.0/?platform=nes&file=attributes.c
 
 Setting the attribute table, which controls palette selection
@@ -19,12 +21,12 @@ byte[] ATTRIBUTE_TABLE = [
 
 /*{pal:"nes",layout:"nes"}*/
 byte[] PALETTE = [
-  0x03,			// screen color
+    DarkViolet,                                // screen color
 
-  0x11,0x30,0x27,0x0,	// background palette 0
-  0x1c,0x20,0x2c,0x0,	// background palette 1
-  0x00,0x10,0x20,0x0,	// background palette 2
-  0x06,0x16,0x26        // background palette 3
+    Azure, White, LightOrange, 0x0,            // background palette 0
+    Cyan, LightGray, LightCyan, 0x0,           // background palette 1
+    DarkGray, Gray, LightGray, 0x0,            // background palette 2
+    DarkRed, Red, LightRed                     // background palette 3
 ];
 
 // set background palette colors

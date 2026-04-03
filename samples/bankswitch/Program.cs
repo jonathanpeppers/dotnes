@@ -1,3 +1,5 @@
+using static NES.NESColor;
+
 /*
 Based on: https://8bitworkshop.com/v3.10.0/?platform=nes&file=bankswitch.c
 
@@ -8,9 +10,9 @@ registers, switching CHR and PRG banks at runtime.
 */
 
 // set palette colors
-pal_col(1, 0x04);
-pal_col(2, 0x20);
-pal_col(3, 0x30);
+pal_col(1, DarkMagenta);
+pal_col(2, LightGray);
+pal_col(3, White);
 
 // setup MMC3 CHR bank switching for background
 // CHR $0000-$07FF = bank 0

@@ -1,3 +1,5 @@
+using static NES.NESColor;
+
 /*
 MMC1 (Mapper 1) demo.
 Demonstrates the MMC1 serial shift register API.
@@ -17,10 +19,10 @@ mmc1_set_prg_bank(0);
 mmc1_set_chr_bank(0, 1);
 
 // Set palette colors
-pal_col(0, 0x0F);   // black background
-pal_col(1, 0x20);   // white
-pal_col(2, 0x16);   // red
-pal_col(3, 0x11);   // blue
+pal_col(0, Black);
+pal_col(1, LightGray);
+pal_col(2, Red);
+pal_col(3, Azure);
 
 // Write text to nametable
 vram_adr(NTADR_A(6, 4));

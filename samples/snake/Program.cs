@@ -1,3 +1,5 @@
+using static NES.NESColor;
+
 /*
 Snake — classic snake game.
 D-pad changes direction (edge-triggered).
@@ -8,15 +10,15 @@ APIs: pad_trigger, oam_spr, oam_hide_rest, rand8, vrambuf_put, ppu_wait_nmi.
 #pragma warning disable CS0649, CS0219
 
 byte[] PALETTE = [
-    0x0F,                   // screen color (black)
-    0x00, 0x10, 0x30,       // bg palette 0
-    0x0F, 0x00, 0x10, 0x30, // bg palette 1
-    0x0F, 0x00, 0x10, 0x30, // bg palette 2
-    0x0F, 0x00, 0x10, 0x30, // bg palette 3
-    0x0F, 0x1A, 0x2A, 0x3A, // spr palette 0 (green: snake)
-    0x0F, 0x16, 0x26, 0x36, // spr palette 1 (red: food)
-    0x0F, 0x30, 0x30, 0x30, // spr palette 2 (white)
-    0x0F, 0x30, 0x30, 0x30  // spr palette 3
+    Black,                                   // screen color
+    DarkGray, Gray, White,                   // bg palette 0
+    Black, DarkGray, Gray, White,            // bg palette 1
+    Black, DarkGray, Gray, White,            // bg palette 2
+    Black, DarkGray, Gray, White,            // bg palette 3
+    Black, Green, LightGreen, PaleGreen,     // spr palette 0 (green: snake)
+    Black, Red, LightRed, PaleRed,           // spr palette 1 (red: food)
+    Black, White, White, White,              // spr palette 2
+    Black, White, White, White               // spr palette 3
 ];
 
 // direction constants

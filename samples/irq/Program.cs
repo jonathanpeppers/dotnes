@@ -1,3 +1,5 @@
+using static NES.NESColor;
+
 /*
  * MMC3 Scanline IRQ Demo
  * Port of 8bitworkshop irq.c - demonstrates split-screen scrolling
@@ -51,9 +53,9 @@ cli();
 unsafe { irq_set_callback(&irq_handler); }
 
 // Set palette colors
-pal_col(1, 0x04);
-pal_col(2, 0x20);
-pal_col(3, 0x30);
+pal_col(1, DarkMagenta);
+pal_col(2, LightGray);
+pal_col(3, White);
 
 // Fill screen with 'A' characters
 vram_adr(NTADR_A(0, 0));

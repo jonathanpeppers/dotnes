@@ -1,3 +1,5 @@
+using static NES.NESColor;
+
 /*
 Horizontal scrolling demo with vrambuf and split.
 Based on: https://github.com/sehugg/8bitworkshop/blob/master/presets/nes/horizscroll.c
@@ -6,15 +8,15 @@ Simplified: uses byte scroll counter (0-255), continuous left scroll.
 
 // palette
 byte[] PALETTE = {
-    0x03,                       // background color
-    0x25, 0x30, 0x27, 0x00,    // palette 0
-    0x1C, 0x20, 0x2C, 0x00,    // palette 1
-    0x00, 0x10, 0x20, 0x00,    // palette 2
-    0x06, 0x16, 0x26, 0x00,    // palette 3
-    0x16, 0x35, 0x24, 0x00,    // sprite palette 0
-    0x00, 0x37, 0x25, 0x00,    // sprite palette 1
-    0x0D, 0x2D, 0x1A, 0x00,    // sprite palette 2
-    0x0D, 0x27, 0x2A           // sprite palette 3
+    DarkViolet,                              // background color
+    LightRose, White, LightOrange, 0x00,     // palette 0
+    Cyan, LightGray, LightCyan, 0x00,        // palette 1
+    DarkGray, Gray, LightGray, 0x00,         // palette 2
+    DarkRed, Red, LightRed, 0x00,            // palette 3
+    Red, PaleRose, LightMagenta, 0x00,       // sprite palette 0
+    DarkGray, PaleOrange, LightRose, 0x00,   // sprite palette 1
+    0x0D, MediumGray, Green, 0x00,           // sprite palette 2
+    0x0D, LightOrange, LightGreen            // sprite palette 3
 };
 
 // set palette colors

@@ -1,3 +1,5 @@
+using static NES.NESColor;
+
 // Based on: https://8bitworkshop.com/v3.10.0/?platform=nes&file=transtable.c
 // Demonstrates CHR RAM with tileset data uploaded to PPU at runtime.
 // Instead of using CHR ROM, the tile graphics are stored as a byte array
@@ -114,8 +116,8 @@ vram_adr(0x0);
 vram_write(TILESET);
 
 // Set palette colors
-pal_col(0, 0x00);  // background: black
-pal_col(3, 0x30);  // foreground: white
+pal_col(0, DarkGray);
+pal_col(3, White);
 
 // Write text to nametable
 vram_adr(NTADR_A(2, 2));

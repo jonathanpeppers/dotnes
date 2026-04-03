@@ -1,3 +1,5 @@
+using static NES.NESColor;
+
 /*
 Animation demo - frame-by-frame sprite animation.
 Cycles through metasprite frames using a counter and bit masking
@@ -28,15 +30,15 @@ byte[] walk1 = [
 ];
 
 byte[] PALETTE = [
-    0x0F,                    // screen color (black)
-    0x11, 0x30, 0x27, 0x0,  // background palette 0
-    0x1c, 0x20, 0x2c, 0x0,  // background palette 1
-    0x00, 0x10, 0x20, 0x0,  // background palette 2
-    0x06, 0x16, 0x26, 0x0,  // background palette 3
-    0x16, 0x35, 0x24, 0x0,  // sprite palette 0
-    0x00, 0x37, 0x25, 0x0,  // sprite palette 1
-    0x0d, 0x2d, 0x3a, 0x0,  // sprite palette 2
-    0x0d, 0x27, 0x2a         // sprite palette 3
+    Black,                                   // screen color
+    Azure, White, LightOrange, 0x0,          // background palette 0
+    Cyan, LightGray, LightCyan, 0x0,         // background palette 1
+    DarkGray, Gray, LightGray, 0x0,          // background palette 2
+    DarkRed, Red, LightRed, 0x0,             // background palette 3
+    Red, PaleRose, LightMagenta, 0x0,        // sprite palette 0
+    DarkGray, PaleOrange, LightRose, 0x0,    // sprite palette 1
+    0x0D, MediumGray, PaleGreen, 0x0,        // sprite palette 2
+    0x0D, LightOrange, LightGreen            // sprite palette 3
 ];
 
 // setup — must be before scalar locals so PALETTE address isn't lost

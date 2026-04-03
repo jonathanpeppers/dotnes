@@ -1,4 +1,6 @@
-﻿/*
+using static NES.NESColor;
+
+/*
 Based on: https://8bitworkshop.com/v3.10.0/?platform=nes&file=hello.c
 
 A simple "hello world" example.
@@ -8,10 +10,10 @@ Finally, turn on the PPU to display video.
 */
 
 // set palette colors
-pal_col(0, 0x02);   // set screen to dark blue
-pal_col(1, 0x14);   // fuchsia
-pal_col(2, 0x20);   // grey
-pal_col(3, 0x30);   // white
+pal_col(0, DarkBlue);
+pal_col(1, Magenta);
+pal_col(2, LightGray);
+pal_col(3, White);
 
 // write text to name table
 vram_adr(NTADR_A(2, 2));       // set address
