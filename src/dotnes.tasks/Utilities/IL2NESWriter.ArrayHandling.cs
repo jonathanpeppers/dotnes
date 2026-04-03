@@ -1774,17 +1774,24 @@ partial class IL2NESWriter
     void HandleMetaSpr2x2(bool flip)
     {
         // Pop 5 constants from Stack (reverse order): attr, bottomRight, topRight, bottomLeft, topLeft
-        int attr = Stack.Count > 0 ? Stack.Pop() : 0;
-        int bottomRight = Stack.Count > 0 ? Stack.Pop() : 0;
-        int topRight = Stack.Count > 0 ? Stack.Pop() : 0;
-        int bottomLeft = Stack.Count > 0 ? Stack.Pop() : 0;
-        int topLeft = Stack.Count > 0 ? Stack.Pop() : 0;
+        if (Stack.Count < 5)
+            throw new InvalidOperationException($"{(flip ? "meta_spr_2x2_flip" : "meta_spr_2x2")} requires 5 arguments on the stack, but only {Stack.Count} found.");
+
+        int attr = Stack.Pop();
+        int bottomRight = Stack.Pop();
+        int topRight = Stack.Pop();
+        int bottomLeft = Stack.Pop();
+        int topLeft = Stack.Pop();
 
         if (flip)
             attr |= 0x40; // Set horizontal flip bit
 
-        // Remove previously emitted LDA instructions for the 5 arguments
-        // Scan back through IL instructions to find the first ldc that pushed our arguments
+        // Remove previously emitted LDA instructions for the 5 arguments.
+        // This backward scan assumes 5 consecutive ldc instructions with no interleaved
+        // opcodes (nop, dup, stloc/ldloc reloads, etc.) between the constant pushes and
+        // this Call. This matches the IL that current Roslyn versions emit for
+        // meta_spr_2x2(const, const, const, const, const). If a future compiler version
+        // interleaves other IL, the scan may misidentify which instructions to remove.
         if (Instructions != null)
         {
             int argsToFind = 5;
