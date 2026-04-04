@@ -46,6 +46,18 @@ partial class Transpiler : IDisposable
     public Dictionary<string, (int argCount, bool hasReturnValue)> ExternMethods { get; } = new(StringComparer.Ordinal);
 
     /// <summary>
+    /// Exception regions (try/finally) for the main method.
+    /// Populated by ReadStaticVoidMain().
+    /// </summary>
+    internal TryFinallyRegion[] MainExceptionRegions { get; private set; } = [];
+
+    /// <summary>
+    /// Exception regions (try/finally) for user-defined methods (name -> regions).
+    /// Populated by ReadStaticVoidMain().
+    /// </summary>
+    internal Dictionary<string, TryFinallyRegion[]> UserMethodExceptionRegions { get; } = new(StringComparer.Ordinal);
+
+    /// <summary>
     /// Closure field types: field name → size (-1 for byte[], positive for scalars).
     /// Populated by DetectStructLayouts() when compiler-generated DisplayClass types are found.
     /// </summary>
@@ -278,6 +290,7 @@ partial class Transpiler : IDisposable
             ClosureFieldLabels = _closureFieldLabels,
             ClosureFieldAddresses = _closureFieldAddresses,
             ClosureStructLocalIndex = _closureStructLocalIndex,
+            TryFinallyRegions = MainExceptionRegions.Length > 0 ? MainExceptionRegions : null,
         };
 
         writer.StartBlockBuffering();
@@ -365,6 +378,7 @@ partial class Transpiler : IDisposable
                 ClosureFieldLabels = _closureFieldLabels,
                 ClosureFieldAddresses = _closureFieldAddresses,
                 ClosureArgIndex = _closureMethodArgIndex.TryGetValue(methodName, out var cai) ? cai : -1,
+                TryFinallyRegions = UserMethodExceptionRegions.TryGetValue(methodName, out var umer) ? umer : null,
             };
             methodWriter.StartBlockBuffering();
 

@@ -893,7 +893,7 @@ public class NESAnalyzerTests
         await VerifyAsync(test);
     }
 
-    // ==================== NES011: try/catch/finally not supported ====================
+    // ==================== NES011: try/catch not supported (try/finally is allowed) ====================
 
     [Fact]
     public async Task NES011_TryCatch_Diagnostic()
@@ -908,10 +908,21 @@ public class NESAnalyzerTests
     }
 
     [Fact]
-    public async Task NES011_TryFinally_Diagnostic()
+    public async Task NES011_TryFinally_NoDiagnostic()
     {
         var test = """
-            {|#0:try { } finally { }|}
+            try { } finally { }
+            while (true) ;
+            """;
+
+        await VerifyAsync(test);
+    }
+
+    [Fact]
+    public async Task NES011_TryCatchFinally_Diagnostic()
+    {
+        var test = """
+            {|#0:try { } catch { } finally { }|}
             while (true) ;
             """;
 
