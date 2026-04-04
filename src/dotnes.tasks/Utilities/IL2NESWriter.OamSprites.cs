@@ -997,7 +997,7 @@ partial class IL2NESWriter
             }
 
             bool isValueProducer = GetLdcValue(il) != null || GetLdlocIndex(il) != null
-                || il.OpCode is ILOpCode.Ldsfld or ILOpCode.Conv_u1;
+                || il.OpCode is ILOpCode.Ldsfld;
 
             // Conv_u1 doesn't produce a new value (just converts top-of-stack), skip it
             if (il.OpCode == ILOpCode.Conv_u1)
@@ -1111,6 +1111,10 @@ partial class IL2NESWriter
         {
             Emit(Opcode.LDA, AddressMode.Absolute, (ushort)spridLocal.Address);
         }
+        else
+        {
+            throw new TranspileException("oam_spr_2x2: unsupported sprid argument type.", MethodName);
+        }
 
         // 5. Call oam_meta_spr
         EmitWithLabel(Opcode.JSR, AddressMode.Absolute, nameof(NESLib.oam_meta_spr));
@@ -1140,6 +1144,10 @@ partial class IL2NESWriter
         {
             Emit(Opcode.LDA, AddressMode.Absolute, (ushort)local.Address);
             Emit(Opcode.STA, AddressMode.ZeroPage, target);
+        }
+        else
+        {
+            throw new TranspileException("oam_spr_2x2: unsupported x/y argument type.", MethodName);
         }
     }
 }
