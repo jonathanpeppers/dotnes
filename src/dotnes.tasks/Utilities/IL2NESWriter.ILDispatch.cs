@@ -2000,6 +2000,11 @@ partial class IL2NESWriter
                         _lastByteArrayLabel = null;
                         _needsByteArrayLoadInCall = false;
                         break;
+                    case nameof(NESLib.oam_spr_2x2):
+                        EmitOamSpr2x2();
+                        _lastByteArrayLabel = null;
+                        _needsByteArrayLoadInCall = false;
+                        break;
                     case nameof(NESLib.oam_meta_spr):
                         EmitOamMetaSpr();
                         break;
