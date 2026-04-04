@@ -120,7 +120,7 @@ byte[] UPD_WON = new byte[25] {
 
 byte[] map = new byte[16];
 byte[] prev_map = new byte[16];
-byte[] vbuf = new byte[29];
+byte[] tile_row = new byte[4];
 
 byte i = 0, j = 0, k = 0, sprite = 0;
 byte keys = 0, keys_changed = 0, has_changed = 0, game_on = 0;
@@ -198,7 +198,9 @@ while (true)
     // Clear message area
     set_vram_update(UPD_BLANK);
     ppu_wait_nmi();
-    set_vram_update(0);
+    // Switch to vrambuf mode for the game loop
+    vrambuf_clear();
+    set_vram_update(updbuf);
 
     // ===== INNER GAME LOOP =====
 
@@ -219,31 +221,27 @@ while (true)
                     else if (v0 > 3) sprite = (byte)(sprite + 0x70);
                     else sprite = (byte)(sprite + 0x40);
 
-                    addr = NTADR_C((byte)(4 + j * 6), (byte)(4 + i * 6));
-                    counter = 0;
+                    // Pre-compute NTADR args to avoid TEMP clobber in multiply
+                    p0 = (byte)(4 + j * 6);
+                    p1 = (byte)(4 + i * 6);
+                    addr = NTADR_C(p0, p1);
                     for (k = 0; k < 4; k = (byte)(k + 1))
                     {
-                        vbuf[counter] = (byte)((addr >> 8) | 0x40);
-                        counter = (byte)(counter + 1);
-                        vbuf[counter] = (byte)(addr & 0xFF);
-                        counter = (byte)(counter + 1);
-                        vbuf[counter] = 4;
-                        counter = (byte)(counter + 1);
-                        vbuf[counter] = sprite;
-                        counter = (byte)(counter + 1);
-                        vbuf[counter] = (byte)(sprite + 1);
-                        counter = (byte)(counter + 1);
-                        vbuf[counter] = (byte)(sprite + 2);
-                        counter = (byte)(counter + 1);
-                        vbuf[counter] = (byte)(sprite + 3);
-                        counter = (byte)(counter + 1);
+                        // Pre-compute into locals to avoid stelem add expression bug
+                        v2 = sprite;
+                        v3 = (byte)(sprite + 1);
+                        p2 = (byte)(sprite + 2);
+                        p3 = (byte)(sprite + 3);
+                        tile_row[0] = v2;
+                        tile_row[1] = v3;
+                        tile_row[2] = p2;
+                        tile_row[3] = p3;
+                        vrambuf_put(addr, tile_row, 4);
                         sprite = (byte)(sprite + 0x10);
                         addr = (ushort)(addr + 32);
                     }
-                    vbuf[counter] = 0xFF;
-                    set_vram_update(vbuf);
                     ppu_wait_nmi();
-                    set_vram_update(0);
+                    vrambuf_clear();
                 }
             }
         }
