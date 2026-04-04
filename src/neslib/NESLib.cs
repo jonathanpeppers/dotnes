@@ -291,6 +291,14 @@ public static class NESLib
     public static byte oam_spr(byte x, byte y, byte chrnum, byte attr, byte sprid) => throw null!;
 
     /// <summary>
+    /// Draw a 2×2 (16×16 pixel) sprite from four sequential 8×8 tiles.
+    /// Writes 4 entries into the OAM buffer with standard 8-pixel offsets.
+    /// Parameters: topLeft, bottomLeft, topRight, bottomRight to match NES tile layout convention.
+    /// </summary>
+    /// <returns>returns sprid+16, which is offset for the next sprite</returns>
+    public static byte oam_spr_2x2(byte x, byte y, byte topLeft, byte bottomLeft, byte topRight, byte bottomRight, byte attr, byte sprid) => throw null!;
+
+    /// <summary>
     /// poll controller and return enum like PAD.LEFT, etc.
     /// </summary>
     /// <param name="pad">pad number (0 or 1)</param>
