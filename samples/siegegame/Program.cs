@@ -389,8 +389,7 @@ while (true)
             }
 
             // Draw sprites: cursor + enemies
-            oam_clear();
-            oam_off = 0;
+            using var frame = oam_begin();
             tempNX = (byte)(cursorX * 8);
             tempNY = (byte)(cursorY * 8);
             oam_off = oam_spr(tempNX, tempNY, SPR_CURSOR, 0, oam_off);
@@ -403,7 +402,6 @@ while (true)
                     oam_off = oam_spr(tempNX, tempNY, SPR_ENEMY, 1, oam_off);
                 }
             }
-            oam_hide_rest(oam_off);
 
             // Apply castle damage
             if (castleHits > 0)

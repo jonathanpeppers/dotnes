@@ -373,7 +373,7 @@ while (true)
         vrambuf_flush();
 
         // --- Draw all sprites ---
-        oam_off = 0;
+        using var oamFrame = oam_begin();
         for (byte ai = 0; ai < MAX_ACTORS; ai++)
         {
             if (actor_state[ai] == INACTIVE)
@@ -474,7 +474,6 @@ while (true)
         // Scoreboard
         oam_off = oam_spr(24, 24, (byte)(0x30 + (score >> 4)), 2, oam_off);
         oam_off = oam_spr(32, 24, (byte)(0x30 + (score & 0x0f)), 2, oam_off);
-        oam_hide_rest(oam_off);
 
         // --- Player movement ---
         PAD joy = pad_poll(0);

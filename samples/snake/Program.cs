@@ -2,7 +2,7 @@
 Snake — classic snake game.
 D-pad changes direction (edge-triggered).
 Eat food to grow and score. Game over on wall or self collision.
-APIs: pad_trigger, oam_spr, oam_hide_rest, rand8, vrambuf_put, ppu_wait_nmi.
+APIs: pad_trigger, oam_spr, oam_begin, rand8, vrambuf_put, ppu_wait_nmi.
 */
 
 #pragma warning disable CS0649, CS0219
@@ -192,7 +192,7 @@ while (true)
     }
 
     // draw sprites (pre-compute array args into globals)
-    oam_off = 0;
+    using var frame = oam_begin();
     idx = 0;
     while (idx < snake_len)
     {
@@ -202,5 +202,4 @@ while (true)
         idx = (byte)(idx + 1);
     }
     oam_off = oam_spr(food_x, food_y, 0x01, 1, oam_off);
-    oam_hide_rest(oam_off);
 }

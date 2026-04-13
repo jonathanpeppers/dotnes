@@ -491,8 +491,7 @@ while (true)
     poke(APU_STATUS, snd_enable);
 
     // --- Draw sprites ---
-    oam_clear();
-    oam_off = 0;
+    using var frame = oam_begin();
 
     // Player
     oam_off = oam_spr(player_x, player_y, SPR_PLAYER, 0, oam_off);
@@ -527,8 +526,6 @@ while (true)
     {
         oam_off = oam_spr(star_x[i], star_y[i], SPR_STAR, 2, oam_off);
     }
-
-    oam_hide_rest(oam_off);
 
     // Update score display via VRAM buffer (processed by NMI during vblank)
     digits[0] = d0;

@@ -44,14 +44,12 @@ for (byte i = 0; i < 16; i = (byte)(i + 1))
 // main loop
 while (true)
 {
-    byte oam_id = 0;
+    using var frame = oam_begin();
     for (byte i = 0; i < 16; i = (byte)(i + 1))
     {
-        oam_id = oam_meta_spr(actor_x[i], actor_y[i], oam_id, metasprite);
+        oam_off = oam_meta_spr(actor_x[i], actor_y[i], oam_off, metasprite);
         actor_x[i] = (byte)(actor_x[i] + actor_dx[i]);
         actor_y[i] = (byte)(actor_y[i] + actor_dy[i]);
     }
-    if (oam_id != 0)
-        oam_hide_rest(oam_id);
     ppu_wait_frame();
 }

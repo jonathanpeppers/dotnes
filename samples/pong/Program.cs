@@ -3,7 +3,7 @@ Pong — 2-player game.
 Player 1: controller 1 UP/DOWN.
 Player 2: controller 2 UP/DOWN.
 Ball bounces off walls and paddles. Score at top.
-APIs: pad_poll, oam_spr, oam_hide_rest, vrambuf_put, ppu_wait_nmi.
+APIs: pad_poll, oam_spr, oam_begin, vrambuf_put, ppu_wait_nmi.
 */
 
 byte[] PALETTE = [
@@ -177,16 +177,15 @@ while (true)
     }
 
     // draw sprites
-    byte oam_id = 0;
+    using var frame = oam_begin();
     // paddle 1 (3 sprites at x=16)
-    oam_id = oam_spr(16, p1_y, 0x01, 0, oam_id);
-    oam_id = oam_spr(16, (byte)(p1_y + 8), 0x01, 0, oam_id);
-    oam_id = oam_spr(16, (byte)(p1_y + 16), 0x01, 0, oam_id);
+    oam_off = oam_spr(16, p1_y, 0x01, 0, oam_off);
+    oam_off = oam_spr(16, (byte)(p1_y + 8), 0x01, 0, oam_off);
+    oam_off = oam_spr(16, (byte)(p1_y + 16), 0x01, 0, oam_off);
     // paddle 2 (3 sprites at x=232)
-    oam_id = oam_spr(232, p2_y, 0x01, 1, oam_id);
-    oam_id = oam_spr(232, (byte)(p2_y + 8), 0x01, 1, oam_id);
-    oam_id = oam_spr(232, (byte)(p2_y + 16), 0x01, 1, oam_id);
+    oam_off = oam_spr(232, p2_y, 0x01, 1, oam_off);
+    oam_off = oam_spr(232, (byte)(p2_y + 8), 0x01, 1, oam_off);
+    oam_off = oam_spr(232, (byte)(p2_y + 16), 0x01, 1, oam_off);
     // ball
-    oam_id = oam_spr(ball_x, ball_y, 0x01, 2, oam_id);
-    oam_hide_rest(oam_id);
+    oam_off = oam_spr(ball_x, ball_y, 0x01, 2, oam_off);
 }

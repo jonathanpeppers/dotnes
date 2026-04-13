@@ -54,7 +54,7 @@ for (i = 0; i < 24; i = (byte)(i + 1))
 // main loop - i persists across frames for flicker effect
 while (true)
 {
-    oam_off = 0;
+    using var frame = oam_begin();
     byte count = 0;
 
     // draw up to 15 actors per frame (15 * 4 = 60 sprites, under the 64 limit)
@@ -78,6 +78,5 @@ while (true)
         count = (byte)(count + 1);
     }
 
-    oam_hide_rest(oam_off);
     ppu_wait_nmi();
 }

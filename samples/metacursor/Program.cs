@@ -71,7 +71,7 @@ for (byte i = 0; i < 8; i = (byte)(i + 1))
 // main loop
 while (true)
 {
-    byte oam_id = 0;
+    using var frame = oam_begin();
 
     // poll controller 0 (player 1 controls actor 0)
     PAD pad = pad_poll(0);
@@ -108,12 +108,10 @@ while (true)
     // draw and move all actors
     for (byte i = 0; i < 8; i = (byte)(i + 1))
     {
-        oam_id = oam_meta_spr(actor_x[i], actor_y[i], oam_id, playerRStand);
+        oam_off = oam_meta_spr(actor_x[i], actor_y[i], oam_off, playerRStand);
         actor_x[i] = (byte)(actor_x[i] + actor_dx[i]);
         actor_y[i] = (byte)(actor_y[i] + actor_dy[i]);
     }
 
-    if (oam_id != 0)
-        oam_hide_rest(oam_id);
     ppu_wait_frame();
 }

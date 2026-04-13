@@ -1100,16 +1100,23 @@ partial class IL2NESWriter
                 break;
             case ILOpCode.Endfinally:
                 {
-                    // End of a finally block — jump to the instruction after the handler,
-                    // or fall through if it's already the next instruction.
-                    var region = FindEnclosingHandlerRegion(instruction.Offset);
-                    if (region != null)
+                    // End of a finally block — jump to the leave target if it's not
+                    // the next instruction (i.e., can't just fall through).
+                    int nextOffset = instruction.Offset + 1; // endfinally is 1 byte
+                    int? jumpTarget = _pendingLeaveTarget;
+                    _pendingLeaveTarget = null;
+
+                    if (jumpTarget == null)
                     {
-                        int afterHandler = region.Value.HandlerOffset + region.Value.HandlerLength;
-                        int nextOffset = instruction.Offset + 1; // endfinally is 1 byte
-                        if (nextOffset != afterHandler)
-                            EmitJMP(InstructionLabel(afterHandler));
+                        // Fallback: jump to the instruction after the handler region
+                        var region = FindEnclosingHandlerRegion(instruction.Offset);
+                        if (region != null)
+                            jumpTarget = region.Value.HandlerOffset + region.Value.HandlerLength;
                     }
+
+                    if (jumpTarget != null && jumpTarget.Value != nextOffset)
+                        EmitJMP(InstructionLabel(jumpTarget.Value));
+
                     Stack.Clear();
                     _accState = AccumulatorState.Empty;
                 }
@@ -1175,9 +1182,12 @@ partial class IL2NESWriter
                 // Exit try block (short form) — jump to finally handler start,
                 // or fall through if the handler is the next instruction.
                 {
+                    operand = (sbyte)(byte)operand;
+                    int leaveTarget = instruction.Offset + operand + 2;
                     var region = FindEnclosingTryRegion(instruction.Offset);
                     if (region != null)
                     {
+                        _pendingLeaveTarget = leaveTarget;
                         int nextOffset = instruction.Offset + 2; // leave.s is 2 bytes
                         if (nextOffset != region.Value.HandlerOffset)
                             EmitJMP(InstructionLabel(region.Value.HandlerOffset));
@@ -1185,8 +1195,7 @@ partial class IL2NESWriter
                     else
                     {
                         // No try/finally context — treat as unconditional branch
-                        operand = (sbyte)(byte)operand;
-                        EmitJMP(InstructionLabel(instruction.Offset + operand + 2));
+                        EmitJMP(InstructionLabel(leaveTarget));
                     }
                     Stack.Clear();
                     _accState = AccumulatorState.Empty;
@@ -1196,9 +1205,11 @@ partial class IL2NESWriter
                 // Exit try block (long form) — jump to finally handler start,
                 // or fall through if the handler is the next instruction.
                 {
+                    int leaveTarget = instruction.Offset + operand + 5;
                     var region = FindEnclosingTryRegion(instruction.Offset);
                     if (region != null)
                     {
+                        _pendingLeaveTarget = leaveTarget;
                         int nextOffset = instruction.Offset + 5; // leave is 5 bytes
                         if (nextOffset != region.Value.HandlerOffset)
                             EmitJMP(InstructionLabel(region.Value.HandlerOffset));
@@ -1206,7 +1217,7 @@ partial class IL2NESWriter
                     else
                     {
                         // No try/finally context — treat as unconditional branch
-                        EmitJMP(InstructionLabel(instruction.Offset + operand + 5));
+                        EmitJMP(InstructionLabel(leaveTarget));
                     }
                     Stack.Clear();
                     _accState = AccumulatorState.Empty;

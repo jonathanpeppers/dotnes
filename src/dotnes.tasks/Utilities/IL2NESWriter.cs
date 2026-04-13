@@ -412,6 +412,12 @@ partial class IL2NESWriter : NESWriter
     int? _pendingStructLocal;
 
     /// <summary>
+    /// The IL offset where execution should resume after the current finally handler.
+    /// Set by Leave/Leave_s, consumed by Endfinally.
+    /// </summary>
+    int? _pendingLeaveTarget;
+
+    /// <summary>
     /// Pending struct array element access state from ldelema.
     /// Null when no ldelema is pending.
     /// </summary>
