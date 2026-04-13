@@ -291,7 +291,7 @@ public static class NESLib
     public static byte oam_spr(byte x, byte y, byte chrnum, byte attr, byte sprid) => throw null!;
 
     /// <summary>
-    /// Draw a 2×2 (16×16 pixel) sprite from four sequential 8×8 tiles.
+    /// Draw a 2×2 (16×16 pixel) sprite from four 8×8 tiles.
     /// Writes 4 entries into the OAM buffer with standard 8-pixel offsets.
     /// Parameters: topLeft, bottomLeft, topRight, bottomRight to match NES tile layout convention.
     /// </summary>

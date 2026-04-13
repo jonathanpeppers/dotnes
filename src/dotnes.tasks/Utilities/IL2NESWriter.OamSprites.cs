@@ -1031,7 +1031,7 @@ partial class IL2NESWriter
                     scan--;
                     argIdx--;
                 }
-                else if (il.OpCode == ILOpCode.Ldsfld || il.OpCode == ILOpCode.Call)
+                else if (il.OpCode == ILOpCode.Ldsfld)
                 {
                     args[argIdx] = (false, 0, -1, true, il.String);
                     if (argIdx == 0) firstArgILOffset = il.Offset;

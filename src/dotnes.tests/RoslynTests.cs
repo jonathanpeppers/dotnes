@@ -2725,10 +2725,8 @@ public class RoslynTests
         // Data pointer setup: STA ptr1 ($2A) and STA ptr1+1 ($2B)
         Assert.Contains("852A", hex); // STA ptr1
         Assert.Contains("852B", hex); // STA ptr1+1
-        // sprid=0 loaded into A: LDA #$00 = A900
-        Assert.Contains("A900", hex);
-        // JSR oam_meta_spr must be present
-        Assert.Contains("20", hex.Substring(hex.IndexOf("A900") + 4, 2));
+        // sprid=0 loaded into A and followed by JSR oam_meta_spr: LDA #$00 = A900, JSR = 20
+        Assert.Contains("A90020", hex);
     }
 
     [Fact]
