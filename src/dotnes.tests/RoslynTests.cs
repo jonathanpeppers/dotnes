@@ -5571,4 +5571,34 @@ public class RoslynTests
             il.Instruction.Operand is LabelOperand lbl && lbl.Label == "oam_hide_rest");
         Assert.True(hasOamHideRest, "Expected JSR oam_hide_rest from OamFrame.Dispose() in main block");
     }
+
+    [Fact]
+    public void OamBegin_InsideLoopBody_EmitsCorrectOrdering()
+    {
+        // Realistic game loop: oam_begin inside while(true), Dispose called each iteration
+        var (program, _) = BuildProgram(
+            """
+            ppu_on_all();
+            while (true)
+            {
+                ppu_wait_nmi();
+                using var frame = oam_begin();
+                oam_spr(10, 20, 0x01, 0, 0);
+            }
+            """);
+
+        var mainBlock = program.Blocks.Single(b => b.Label == "main");
+        var jsrLabels = mainBlock.InstructionsWithLabels
+            .Where(il => il.Instruction.Opcode == Opcode.JSR && il.Instruction.Operand is LabelOperand)
+            .Select(il => ((LabelOperand)il.Instruction.Operand!).Label)
+            .ToList();
+
+        // oam_clear (from oam_begin) must appear before oam_hide_rest (from Dispose)
+        int clearIndex = jsrLabels.IndexOf("oam_clear");
+        int hideRestIndex = jsrLabels.IndexOf("oam_hide_rest");
+        Assert.True(clearIndex >= 0, "Expected JSR oam_clear from oam_begin()");
+        Assert.True(hideRestIndex >= 0, "Expected JSR oam_hide_rest from OamFrame.Dispose()");
+        Assert.True(clearIndex < hideRestIndex,
+            $"oam_clear (index {clearIndex}) should come before oam_hide_rest (index {hideRestIndex})");
+    }
 }
