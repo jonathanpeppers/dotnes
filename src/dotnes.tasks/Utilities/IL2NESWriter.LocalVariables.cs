@@ -197,9 +197,12 @@ partial class IL2NESWriter
             // Check if the next instruction can handle A:X directly
             bool nextIsShift = Instructions is not null && Index + 1 < Instructions.Length &&
                 Instructions[Index + 1].OpCode is ILOpCode.Shr or ILOpCode.Shr_un or ILOpCode.Shl;
-            bool nextIsAddSub = _runtimeValueInA && Instructions is not null && Index + 1 < Instructions.Length &&
+            // When A:X holds a ushort, the next Add/Sub/Div/Rem should operate on
+            // A:X directly — no need to push to the C stack first. This matches the
+            // behavior of WriteLdc(ushort) which also skips pushax for Add/Sub.
+            bool nextIsAddSub = Instructions is not null && Index + 1 < Instructions.Length &&
                 Instructions[Index + 1].OpCode is ILOpCode.Add or ILOpCode.Sub;
-            bool nextIsDivRem = _runtimeValueInA && Instructions is not null && Index + 1 < Instructions.Length &&
+            bool nextIsDivRem = Instructions is not null && Index + 1 < Instructions.Length &&
                 Instructions[Index + 1].OpCode is ILOpCode.Div or ILOpCode.Rem;
             bool nextIsBitwise = Instructions is not null && Index + 1 < Instructions.Length &&
                 Instructions[Index + 1].OpCode is ILOpCode.And or ILOpCode.Or or ILOpCode.Xor;
