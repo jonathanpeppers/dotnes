@@ -992,4 +992,41 @@ public class NESAnalyzerTests
         var expected = Diagnostic(NESAnalyzer.NES012).WithLocation(0).WithArguments("Speed");
         await VerifyLibraryAsync(test, expected);
     }
+
+    // ==================== NES013: throw is not supported ====================
+
+    [Fact]
+    public async Task NES013_ThrowStatement_Diagnostic()
+    {
+        var test = """
+            {|#0:throw null;|}
+            while (true) ;
+            """;
+
+        var expected = Diagnostic(NESAnalyzer.NES013).WithLocation(0);
+        await VerifyAsync(test, expected);
+    }
+
+    [Fact]
+    public async Task NES013_ThrowExpression_Diagnostic()
+    {
+        var test = """
+            static byte GetValue(bool b) => b ? (byte)1 : {|#0:throw null|};
+            while (true) ;
+            """;
+
+        var expected = Diagnostic(NESAnalyzer.NES013).WithLocation(0);
+        await VerifyAsync(test, expected);
+    }
+
+    [Fact]
+    public async Task NES013_NoThrow_NoDiagnostic()
+    {
+        var test = """
+            byte x = 0;
+            while (true) ;
+            """;
+
+        await VerifyAsync(test);
+    }
 }
