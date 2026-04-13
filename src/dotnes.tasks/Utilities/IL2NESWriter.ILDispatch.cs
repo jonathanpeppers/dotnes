@@ -2001,6 +2001,7 @@ partial class IL2NESWriter
                         Emit(Opcode.LDA, AddressMode.Immediate, 0x00);
                         Emit(Opcode.STA, AddressMode.ZeroPage, (byte)OAM_OFF);
                         EmitJSR(nameof(NESLib.oam_clear));
+                        _immediateInA = null;
                         argsAlreadyPopped = true;
                         break;
                     case "OamFrame.Dispose":
@@ -2008,6 +2009,7 @@ partial class IL2NESWriter
                         _pendingStructLocal = null; // ldloca.s before Dispose is consumed
                         Emit(Opcode.LDA, AddressMode.ZeroPage, (byte)OAM_OFF);
                         EmitJSR(nameof(NESLib.oam_hide_rest));
+                        _immediateInA = null;
                         argsAlreadyPopped = true;
                         break;
                     case "oam_spr":
