@@ -2704,6 +2704,58 @@ public class RoslynTests
     }
 
     [Fact]
+    public void OamSpr2x2WithConstantArgs()
+    {
+        // oam_spr_2x2 with all constant arguments
+        var bytes = GetProgramBytes(
+            """
+            oam_spr_2x2(40, 40, 0xD8, 0xD9, 0xDA, 0xDB, 0, 0);
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"OamSpr2x2Const hex: {hex}");
+
+        // x=40 (0x28) stored to TEMP ($17): LDA #$28 = A928, STA $17 = 8517
+        Assert.Contains("A9288517", hex);
+        // y=40 (0x28) stored to TEMP2 ($19): LDA #$28 = A928, STA $19 = 8519
+        Assert.Contains("A9288519", hex);
+        // Data pointer setup: STA ptr1 ($2A) and STA ptr1+1 ($2B)
+        Assert.Contains("852A", hex); // STA ptr1
+        Assert.Contains("852B", hex); // STA ptr1+1
+        // sprid=0 loaded into A and followed by JSR oam_meta_spr: LDA #$00 = A900, JSR = 20
+        Assert.Contains("A90020", hex);
+    }
+
+    [Fact]
+    public void OamSpr2x2WithLocalArgs()
+    {
+        // oam_spr_2x2 with local x, y, and constant tiles/attr/sprid
+        var bytes = GetProgramBytes(
+            """
+            byte x = 40;
+            byte y = 40;
+            oam_spr_2x2(x, y, 0xD8, 0xD9, 0xDA, 0xDB, 0, 0);
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"OamSpr2x2Local hex: {hex}");
+
+        // x from local stored to TEMP ($17): LDA abs = AD...., STA $17 = 8517
+        Assert.Contains("8517", hex);
+        // y from local stored to TEMP2 ($19): STA $19 = 8519
+        Assert.Contains("8519", hex);
+        // Data pointer setup
+        Assert.Contains("852A", hex); // STA ptr1
+        Assert.Contains("852B", hex); // STA ptr1+1
+    }
+
+    [Fact]
     public void MultiFile_StaticHelperClass()
     {
         // Verify that methods in a separate static class are correctly transpiled.
