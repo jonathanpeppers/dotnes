@@ -2704,6 +2704,58 @@ public class RoslynTests
     }
 
     [Fact]
+    public void OamSpr2x2WithConstantArgs()
+    {
+        // oam_spr_2x2 with all constant arguments
+        var bytes = GetProgramBytes(
+            """
+            oam_spr_2x2(40, 40, 0xD8, 0xD9, 0xDA, 0xDB, 0, 0);
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"OamSpr2x2Const hex: {hex}");
+
+        // x=40 (0x28) stored to TEMP ($17): LDA #$28 = A928, STA $17 = 8517
+        Assert.Contains("A9288517", hex);
+        // y=40 (0x28) stored to TEMP2 ($19): LDA #$28 = A928, STA $19 = 8519
+        Assert.Contains("A9288519", hex);
+        // Data pointer setup: STA ptr1 ($2A) and STA ptr1+1 ($2B)
+        Assert.Contains("852A", hex); // STA ptr1
+        Assert.Contains("852B", hex); // STA ptr1+1
+        // sprid=0 loaded into A and followed by JSR oam_meta_spr: LDA #$00 = A900, JSR = 20
+        Assert.Contains("A90020", hex);
+    }
+
+    [Fact]
+    public void OamSpr2x2WithLocalArgs()
+    {
+        // oam_spr_2x2 with local x, y, and constant tiles/attr/sprid
+        var bytes = GetProgramBytes(
+            """
+            byte x = 40;
+            byte y = 40;
+            oam_spr_2x2(x, y, 0xD8, 0xD9, 0xDA, 0xDB, 0, 0);
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"OamSpr2x2Local hex: {hex}");
+
+        // x from local stored to TEMP ($17): LDA abs = AD...., STA $17 = 8517
+        Assert.Contains("8517", hex);
+        // y from local stored to TEMP2 ($19): STA $19 = 8519
+        Assert.Contains("8519", hex);
+        // Data pointer setup
+        Assert.Contains("852A", hex); // STA ptr1
+        Assert.Contains("852B", hex); // STA ptr1+1
+    }
+
+    [Fact]
     public void MultiFile_StaticHelperClass()
     {
         // Verify that methods in a separate static class are correctly transpiled.
@@ -5580,5 +5632,67 @@ public class RoslynTests
         // arr[1] = 1000 (0x03E8): lo=0xE8, hi=0x03
         Assert.Contains("A9E8", hex); // LDA #$E8
         Assert.Contains("A903", hex); // LDA #$03
+    }
+
+    [Fact]
+    public void OamBegin_EmitsLdaStaJsrInMainBlock()
+    {
+        // oam_begin() should emit: LDA #0, STA $1B (oam_off), JSR oam_clear in the main block
+        var (program, _) = BuildProgram(
+            """
+            using var frame = oam_begin();
+            oam_spr(10, 20, 0x01, 0, 0);
+            ppu_on_all();
+            while (true) ;
+            """);
+
+        var mainBlock = program.Blocks.Single(b => b.Label == "main");
+        var instructions = mainBlock.InstructionsWithLabels.ToList();
+
+        // Find the LDA #$00 → STA $1B → JSR oam_clear sequence
+        bool foundSequence = false;
+        for (int i = 0; i < instructions.Count - 2; i++)
+        {
+            var lda = instructions[i].Instruction;
+            var sta = instructions[i + 1].Instruction;
+            var jsr = instructions[i + 2].Instruction;
+            if (lda.Opcode == Opcode.LDA && lda.Mode == AddressMode.Immediate &&
+                lda.Operand is ImmediateOperand imm && imm.Value == 0x00 &&
+                sta.Opcode == Opcode.STA && sta.Mode == AddressMode.ZeroPage &&
+                sta.Operand is ImmediateOperand zpg && zpg.Value == 0x1B &&
+                jsr.Opcode == Opcode.JSR && jsr.Operand is LabelOperand lbl && lbl.Label == "oam_clear")
+            {
+                foundSequence = true;
+                break;
+            }
+        }
+        Assert.True(foundSequence, "Expected LDA #$00 → STA $1B → JSR oam_clear sequence in main block");
+    }
+
+    [Fact]
+    public void OamBegin_EmitsOamClearAndOamHideRestInMainBlock()
+    {
+        // oam_begin() emits JSR oam_clear; OamFrame.Dispose() emits LDA oam_off, JSR oam_hide_rest
+        var (program, _) = BuildProgram(
+            """
+            using var frame = oam_begin();
+            oam_spr(10, 20, 0x01, 0, 0);
+            ppu_on_all();
+            while (true) ;
+            """);
+
+        var mainBlock = program.Blocks.Single(b => b.Label == "main");
+
+        // Verify JSR oam_clear is emitted in the main block (from oam_begin)
+        bool hasOamClear = mainBlock.InstructionsWithLabels.Any(il =>
+            il.Instruction.Opcode == Opcode.JSR &&
+            il.Instruction.Operand is LabelOperand lbl && lbl.Label == "oam_clear");
+        Assert.True(hasOamClear, "Expected JSR oam_clear from oam_begin() in main block");
+
+        // Verify JSR oam_hide_rest is emitted in the main block (from OamFrame.Dispose)
+        bool hasOamHideRest = mainBlock.InstructionsWithLabels.Any(il =>
+            il.Instruction.Opcode == Opcode.JSR &&
+            il.Instruction.Operand is LabelOperand lbl && lbl.Label == "oam_hide_rest");
+        Assert.True(hasOamHideRest, "Expected JSR oam_hide_rest from OamFrame.Dispose() in main block");
     }
 }

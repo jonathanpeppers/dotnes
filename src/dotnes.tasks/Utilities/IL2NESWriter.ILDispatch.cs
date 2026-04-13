@@ -303,12 +303,8 @@ partial class IL2NESWriter
                 HandleStelemI1();
                 break;
             case ILOpCode.Stelem_i2:
-                // stelem.i2: ushort array store if pending, else fall through to byte handler
-                // (music note tables use stelem.i2 but are handled by the existing byte path)
-                if (_pendingUshortArrayBase is not null)
-                    HandleStelemI2();
-                else
-                    HandleStelemI1();
+                // stelem.i2 always represents a 16-bit element store.
+                HandleStelemI2();
                 break;
             case ILOpCode.Ldind_u1:
                 // ldind.u1: load byte through pointer (from ldelema System.Byte)
@@ -2043,8 +2039,30 @@ partial class IL2NESWriter
                         _firstAndAfterPadPoll = true;
                         _immediateInA = null;
                         break;
+                    case nameof(NESLib.oam_begin):
+                        // oam_begin(): reset OAM offset and clear OAM buffer
+                        // Return value (OamFrame) is a zero-size sentinel — no data to store
+                        Emit(Opcode.LDA, AddressMode.Immediate, 0x00);
+                        Emit(Opcode.STA, AddressMode.ZeroPage, (byte)OAM_OFF);
+                        EmitJSR(nameof(NESLib.oam_clear));
+                        _immediateInA = null;
+                        argsAlreadyPopped = true;
+                        break;
+                    case "OamFrame.Dispose":
+                        // OamFrame.Dispose(): hide all unused OAM entries from current offset
+                        _pendingStructLocal = null; // ldloca.s before Dispose is consumed
+                        Emit(Opcode.LDA, AddressMode.ZeroPage, (byte)OAM_OFF);
+                        EmitJSR(nameof(NESLib.oam_hide_rest));
+                        _immediateInA = null;
+                        argsAlreadyPopped = true;
+                        break;
                     case "oam_spr":
                         EmitOamSprDecsp4();
+                        _lastByteArrayLabel = null;
+                        _needsByteArrayLoadInCall = false;
+                        break;
+                    case nameof(NESLib.oam_spr_2x2):
+                        EmitOamSpr2x2();
                         _lastByteArrayLabel = null;
                         _needsByteArrayLoadInCall = false;
                         break;

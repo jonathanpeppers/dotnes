@@ -13,10 +13,7 @@ byte[] PALETTE = [
 ];
 
 pal_all(PALETTE);
-oam_spr(40, 40, 0xD8, 0, 0);
-oam_spr(48, 40, 0xDA, 0, 4);
-oam_spr(40, 48, 0xD9, 0, 8);
-oam_spr(48, 48, 0xDB, 0, 12);
+oam_spr_2x2(40, 40, 0xD8, 0xD9, 0xDA, 0xDB, 0, 0);
 ppu_on_all();
 
 while (true) ;

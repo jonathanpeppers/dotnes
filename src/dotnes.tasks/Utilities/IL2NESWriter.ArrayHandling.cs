@@ -2015,15 +2015,52 @@ partial class IL2NESWriter
             constantIndex = GetLdcValue(indexInstr);
             indexLocalIdx = GetLdlocIndex(indexInstr);
 
-            // Remove previously emitted instructions
+            // Remove previously emitted instructions for array ref and index only.
+            // Value-expression code (calls, arithmetic) must be preserved.
+            var valueStartInstr = Instructions[valueStart];
             int arrayILOffset = arrayInstr.Offset;
-            if (_blockCountAtILOffset.TryGetValue(arrayILOffset, out int blockCountAtArray))
+            if (_blockCountAtILOffset.TryGetValue(arrayILOffset, out int blockCountAtArray)
+                && _blockCountAtILOffset.TryGetValue(valueStartInstr.Offset, out int blockCountAtValue))
             {
-                int instrToRemove = GetBufferedBlockCount() - blockCountAtArray;
+                int instrToRemove = blockCountAtValue - blockCountAtArray;
                 if (instrToRemove > 0)
                 {
-                    RemoveLastInstructions(instrToRemove);
-                    _savedRuntimeToTemp = false;
+                    // Remove only the array ref + index loads, keeping the value computation
+                    // that follows. We need to remove from the end of the value region backward.
+                    int totalBuffered = GetBufferedBlockCount();
+                    int valueRegionSize = totalBuffered - blockCountAtValue;
+                    // Remove from position blockCountAtArray, count = instrToRemove
+                    // But RemoveLastInstructions only removes from the end.
+                    // We need a different approach: remove all from array offset, then
+                    // the value code will still need re-emitting for runtime values.
+                    // For constant/local values, value code is not needed (re-emitted fresh).
+                    // For runtime values, the code is already in A:X.
+                    // So: if the value is constant or a local load, remove everything.
+                    // If the value is runtime, only remove array+index (keep value code).
+                    var valInstr = Instructions[Index - 1];
+                    if (valInstr.OpCode is ILOpCode.Conv_u2 or ILOpCode.Conv_i2 && Index - 2 >= valueStart)
+                        valInstr = Instructions[Index - 2];
+                    bool isRuntimeValue = valInstr.OpCode is ILOpCode.Add or ILOpCode.Sub or ILOpCode.Mul
+                        or ILOpCode.Shl or ILOpCode.Shr or ILOpCode.Shr_un or ILOpCode.And or ILOpCode.Or
+                        or ILOpCode.Call;
+
+                    if (isRuntimeValue)
+                    {
+                        // Runtime value: keep the value computation, only conceptually
+                        // skip the array+index removal since we can't remove from the middle.
+                        // The value computation code already set A (or A:X).
+                        // We'll save A:X to TEMP/TEMP2, emit array+index addressing, then store.
+                    }
+                    else
+                    {
+                        // Constant/local value: safe to remove everything from array offset
+                        int totalToRemove = totalBuffered - blockCountAtArray;
+                        if (totalToRemove > 0)
+                        {
+                            RemoveLastInstructions(totalToRemove);
+                            _savedRuntimeToTemp = false;
+                        }
+                    }
                 }
             }
         }

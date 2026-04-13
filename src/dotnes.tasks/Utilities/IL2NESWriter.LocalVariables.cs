@@ -33,6 +33,7 @@ partial class IL2NESWriter
             Locals[localIdx] = new Local(count, arrayAddr, ArraySize: totalBytes, StructArrayType: _pendingArrayType);
             _pendingStructArrayCount = 0;
             _pendingStructArrayBase = null;
+            _pendingArrayType = null;
         }
         else if (isUshortArray)
         {
@@ -44,6 +45,7 @@ partial class IL2NESWriter
             Locals[localIdx] = new Local(count, arrayAddr, ArraySize: totalBytes, IsWord: true);
             _pendingUshortArrayCount = 0;
             _pendingUshortArrayBase = null;
+            _pendingArrayType = null;
         }
         else
         {
