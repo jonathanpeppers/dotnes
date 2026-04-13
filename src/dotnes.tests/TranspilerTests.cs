@@ -296,9 +296,12 @@ public class TranspilerTests
             else if (lbl.Label is "popax" or "incsp2") popaCount += 2;
             if (lbl.Label != "pusha") continue;
 
-            // Check if this pusha is for a function argument
+            // Check if this pusha is for a function argument.
+            // Use a larger window to handle patterns where array element
+            // loads (ldelem_u1) push early and intermediate stloc/ldloc
+            // pairs separate the pusha from the eventual JSR.
             bool isForFuncCall = false;
-            for (int j = i + 1; j < Math.Min(i + 8, instrs.Count); j++)
+            for (int j = i + 1; j < Math.Min(i + 20, instrs.Count); j++)
             {
                 var next = instrs[j].Instruction;
                 if (next.Opcode == ObjectModel.Opcode.JSR && next.Operand is ObjectModel.LabelOperand callLbl

@@ -599,6 +599,14 @@ partial class IL2NESWriter
                 _immediateInA = null;
                 _lastLoadedLocalIndex = null;
                 _runtimeValueInA = true;
+                // If this array element is an argument for a multi-arg call that
+                // uses the default path, push it to the cc65 stack now so it
+                // survives subsequent loads.
+                if (ScanForUpcomingMultiArgCall())
+                {
+                    EmitJSR("pusha");
+                    _runtimeValueInA = false;
+                }
                 return;
             }
             Emit(Opcode.LDX, AddressMode.Immediate, (byte)constantIndex.Value);
@@ -631,6 +639,14 @@ partial class IL2NESWriter
         _immediateInA = null;
         _lastLoadedLocalIndex = null;
         _runtimeValueInA = true;
+        // If this array element is an argument for a multi-arg call that
+        // uses the default path, push it to the cc65 stack now so it
+        // survives subsequent loads.
+        if (ScanForUpcomingMultiArgCall())
+        {
+            EmitJSR("pusha");
+            _runtimeValueInA = false;
+        }
     }
 
     /// <summary>
