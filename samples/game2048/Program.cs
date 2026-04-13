@@ -246,6 +246,13 @@ while (true)
             }
         }
 
+        // Sync prev_map so changed tiles aren't redrawn every frame
+        for (k = 0; k < 16; k = (byte)(k + 1))
+        {
+            v0 = map[k];
+            prev_map[k] = v0;
+        }
+
         // ----- Show notification sprites -----
         oam_id = 0;
         sy = 24;
