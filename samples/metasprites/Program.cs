@@ -6,14 +6,8 @@ Uses 4 hardware sprites in a 2x2 pattern (16x16 pixel metasprites).
 16 actors bounce around the screen using oam_meta_spr().
 */
 
-// define a 2x2 metasprite: x-offset, y-offset, tile, attribute; terminated by 128
-byte[] metasprite = [
-    0, 0, 0xD8, 0,
-    0, 8, 0xD9, 0,
-    8, 0, 0xDA, 0,
-    8, 8, 0xDB, 0,
-    128
-];
+// define a 2x2 metasprite using the helper
+byte[] metasprite = meta_spr_2x2(0xD8, 0xD9, 0xDA, 0xDB);
 
 byte[] PALETTE = [
     DarkViolet,                                    // screen color

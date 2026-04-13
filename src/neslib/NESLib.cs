@@ -307,9 +307,27 @@ public static class NESLib
     public static byte oam_meta_spr(byte x, byte y, byte sprid, byte[] data) => throw null!;
 
     /// <summary>
+    /// Build a 2×2 (16×16 pixel) metasprite from four tile indices.
+    /// Parameters: topLeft, bottomLeft, topRight, bottomRight to match NES OAM convention.
+    /// Returns 17-byte metasprite array suitable for oam_meta_spr / oam_meta_spr_pal.
+    /// </summary>
+    public static byte[] meta_spr_2x2(byte topLeft, byte bottomLeft, byte topRight, byte bottomRight, byte attr = 0) => throw null!;
+
+    /// <summary>
+    /// Build a horizontally-flipped 2×2 metasprite (sets 0x40 flip bit, swaps L/R columns).
+    /// Returns 17-byte metasprite array suitable for oam_meta_spr / oam_meta_spr_pal.
+    /// </summary>
+    public static byte[] meta_spr_2x2_flip(byte topLeft, byte bottomLeft, byte topRight, byte bottomRight, byte attr = 0) => throw null!;
+
+    /// <summary>
     /// hide all remaining sprites from given offset
     /// </summary>
     public static void oam_hide_rest(byte sprid) => throw null!;
+
+    /// <summary>
+    /// Returns an OamFrame that auto-hides remaining sprites on Dispose
+    /// </summary>
+    public static OamFrame oam_begin() => throw null!;
 
     /// <summary>
     /// set vram pointer to write operations if you need to write some data to vram
@@ -702,4 +720,13 @@ public static class NESLib
         0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30,
         0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30,
     ];
+}
+
+/// <summary>
+/// RAII scope for OAM sprite drawing.
+/// Dispose() calls oam_hide_rest(oam_off).
+/// </summary>
+public ref struct OamFrame
+{
+    public void Dispose() => throw null!;
 }

@@ -55,3 +55,9 @@ const NES.NESColor.Teal = 27 -> byte
 const NES.NESColor.Violet = 19 -> byte
 const NES.NESColor.White = 48 -> byte
 const NES.NESColor.Yellow = 40 -> byte
+NES.OamFrame
+NES.OamFrame.Dispose() -> void
+NES.OamFrame.OamFrame() -> void
+static NES.NESLib.meta_spr_2x2(byte topLeft, byte bottomLeft, byte topRight, byte bottomRight, byte attr = 0) -> byte[]!
+static NES.NESLib.meta_spr_2x2_flip(byte topLeft, byte bottomLeft, byte topRight, byte bottomRight, byte attr = 0) -> byte[]!
+static NES.NESLib.oam_begin() -> NES.OamFrame

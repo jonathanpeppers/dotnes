@@ -152,11 +152,12 @@ partial class IL2NESWriter
                     Locals[0] = new Local(Stack.Pop(), Locals[0].Address, IsWord: Locals[0].IsWord);
                     _pendingIncDecLocal = null;
                 }
-                else if (previous == ILOpCode.Ldtoken)
+                else if (previous == ILOpCode.Ldtoken || _pendingByteArrayFromIntrinsic)
                 {
                     // Capture label for byte array reference
                     Locals[0] = new Local(_lastByteArraySize, LabelName: _lastByteArrayLabel);
                     _lastByteArrayLabel = null;
+                    _pendingByteArrayFromIntrinsic = false;
                     _stloc0IsLdtokenPath = true;
                     Stack.Pop(); // Discard marker
                 }
@@ -177,10 +178,11 @@ partial class IL2NESWriter
                     Locals[1] = new Local(Stack.Pop(), Locals[1].Address, IsWord: Locals[1].IsWord);
                     _pendingIncDecLocal = null;
                 }
-                else if (previous == ILOpCode.Ldtoken)
+                else if (previous == ILOpCode.Ldtoken || _pendingByteArrayFromIntrinsic)
                 {
                     Locals[1] = new Local(_lastByteArraySize, LabelName: _lastByteArrayLabel);
                     _lastByteArrayLabel = null;
+                    _pendingByteArrayFromIntrinsic = false;
                     Stack.Pop();
                 }
                 else if (previous == ILOpCode.Newarr)
@@ -200,10 +202,11 @@ partial class IL2NESWriter
                     Locals[2] = new Local(Stack.Pop(), Locals[2].Address, IsWord: Locals[2].IsWord);
                     _pendingIncDecLocal = null;
                 }
-                else if (previous == ILOpCode.Ldtoken)
+                else if (previous == ILOpCode.Ldtoken || _pendingByteArrayFromIntrinsic)
                 {
                     Locals[2] = new Local(_lastByteArraySize, LabelName: _lastByteArrayLabel);
                     _lastByteArrayLabel = null;
+                    _pendingByteArrayFromIntrinsic = false;
                     Stack.Pop();
                 }
                 else if (previous == ILOpCode.Newarr)
@@ -223,10 +226,11 @@ partial class IL2NESWriter
                     Locals[3] = new Local(Stack.Pop(), Locals[3].Address, IsWord: Locals[3].IsWord);
                     _pendingIncDecLocal = null;
                 }
-                else if (previous == ILOpCode.Ldtoken)
+                else if (previous == ILOpCode.Ldtoken || _pendingByteArrayFromIntrinsic)
                 {
                     Locals[3] = new Local(_lastByteArraySize, LabelName: _lastByteArrayLabel);
                     _lastByteArrayLabel = null;
+                    _pendingByteArrayFromIntrinsic = false;
                     Stack.Pop();
                 }
                 else if (previous == ILOpCode.Newarr)
@@ -1115,6 +1119,22 @@ partial class IL2NESWriter
                 // ldelem.u2/i2: pop array ref and index, push ushort array[index]
                 HandleLdelemU2();
                 break;
+            case ILOpCode.Endfinally:
+                {
+                    // End of a finally block — jump to the instruction after the handler,
+                    // or fall through if it's already the next instruction.
+                    var region = FindEnclosingHandlerRegion(instruction.Offset);
+                    if (region != null)
+                    {
+                        int afterHandler = region.Value.HandlerOffset + region.Value.HandlerLength;
+                        int nextOffset = instruction.Offset + 1; // endfinally is 1 byte
+                        if (nextOffset != afterHandler)
+                            EmitJMP(InstructionLabel(afterHandler));
+                    }
+                    Stack.Clear();
+                    _accState = AccumulatorState.Empty;
+                }
+                break;
             default:
                 throw new TranspileException(GetUnsupportedOpcodeMessage(instruction.OpCode), MethodName);
         }
@@ -1170,6 +1190,47 @@ partial class IL2NESWriter
                 {
                     var labelName = InstructionLabel(instruction.Offset + operand + 5);
                     EmitJMP(labelName);
+                }
+                break;
+            case ILOpCode.Leave_s:
+                // Exit try block (short form) — jump to finally handler start,
+                // or fall through if the handler is the next instruction.
+                {
+                    var region = FindEnclosingTryRegion(instruction.Offset);
+                    if (region != null)
+                    {
+                        int nextOffset = instruction.Offset + 2; // leave.s is 2 bytes
+                        if (nextOffset != region.Value.HandlerOffset)
+                            EmitJMP(InstructionLabel(region.Value.HandlerOffset));
+                    }
+                    else
+                    {
+                        // No try/finally context — treat as unconditional branch
+                        operand = (sbyte)(byte)operand;
+                        EmitJMP(InstructionLabel(instruction.Offset + operand + 2));
+                    }
+                    Stack.Clear();
+                    _accState = AccumulatorState.Empty;
+                }
+                break;
+            case ILOpCode.Leave:
+                // Exit try block (long form) — jump to finally handler start,
+                // or fall through if the handler is the next instruction.
+                {
+                    var region = FindEnclosingTryRegion(instruction.Offset);
+                    if (region != null)
+                    {
+                        int nextOffset = instruction.Offset + 5; // leave is 5 bytes
+                        if (nextOffset != region.Value.HandlerOffset)
+                            EmitJMP(InstructionLabel(region.Value.HandlerOffset));
+                    }
+                    else
+                    {
+                        // No try/finally context — treat as unconditional branch
+                        EmitJMP(InstructionLabel(instruction.Offset + operand + 5));
+                    }
+                    Stack.Clear();
+                    _accState = AccumulatorState.Empty;
                 }
                 break;
             case ILOpCode.Newarr:
@@ -1248,11 +1309,12 @@ partial class IL2NESWriter
                     {
                         HandleStlocAfterNewarr(localIdx);
                     }
-                    else if (previous == ILOpCode.Ldtoken)
+                    else if (previous == ILOpCode.Ldtoken || _pendingByteArrayFromIntrinsic)
                     {
-                        // Initialized byte array from Ldtoken
+                        // Initialized byte array from Ldtoken or meta_spr_2x2 intrinsic
                         Locals[localIdx] = new Local(_lastByteArraySize, LabelName: _lastByteArrayLabel);
                         _lastByteArrayLabel = null;
+                        _pendingByteArrayFromIntrinsic = false;
                         Stack.Pop();
                     }
                     else
@@ -1991,6 +2053,12 @@ partial class IL2NESWriter
                         break;
                     case nameof(NESLib.oam_meta_spr_pal):
                         EmitOamMetaSprPal();
+                        break;
+                    case nameof(NESLib.meta_spr_2x2):
+                        HandleMetaSpr2x2(flip: false);
+                        break;
+                    case nameof(NESLib.meta_spr_2x2_flip):
+                        HandleMetaSpr2x2(flip: true);
                         break;
                     case nameof(NESLib.set_music_pulse_table):
                     case nameof(NESLib.set_music_triangle_table):
