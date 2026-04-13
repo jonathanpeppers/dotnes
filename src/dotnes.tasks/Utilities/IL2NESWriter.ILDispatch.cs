@@ -1995,6 +1995,21 @@ partial class IL2NESWriter
                         _firstAndAfterPadPoll = true;
                         _immediateInA = null;
                         break;
+                    case nameof(NESLib.oam_begin):
+                        // oam_begin(): reset OAM offset and clear OAM buffer
+                        // Return value (OamFrame) is a zero-size sentinel — no data to store
+                        Emit(Opcode.LDA, AddressMode.Immediate, 0x00);
+                        Emit(Opcode.STA, AddressMode.ZeroPage, (byte)OAM_OFF);
+                        EmitJSR(nameof(NESLib.oam_clear));
+                        argsAlreadyPopped = true;
+                        break;
+                    case "OamFrame.Dispose":
+                        // OamFrame.Dispose(): hide all unused OAM entries from current offset
+                        _pendingStructLocal = null; // ldloca.s before Dispose is consumed
+                        Emit(Opcode.LDA, AddressMode.ZeroPage, (byte)OAM_OFF);
+                        EmitJSR(nameof(NESLib.oam_hide_rest));
+                        argsAlreadyPopped = true;
+                        break;
                     case "oam_spr":
                         EmitOamSprDecsp4();
                         _lastByteArrayLabel = null;

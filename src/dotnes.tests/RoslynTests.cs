@@ -5457,4 +5457,52 @@ public class RoslynTests
                 """));
         Assert.Contains("try/catch", ex.Message);
     }
+
+    [Fact]
+    public void OamBegin_EmitsLdaStaJsr()
+    {
+        // oam_begin() should emit: LDA #0, STA $1B (oam_off), JSR oam_clear
+        var bytes = GetProgramBytes(
+            """
+            using var frame = oam_begin();
+            oam_spr(10, 20, 0x01, 0, 0);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        // LDA #$00 → A9 00
+        // STA $1B (zero page) → 85 1B
+        Assert.Contains("A900", hex);
+        Assert.Contains("851B", hex);
+    }
+
+    [Fact]
+    public void OamBegin_EmitsOamClearAndOamHideRest()
+    {
+        // oam_begin() emits JSR oam_clear; OamFrame.Dispose() emits LDA oam_off, JSR oam_hide_rest
+        var (program, _) = BuildProgram(
+            """
+            using var frame = oam_begin();
+            oam_spr(10, 20, 0x01, 0, 0);
+            ppu_on_all();
+            while (true) ;
+            """);
+
+        // Verify JSR oam_clear is emitted (from oam_begin)
+        bool hasOamClear = program.Blocks.Any(b =>
+            b.InstructionsWithLabels.Any(il =>
+                il.Instruction.Opcode == Opcode.JSR &&
+                il.Instruction.Operand is LabelOperand lbl && lbl.Label == "oam_clear"));
+        Assert.True(hasOamClear, "Expected JSR oam_clear from oam_begin()");
+
+        // Verify JSR oam_hide_rest is emitted (from OamFrame.Dispose)
+        bool hasOamHideRest = program.Blocks.Any(b =>
+            b.InstructionsWithLabels.Any(il =>
+                il.Instruction.Opcode == Opcode.JSR &&
+                il.Instruction.Operand is LabelOperand lbl && lbl.Label == "oam_hide_rest"));
+        Assert.True(hasOamHideRest, "Expected JSR oam_hide_rest from OamFrame.Dispose()");
+    }
 }
