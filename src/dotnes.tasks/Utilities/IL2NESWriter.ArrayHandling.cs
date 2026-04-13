@@ -1784,56 +1784,57 @@ partial class IL2NESWriter
     /// </summary>
     void HandleLdelemU2()
     {
-        if (Instructions is null || Index < 2)
-            throw new InvalidOperationException("HandleLdelemU2 requires at least 2 previous instructions");
+        if (Instructions is null || Index < 1)
+            throw new InvalidOperationException("HandleLdelemU2 requires at least 1 previous instruction");
 
         if (Stack.Count > 0) Stack.Pop(); // index
         if (Stack.Count > 0) Stack.Pop(); // array ref
 
         var indexInstr = Instructions[Index - 1];
-        var arrayInstr = Instructions[Index - 2];
-
         int? indexLocalIdx = GetLdlocIndex(indexInstr);
-        int? arrayLocalIdx = GetLdlocIndex(arrayInstr);
-        Local? arrayLocalFromField = null;
-        if (arrayLocalIdx == null)
-            arrayLocalFromField = TryResolveArrayLocal(arrayInstr);
-
         int? constantIndex = indexLocalIdx == null ? GetLdcValue(indexInstr) : null;
 
-        if (arrayLocalIdx == null && arrayLocalFromField == null)
+        // Determine the array base address
+        ushort arrayBase;
+        int removeFromILOffset;
+
+        if (_pendingUshortArrayBase is not null)
         {
-            // Check if array ref came from newarr+dup (not yet stored in local)
-            if ((arrayInstr.OpCode == ILOpCode.Dup || arrayInstr.OpCode == ILOpCode.Newarr) && _pendingUshortArrayBase is not null)
+            // Array ref is implicit on eval stack (never stored to local — Release compiler pattern).
+            // Only the index instruction precedes ldelem.u2.
+            arrayBase = _pendingUshortArrayBase.Value;
+            removeFromILOffset = indexInstr.Offset;
+        }
+        else if (Index >= 2)
+        {
+            var arrayInstr = Instructions[Index - 2];
+            int? arrayLocalIdx = GetLdlocIndex(arrayInstr);
+            Local? arrayLocalFromField = arrayLocalIdx == null ? TryResolveArrayLocal(arrayInstr) : null;
+
+            if (arrayLocalIdx != null)
             {
-                // Use pre-allocated address
+                var arrayLocal = Locals[arrayLocalIdx.Value];
+                if (arrayLocal.Address is null)
+                    throw new TranspileException("Ushort array element access failed: the array variable has no allocated address.", MethodName);
+                arrayBase = (ushort)arrayLocal.Address;
+            }
+            else if (arrayLocalFromField?.Address is not null)
+            {
+                arrayBase = (ushort)arrayLocalFromField.Address;
             }
             else
             {
                 throw new TranspileException("Ushort array element access requires the array to be stored in a local variable or static field.", MethodName);
             }
-        }
-
-        Local? indexLocal = indexLocalIdx != null ? Locals[indexLocalIdx.Value] : null;
-        ushort arrayBase;
-        if (arrayLocalIdx != null)
-        {
-            var arrayLocal = Locals[arrayLocalIdx.Value];
-            if (arrayLocal.Address is null)
-                throw new TranspileException("Ushort array element access failed: the array variable has no allocated address.", MethodName);
-            arrayBase = (ushort)arrayLocal.Address;
-        }
-        else if (arrayLocalFromField?.Address is not null)
-        {
-            arrayBase = (ushort)arrayLocalFromField.Address;
+            removeFromILOffset = arrayInstr.Offset;
         }
         else
         {
-            arrayBase = _pendingUshortArrayBase!.Value;
+            throw new TranspileException("Ushort array element access requires the array to be stored in a local variable or static field.", MethodName);
         }
+
         // Remove previously emitted instructions from WriteLdloc/WriteLdc
-        int arrayILOffset = arrayInstr.Offset;
-        if (_blockCountAtILOffset.TryGetValue(arrayILOffset, out int blockCountAtArray))
+        if (_blockCountAtILOffset.TryGetValue(removeFromILOffset, out int blockCountAtArray))
         {
             int instrToRemove = GetBufferedBlockCount() - blockCountAtArray;
             if (instrToRemove > 0)
@@ -1842,6 +1843,8 @@ partial class IL2NESWriter
                 _savedRuntimeToTemp = false;
             }
         }
+
+        Local? indexLocal = indexLocalIdx != null ? Locals[indexLocalIdx.Value] : null;
 
         if (constantIndex != null)
         {
