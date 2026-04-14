@@ -3176,6 +3176,89 @@ public class RoslynTests
     }
 
     [Fact]
+    public void PadPressed_ProducesSameCodeAsManualAnd()
+    {
+        // pad_pressed(pad, PAD.LEFT) should produce identical 6502 code
+        // to the manual (pad & PAD.LEFT) != 0 pattern.
+        var manualBytes = GetProgramBytes(
+            """
+            byte x = 40;
+            ppu_on_all();
+            while (true)
+            {
+                ppu_wait_nmi();
+                PAD pad = pad_poll(0);
+                if ((pad & PAD.LEFT) != 0) x--;
+                if ((pad & PAD.RIGHT) != 0) x++;
+                oam_spr(x, 40, 0xD8, 0, 0);
+            }
+            """);
+        Assert.NotNull(manualBytes);
+
+        var helperBytes = GetProgramBytes(
+            """
+            byte x = 40;
+            ppu_on_all();
+            while (true)
+            {
+                ppu_wait_nmi();
+                PAD pad = pad_poll(0);
+                if (pad_pressed(pad, PAD.LEFT)) x--;
+                if (pad_pressed(pad, PAD.RIGHT)) x++;
+                oam_spr(x, 40, 0xD8, 0, 0);
+            }
+            """);
+        Assert.NotNull(helperBytes);
+
+        var manualHex = Convert.ToHexString(manualBytes);
+        var helperHex = Convert.ToHexString(helperBytes);
+        _logger.WriteLine($"Manual: {manualHex}");
+        _logger.WriteLine($"Helper: {helperHex}");
+
+        // Both should produce the same length
+        Assert.Equal(manualBytes.Length, helperBytes.Length);
+
+        // Compare instruction patterns (mask JSR absolute addresses that may shift)
+        // The AND #mask + BEQ patterns must be identical
+        Assert.Contains("2940F003CE2503", helperHex); // AND #$40; BEQ +3; DEC $0325
+        Assert.Contains("2980F003EE2503", helperHex); // AND #$80; BEQ +3; INC $0325
+    }
+
+    [Fact]
+    public void PadPressed_MultipleButtons()
+    {
+        // Verify pad_pressed emits correct AND immediate for multiple button checks
+        var bytes = GetProgramBytes(
+            """
+            byte x = 100;
+            byte y = 100;
+            ppu_on_all();
+            while (true)
+            {
+                ppu_wait_nmi();
+                PAD pad = pad_poll(0);
+                if (pad_pressed(pad, PAD.UP)) y--;
+                if (pad_pressed(pad, PAD.DOWN)) y++;
+                if (pad_pressed(pad, PAD.LEFT)) x--;
+                if (pad_pressed(pad, PAD.RIGHT)) x++;
+                oam_spr(x, y, 0xD8, 0, 0);
+            }
+            """);
+        Assert.NotNull(bytes);
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"PadPressed_MultipleButtons hex: {hex}");
+
+        // AND #$10 for PAD.UP
+        Assert.Contains("2910", hex);
+        // AND #$20 for PAD.DOWN
+        Assert.Contains("2920", hex);
+        // AND #$40 for PAD.LEFT
+        Assert.Contains("2940", hex);
+        // AND #$80 for PAD.RIGHT
+        Assert.Contains("2980", hex);
+    }
+
+    [Fact]
     public void DupCascade_InterveningStloc_ReloadsFromTemp()
     {
         // Regression: In the climber sample, the pattern:

@@ -163,6 +163,12 @@ public static class NESLib
     public static PAD pad_state(byte pad) => throw null!;
 
     /// <summary>
+    /// Returns true if the specified button is pressed in the pad state.
+    /// Compile-time intrinsic: emits inline AND + branch, identical to (joy &amp; button) != 0.
+    /// </summary>
+    public static bool pad_pressed(PAD joy, PAD button) => throw null!;
+
+    /// <summary>
     /// read from vram
     /// </summary>
     public static void vram_read(byte[] dst, uint size) => throw null!;
