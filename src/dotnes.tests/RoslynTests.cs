@@ -3215,14 +3215,8 @@ public class RoslynTests
         _logger.WriteLine($"Manual: {manualHex}");
         _logger.WriteLine($"Helper: {helperHex}");
 
-        // Both should produce the same length
-        Assert.Equal(manualBytes.Length, helperBytes.Length);
-
-        // Verify both versions contain the same AND #mask + BEQ instruction patterns
-        Assert.Contains("2940F003CE2503", manualHex); // AND #$40; BEQ +3; DEC $0325
-        Assert.Contains("2980F003EE2503", manualHex); // AND #$80; BEQ +3; INC $0325
-        Assert.Contains("2940F003CE2503", helperHex); // AND #$40; BEQ +3; DEC $0325
-        Assert.Contains("2980F003EE2503", helperHex); // AND #$80; BEQ +3; INC $0325
+        // Both should produce byte-identical 6502 output
+        Assert.Equal(manualBytes, helperBytes);
     }
 
     [Fact]

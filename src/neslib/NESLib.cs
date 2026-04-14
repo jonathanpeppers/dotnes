@@ -165,6 +165,7 @@ public static class NESLib
     /// <summary>
     /// Returns true if the specified button is pressed in the pad state.
     /// Compile-time intrinsic: emits inline AND + branch, identical to (joy &amp; button) != 0.
+    /// <paramref name="button"/> must be a compile-time constant (e.g. <c>PAD.LEFT</c>).
     /// </summary>
     public static bool pad_pressed(PAD joy, PAD button) => throw null!;
 
