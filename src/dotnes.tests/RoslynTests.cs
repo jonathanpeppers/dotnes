@@ -5571,4 +5571,41 @@ public class RoslynTests
             il.Instruction.Operand is LabelOperand lbl && lbl.Label == "oam_hide_rest");
         Assert.True(hasOamHideRest, "Expected JSR oam_hide_rest from OamFrame.Dispose() in main block");
     }
+
+    [Fact]
+    public void NtadrWithTwoRuntimeMultiplyExpressions()
+    {
+        // Regression: NTADR_C((byte)(4 + col * 6), (byte)(4 + row * 6))
+        // The multiply for the y argument clobbers TEMP which held the x value.
+        // The Mul handler's _savedRuntimeToTemp path incorrectly treats the multiply
+        // as runtime × runtime when it's actually runtime × constant.
+        var bytes = GetProgramBytes(
+            """
+            byte col = 1;
+            byte row = 2;
+            ushort addr = NTADR_C((byte)(4 + col * 6), (byte)(4 + row * 6));
+            vram_adr(addr);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"NtadrTwoMul hex: {hex}");
+
+        // Both args involve * 6 (non-power-of-2), so the multiply loop must appear.
+        // After the fix:
+        // - First multiply (col * 6) uses TEMP correctly, adds #$04 (not #$06)
+        // - First arg saved to TEMP, then pushed to cc65 stack before second multiply
+        // - Second multiply (row * 6) uses TEMP freely, adds #$04 (not #$0C)
+        // - NTADR handler recovers first arg via popa
+
+        // ADC #$04 must appear (add 4 to multiply results), not ADC #$06 or ADC #$0C
+        Assert.Contains("6904", hex); // CLC; ADC #$04
+        // The NTADR handler must set up args correctly via popa
+        Assert.Contains("8519", hex); // STA TEMP2 (save y)
+        Assert.Contains("8517", hex); // STA TEMP (save x from popa)
+        Assert.Contains("A519", hex); // LDA TEMP2 (restore y)
+    }
 }

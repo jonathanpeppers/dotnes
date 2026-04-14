@@ -342,33 +342,44 @@ partial class IL2NESWriter
                             RemoveLastInstructions(1);
                         }
 
+                        bool twoRuntimeMul = false;
                         if (_savedRuntimeToTemp)
                         {
-                            // Two runtime values: first in TEMP, second in A
-                            // 8-bit multiply: TEMP × A → A
-                            //   STA TEMP2      ; multiplier
-                            //   LDA #0         ; result = 0
-                            //   LDX #8         ; 8 bits
-                            //   LSR TEMP2      ; ← @loop: shift multiplier right
-                            //   BCC @skip      ; +3 to skip CLC+ADC
-                            //   CLC
-                            //   ADC TEMP       ; result += multiplicand
-                            //   ASL TEMP       ; ← @skip: shift multiplicand left
-                            //   DEX
-                            //   BNE @loop      ; -10 to LSR
-                            Emit(Opcode.STA, AddressMode.ZeroPage, (byte)NESConstants.TEMP2);
-                            Emit(Opcode.LDA, AddressMode.Immediate, 0);
-                            Emit(Opcode.LDX, AddressMode.Immediate, 8);
-                            Emit(Opcode.LSR, AddressMode.ZeroPage, (byte)NESConstants.TEMP2);
-                            Emit(Opcode.BCC, AddressMode.Relative, 3); // skip CLC(1) + ADC_zp(2)
-                            Emit(Opcode.CLC, AddressMode.Implied);
-                            Emit(Opcode.ADC, AddressMode.ZeroPage, (byte)TEMP);
-                            Emit(Opcode.ASL, AddressMode.ZeroPage, (byte)TEMP);
-                            Emit(Opcode.DEX, AddressMode.Implied);
-                            Emit(Opcode.BNE, AddressMode.Relative, unchecked((byte)-12));
+                            bool prevWasLdc =
+                                previous is ILOpCode.Ldc_i4_s or ILOpCode.Ldc_i4
+                                or ILOpCode.Ldc_i4_0 or ILOpCode.Ldc_i4_1 or ILOpCode.Ldc_i4_2
+                                or ILOpCode.Ldc_i4_3 or ILOpCode.Ldc_i4_4 or ILOpCode.Ldc_i4_5
+                                or ILOpCode.Ldc_i4_6 or ILOpCode.Ldc_i4_7 or ILOpCode.Ldc_i4_8;
+                            if (!prevWasLdc)
+                            {
+                                // Two runtime values: first in TEMP, second in A
+                                // 8-bit multiply: TEMP × A → A
+                                Emit(Opcode.STA, AddressMode.ZeroPage, (byte)NESConstants.TEMP2);
+                                Emit(Opcode.LDA, AddressMode.Immediate, 0);
+                                Emit(Opcode.LDX, AddressMode.Immediate, 8);
+                                Emit(Opcode.LSR, AddressMode.ZeroPage, (byte)NESConstants.TEMP2);
+                                Emit(Opcode.BCC, AddressMode.Relative, 3); // skip CLC(1) + ADC_zp(2)
+                                Emit(Opcode.CLC, AddressMode.Implied);
+                                Emit(Opcode.ADC, AddressMode.ZeroPage, (byte)TEMP);
+                                Emit(Opcode.ASL, AddressMode.ZeroPage, (byte)TEMP);
+                                Emit(Opcode.DEX, AddressMode.Implied);
+                                Emit(Opcode.BNE, AddressMode.Relative, unchecked((byte)-12));
+                                twoRuntimeMul = true;
+                            }
+                            else
+                            {
+                                // Runtime × constant, but TEMP holds a value from a prior
+                                // computation (e.g. the first NTADR argument). Save TEMP
+                                // to the cc65 stack so the multiply can use TEMP freely.
+                                Emit(Opcode.STA, AddressMode.ZeroPage, (byte)NESConstants.TEMP2);
+                                Emit(Opcode.LDA, AddressMode.ZeroPage, (byte)TEMP);
+                                EmitJSR("pusha");
+                                Emit(Opcode.LDA, AddressMode.ZeroPage, (byte)NESConstants.TEMP2);
+                                // Fall through to constant multiply below
+                            }
                             _savedRuntimeToTemp = false;
                         }
-                        else
+                        if (!twoRuntimeMul)
                         {
                             // Determine which operand is the compile-time constant
                             bool previousWasLdc =
