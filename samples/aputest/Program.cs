@@ -29,10 +29,10 @@ ppu_on_all();
 poke(APU_STATUS, 0x0F);
 
 // Pulse 1 via helper: 50% duty, volume 15, period ~440Hz (0x00FD)
-apu_play_tone(0, 0x00FD, 2, 15);
+apu_play_tone(PulseChannel.Pulse1, 0x00FD, APUDuty.Duty50, 15);
 
 // Pulse 2 via helper: 25% duty, volume 10, period ~262Hz (0x01A9)
-apu_play_tone(1, 0x01A9, 1, 10);
+apu_play_tone(PulseChannel.Pulse2, 0x01A9, APUDuty.Duty25, 10);
 
 // Triangle: linear counter max, period ~835Hz (direct register access)
 poke(APU_TRIANGLE_CTRL, 0xFF);

@@ -1487,7 +1487,7 @@ public class RoslynTests
     [Fact]
     public void ApuPlayTone_Pulse1()
     {
-        // apu_play_tone(0, 0x0180, 1, 10) should emit inline register writes:
+        // apu_play_tone(PulseChannel.Pulse1, 0x0180, APUDuty.Duty25, 10) should emit inline register writes:
         //   ctrl = (1 << 6) | 0x30 | 10 = 0x7A -> STA $4000
         //   sweep = 0x00 -> STA $4001
         //   timer_lo = 0x80 -> STA $4002
@@ -1495,7 +1495,7 @@ public class RoslynTests
         var bytes = GetProgramBytes(
             """
             poke(APU_STATUS, 0x0F);
-            apu_play_tone(0, 0x0180, 1, 10);
+            apu_play_tone(PulseChannel.Pulse1, 0x0180, APUDuty.Duty25, 10);
             ppu_on_all();
             while (true) ;
             """);
@@ -1516,7 +1516,7 @@ public class RoslynTests
     [Fact]
     public void ApuPlayTone_Pulse2()
     {
-        // apu_play_tone(1, 0x00FD, 2, 15) should target pulse 2 registers ($4004-$4007):
+        // apu_play_tone(PulseChannel.Pulse2, 0x00FD, APUDuty.Duty50, 15) should target pulse 2 registers ($4004-$4007):
         //   ctrl = (2 << 6) | 0x30 | 15 = 0xBF -> STA $4004
         //   sweep = 0x00 -> STA $4005
         //   timer_lo = 0xFD -> STA $4006
@@ -1524,7 +1524,7 @@ public class RoslynTests
         var bytes = GetProgramBytes(
             """
             poke(APU_STATUS, 0x0F);
-            apu_play_tone(1, 0x00FD, 2, 15);
+            apu_play_tone(PulseChannel.Pulse2, 0x00FD, APUDuty.Duty50, 15);
             ppu_on_all();
             while (true) ;
             """);
@@ -1543,12 +1543,12 @@ public class RoslynTests
     [Fact]
     public void ApuStop_Pulse1()
     {
-        // apu_stop(0) should silence pulse 1:
+        // apu_stop(PulseChannel.Pulse1) should silence pulse 1:
         //   LDA #$30, STA $4000
         var bytes = GetProgramBytes(
             """
             poke(APU_STATUS, 0x0F);
-            apu_stop(0);
+            apu_stop(PulseChannel.Pulse1);
             ppu_on_all();
             while (true) ;
             """);
@@ -1563,12 +1563,12 @@ public class RoslynTests
     [Fact]
     public void ApuStop_Pulse2()
     {
-        // apu_stop(1) should silence pulse 2:
+        // apu_stop(PulseChannel.Pulse2) should silence pulse 2:
         //   LDA #$30, STA $4004
         var bytes = GetProgramBytes(
             """
             poke(APU_STATUS, 0x0F);
-            apu_stop(1);
+            apu_stop(PulseChannel.Pulse2);
             ppu_on_all();
             while (true) ;
             """);
