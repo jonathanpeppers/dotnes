@@ -1809,10 +1809,17 @@ partial class IL2NESWriter
                                 for (int bi = block.Count - 1; bi >= 0; bi--)
                                 {
                                     if (block[bi].Opcode == Opcode.JSR &&
-                                        block[bi].Operand is LabelOperand lbl && lbl.Label == "pusha")
+                                        block[bi].Operand is LabelOperand lbl)
                                     {
-                                        yIsExpression = true;
-                                        break;
+                                        if (lbl.Label == "pusha")
+                                        {
+                                            yIsExpression = true;
+                                            break;
+                                        }
+                                        // Stop at any JSR to a non-helper function — any earlier
+                                        // pusha was consumed by that function call's arguments.
+                                        if (!IsCC65StackHelper(lbl.Label))
+                                            break;
                                     }
                                 }
                             }
@@ -1918,16 +1925,22 @@ partial class IL2NESWriter
                                         // Scan backwards for JSR pusha or an LDA that represents x.
                                         // Block may have intervening STA/LDA from stloc (store-local)
                                         // when Roslyn inserts temp variables between the NTADR args.
+                                        // Stop at any JSR to a non-helper function — any earlier
+                                        // pusha was consumed by that function call's arguments.
                                         int pushaIdx2 = -1;
                                         int xLdaIdx = -1;
                                         for (int bi = block.Count - 2; bi >= 0; bi--)
                                         {
                                             if (block[bi].Opcode == Opcode.JSR
-                                                && block[bi].Operand is LabelOperand staPushaLbl
-                                                && staPushaLbl.Label == "pusha")
+                                                && block[bi].Operand is LabelOperand staPushaLbl)
                                             {
-                                                pushaIdx2 = bi;
-                                                break;
+                                                if (staPushaLbl.Label == "pusha")
+                                                {
+                                                    pushaIdx2 = bi;
+                                                    break;
+                                                }
+                                                if (!IsCC65StackHelper(staPushaLbl.Label))
+                                                    break;
                                             }
                                         }
 

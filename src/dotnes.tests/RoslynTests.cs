@@ -2544,6 +2544,71 @@ public class RoslynTests
     }
 
     [Fact]
+    public void NtadrInsideLoopWithVrambufPut()
+    {
+        // Regression: NTADR_C inside a loop body with vrambuf_put causes the
+        // backward scan for JSR pusha to match pushes from vrambuf_put instead
+        // of the NTADR_C first arg, producing incorrect nametable addresses.
+        var bytes = GetProgramBytes(
+            """
+            byte[] tile_row = new byte[4];
+            byte nx = 5;
+            byte ny = 3;
+            vrambuf_clear();
+            set_vram_update(tile_row);
+            for (byte k = 0; k < 4; k++)
+            {
+                ushort addr = NTADR_C(nx, ny);
+                vrambuf_put(addr, tile_row, 4);
+                ny = (byte)(ny + 1);
+            }
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"NtadrLoopVrambuf hex: {hex}");
+        // NTADR_C handler must correctly resolve x=nx. The nametable_c subroutine
+        // must be called (JSR nametable_c). If the backward scan matched an
+        // unrelated pusha, the codegen would be incorrect or crash.
+        // TEMP = x (nx), A = y (ny) before calling nametable_c.
+        // STA $17 (TEMP = x) must appear before JSR nametable_c
+        Assert.Contains("8517", hex); // STA TEMP (x)
+    }
+
+    [Fact]
+    public void NtadrExpressionAfterMultiArgCall()
+    {
+        // Regression: when a multi-arg function (e.g. pal_col) precedes NTADR_C
+        // with a runtime expression y arg, the yIsExpression backward scan could
+        // match pal_col's pusha instead of NTADR_C's. The fix stops the scan
+        // when a non-helper JSR is encountered.
+        var bytes = GetProgramBytes(
+            """
+            pal_col(0, 0x30);
+            for (byte row = 0; row < 4; row++)
+            {
+                ushort addr = NTADR_A(1, (byte)(row + 10));
+                vrambuf_flush();
+            }
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"NtadrAfterMultiArg hex: {hex}");
+        // The constant 10 (0x0A) must appear as ADC #$0A (690A) — the add of row+10.
+        Assert.Contains("690A", hex);
+        // NTADR args must be set up correctly with TEMP/TEMP2
+        Assert.Contains("8519", hex); // STA TEMP2
+        Assert.Contains("8517", hex); // STA TEMP (x from popa)
+    }
+
+    [Fact]
     public void LdelemConstantIndexCompareWithConstant()
     {
         // Pattern from climber: while (actor_floor[0] != MAX_FLOORS - 1)
