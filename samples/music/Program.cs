@@ -1,4 +1,4 @@
-﻿//
+//
 // A simple music player.
 // Based on https://github.com/sehugg/8bitworkshop/blob/master/presets/nes/music.c
 //
@@ -245,10 +245,10 @@ apu_init();
 start_music(music1);
 
 // Set palette and display song info
-pal_col(0, 0x01);   // dark blue background
-pal_col(1, 0x30);   // white
-pal_col(2, 0x10);   // grey
-pal_col(3, 0x27);   // warm orange
+pal_col(0, DarkAzure);
+pal_col(1, White);
+pal_col(2, Gray);
+pal_col(3, LightOrange);
 
 vram_adr(NTADR_A(10, 8));
 vram_write("NOW PLAYING");

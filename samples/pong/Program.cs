@@ -7,15 +7,15 @@ APIs: pad_poll, oam_spr, oam_hide_rest, vrambuf_put, ppu_wait_nmi.
 */
 
 byte[] PALETTE = [
-    0x0F,                    // screen color (black)
-    0x00, 0x10, 0x30, 0x0,  // bg palette 0
-    0x00, 0x10, 0x30, 0x0,  // bg palette 1
-    0x00, 0x10, 0x30, 0x0,  // bg palette 2
-    0x00, 0x10, 0x30, 0x0,  // bg palette 3
-    0x0F, 0x30, 0x30, 0x0,  // spr palette 0 (white)
-    0x0F, 0x30, 0x30, 0x0,  // spr palette 1
-    0x0F, 0x30, 0x30, 0x0,  // spr palette 2
-    0x0F, 0x30, 0x30, 0x0   // spr palette 3
+    Black,                                     // screen color
+    DarkGray, Gray, White, 0x0,                // bg palette 0
+    DarkGray, Gray, White, 0x0,                // bg palette 1
+    DarkGray, Gray, White, 0x0,                // bg palette 2
+    DarkGray, Gray, White, 0x0,                // bg palette 3
+    Black, White, White, 0x0,                  // spr palette 0
+    Black, White, White, 0x0,                  // spr palette 1
+    Black, White, White, 0x0,                  // spr palette 2
+    Black, White, White, 0x0                   // spr palette 3
 ];
 
 // paddle y positions
@@ -108,38 +108,18 @@ while (true)
         ball_down = 0;
     }
 
-    // paddle 1 collision (left side)
-    if (ball_x < 24)
+    // paddle 1 collision (left side) — cheap X pre-check before rect_overlap
+    if (ball_right == 0 && ball_x < 24 && rect_overlap(ball_x, ball_y, 8, 8, 16, p1_y, 8, 24))
     {
-        if (ball_right == 0)
-        {
-            if (ball_y >= p1_y)
-            {
-                byte p1_end = (byte)(p1_y + 24);
-                if (ball_y < p1_end)
-                {
-                    ball_right = 1;
-                    ball_x = 24;
-                }
-            }
-        }
+        ball_right = 1;
+        ball_x = 24;
     }
 
-    // paddle 2 collision (right side)
-    if (ball_x > 224)
+    // paddle 2 collision (right side) — cheap X pre-check before rect_overlap
+    if (ball_right != 0 && ball_x > 224 && rect_overlap(ball_x, ball_y, 8, 8, 232, p2_y, 8, 24))
     {
-        if (ball_right != 0)
-        {
-            if (ball_y >= p2_y)
-            {
-                byte p2_end = (byte)(p2_y + 24);
-                if (ball_y < p2_end)
-                {
-                    ball_right = 0;
-                    ball_x = 224;
-                }
-            }
-        }
+        ball_right = 0;
+        ball_x = 224;
     }
 
     // player 2 scores (ball passed left edge)

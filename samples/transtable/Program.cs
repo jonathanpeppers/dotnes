@@ -114,8 +114,8 @@ vram_adr(0x0);
 vram_write(TILESET);
 
 // Set palette colors
-pal_col(0, 0x00);  // background: black
-pal_col(3, 0x30);  // foreground: white
+pal_col(0, DarkGray);
+pal_col(3, White);
 
 // Write text to nametable
 vram_adr(NTADR_A(2, 2));

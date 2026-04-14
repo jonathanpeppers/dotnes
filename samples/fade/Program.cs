@@ -1,14 +1,14 @@
 /*
 Demonstrates palette brightness fading effects.
-Uses pal_bright(), pal_spr_bright(), and pal_bg_bright()
+Uses fade_in(), fade_out(), pal_spr_bright(), and pal_bg_bright()
 with delay() for timed transitions.
 */
 
 // set palette colors
-pal_col(0, 0x02);   // dark blue background
-pal_col(1, 0x14);   // fuchsia
-pal_col(2, 0x20);   // grey
-pal_col(3, 0x30);   // white
+pal_col(0, DarkBlue);
+pal_col(1, Magenta);
+pal_col(2, LightGray);
+pal_col(3, White);
 
 // write text to name table
 vram_adr(NTADR_A(2, 2));
@@ -33,9 +33,9 @@ ppu_on_all();
 while (true)
 {
     // Phase 1: global fade in / out
-    fade_in();
+    fade_in(4);
     delay(60);
-    fade_out();
+    fade_out(4);
     delay(30);
 
     // Phase 2: background-only fade in / out
@@ -49,24 +49,6 @@ while (true)
     delay(60);
     spr_fade_out();
     delay(30);
-}
-
-static void fade_in()
-{
-    for (byte i = 0; i <= 4; i = (byte)(i + 1))
-    {
-        pal_bright(i);
-        delay(4);
-    }
-}
-
-static void fade_out()
-{
-    for (byte i = 4; i != 255; i = (byte)(i - 1))
-    {
-        pal_bright(i);
-        delay(4);
-    }
 }
 
 static void bg_fade_in()

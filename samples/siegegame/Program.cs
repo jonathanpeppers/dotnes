@@ -31,14 +31,14 @@ const byte STATE_OVER = 2;
 
 // Palette
 byte[] palette = new byte[] {
-    0x0f, 0x00, 0x10, 0x30,
-    0x0f, 0x06, 0x16, 0x26,
-    0x0f, 0x11, 0x21, 0x31,
-    0x0f, 0x09, 0x19, 0x29,
-    0x0f, 0x00, 0x10, 0x30,
-    0x0f, 0x06, 0x16, 0x26,
-    0x0f, 0x11, 0x21, 0x31,
-    0x0f, 0x09, 0x19, 0x29
+    Black, DarkGray, Gray, White,
+    Black, DarkRed, Red, LightRed,
+    Black, Azure, LightAzure, PaleAzure,
+    Black, DarkLime, Lime, LightLime,
+    Black, DarkGray, Gray, White,
+    Black, DarkRed, Red, LightRed,
+    Black, Azure, LightAzure, PaleAzure,
+    Black, DarkLime, Lime, LightLime
 };
 
 // Game state — all globals so they survive across function calls

@@ -2544,6 +2544,71 @@ public class RoslynTests
     }
 
     [Fact]
+    public void NtadrInsideLoopWithVrambufPut()
+    {
+        // Regression: NTADR_C inside a loop body with vrambuf_put causes the
+        // backward scan for JSR pusha to match pushes from vrambuf_put instead
+        // of the NTADR_C first arg, producing incorrect nametable addresses.
+        var bytes = GetProgramBytes(
+            """
+            byte[] tile_row = new byte[4];
+            byte nx = 5;
+            byte ny = 3;
+            vrambuf_clear();
+            set_vram_update(tile_row);
+            for (byte k = 0; k < 4; k++)
+            {
+                ushort addr = NTADR_C(nx, ny);
+                vrambuf_put(addr, tile_row, 4);
+                ny = (byte)(ny + 1);
+            }
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"NtadrLoopVrambuf hex: {hex}");
+        // NTADR_C handler must correctly resolve x=nx. The nametable_c subroutine
+        // must be called (JSR nametable_c). If the backward scan matched an
+        // unrelated pusha, the codegen would be incorrect or crash.
+        // TEMP = x (nx), A = y (ny) before calling nametable_c.
+        // STA $17 (TEMP = x) must appear before JSR nametable_c
+        Assert.Contains("8517", hex); // STA TEMP (x)
+    }
+
+    [Fact]
+    public void NtadrExpressionAfterMultiArgCall()
+    {
+        // Regression: when a multi-arg function (e.g. pal_col) precedes NTADR_C
+        // with a runtime expression y arg, the yIsExpression backward scan could
+        // match pal_col's pusha instead of NTADR_C's. The fix stops the scan
+        // when a non-helper JSR is encountered.
+        var bytes = GetProgramBytes(
+            """
+            pal_col(0, 0x30);
+            for (byte row = 0; row < 4; row++)
+            {
+                ushort addr = NTADR_A(1, (byte)(row + 10));
+                vrambuf_flush();
+            }
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"NtadrAfterMultiArg hex: {hex}");
+        // The constant 10 (0x0A) must appear as ADC #$0A (690A) — the add of row+10.
+        Assert.Contains("690A", hex);
+        // NTADR args must be set up correctly with TEMP/TEMP2
+        Assert.Contains("8519", hex); // STA TEMP2
+        Assert.Contains("8517", hex); // STA TEMP (x from popa)
+    }
+
+    [Fact]
     public void LdelemConstantIndexCompareWithConstant()
     {
         // Pattern from climber: while (actor_floor[0] != MAX_FLOORS - 1)
@@ -2699,6 +2764,58 @@ public class RoslynTests
         Assert.Equal("BD", before_sta17); // LDA abs,X for array element
 
         // Data pointer setup: STA $2A and STA $2B must exist for ptr1
+        Assert.Contains("852A", hex); // STA ptr1
+        Assert.Contains("852B", hex); // STA ptr1+1
+    }
+
+    [Fact]
+    public void OamSpr2x2WithConstantArgs()
+    {
+        // oam_spr_2x2 with all constant arguments
+        var bytes = GetProgramBytes(
+            """
+            oam_spr_2x2(40, 40, 0xD8, 0xD9, 0xDA, 0xDB, 0, 0);
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"OamSpr2x2Const hex: {hex}");
+
+        // x=40 (0x28) stored to TEMP ($17): LDA #$28 = A928, STA $17 = 8517
+        Assert.Contains("A9288517", hex);
+        // y=40 (0x28) stored to TEMP2 ($19): LDA #$28 = A928, STA $19 = 8519
+        Assert.Contains("A9288519", hex);
+        // Data pointer setup: STA ptr1 ($2A) and STA ptr1+1 ($2B)
+        Assert.Contains("852A", hex); // STA ptr1
+        Assert.Contains("852B", hex); // STA ptr1+1
+        // sprid=0 loaded into A and followed by JSR oam_meta_spr: LDA #$00 = A900, JSR = 20
+        Assert.Contains("A90020", hex);
+    }
+
+    [Fact]
+    public void OamSpr2x2WithLocalArgs()
+    {
+        // oam_spr_2x2 with local x, y, and constant tiles/attr/sprid
+        var bytes = GetProgramBytes(
+            """
+            byte x = 40;
+            byte y = 40;
+            oam_spr_2x2(x, y, 0xD8, 0xD9, 0xDA, 0xDB, 0, 0);
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"OamSpr2x2Local hex: {hex}");
+
+        // x from local stored to TEMP ($17): LDA abs = AD...., STA $17 = 8517
+        Assert.Contains("8517", hex);
+        // y from local stored to TEMP2 ($19): STA $19 = 8519
+        Assert.Contains("8519", hex);
+        // Data pointer setup
         Assert.Contains("852A", hex); // STA ptr1
         Assert.Contains("852B", hex); // STA ptr1+1
     }
@@ -5322,5 +5439,436 @@ public class RoslynTests
         Assert.True(pushaCount <= popaCount,
             $"Unmatched pusha calls detected: pusha={pushaCount}, popa/incsp1={popaCount}. " +
             "Each pusha must be balanced by popa or incsp1 to prevent cc65 stack leaks.");
+    }
+
+    [Fact]
+    public void UserFunctionInWhileTrueBreakInsideForLoop()
+    {
+        // Reproduces issue #408: user function with early return (return 1 before return 0)
+        // called inside while(true){...break;} in a for loop.
+        // The IL has two 'ret' instructions. The transpiler treats 'ret' as no-op,
+        // so the early 'return 1' falls through to 'return 0', making the function
+        // always return 0.
+        var (program, transpiler) = BuildProgram(
+            """
+            byte prev1 = 3;
+            byte prev2 = 7;
+            byte[] gaps = new byte[5];
+
+            for (byte i = 0; i < 5; i++)
+            {
+                while (true)
+                {
+                    gaps[i] = rand8();
+                    if (check_overlap(prev1, gaps[i]) == 0 &&
+                        check_overlap(prev2, gaps[i]) == 0)
+                        break;
+                }
+            }
+
+            ppu_on_all();
+            while (true) ;
+
+            static byte check_overlap(byte x, byte gap)
+            {
+                if (gap != 0 && x >= gap && x < (byte)(gap + 8))
+                    return 1;
+                return 0;
+            }
+            """);
+
+        program.ResolveAddresses();
+
+        // Dump the method block instructions
+        var methodBlock = program.GetBlock("check_overlap");
+        Assert.NotNull(methodBlock);
+
+        _logger.WriteLine($"{"=== check_overlap method block ==="}");
+        bool foundLda1 = false;
+        bool earlyReturnHasJmp = false;
+        foreach (var (instruction, label) in methodBlock.InstructionsWithLabels)
+        {
+            _logger.WriteLine($"  {(label != null ? $"[{label}] " : "")}{instruction.Opcode} {instruction.Mode} {instruction.Operand}");
+
+            // Track: after LDA #$01 (return 1), there should be JMP to method end
+            // NOT another LDA #$00 (return 0) -- that would mean fall-through
+            if (instruction.Opcode == Opcode.LDA
+                && instruction.Operand is ImmediateOperand imm1 && imm1.Value == 1)
+            {
+                foundLda1 = true;
+            }
+            else if (foundLda1)
+            {
+                if (instruction.Opcode == Opcode.JMP)
+                    earlyReturnHasJmp = true;
+                else if (instruction.Opcode == Opcode.LDA
+                    && instruction.Operand is ImmediateOperand imm0 && imm0.Value == 0)
+                {
+                    // LDA #$01 followed by LDA #$00 = fall-through bug
+                    _logger.WriteLine($"{"  *** BUG: LDA #$01 falls through to LDA #$00 ***"}");
+                }
+                foundLda1 = false;
+            }
+        }
+
+        Assert.True(earlyReturnHasJmp,
+            "User method with early 'return 1' must JMP to epilogue. " +
+            "Without it, A is overwritten by 'return 0' and the function always returns 0.");
+    }
+
+    [Fact]
+    public void TryFinally()
+    {
+        // try/finally inlines both blocks sequentially — no exception handling needed on the NES.
+        // The leave/endfinally opcodes fall through when the code is linear.
+        AssertProgram(
+            csharpSource:
+                """
+                pal_col(0, 0x02);
+                try
+                {
+                    pal_col(1, 0x14);
+                }
+                finally
+                {
+                    pal_col(2, 0x20);
+                }
+                ppu_on_all();
+                while (true) ;
+                """,
+            expectedAssembly:
+                """
+                A900    ; LDA #$00
+                208385  ; JSR pusha
+                A902    ; LDA #$02
+                203E82  ; JSR pal_col
+                A901    ; LDA #$01
+                208385  ; JSR pusha
+                A914    ; LDA #$14
+                203E82  ; JSR pal_col
+                A902    ; LDA #$02
+                208385  ; JSR pusha
+                A920    ; LDA #$20
+                203E82  ; JSR pal_col
+                208982  ; JSR ppu_on_all
+                4C2185  ; JMP (infinite loop)
+                """);
+    }
+
+    [Fact]
+    public void TryCatch_Throws()
+    {
+        // try/catch must still be rejected — the NES has no exception handling.
+        var ex = Assert.Throws<TranspileException>(() =>
+            GetProgramBytes(
+                """
+                try
+                {
+                    ppu_on_all();
+                }
+                catch
+                {
+                    ppu_off();
+                }
+                while (true) ;
+                """));
+        Assert.Contains("try/catch", ex.Message);
+    }
+
+    [Fact]
+    public void UshortArray_NewarrAndConstantStore()
+    {
+        // ushort[] newarr allocates count*2 bytes; constant-index stelem.i2 stores lo/hi at computed addresses
+        var bytes = GetProgramBytes(
+            """
+            ushort[] arr = new ushort[4];
+            arr[0] = 100;
+            arr[1] = 300;
+            arr[2] = 1000;
+            arr[3] = 50000;
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"UshortArray_NewarrAndConstantStore hex: {hex}");
+
+        // arr[0] = 100 (0x0064): STA base+0 with 0x64, STA base+1 with 0x00
+        Assert.Contains("A964", hex); // LDA #$64 (lo byte of 100)
+        Assert.Contains("A900", hex); // LDA #$00 (hi byte of 100)
+
+        // arr[1] = 300 (0x012C): lo=0x2C, hi=0x01
+        Assert.Contains("A92C", hex); // LDA #$2C (lo byte of 300)
+        Assert.Contains("A901", hex); // LDA #$01 (hi byte of 300)
+
+        // arr[3] = 50000 (0xC350): lo=0x50, hi=0xC3
+        Assert.Contains("A950", hex); // LDA #$50 (lo byte of 50000)
+        Assert.Contains("A9C3", hex); // LDA #$C3 (hi byte of 50000)
+    }
+
+    [Fact]
+    public void UshortArray_VariableIndexLoad()
+    {
+        // Variable-index ldelem.u2 uses ASL A, TAY, LDA base,Y / LDA base+1,Y
+        var bytes = GetProgramBytes(
+            """
+            byte idx = rand8();
+            ushort[] arr = new ushort[4];
+            arr[0] = 100;
+            arr[1] = 300;
+            arr[2] = 1000;
+            arr[3] = 50000;
+            ushort loaded = arr[idx];
+            pal_col(0, (byte)loaded);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"UshortArray_VariableIndexLoad hex: {hex}");
+
+        // Variable index load pattern: ASL A (0A), TAY (A8)
+        Assert.Contains("0AA8", hex); // ASL A; TAY (double index for 16-bit elements)
+
+        // AbsoluteY addressing: LDA abs,Y (B9) for both lo and hi bytes
+        Assert.Contains("B9", hex);
+    }
+
+    [Fact]
+    public void UshortArray_VariableIndexStore()
+    {
+        // Variable-index stelem.i2 saves value, computes Y offset, stores both bytes
+        var bytes = GetProgramBytes(
+            """
+            ushort[] arr = new ushort[4];
+            arr[0] = 100;
+            byte idx = rand8();
+            arr[idx] = 310;
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"UshortArray_VariableIndexStore hex: {hex}");
+
+        // 310 = 0x0136: lo=0x36, hi=0x01
+        Assert.Contains("A936", hex); // LDA #$36 (lo byte of 310)
+        Assert.Contains("A901", hex); // LDA #$01 (hi byte of 310)
+
+        // Variable index store uses ASL A + TAY pattern
+        Assert.Contains("0A", hex);   // ASL A
+        Assert.Contains("A8", hex);   // TAY
+
+        // Store pattern uses STA absolute,Y (opcode 99)
+        Assert.Contains("99", hex);   // STA absolute,Y
+    }
+
+    [Fact]
+    public void UshortArray_LoadStoresIn16BitLocal()
+    {
+        // ldelem.u2 result stored to ushort local uses STA $xxxx + STX $xxxx+1
+        var bytes = GetProgramBytes(
+            """
+            byte i = rand8();
+            ushort[] arr = new ushort[2];
+            arr[0] = 500;
+            arr[1] = 1000;
+            ushort val = arr[i];
+            pal_col(0, (byte)val);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"UshortArray_LoadStoresIn16BitLocal hex: {hex}");
+
+        // arr[0] = 500 (0x01F4): lo=0xF4, hi=0x01
+        Assert.Contains("A9F4", hex); // LDA #$F4
+        Assert.Contains("A901", hex); // LDA #$01
+
+        // arr[1] = 1000 (0x03E8): lo=0xE8, hi=0x03
+        Assert.Contains("A9E8", hex); // LDA #$E8
+        Assert.Contains("A903", hex); // LDA #$03
+    }
+
+    [Fact]
+    public void OamBegin_EmitsLdaStaJsrInMainBlock()
+    {
+        // oam_begin() should emit: LDA #0, STA $1B (oam_off), JSR oam_clear in the main block
+        var (program, _) = BuildProgram(
+            """
+            using var frame = oam_begin();
+            oam_spr(10, 20, 0x01, 0, 0);
+            ppu_on_all();
+            while (true) ;
+            """);
+
+        var mainBlock = program.Blocks.Single(b => b.Label == "main");
+        var instructions = mainBlock.InstructionsWithLabels.ToList();
+
+        // Find the LDA #$00 → STA $1B → JSR oam_clear sequence
+        bool foundSequence = false;
+        for (int i = 0; i < instructions.Count - 2; i++)
+        {
+            var lda = instructions[i].Instruction;
+            var sta = instructions[i + 1].Instruction;
+            var jsr = instructions[i + 2].Instruction;
+            if (lda.Opcode == Opcode.LDA && lda.Mode == AddressMode.Immediate &&
+                lda.Operand is ImmediateOperand imm && imm.Value == 0x00 &&
+                sta.Opcode == Opcode.STA && sta.Mode == AddressMode.ZeroPage &&
+                sta.Operand is ImmediateOperand zpg && zpg.Value == 0x1B &&
+                jsr.Opcode == Opcode.JSR && jsr.Operand is LabelOperand lbl && lbl.Label == "oam_clear")
+            {
+                foundSequence = true;
+                break;
+            }
+        }
+        Assert.True(foundSequence, "Expected LDA #$00 → STA $1B → JSR oam_clear sequence in main block");
+    }
+
+    [Fact]
+    public void OamBegin_EmitsOamClearAndOamHideRestInMainBlock()
+    {
+        // oam_begin() emits JSR oam_clear; OamFrame.Dispose() emits LDA oam_off, JSR oam_hide_rest
+        var (program, _) = BuildProgram(
+            """
+            using var frame = oam_begin();
+            oam_spr(10, 20, 0x01, 0, 0);
+            ppu_on_all();
+            while (true) ;
+            """);
+
+        var mainBlock = program.Blocks.Single(b => b.Label == "main");
+
+        // Verify JSR oam_clear is emitted in the main block (from oam_begin)
+        bool hasOamClear = mainBlock.InstructionsWithLabels.Any(il =>
+            il.Instruction.Opcode == Opcode.JSR &&
+            il.Instruction.Operand is LabelOperand lbl && lbl.Label == "oam_clear");
+        Assert.True(hasOamClear, "Expected JSR oam_clear from oam_begin() in main block");
+
+        // Verify JSR oam_hide_rest is emitted in the main block (from OamFrame.Dispose)
+        bool hasOamHideRest = mainBlock.InstructionsWithLabels.Any(il =>
+            il.Instruction.Opcode == Opcode.JSR &&
+            il.Instruction.Operand is LabelOperand lbl && lbl.Label == "oam_hide_rest");
+        Assert.True(hasOamHideRest, "Expected JSR oam_hide_rest from OamFrame.Dispose() in main block");
+    }
+
+    [Fact]
+    public void OamBegin_InsideLoopBody_EmitsCorrectOrdering()
+    {
+        // Realistic game loop: oam_begin inside while(true), Dispose called each iteration
+        var (program, _) = BuildProgram(
+            """
+            ppu_on_all();
+            while (true)
+            {
+                ppu_wait_nmi();
+                using var frame = oam_begin();
+                oam_spr(10, 20, 0x01, 0, 0);
+            }
+            """);
+
+        var mainBlock = program.Blocks.Single(b => b.Label == "main");
+        var instructions = mainBlock.InstructionsWithLabels.ToList();
+
+        static bool IsJsrTo((Instruction Instruction, string? Label) il, string label) =>
+            il.Instruction.Opcode == Opcode.JSR &&
+            il.Instruction.Operand is LabelOperand lbl &&
+            lbl.Label == label;
+
+        int loopStartIndex= instructions.FindIndex(il => IsJsrTo(il, "ppu_wait_nmi"));
+        int clearIndex = instructions.FindIndex(il => IsJsrTo(il, "oam_clear"));
+        int hideRestIndex = instructions.FindIndex(il => IsJsrTo(il, "oam_hide_rest"));
+
+        Assert.True(loopStartIndex >= 0, "Expected JSR ppu_wait_nmi at start of loop body");
+        Assert.True(clearIndex >= 0, "Expected JSR oam_clear from oam_begin()");
+        Assert.True(hideRestIndex >= 0, "Expected JSR oam_hide_rest from OamFrame.Dispose()");
+
+        // Both OAM calls must be inside the loop body (after ppu_wait_nmi)
+        Assert.True(loopStartIndex < clearIndex,
+            $"oam_clear (index {clearIndex}) should be inside loop body after ppu_wait_nmi (index {loopStartIndex})");
+        Assert.True(clearIndex < hideRestIndex,
+            $"oam_clear (index {clearIndex}) should come before oam_hide_rest (index {hideRestIndex})");
+    }
+
+    [Fact]
+    public void StelemI1_ConstantIndex_AddExpression()
+    {
+        // Bug: tile_row[1] = (byte)(sprite + 1) emitted LDA #$01 (the constant)
+        // instead of LDA sprite; CLC; ADC #$01 (the computed value).
+        var (program, _) = BuildProgram(
+            """
+            byte sprite = (byte)pad_poll(0);
+            byte[] tile_row = new byte[4];
+            tile_row[1] = (byte)(sprite + 1);
+            pal_col(0, tile_row[1]);
+            ppu_on_all();
+            while (true) ;
+            """);
+
+        var mainBlock = program.Blocks.Single(b => b.Label == "main");
+        var instructions = mainBlock.InstructionsWithLabels.ToList();
+
+        // Find the CLC instruction that starts the add sequence
+        int clcIndex = instructions.FindIndex(il =>
+            il.Instruction.Opcode == Opcode.CLC);
+        Assert.True(clcIndex >= 0, "Expected CLC for the add operation");
+
+        // The next instruction should be ADC #$01
+        var adcInstr = instructions[clcIndex + 1].Instruction;
+        Assert.Equal(Opcode.ADC, adcInstr.Opcode);
+        Assert.Equal(AddressMode.Immediate, adcInstr.Mode);
+        Assert.IsType<ImmediateOperand>(adcInstr.Operand);
+        Assert.Equal(1, ((ImmediateOperand)adcInstr.Operand).Value);
+
+        // The instruction before CLC should load the sprite local (LDA abs)
+        var ldaInstr = instructions[clcIndex - 1].Instruction;
+        Assert.Equal(Opcode.LDA, ldaInstr.Opcode);
+        Assert.Equal(AddressMode.Absolute, ldaInstr.Mode);
+    }
+
+    [Fact]
+    public void NtadrWithTwoRuntimeMultiplyExpressions()
+    {
+        // Regression: NTADR_C((byte)(4 + col * 6), (byte)(4 + row * 6))
+        // The multiply for the y argument clobbers TEMP which held the x value.
+        // The Mul handler's _savedRuntimeToTemp path incorrectly treats the multiply
+        // as runtime × runtime when it's actually runtime × constant.
+        var bytes = GetProgramBytes(
+            """
+            byte col = 1;
+            byte row = 2;
+            ushort addr = NTADR_C((byte)(4 + col * 6), (byte)(4 + row * 6));
+            vram_adr(addr);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"NtadrTwoMul hex: {hex}");
+
+        // Both args involve * 6 (non-power-of-2), so the multiply loop must appear.
+        // After the fix:
+        // - First multiply (col * 6) uses TEMP correctly, adds #$04 (not #$06)
+        // - First arg saved to TEMP, then pushed to cc65 stack before second multiply
+        // - Second multiply (row * 6) uses TEMP freely, adds #$04 (not #$0C)
+        // - NTADR handler recovers first arg via popa
+
+        // ADC #$04 must appear (add 4 to multiply results), not ADC #$06 or ADC #$0C
+        Assert.Contains("6904", hex); // CLC; ADC #$04
+        // The NTADR handler must set up args correctly via popa
+        Assert.Contains("8519", hex); // STA TEMP2 (save y)
+        Assert.Contains("8517", hex); // STA TEMP (save x from popa)
+        Assert.Contains("A519", hex); // LDA TEMP2 (restore y)
     }
 }

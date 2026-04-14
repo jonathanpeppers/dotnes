@@ -12,8 +12,8 @@ See docs/conio-missing-features.md for CC65 features not yet in dotnes.
 // NES screen is 32 tiles wide, 30 tiles tall
 
 // Set background color to blue (bgcolor(COLOR_BLUE) equivalent)
-pal_col(0, 0x02);   // dark blue background
-pal_col(1, 0x30);   // white text
+pal_col(0, DarkBlue);
+pal_col(1, White);
 
 // Clear the screen (clrscr() equivalent)
 vram_adr(NTADR_A(0, 0));

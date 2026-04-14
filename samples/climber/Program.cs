@@ -62,15 +62,15 @@ static void setup_graphics()
     ppu_off();
     oam_clear();
     pal_all(new byte[] {
-        0x03,
-        0x11, 0x30, 0x27, 0x00,
-        0x1c, 0x20, 0x2c, 0x00,
-        0x00, 0x10, 0x20, 0x00,
-        0x06, 0x16, 0x26, 0x00,
-        0x16, 0x35, 0x24, 0x00,
-        0x00, 0x37, 0x25, 0x00,
-        0x0d, 0x2d, 0x3a, 0x00,
-        0x0d, 0x27, 0x2a
+        DarkViolet,
+        Azure, White, LightOrange, 0x00,
+        Cyan, LightGray, LightCyan, 0x00,
+        DarkGray, Gray, LightGray, 0x00,
+        DarkRed, Red, LightRed, 0x00,
+        Red, PaleRose, LightMagenta, 0x00,
+        DarkGray, PaleOrange, LightRose, 0x00,
+        Black, MediumGray, PaleGreen, 0x00,
+        Black, LightOrange, LightGreen
     });
     vram_adr(NAMETABLE_A);
     vram_fill(CH_BLANK, 0x1000);
@@ -126,20 +126,20 @@ while (true)
     byte vbright = 4;
 
     // Metasprite data (ROM tables)
-    byte[] playerRStand = new byte[] { 0, 0, 0xd8, 0, 0, 8, 0xd9, 0, 8, 0, 0xda, 0, 8, 8, 0xdb, 0, 128 };
-    byte[] playerRRun1 = new byte[] { 0, 0, 0xdc, 0, 0, 8, 0xdd, 0, 8, 0, 0xde, 0, 8, 8, 0xdf, 0, 128 };
-    byte[] playerRRun2 = new byte[] { 0, 0, 0xe0, 0, 0, 8, 0xe1, 0, 8, 0, 0xe2, 0, 8, 8, 0xe3, 0, 128 };
-    byte[] playerRRun3 = new byte[] { 0, 0, 0xe4, 0, 0, 8, 0xe5, 0, 8, 0, 0xe6, 0, 8, 8, 0xe7, 0, 128 };
-    byte[] playerRJump = new byte[] { 0, 0, 0xe8, 0, 0, 8, 0xe9, 0, 8, 0, 0xea, 0, 8, 8, 0xeb, 0, 128 };
-    byte[] playerRClimb = new byte[] { 0, 0, 0xec, 0, 0, 8, 0xed, 0, 8, 0, 0xee, 0, 8, 8, 0xef, 0, 128 };
-    byte[] playerRSad = new byte[] { 0, 0, 0xf0, 0, 0, 8, 0xf1, 0, 8, 0, 0xf2, 0, 8, 8, 0xf3, 0, 128 };
-    byte[] playerLStand = new byte[] { 8, 0, 0xd8, 0x40, 8, 8, 0xd9, 0x40, 0, 0, 0xda, 0x40, 0, 8, 0xdb, 0x40, 128 };
-    byte[] playerLRun1 = new byte[] { 8, 0, 0xdc, 0x40, 8, 8, 0xdd, 0x40, 0, 0, 0xde, 0x40, 0, 8, 0xdf, 0x40, 128 };
-    byte[] playerLRun2 = new byte[] { 8, 0, 0xe0, 0x40, 8, 8, 0xe1, 0x40, 0, 0, 0xe2, 0x40, 0, 8, 0xe3, 0x40, 128 };
-    byte[] playerLRun3 = new byte[] { 8, 0, 0xe4, 0x40, 8, 8, 0xe5, 0x40, 0, 0, 0xe6, 0x40, 0, 8, 0xe7, 0x40, 128 };
-    byte[] playerLJump = new byte[] { 8, 0, 0xe8, 0x40, 8, 8, 0xe9, 0x40, 0, 0, 0xea, 0x40, 0, 8, 0xeb, 0x40, 128 };
-    byte[] playerLClimb = new byte[] { 8, 0, 0xec, 0x40, 8, 8, 0xed, 0x40, 0, 0, 0xee, 0x40, 0, 8, 0xef, 0x40, 128 };
-    byte[] playerLSad = new byte[] { 8, 0, 0xf0, 0x40, 8, 8, 0xf1, 0x40, 0, 0, 0xf2, 0x40, 0, 8, 0xf3, 0x40, 128 };
+    byte[] playerRStand = meta_spr_2x2(0xd8, 0xd9, 0xda, 0xdb);
+    byte[] playerRRun1 = meta_spr_2x2(0xdc, 0xdd, 0xde, 0xdf);
+    byte[] playerRRun2 = meta_spr_2x2(0xe0, 0xe1, 0xe2, 0xe3);
+    byte[] playerRRun3 = meta_spr_2x2(0xe4, 0xe5, 0xe6, 0xe7);
+    byte[] playerRJump = meta_spr_2x2(0xe8, 0xe9, 0xea, 0xeb);
+    byte[] playerRClimb = meta_spr_2x2(0xec, 0xed, 0xee, 0xef);
+    byte[] playerRSad = meta_spr_2x2(0xf0, 0xf1, 0xf2, 0xf3);
+    byte[] playerLStand = meta_spr_2x2_flip(0xd8, 0xd9, 0xda, 0xdb);
+    byte[] playerLRun1 = meta_spr_2x2_flip(0xdc, 0xdd, 0xde, 0xdf);
+    byte[] playerLRun2 = meta_spr_2x2_flip(0xe0, 0xe1, 0xe2, 0xe3);
+    byte[] playerLRun3 = meta_spr_2x2_flip(0xe4, 0xe5, 0xe6, 0xe7);
+    byte[] playerLJump = meta_spr_2x2_flip(0xe8, 0xe9, 0xea, 0xeb);
+    byte[] playerLClimb = meta_spr_2x2_flip(0xec, 0xed, 0xee, 0xef);
+    byte[] playerLSad = meta_spr_2x2_flip(0xf0, 0xf1, 0xf2, 0xf3);
     byte[] personToSave = new byte[] { 0, 0, 0xba, 3, 0, 8, 0xbc, 0, 8, 0, 0xbb, 3, 8, 8, 0xbd, 0, 128 };
 
     // Buffers
@@ -1017,11 +1017,13 @@ while (true)
             {
                 if (collided == 0 && actor_onscreen[ci] != 0 && actor_floor[ci] == actor_floor[0])
                 {
-                    byte dx = (byte)(actor_x[0] - actor_x[ci]);
-                    if (dx >= 248) dx = (byte)(0 - dx);
-                    byte dyl = (byte)(actor_yy_lo[0] - actor_yy_lo[ci]);
-                    if (dyl >= 248) dyl = (byte)(0 - dyl);
-                    if (dx < 8 && dyl < 8)
+                    // Store array values in locals before calling sprite_overlap
+                    // (the transpiler saves to TEMP for ldelem_u1 chains, which is a single register)
+                    byte px = actor_x[0];
+                    byte py = actor_yy_lo[0];
+                    byte ex = actor_x[ci];
+                    byte ey = actor_yy_lo[ci];
+                    if (sprite_overlap(px, py, ex, ey, 8))
                     {
                         collided = 1;
                     }

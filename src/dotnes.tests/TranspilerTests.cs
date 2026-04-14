@@ -238,8 +238,8 @@ public class TranspilerTests
     [Theory]
     [InlineData("tint", false, 3)]       // 2 byte locals + 1 pad_poll temp
     [InlineData("tint", true, 3)]
-    [InlineData("peekpoke", false, 3)]   // 3 byte locals
-    [InlineData("peekpoke", true, 3)]
+    [InlineData("peekpoke", false, 4)]   // 2 byte locals + 1 ushort local (2 bytes)
+    [InlineData("peekpoke", true, 4)]
     public void LocalCountNotInflatedByReassignment(string name, bool debug, int expectedLocals)
     {
         var configuration = debug ? "debug" : "release";
@@ -298,9 +298,12 @@ public class TranspilerTests
             else if (lbl.Label is "popax" or "incsp2") popaCount += 2;
             if (lbl.Label != "pusha") continue;
 
-            // Check if this pusha is for a function argument
+            // Check if this pusha is for a function argument.
+            // Use a larger window to handle patterns where array element
+            // loads (ldelem_u1) push early and intermediate stloc/ldloc
+            // pairs separate the pusha from the eventual JSR.
             bool isForFuncCall = false;
-            for (int j = i + 1; j < Math.Min(i + 8, instrs.Count); j++)
+            for (int j = i + 1; j < Math.Min(i + 20, instrs.Count); j++)
             {
                 var next = instrs[j].Instruction;
                 if (next.Opcode == ObjectModel.Opcode.JSR && next.Operand is ObjectModel.LabelOperand callLbl

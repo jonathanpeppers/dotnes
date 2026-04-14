@@ -29,6 +29,9 @@ partial class Transpiler
 
             if (methodName == "Main" || methodName == "<Main>$")
             {
+                // Parse exception regions (try/finally) before yielding instructions
+                MainExceptionRegions = ParseExceptionRegions(methodDef);
+
                 // Yield main method instructions
                 foreach (var instruction in ReadMethodBody(methodDef, arrayValues))
                     yield return instruction;
@@ -84,6 +87,11 @@ partial class Transpiler
                 var instructions = ReadMethodBody(methodDef, arrayValues).ToArray();
                 UserMethods[cleanName] = instructions;
 
+                // Parse exception regions (try/finally) for user methods
+                var userRegions = ParseExceptionRegions(methodDef);
+                if (userRegions.Length > 0)
+                    UserMethodExceptionRegions[cleanName] = userRegions;
+
                 // Extract metadata from method signature blob
                 var sig = _reader.GetBlobReader(methodDef.Signature);
                 sig.ReadByte(); // calling convention
@@ -104,6 +112,38 @@ partial class Transpiler
                 UserMethodMetadata[cleanName] = (paramCount, hasReturnValue, isArrayParam);
             }
         }
+    }
+
+    /// <summary>
+    /// Parses structured exception handling (SEH) clauses from a method body.
+    /// Only try/finally regions are supported; try/catch and filters produce an error.
+    /// </summary>
+    TryFinallyRegion[] ParseExceptionRegions(MethodDefinition methodDef)
+    {
+        var body = _pe.GetMethodBody(methodDef.RelativeVirtualAddress);
+        if (body.ExceptionRegions.Length == 0)
+            return [];
+
+        var regions = new List<TryFinallyRegion>();
+        foreach (var region in body.ExceptionRegions)
+        {
+            switch (region.Kind)
+            {
+                case ExceptionRegionKind.Finally:
+                    regions.Add(new TryFinallyRegion(
+                        region.TryOffset, region.TryLength,
+                        region.HandlerOffset, region.HandlerLength));
+                    break;
+                case ExceptionRegionKind.Catch:
+                    throw new TranspileException(
+                        "try/catch blocks are not supported on the NES. " +
+                        "Only try/finally is supported (for 'using' statements).", null);
+                default:
+                    throw new TranspileException(
+                        $"Exception region kind '{region.Kind}' is not supported on the NES.", null);
+            }
+        }
+        return regions.ToArray();
     }
 
     IEnumerable<ILInstruction> ReadMethodBody(MethodDefinition methodDef, Dictionary<string, ArrayValue> arrayValues)

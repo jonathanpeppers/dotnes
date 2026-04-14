@@ -712,11 +712,12 @@ partial class IL2NESWriter
                     Emit(Opcode.CLC, AddressMode.Implied);
                     Emit(Opcode.ADC, AddressMode.ZeroPage, (byte)NESConstants.TEMP);
                 }
-                else if (_savedConstantViaPusha && operand == 0)
+                else if (_savedConstantViaPusha && (operand == 0 || _runtimeValueInA))
                 {
                     // Constant was pusha'd, runtime in A — A + constant (commutative)
-                    // Only applies when operand==0 (no real Stack value for the add).
-                    // If operand!=0, the pusha'd value is a function call arg, not ours.
+                    // Applies when operand==0 (no real Stack value for the add) or when
+                    // _runtimeValueInA is true (a multiply result is in A and the pusha'd
+                    // value is the constant from an earlier ldc, e.g. 4 + col * 6).
                     Emit(Opcode.STA, AddressMode.ZeroPage, (byte)NESConstants.TEMP2);
                     EmitJSR("popa");
                     Emit(Opcode.CLC, AddressMode.Implied);
@@ -732,8 +733,11 @@ partial class IL2NESWriter
                 else
                 {
                     // Runtime value in A + compile-time constant
+                    // When A holds a multiply result (previous==Mul) and the constant was
+                    // the first operand (ldc before ldloc;ldc;mul), baseValue has the constant.
+                    int addConst = (_runtimeValueInA && previous == ILOpCode.Mul) ? baseValue : operand;
                     Emit(Opcode.CLC, AddressMode.Implied);
-                    Emit(Opcode.ADC, AddressMode.Immediate, checked((byte)operand));
+                    Emit(Opcode.ADC, AddressMode.Immediate, checked((byte)addConst));
                 }
             }
             else
@@ -747,10 +751,11 @@ partial class IL2NESWriter
                     Emit(Opcode.SEC, AddressMode.Implied);
                     Emit(Opcode.SBC, AddressMode.ZeroPage, (byte)(NESConstants.TEMP + 1));
                 }
-                else if (_savedConstantViaPusha && operand == 0)
+                else if (_savedConstantViaPusha && (operand == 0 || _runtimeValueInA))
                 {
                     // Constant was pusha'd, runtime in A — need constant - A
-                    // Only applies when operand==0 (no real Stack value for the sub).
+                    // Applies when operand==0 (no real Stack value for the sub) or when
+                    // _runtimeValueInA is true (a multiply result is in A).
                     Emit(Opcode.STA, AddressMode.ZeroPage, (byte)NESConstants.TEMP2);
                     EmitJSR("popa");
                     Emit(Opcode.SEC, AddressMode.Implied);
@@ -766,8 +771,11 @@ partial class IL2NESWriter
                 else
                 {
                     // Runtime value in A - compile-time constant
+                    // When A holds a multiply result (previous==Mul) and the constant was
+                    // the first operand (ldc before ldloc;ldc;mul), baseValue has the constant.
+                    int subConst = (_runtimeValueInA && previous == ILOpCode.Mul) ? baseValue : operand;
                     Emit(Opcode.SEC, AddressMode.Implied);
-                    Emit(Opcode.SBC, AddressMode.Immediate, checked((byte)operand));
+                    Emit(Opcode.SBC, AddressMode.Immediate, checked((byte)subConst));
                 }
             }
             Stack.Push(0); // Placeholder

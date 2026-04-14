@@ -17,5 +17,5 @@ NES007 | NES | Warning | Recursive functions are not supported
 NES008 | NES | Error | LINQ is not supported
 NES009 | NES | Error | Delegates and lambdas are not supported
 NES010 | NES | Error | foreach loops are not supported
-NES011 | NES | Error | Exception handling is not supported
+NES011 | NES | Error | try/catch is not supported (try/finally is allowed)
 NES012 | NES | Error | Property declarations are not supported

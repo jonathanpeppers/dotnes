@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using System.Reflection.Metadata;
 using dotnes.ObjectModel;
 using static NES.NESLib;
@@ -954,5 +955,199 @@ partial class IL2NESWriter
         EmitWithLabel(Opcode.JSR, AddressMode.Absolute, nameof(NESLib.oam_meta_spr_pal));
         _immediateInA = null;
         _runtimeValueInA = false; // void return
+    }
+
+    /// <summary>
+    /// Emits oam_spr_2x2 call: builds a 17-byte metasprite array at compile time from
+    /// 4 tile constants + attr, then emits an oam_meta_spr call with x, y, sprid.
+    /// Args: x, y, topLeft, bottomLeft, topRight, bottomRight, attr, sprid (8 total).
+    /// </summary>
+    void EmitOamSpr2x2()
+    {
+        if (Instructions is null)
+            throw new InvalidOperationException("EmitOamSpr2x2 requires Instructions");
+
+        // Scan backward through IL to classify all 8 argument sources.
+        // Args in IL order: x, y, topLeft, bottomLeft, topRight, bottomRight, attr, sprid
+        // We scan in reverse: sprid, attr, bottomRight, topRight, bottomLeft, topLeft, y, x
+        //
+        // Roslyn's Release optimizer may interleave Stloc instructions between argument pushes
+        // (e.g., "ldc 40, ldc 40, stloc.0, ldloc.0" for inline constant+init).
+        // When scanning backward, we skip Stloc and the value it consumed.
+
+        int scan = Index - 1;
+
+        // Each arg: (isConst, constValue, localIdx)
+        var args = new (bool isConst, int value, int localIdx, bool isStaticField, string? staticFieldName)[8];
+        int firstArgILOffset = -1;
+        int skip = 0; // values to skip (consumed by Stloc interleaved in the arg sequence)
+
+        for (int argIdx = 7; argIdx >= 0 && scan >= 0;)
+        {
+            var il = Instructions[scan];
+
+            // Skip Stloc instructions — they consume one stack value that isn't a call arg
+            if (il.OpCode is ILOpCode.Stloc_0 or ILOpCode.Stloc_1 or ILOpCode.Stloc_2
+                or ILOpCode.Stloc_3 or ILOpCode.Stloc_s or ILOpCode.Stloc
+                or ILOpCode.Pop)
+            {
+                skip++; // The next value-producing instruction we find was consumed by this stloc
+                scan--;
+                continue;
+            }
+
+            bool isValueProducer = GetLdcValue(il) != null || GetLdlocIndex(il) != null
+                || il.OpCode is ILOpCode.Ldsfld;
+
+            // Conv_u1 doesn't produce a new value (just converts top-of-stack), skip it
+            if (il.OpCode == ILOpCode.Conv_u1)
+            {
+                scan--;
+                continue;
+            }
+
+            if (skip > 0 && isValueProducer)
+            {
+                skip--;
+                scan--;
+                continue;
+            }
+
+            var ldcValue = GetLdcValue(il);
+            if (ldcValue != null)
+            {
+                args[argIdx] = (true, ldcValue.Value, -1, false, null);
+                if (argIdx == 0) firstArgILOffset = il.Offset;
+                scan--;
+                argIdx--;
+            }
+            else
+            {
+                var locIdx = GetLdlocIndex(il);
+                if (locIdx != null)
+                {
+                    args[argIdx] = (false, 0, locIdx.Value, false, null);
+                    if (argIdx == 0) firstArgILOffset = il.Offset;
+                    scan--;
+                    argIdx--;
+                }
+                else if (il.OpCode == ILOpCode.Ldsfld)
+                {
+                    args[argIdx] = (false, 0, -1, true, il.String);
+                    if (argIdx == 0) firstArgILOffset = il.Offset;
+                    scan--;
+                    argIdx--;
+                }
+                else
+                {
+                    throw new TranspileException(
+                        $"oam_spr_2x2 argument {argIdx} has unsupported IL opcode: {il.OpCode}",
+                        MethodName);
+                }
+            }
+        }
+
+        // Extract tile and attr constants (args 2-6 must be compile-time constants)
+        for (int i = 2; i <= 6; i++)
+        {
+            if (!args[i].isConst)
+                throw new TranspileException(
+                    $"oam_spr_2x2: argument {i} (tile/attr) must be a compile-time constant.",
+                    MethodName);
+        }
+
+        int topLeft = args[2].value;
+        int bottomLeft = args[3].value;
+        int topRight = args[4].value;
+        int bottomRight = args[5].value;
+        int attr = args[6].value;
+
+        // Remove all previously emitted instructions for these 8 arguments
+        if (firstArgILOffset >= 0 && _blockCountAtILOffset.TryGetValue(firstArgILOffset, out int blockCount))
+        {
+            int instrToRemove = GetBufferedBlockCount() - blockCount;
+            if (instrToRemove > 0)
+                RemoveLastInstructions(instrToRemove);
+        }
+
+        // Build the 17-byte metasprite array (same layout as meta_spr_2x2)
+        byte[] data = new byte[]
+        {
+            0, 0, (byte)topLeft, (byte)attr,
+            0, 8, (byte)bottomLeft, (byte)attr,
+            8, 0, (byte)topRight, (byte)attr,
+            8, 8, (byte)bottomRight, (byte)attr,
+            128 // end marker
+        };
+
+        // Register as byte array data
+        string byteArrayLabel = $"bytearray_{_byteArrayLabelIndex}";
+        _byteArrayLabelIndex++;
+        _byteArrays.Add(data.ToImmutableArray());
+
+        // Emit oam_meta_spr calling convention:
+        // 1. Load x into TEMP
+        EmitOamSpr2x2Arg(args[0], (byte)NESConstants.TEMP);
+
+        // 2. Load y into TEMP2
+        EmitOamSpr2x2Arg(args[1], (byte)NESConstants.TEMP2);
+
+        // 3. Load data pointer into PTR
+        EmitWithLabel(Opcode.LDA, AddressMode.Immediate_LowByte, byteArrayLabel);
+        Emit(Opcode.STA, AddressMode.ZeroPage, (byte)NESConstants.ptr1);
+        EmitWithLabel(Opcode.LDA, AddressMode.Immediate_HighByte, byteArrayLabel);
+        Emit(Opcode.STA, AddressMode.ZeroPage, (byte)(NESConstants.ptr1 + 1));
+
+        // 4. Load sprid into A
+        if (args[7].isConst)
+        {
+            Emit(Opcode.LDA, AddressMode.Immediate, checked((byte)args[7].value));
+        }
+        else if (args[7].isStaticField)
+        {
+            EmitLdsfldForArg(args[7].staticFieldName);
+        }
+        else if (Locals.TryGetValue(args[7].localIdx, out var spridLocal) && spridLocal.Address != null)
+        {
+            Emit(Opcode.LDA, AddressMode.Absolute, (ushort)spridLocal.Address);
+        }
+        else
+        {
+            throw new TranspileException("oam_spr_2x2: unsupported sprid argument type.", MethodName);
+        }
+
+        // 5. Call oam_meta_spr
+        EmitWithLabel(Opcode.JSR, AddressMode.Absolute, nameof(NESLib.oam_meta_spr));
+        UsedMethods?.Add(nameof(NESLib.oam_meta_spr));
+        _immediateInA = null;
+        _runtimeValueInA = true; // oam_meta_spr returns next OAM offset in A
+    }
+
+    /// <summary>
+    /// Emits code to load an oam_spr_2x2 argument (constant or local) into a zero-page target.
+    /// </summary>
+    void EmitOamSpr2x2Arg(
+        (bool isConst, int value, int localIdx, bool isStaticField, string? staticFieldName) arg,
+        byte target)
+    {
+        if (arg.isConst)
+        {
+            Emit(Opcode.LDA, AddressMode.Immediate, checked((byte)arg.value));
+            Emit(Opcode.STA, AddressMode.ZeroPage, target);
+        }
+        else if (arg.isStaticField)
+        {
+            EmitLdsfldForArg(arg.staticFieldName);
+            Emit(Opcode.STA, AddressMode.ZeroPage, target);
+        }
+        else if (Locals.TryGetValue(arg.localIdx, out var local) && local.Address != null)
+        {
+            Emit(Opcode.LDA, AddressMode.Absolute, (ushort)local.Address);
+            Emit(Opcode.STA, AddressMode.ZeroPage, target);
+        }
+        else
+        {
+            throw new TranspileException("oam_spr_2x2: unsupported x/y argument type.", MethodName);
+        }
     }
 }

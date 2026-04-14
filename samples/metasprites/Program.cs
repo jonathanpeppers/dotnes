@@ -6,25 +6,19 @@ Uses 4 hardware sprites in a 2x2 pattern (16x16 pixel metasprites).
 16 actors bounce around the screen using oam_meta_spr().
 */
 
-// define a 2x2 metasprite: x-offset, y-offset, tile, attribute; terminated by 128
-byte[] metasprite = [
-    0, 0, 0xD8, 0,
-    0, 8, 0xD9, 0,
-    8, 0, 0xDA, 0,
-    8, 8, 0xDB, 0,
-    128
-];
+// define a 2x2 metasprite using the helper
+byte[] metasprite = meta_spr_2x2(0xD8, 0xD9, 0xDA, 0xDB);
 
 byte[] PALETTE = [
-    0x03,                // screen color
-    0x11, 0x30, 0x27, 0x0,  // background palette 0
-    0x1c, 0x20, 0x2c, 0x0,  // background palette 1
-    0x00, 0x10, 0x20, 0x0,  // background palette 2
-    0x06, 0x16, 0x26, 0x0,  // background palette 3
-    0x16, 0x35, 0x24, 0x0,  // sprite palette 0
-    0x00, 0x37, 0x25, 0x0,  // sprite palette 1
-    0x0d, 0x2d, 0x3a, 0x0,  // sprite palette 2
-    0x0d, 0x27, 0x2a         // sprite palette 3
+    DarkViolet,                                    // screen color
+    Azure, White, LightOrange, 0x0,                // background palette 0
+    Cyan, LightGray, LightCyan, 0x0,               // background palette 1
+    DarkGray, Gray, LightGray, 0x0,                // background palette 2
+    DarkRed, Red, LightRed, 0x0,                   // background palette 3
+    Red, PaleRose, LightMagenta, 0x0,              // sprite palette 0
+    DarkGray, PaleOrange, LightRose, 0x0,          // sprite palette 1
+    Black, MediumGray, PaleGreen, 0x0,              // sprite palette 2
+    Black, LightOrange, LightGreen                  // sprite palette 3
 ];
 
 // actor positions and velocities (16 actors)

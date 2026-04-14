@@ -6,8 +6,8 @@ Based on: https://github.com/sehugg/8bitworkshop/blob/master/presets/nes/rletitl
 
 // climbr_title palette (16 bytes)
 byte[] climbr_title_pal = [
-    0x0F, 0x11, 0x25, 0x35, 0x0F, 0x01, 0x21, 0x30,
-    0x0F, 0x06, 0x1C, 0x3C, 0x0F, 0x11, 0x27, 0x38
+    Black, Azure, LightRose, PaleRose, Black, DarkAzure, LightAzure, White,
+    Black, DarkRed, Cyan, PaleCyan, Black, Azure, LightOrange, PaleYellow
 ];
 
 // climbr_title RLE-compressed nametable (569 bytes)
@@ -58,19 +58,7 @@ vram_adr(NAMETABLE_A);
 vram_unrle(climbr_title_rle);
 ppu_on_all();
 
-fade_in();
+fade_in(4);
 
 // do nothing, infinite loop
 while (true) ;
-
-static void fade_in()
-{
-    for (byte vb = 0; vb <= 4; vb = (byte)(vb + 1))
-    {
-        pal_bright(vb);
-        ppu_wait_frame();
-        ppu_wait_frame();
-        ppu_wait_frame();
-        ppu_wait_frame();
-    }
-}

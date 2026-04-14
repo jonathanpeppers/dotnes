@@ -10,6 +10,12 @@ using Local = dotnes.LocalVariableManager.Local;
 namespace dotnes;
 
 /// <summary>
+/// Represents a try/finally region parsed from IL method body metadata.
+/// Used by Leave/Leave_s/Endfinally opcode handlers to inline finally blocks.
+/// </summary>
+internal record struct TryFinallyRegion(int TryOffset, int TryLength, int HandlerOffset, int HandlerLength);
+
+/// <summary>
 /// Transpiles .NET IL instructions into 6502 assembly for the NES.
 /// This is the core class containing fields, properties, and the public API surface.
 /// The IL dispatch, code emission, and optimization logic are in partial class files.
@@ -62,6 +68,8 @@ partial class IL2NESWriter : NESWriter
     string? _pendingArrayType;
     int _pendingStructArrayCount;
     ushort? _pendingStructArrayBase; // Pre-allocated base address from newarr for struct arrays
+    int _pendingUshortArrayCount;
+    ushort? _pendingUshortArrayBase; // Pre-allocated base address from newarr for ushort arrays
     readonly Dictionary<string, Local> _staticFieldArrayLocals = new(); // Maps static field names to their array Local entries
     ImmutableArray<byte>? _pendingUShortArray;
 
@@ -419,6 +427,13 @@ partial class IL2NESWriter : NESWriter
     PendingByteArrayElement? _pendingByteArrayElement;
 
     /// <summary>
+    /// Pending ushort array element access state from ldelema System.UInt16.
+    /// Null when no ushort array ldelema is pending.
+    /// Used for compound assignments: arr[i]++, arr[i] += expr, etc.
+    /// </summary>
+    PendingUshortArrayElement? _pendingUshortArrayElement;
+
+    /// <summary>
     /// State for a pending struct array element access (from ldelema).
     /// </summary>
     readonly record struct PendingStructElement(
@@ -435,6 +450,17 @@ partial class IL2NESWriter : NESWriter
     /// </summary>
     readonly record struct PendingByteArrayElement(
         /// <summary>Array base address for AbsoluteX addressing (runtime index).</summary>
+        ushort ArrayBase,
+        /// <summary>Element address for constant-index access; null for runtime-index.</summary>
+        ushort? ConstantElementAddress
+    );
+
+    /// <summary>
+    /// State for a pending ushort array element access (from ldelema System.UInt16).
+    /// For variable-index access, Y holds the byte offset (index * 2).
+    /// </summary>
+    readonly record struct PendingUshortArrayElement(
+        /// <summary>Array base address for AbsoluteY addressing (runtime index).</summary>
         ushort ArrayBase,
         /// <summary>Element address for constant-index access; null for runtime-index.</summary>
         ushort? ConstantElementAddress
@@ -523,6 +549,36 @@ partial class IL2NESWriter : NESWriter
         MethodName is null ? $"instruction_{offset:X2}" : $"{MethodName}_instruction_{offset:X2}";
 
     /// <summary>
+    /// Exception regions (try/finally) parsed from the method body.
+    /// Used by Leave/Leave_s/Endfinally opcode handlers.
+    /// </summary>
+    internal TryFinallyRegion[]? TryFinallyRegions { get; set; }
+
+    /// <summary>
+    /// Finds the try/finally region whose try block contains the given IL offset.
+    /// </summary>
+    TryFinallyRegion? FindEnclosingTryRegion(int offset)
+    {
+        if (TryFinallyRegions == null) return null;
+        foreach (var r in TryFinallyRegions)
+            if (offset >= r.TryOffset && offset < r.TryOffset + r.TryLength)
+                return r;
+        return null;
+    }
+
+    /// <summary>
+    /// Finds the try/finally region whose handler (finally) block contains the given IL offset.
+    /// </summary>
+    TryFinallyRegion? FindEnclosingHandlerRegion(int offset)
+    {
+        if (TryFinallyRegions == null) return null;
+        foreach (var r in TryFinallyRegions)
+            if (offset >= r.HandlerOffset && offset < r.HandlerOffset + r.HandlerLength)
+                return r;
+        return null;
+    }
+
+    /// <summary>
     /// Merges a string table entry from a user method writer into this writer.
     /// </summary>
     public void MergeStringTableEntry(string label, byte[] data)
@@ -583,6 +639,13 @@ partial class IL2NESWriter : NESWriter
     /// </summary>
     string? _lastByteArrayLabel;
     int _lastByteArraySize;
+
+    /// <summary>
+    /// Set by meta_spr_2x2 / meta_spr_2x2_flip intrinsics to signal the next Stloc
+    /// should treat the result as a byte array label (same as the Ldtoken path).
+    /// Cleared by the Stloc handler after use.
+    /// </summary>
+    bool _pendingByteArrayFromIntrinsic;
 
     public ILInstruction[]? Instructions { get; set; }
 

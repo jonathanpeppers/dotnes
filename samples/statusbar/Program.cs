@@ -8,13 +8,13 @@ Based on: https://github.com/sehugg/8bitworkshop/blob/master/presets/nes/statusb
 */
 
 // set palette colors
-pal_col(0, 0x00);   // black
-pal_col(1, 0x04);   // dark purple
-pal_col(2, 0x20);   // grey
-pal_col(3, 0x30);   // white
-pal_col(5, 0x14);   // pink
-pal_col(6, 0x24);   // light pink
-pal_col(7, 0x34);   // lighter pink
+pal_col(0, DarkGray);
+pal_col(1, DarkMagenta);
+pal_col(2, LightGray);
+pal_col(3, White);
+pal_col(5, Magenta);
+pal_col(6, LightMagenta);
+pal_col(7, PaleMagenta);
 
 // write text to nametable A (top lines are the "status bar")
 vram_adr(NTADR_A(7, 0));

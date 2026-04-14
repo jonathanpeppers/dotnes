@@ -34,14 +34,14 @@ static void setup_graphics()
     ppu_off();
     oam_clear();
     byte[] pal = [
-        0x0F, 0x11, 0x21, 0x31,
-        0x0F, 0x14, 0x24, 0x34,
-        0x0F, 0x15, 0x25, 0x35,
-        0x0F, 0x16, 0x26, 0x36,
-        0x0F, 0x11, 0x21, 0x31,
-        0x0F, 0x14, 0x24, 0x34,
-        0x0F, 0x15, 0x25, 0x35,
-        0x0F, 0x16, 0x26, 0x36
+        Black, Azure, LightAzure, PaleAzure,
+        Black, Magenta, LightMagenta, PaleMagenta,
+        Black, Rose, LightRose, PaleRose,
+        Black, Red, LightRed, PaleRed,
+        Black, Azure, LightAzure, PaleAzure,
+        Black, Magenta, LightMagenta, PaleMagenta,
+        Black, Rose, LightRose, PaleRose,
+        Black, Red, LightRed, PaleRed
     ];
     pal_all(pal);
     vram_fill(0x00, 0x1000);

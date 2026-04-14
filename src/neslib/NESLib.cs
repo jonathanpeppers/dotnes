@@ -291,6 +291,14 @@ public static class NESLib
     public static byte oam_spr(byte x, byte y, byte chrnum, byte attr, byte sprid) => throw null!;
 
     /// <summary>
+    /// Draw a 2×2 (16×16 pixel) sprite from four 8×8 tiles.
+    /// Writes 4 entries into the OAM buffer with standard 8-pixel offsets.
+    /// Parameters: topLeft, bottomLeft, topRight, bottomRight to match NES tile layout convention.
+    /// </summary>
+    /// <returns>returns sprid+16, which is offset for the next sprite</returns>
+    public static byte oam_spr_2x2(byte x, byte y, byte topLeft, byte bottomLeft, byte topRight, byte bottomRight, byte attr, byte sprid) => throw null!;
+
+    /// <summary>
     /// poll controller and return enum like PAD.LEFT, etc.
     /// </summary>
     /// <param name="pad">pad number (0 or 1)</param>
@@ -307,9 +315,27 @@ public static class NESLib
     public static byte oam_meta_spr(byte x, byte y, byte sprid, byte[] data) => throw null!;
 
     /// <summary>
+    /// Build a 2×2 (16×16 pixel) metasprite from four tile indices.
+    /// Parameters: topLeft, bottomLeft, topRight, bottomRight to match NES OAM convention.
+    /// Returns 17-byte metasprite array suitable for oam_meta_spr / oam_meta_spr_pal.
+    /// </summary>
+    public static byte[] meta_spr_2x2(byte topLeft, byte bottomLeft, byte topRight, byte bottomRight, byte attr = 0) => throw null!;
+
+    /// <summary>
+    /// Build a horizontally-flipped 2×2 metasprite (sets 0x40 flip bit, swaps L/R columns).
+    /// Returns 17-byte metasprite array suitable for oam_meta_spr / oam_meta_spr_pal.
+    /// </summary>
+    public static byte[] meta_spr_2x2_flip(byte topLeft, byte bottomLeft, byte topRight, byte bottomRight, byte attr = 0) => throw null!;
+
+    /// <summary>
     /// hide all remaining sprites from given offset
     /// </summary>
     public static void oam_hide_rest(byte sprid) => throw null!;
+
+    /// <summary>
+    /// Returns an OamFrame that auto-hides remaining sprites on Dispose
+    /// </summary>
+    public static OamFrame oam_begin() => throw null!;
 
     /// <summary>
     /// set vram pointer to write operations if you need to write some data to vram
@@ -350,6 +376,16 @@ public static class NESLib
     /// delay for N frames
     /// </summary>
     public static void delay(byte frames) => throw null!;
+
+    /// <summary>
+    /// fade in from black to normal brightness over N frames per step
+    /// </summary>
+    public static void fade_in(byte delay) => throw null!;
+
+    /// <summary>
+    /// fade out from normal brightness to black over N frames per step
+    /// </summary>
+    public static void fade_out(byte delay) => throw null!;
 
     /// <summary>
     /// set scroll, including rhe top bits
@@ -407,6 +443,22 @@ public static class NESLib
     /// Example: bcd_add(0x0100, 0x0001) returns 0x0101 (100 + 1 = 101).
     /// </summary>
     public static ushort bcd_add(ushort a, ushort b) => throw null!;
+
+    /// <summary>
+    /// Returns true if two axis-aligned rectangles overlap.
+    /// Uses unsigned byte arithmetic and assumes rectangle extents do not wrap:
+    /// x1+w1, x2+w2, y1+h1, and y2+h2 must all be less than or equal to 255.
+    /// Under that precondition, AABB test: overlap iff
+    /// (x1 &lt; x2+w2) &amp;&amp; (x2 &lt; x1+w1) &amp;&amp; (y1 &lt; y2+h2) &amp;&amp; (y2 &lt; y1+h1).
+    /// </summary>
+    public static bool rect_overlap(byte x1, byte y1, byte w1, byte h1, byte x2, byte y2, byte w2, byte h2) => throw null!;
+
+    /// <summary>
+    /// Returns true if two sprites overlap within a given threshold distance on both axes.
+    /// Uses unsigned absolute-difference: overlap iff |x1-x2| &lt; threshold &amp;&amp; |y1-y2| &lt; threshold.
+    /// Suitable for equal-size sprite collision checks (e.g., 8x8 sprites with threshold=8).
+    /// </summary>
+    public static bool sprite_overlap(byte x1, byte y1, byte x2, byte y2, byte threshold) => throw null!;
 
     /// <summary>
     /// when display is enabled, vram access could only be done with this vram update system
@@ -702,4 +754,13 @@ public static class NESLib
         0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30,
         0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30,
     ];
+}
+
+/// <summary>
+/// RAII scope for OAM sprite drawing.
+/// Dispose() calls oam_hide_rest(oam_off).
+/// </summary>
+public ref struct OamFrame
+{
+    public void Dispose() => throw null!;
 }

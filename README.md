@@ -99,10 +99,10 @@ PRG/CHR bank counts, diagnostic logging, and more). See
 
 ```csharp
 // set palette colors
-pal_col(0, 0x02);   // set screen to dark blue
-pal_col(1, 0x14);   // fuchsia
-pal_col(2, 0x20);   // grey
-pal_col(3, 0x30);   // white
+pal_col(0, DarkBlue);
+pal_col(1, Magenta);
+pal_col(2, LightGray);
+pal_col(3, White);
 
 // write text to name table
 vram_adr(NTADR_A(2, 2));            // set address
@@ -120,7 +120,8 @@ C](https://8bitworkshop.com/v3.10.0/?platform=nes&file=hello.c), taking
 advantage of the latest C# features in 2023.
 
 By default the APIs like `pal_col`, etc. are provided by an implicit
-`global using static NESLib;` and all code is written within a single
+`global using static NESLib;` and color constants like `DarkBlue` by
+`global using static NESColor;`. All code is written within a single
 `Program.cs`.
 
 Additionally, a `chr_generic.s` file is included as your game's "artwork" (lol?):
@@ -234,7 +235,7 @@ taking MSIL and turning it into runnable machine code.
 To understand further, let's look at the MSIL of a `pal_col` method call:
 
 ```msil
-// pal_col((byte)0, (byte)2);
+// pal_col(0, DarkBlue);
 IL_0000: ldc.i4.0
 IL_0001: ldc.i4.2
 IL_0002: call void [neslib]NES.NESLib::pal_col(uint8, uint8)

@@ -22,6 +22,7 @@ public class NESAnalyzer : DiagnosticAnalyzer
     public const string NES010 = nameof(NES010);
     public const string NES011 = nameof(NES011);
     public const string NES012 = nameof(NES012);
+    public const string NES013 = nameof(NES013);
 
     const string Category = "NES";
 
@@ -118,11 +119,11 @@ public class NESAnalyzer : DiagnosticAnalyzer
     static readonly DiagnosticDescriptor NES011Rule = new(
         NES011,
         "Exception handling is not supported",
-        "try/catch/finally is not supported on the NES",
+        "try/catch is not supported on the NES; only try/finally is allowed (for 'using' statements)",
         Category,
         DiagnosticSeverity.Error,
         isEnabledByDefault: true,
-        description: "The NES 6502 CPU has no exception handling mechanism. Use conditional checks instead.");
+        description: "The NES 6502 CPU has no exception handling mechanism. try/finally is allowed because it lowers to sequential code. try/catch is not supported.");
 
     static readonly DiagnosticDescriptor NES012Rule = new(
         NES012,
@@ -133,9 +134,18 @@ public class NESAnalyzer : DiagnosticAnalyzer
         isEnabledByDefault: true,
         description: "Properties generate hidden getter/setter methods that the NES transpiler cannot handle. Use public fields instead.");
 
+    static readonly DiagnosticDescriptor NES013Rule = new(
+        NES013,
+        "throw is not supported",
+        "throw is not supported on the NES. The 6502 CPU has no exception handling mechanism.",
+        Category,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "The NES 6502 CPU has no exception handling mechanism. throw statements and throw expressions are not supported.");
+
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics =>
         ImmutableArray.Create(NES001Rule, NES002Rule, NES003Rule, NES004Rule, NES005Rule, NES006Rule,
-            NES007Rule, NES008Rule, NES009Rule, NES010Rule, NES011Rule, NES012Rule);
+            NES007Rule, NES008Rule, NES009Rule, NES010Rule, NES011Rule, NES012Rule, NES013Rule);
 
     public override void Initialize(AnalysisContext context)
     {
@@ -160,6 +170,7 @@ public class NESAnalyzer : DiagnosticAnalyzer
         context.RegisterSyntaxNodeAction(AnalyzeForEach, SyntaxKind.ForEachStatement);
         context.RegisterSyntaxNodeAction(AnalyzeTryCatchFinally, SyntaxKind.TryStatement);
         context.RegisterSyntaxNodeAction(AnalyzePropertyDeclaration, SyntaxKind.PropertyDeclaration);
+        context.RegisterSyntaxNodeAction(AnalyzeThrowStatement, SyntaxKind.ThrowStatement, SyntaxKind.ThrowExpression);
     }
 
     static void AnalyzeClassDeclaration(SyntaxNodeAnalysisContext context)
@@ -527,13 +538,23 @@ public class NESAnalyzer : DiagnosticAnalyzer
 
     static void AnalyzeTryCatchFinally(SyntaxNodeAnalysisContext context)
     {
-        context.ReportDiagnostic(Diagnostic.Create(NES011Rule, context.Node.GetLocation()));
+        var tryStatement = (TryStatementSyntax)context.Node;
+
+        // try/finally (no catch) is allowed — it lowers to inline code on the NES.
+        // Only report an error if there are catch clauses.
+        if (tryStatement.Catches.Count > 0)
+            context.ReportDiagnostic(Diagnostic.Create(NES011Rule, context.Node.GetLocation()));
     }
 
     static void AnalyzePropertyDeclaration(SyntaxNodeAnalysisContext context)
     {
         var property = (PropertyDeclarationSyntax)context.Node;
         context.ReportDiagnostic(Diagnostic.Create(NES012Rule, property.Identifier.GetLocation(), property.Identifier.Text));
+    }
+
+    static void AnalyzeThrowStatement(SyntaxNodeAnalysisContext context)
+    {
+        context.ReportDiagnostic(Diagnostic.Create(NES013Rule, context.Node.GetLocation()));
     }
 
     static bool IsSupportedType(ITypeSymbol type)

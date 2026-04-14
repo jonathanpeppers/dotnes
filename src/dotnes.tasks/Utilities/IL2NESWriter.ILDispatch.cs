@@ -48,8 +48,13 @@ partial class IL2NESWriter
         switch (instruction.OpCode)
         {
             case ILOpCode.Nop:
+                break;
             case ILOpCode.Ret:
-                // Ret is handled at block level (RTS appended to user method blocks)
+                // For user methods with early returns, emit JMP to epilogue.
+                // Without this, early returns fall through to subsequent code.
+                // Skip for the final ret (it naturally falls through to the epilogue).
+                if (MethodName != null && Instructions != null && Index < Instructions.Length - 1)
+                    EmitWithLabel(Opcode.JMP, AddressMode.Absolute, $"{MethodName}_epilogue");
                 break;
             case ILOpCode.Dup:
                 if (Stack.Count > 0)
@@ -147,11 +152,12 @@ partial class IL2NESWriter
                     Locals[0] = new Local(Stack.Pop(), Locals[0].Address, IsWord: Locals[0].IsWord);
                     _pendingIncDecLocal = null;
                 }
-                else if (previous == ILOpCode.Ldtoken)
+                else if (previous == ILOpCode.Ldtoken || _pendingByteArrayFromIntrinsic)
                 {
                     // Capture label for byte array reference
                     Locals[0] = new Local(_lastByteArraySize, LabelName: _lastByteArrayLabel);
                     _lastByteArrayLabel = null;
+                    _pendingByteArrayFromIntrinsic = false;
                     _stloc0IsLdtokenPath = true;
                     Stack.Pop(); // Discard marker
                 }
@@ -172,10 +178,11 @@ partial class IL2NESWriter
                     Locals[1] = new Local(Stack.Pop(), Locals[1].Address, IsWord: Locals[1].IsWord);
                     _pendingIncDecLocal = null;
                 }
-                else if (previous == ILOpCode.Ldtoken)
+                else if (previous == ILOpCode.Ldtoken || _pendingByteArrayFromIntrinsic)
                 {
                     Locals[1] = new Local(_lastByteArraySize, LabelName: _lastByteArrayLabel);
                     _lastByteArrayLabel = null;
+                    _pendingByteArrayFromIntrinsic = false;
                     Stack.Pop();
                 }
                 else if (previous == ILOpCode.Newarr)
@@ -195,10 +202,11 @@ partial class IL2NESWriter
                     Locals[2] = new Local(Stack.Pop(), Locals[2].Address, IsWord: Locals[2].IsWord);
                     _pendingIncDecLocal = null;
                 }
-                else if (previous == ILOpCode.Ldtoken)
+                else if (previous == ILOpCode.Ldtoken || _pendingByteArrayFromIntrinsic)
                 {
                     Locals[2] = new Local(_lastByteArraySize, LabelName: _lastByteArrayLabel);
                     _lastByteArrayLabel = null;
+                    _pendingByteArrayFromIntrinsic = false;
                     Stack.Pop();
                 }
                 else if (previous == ILOpCode.Newarr)
@@ -218,10 +226,11 @@ partial class IL2NESWriter
                     Locals[3] = new Local(Stack.Pop(), Locals[3].Address, IsWord: Locals[3].IsWord);
                     _pendingIncDecLocal = null;
                 }
-                else if (previous == ILOpCode.Ldtoken)
+                else if (previous == ILOpCode.Ldtoken || _pendingByteArrayFromIntrinsic)
                 {
                     Locals[3] = new Local(_lastByteArraySize, LabelName: _lastByteArrayLabel);
                     _lastByteArrayLabel = null;
+                    _pendingByteArrayFromIntrinsic = false;
                     Stack.Pop();
                 }
                 else if (previous == ILOpCode.Newarr)
@@ -288,19 +297,31 @@ partial class IL2NESWriter
                 _lastStaticFieldAddress = null;
                 break;
             case ILOpCode.Stelem_i1:
-            case ILOpCode.Stelem_i2:
             case ILOpCode.Stelem_i4:
             case ILOpCode.Stelem_i8:
-                // stelem.i*(stack: arrayref, index, value → stack: )
+                // stelem.i1/i4/i8: byte array store (stack: arrayref, index, value → stack: )
                 HandleStelemI1();
+                break;
+            case ILOpCode.Stelem_i2:
+                // stelem.i2 always represents a 16-bit element store.
+                HandleStelemI2();
                 break;
             case ILOpCode.Ldind_u1:
                 // ldind.u1: load byte through pointer (from ldelema System.Byte)
                 HandleLdindU1();
                 break;
+            case ILOpCode.Ldind_u2:
+            case ILOpCode.Ldind_i2:
+                // ldind.u2/i2: load ushort through pointer (from ldelema System.UInt16)
+                HandleLdindU2();
+                break;
             case ILOpCode.Stind_i1:
                 // stind.i1: store byte through pointer (from ldelema System.Byte)
                 HandleStindI1();
+                break;
+            case ILOpCode.Stind_i2:
+                // stind.i2: store ushort through pointer (from ldelema System.UInt16)
+                HandleStindI2();
                 break;
             case ILOpCode.Add:
                 HandleAddSub(isAdd: true);
@@ -333,33 +354,44 @@ partial class IL2NESWriter
                             RemoveLastInstructions(1);
                         }
 
+                        bool twoRuntimeMul = false;
                         if (_savedRuntimeToTemp)
                         {
-                            // Two runtime values: first in TEMP, second in A
-                            // 8-bit multiply: TEMP × A → A
-                            //   STA TEMP2      ; multiplier
-                            //   LDA #0         ; result = 0
-                            //   LDX #8         ; 8 bits
-                            //   LSR TEMP2      ; ← @loop: shift multiplier right
-                            //   BCC @skip      ; +3 to skip CLC+ADC
-                            //   CLC
-                            //   ADC TEMP       ; result += multiplicand
-                            //   ASL TEMP       ; ← @skip: shift multiplicand left
-                            //   DEX
-                            //   BNE @loop      ; -10 to LSR
-                            Emit(Opcode.STA, AddressMode.ZeroPage, (byte)NESConstants.TEMP2);
-                            Emit(Opcode.LDA, AddressMode.Immediate, 0);
-                            Emit(Opcode.LDX, AddressMode.Immediate, 8);
-                            Emit(Opcode.LSR, AddressMode.ZeroPage, (byte)NESConstants.TEMP2);
-                            Emit(Opcode.BCC, AddressMode.Relative, 3); // skip CLC(1) + ADC_zp(2)
-                            Emit(Opcode.CLC, AddressMode.Implied);
-                            Emit(Opcode.ADC, AddressMode.ZeroPage, (byte)TEMP);
-                            Emit(Opcode.ASL, AddressMode.ZeroPage, (byte)TEMP);
-                            Emit(Opcode.DEX, AddressMode.Implied);
-                            Emit(Opcode.BNE, AddressMode.Relative, unchecked((byte)-12));
+                            bool prevWasLdc =
+                                previous is ILOpCode.Ldc_i4_s or ILOpCode.Ldc_i4
+                                or ILOpCode.Ldc_i4_0 or ILOpCode.Ldc_i4_1 or ILOpCode.Ldc_i4_2
+                                or ILOpCode.Ldc_i4_3 or ILOpCode.Ldc_i4_4 or ILOpCode.Ldc_i4_5
+                                or ILOpCode.Ldc_i4_6 or ILOpCode.Ldc_i4_7 or ILOpCode.Ldc_i4_8;
+                            if (!prevWasLdc)
+                            {
+                                // Two runtime values: first in TEMP, second in A
+                                // 8-bit multiply: TEMP × A → A
+                                Emit(Opcode.STA, AddressMode.ZeroPage, (byte)NESConstants.TEMP2);
+                                Emit(Opcode.LDA, AddressMode.Immediate, 0);
+                                Emit(Opcode.LDX, AddressMode.Immediate, 8);
+                                Emit(Opcode.LSR, AddressMode.ZeroPage, (byte)NESConstants.TEMP2);
+                                Emit(Opcode.BCC, AddressMode.Relative, 3); // skip CLC(1) + ADC_zp(2)
+                                Emit(Opcode.CLC, AddressMode.Implied);
+                                Emit(Opcode.ADC, AddressMode.ZeroPage, (byte)TEMP);
+                                Emit(Opcode.ASL, AddressMode.ZeroPage, (byte)TEMP);
+                                Emit(Opcode.DEX, AddressMode.Implied);
+                                Emit(Opcode.BNE, AddressMode.Relative, unchecked((byte)-12));
+                                twoRuntimeMul = true;
+                            }
+                            else
+                            {
+                                // Runtime × constant, but TEMP holds a value from a prior
+                                // computation (e.g. the first NTADR argument). Save TEMP
+                                // to the cc65 stack so the multiply can use TEMP freely.
+                                Emit(Opcode.STA, AddressMode.ZeroPage, (byte)NESConstants.TEMP2);
+                                Emit(Opcode.LDA, AddressMode.ZeroPage, (byte)TEMP);
+                                EmitJSR("pusha");
+                                Emit(Opcode.LDA, AddressMode.ZeroPage, (byte)NESConstants.TEMP2);
+                                // Fall through to constant multiply below
+                            }
                             _savedRuntimeToTemp = false;
                         }
-                        else
+                        if (!twoRuntimeMul)
                         {
                             // Determine which operand is the compile-time constant
                             bool previousWasLdc =
@@ -1089,6 +1121,27 @@ partial class IL2NESWriter
                 // Pattern: Ldloc_N (array), Ldloc_M (index), Ldelem_u1
                 HandleLdelemU1();
                 break;
+            case ILOpCode.Ldelem_u2:
+            case ILOpCode.Ldelem_i2:
+                // ldelem.u2/i2: pop array ref and index, push ushort array[index]
+                HandleLdelemU2();
+                break;
+            case ILOpCode.Endfinally:
+                {
+                    // End of a finally block — jump to the instruction after the handler,
+                    // or fall through if it's already the next instruction.
+                    var region = FindEnclosingHandlerRegion(instruction.Offset);
+                    if (region != null)
+                    {
+                        int afterHandler = region.Value.HandlerOffset + region.Value.HandlerLength;
+                        int nextOffset = instruction.Offset + 1; // endfinally is 1 byte
+                        if (nextOffset != afterHandler)
+                            EmitJMP(InstructionLabel(afterHandler));
+                    }
+                    Stack.Clear();
+                    _accState = AccumulatorState.Empty;
+                }
+                break;
             default:
                 throw new TranspileException(GetUnsupportedOpcodeMessage(instruction.OpCode), MethodName);
         }
@@ -1146,9 +1199,51 @@ partial class IL2NESWriter
                     EmitJMP(labelName);
                 }
                 break;
+            case ILOpCode.Leave_s:
+                // Exit try block (short form) — jump to finally handler start,
+                // or fall through if the handler is the next instruction.
+                {
+                    var region = FindEnclosingTryRegion(instruction.Offset);
+                    if (region != null)
+                    {
+                        int nextOffset = instruction.Offset + 2; // leave.s is 2 bytes
+                        if (nextOffset != region.Value.HandlerOffset)
+                            EmitJMP(InstructionLabel(region.Value.HandlerOffset));
+                    }
+                    else
+                    {
+                        // No try/finally context — treat as unconditional branch
+                        operand = (sbyte)(byte)operand;
+                        EmitJMP(InstructionLabel(instruction.Offset + operand + 2));
+                    }
+                    Stack.Clear();
+                    _accState = AccumulatorState.Empty;
+                }
+                break;
+            case ILOpCode.Leave:
+                // Exit try block (long form) — jump to finally handler start,
+                // or fall through if the handler is the next instruction.
+                {
+                    var region = FindEnclosingTryRegion(instruction.Offset);
+                    if (region != null)
+                    {
+                        int nextOffset = instruction.Offset + 5; // leave is 5 bytes
+                        if (nextOffset != region.Value.HandlerOffset)
+                            EmitJMP(InstructionLabel(region.Value.HandlerOffset));
+                    }
+                    else
+                    {
+                        // No try/finally context — treat as unconditional branch
+                        EmitJMP(InstructionLabel(instruction.Offset + operand + 5));
+                    }
+                    Stack.Clear();
+                    _accState = AccumulatorState.Empty;
+                }
+                break;
             case ILOpCode.Newarr:
                 {
                     bool isStructArray = instruction.String != null && StructLayouts.ContainsKey(instruction.String);
+                    bool isUshortArray = instruction.String is "UInt16";
                     if (isStructArray)
                     {
                         // Struct array: remove the LDA for the count (purely compile-time allocation)
@@ -1165,6 +1260,32 @@ partial class IL2NESWriter
                         int totalBytes = _pendingStructArrayCount * structSize;
                         _pendingStructArrayBase = (ushort)(local + LocalCount);
                         LocalCount += totalBytes;
+                    }
+                    else if (isUshortArray)
+                    {
+                        // Remove the LDA for the count
+                        bool isLdcPrevious = previous == ILOpCode.Ldc_i4_s || previous == ILOpCode.Ldc_i4
+                            || (previous >= ILOpCode.Ldc_i4_0 && previous <= ILOpCode.Ldc_i4_8);
+                        if (isLdcPrevious)
+                        {
+                            int toRemove = Stack.Count > 0 && Stack.Peek() > byte.MaxValue ? 2 : 1;
+                            RemoveLastInstructions(toRemove);
+                        }
+
+                        // Check if this is a music note table (newarr; dup; ldtoken; InitializeArray)
+                        // vs a regular ushort array (newarr; dup; ldc; ldc; stelem).
+                        // Only pre-allocate zero-page space for regular arrays.
+                        bool isMusicTable = Instructions != null
+                            && Index + 2 < Instructions.Length
+                            && Instructions[Index + 1].OpCode == ILOpCode.Dup
+                            && Instructions[Index + 2].OpCode == ILOpCode.Ldtoken;
+
+                        if (!isMusicTable)
+                        {
+                            _pendingUshortArrayCount = Stack.Count > 0 ? Stack.Peek() : 0;
+                            _pendingUshortArrayBase = (ushort)(local + LocalCount);
+                            LocalCount += _pendingUshortArrayCount * 2;
+                        }
                     }
                     else if (previous == ILOpCode.Ldc_i4_s || previous == ILOpCode.Ldc_i4
                         || (previous >= ILOpCode.Ldc_i4_0 && previous <= ILOpCode.Ldc_i4_8))
@@ -1195,11 +1316,12 @@ partial class IL2NESWriter
                     {
                         HandleStlocAfterNewarr(localIdx);
                     }
-                    else if (previous == ILOpCode.Ldtoken)
+                    else if (previous == ILOpCode.Ldtoken || _pendingByteArrayFromIntrinsic)
                     {
-                        // Initialized byte array from Ldtoken
+                        // Initialized byte array from Ldtoken or meta_spr_2x2 intrinsic
                         Locals[localIdx] = new Local(_lastByteArraySize, LabelName: _lastByteArrayLabel);
                         _lastByteArrayLabel = null;
+                        _pendingByteArrayFromIntrinsic = false;
                         Stack.Pop();
                     }
                     else
@@ -1698,10 +1820,17 @@ partial class IL2NESWriter
                                 for (int bi = block.Count - 1; bi >= 0; bi--)
                                 {
                                     if (block[bi].Opcode == Opcode.JSR &&
-                                        block[bi].Operand is LabelOperand lbl && lbl.Label == "pusha")
+                                        block[bi].Operand is LabelOperand lbl)
                                     {
-                                        yIsExpression = true;
-                                        break;
+                                        if (lbl.Label == "pusha")
+                                        {
+                                            yIsExpression = true;
+                                            break;
+                                        }
+                                        // Stop at any JSR to a non-helper function — any earlier
+                                        // pusha was consumed by that function call's arguments.
+                                        if (!IsCC65StackHelper(lbl.Label))
+                                            break;
                                     }
                                 }
                             }
@@ -1807,16 +1936,22 @@ partial class IL2NESWriter
                                         // Scan backwards for JSR pusha or an LDA that represents x.
                                         // Block may have intervening STA/LDA from stloc (store-local)
                                         // when Roslyn inserts temp variables between the NTADR args.
+                                        // Stop at any JSR to a non-helper function — any earlier
+                                        // pusha was consumed by that function call's arguments.
                                         int pushaIdx2 = -1;
                                         int xLdaIdx = -1;
                                         for (int bi = block.Count - 2; bi >= 0; bi--)
                                         {
                                             if (block[bi].Opcode == Opcode.JSR
-                                                && block[bi].Operand is LabelOperand staPushaLbl
-                                                && staPushaLbl.Label == "pusha")
+                                                && block[bi].Operand is LabelOperand staPushaLbl)
                                             {
-                                                pushaIdx2 = bi;
-                                                break;
+                                                if (staPushaLbl.Label == "pusha")
+                                                {
+                                                    pushaIdx2 = bi;
+                                                    break;
+                                                }
+                                                if (!IsCC65StackHelper(staPushaLbl.Label))
+                                                    break;
                                             }
                                         }
 
@@ -1944,8 +2079,30 @@ partial class IL2NESWriter
                         _firstAndAfterPadPoll = true;
                         _immediateInA = null;
                         break;
+                    case nameof(NESLib.oam_begin):
+                        // oam_begin(): reset OAM offset and clear OAM buffer
+                        // Return value (OamFrame) is a zero-size sentinel — no data to store
+                        Emit(Opcode.LDA, AddressMode.Immediate, 0x00);
+                        Emit(Opcode.STA, AddressMode.ZeroPage, (byte)OAM_OFF);
+                        EmitJSR(nameof(NESLib.oam_clear));
+                        _immediateInA = null;
+                        argsAlreadyPopped = true;
+                        break;
+                    case "OamFrame.Dispose":
+                        // OamFrame.Dispose(): hide all unused OAM entries from current offset
+                        _pendingStructLocal = null; // ldloca.s before Dispose is consumed
+                        Emit(Opcode.LDA, AddressMode.ZeroPage, (byte)OAM_OFF);
+                        EmitJSR(nameof(NESLib.oam_hide_rest));
+                        _immediateInA = null;
+                        argsAlreadyPopped = true;
+                        break;
                     case "oam_spr":
                         EmitOamSprDecsp4();
+                        _lastByteArrayLabel = null;
+                        _needsByteArrayLoadInCall = false;
+                        break;
+                    case nameof(NESLib.oam_spr_2x2):
+                        EmitOamSpr2x2();
                         _lastByteArrayLabel = null;
                         _needsByteArrayLoadInCall = false;
                         break;
@@ -1954,6 +2111,12 @@ partial class IL2NESWriter
                         break;
                     case nameof(NESLib.oam_meta_spr_pal):
                         EmitOamMetaSprPal();
+                        break;
+                    case nameof(NESLib.meta_spr_2x2):
+                        HandleMetaSpr2x2(flip: false);
+                        break;
+                    case nameof(NESLib.meta_spr_2x2_flip):
+                        HandleMetaSpr2x2(flip: true);
                         break;
                     case nameof(NESLib.set_music_pulse_table):
                     case nameof(NESLib.set_music_triangle_table):

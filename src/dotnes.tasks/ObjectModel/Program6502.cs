@@ -720,6 +720,10 @@ public class Program6502
             usedMethods.Add("vrambuf_clear");
         }
 
+        // rect_overlap / sprite_overlap depend on addysp for stack cleanup
+        if (usedMethods.Contains("rect_overlap") || usedMethods.Contains("sprite_overlap"))
+            usedMethods.Add("addysp");
+
         // pad_poll is needed directly or as a dependency of pad_trigger/pad_state
         if (usedMethods.Contains("pad_poll") || usedMethods.Contains("pad_trigger") || usedMethods.Contains("pad_state"))
             action(BuiltInSubroutines.PadPoll());
@@ -738,7 +742,7 @@ public class Program6502
             action(BuiltInSubroutines.SRand());
         if (usedMethods.Contains("rand16") || usedMethods.Contains("srand"))
             action(BuiltInSubroutines.Rand());
-        if (usedMethods.Contains("oam_meta_spr"))
+        if (usedMethods.Contains("oam_meta_spr") || usedMethods.Contains("oam_spr_2x2"))
             action(BuiltInSubroutines.OamMetaSpr());
         if (usedMethods.Contains("oam_meta_spr_pal"))
             action(BuiltInSubroutines.OamMetaSprPal());
@@ -772,8 +776,16 @@ public class Program6502
             action(BuiltInSubroutines.Addysp());
         if (usedMethods.Contains("bcd_add"))
             action(BuiltInSubroutines.BcdAdd());
+        if (usedMethods.Contains("rect_overlap"))
+            action(BuiltInSubroutines.RectOverlap());
+        if (usedMethods.Contains("sprite_overlap"))
+            action(BuiltInSubroutines.SpriteOverlap());
         if (usedMethods.Contains("waitvsync"))
             action(BuiltInSubroutines.Waitvsync());
+        if (usedMethods.Contains("fade_in"))
+            action(BuiltInSubroutines.FadeIn());
+        if (usedMethods.Contains("fade_out"))
+            action(BuiltInSubroutines.FadeOut());
         if (usedMethods.Contains("irq_set_callback"))
         {
             action(BuiltInSubroutines.IrqSetCallback());
