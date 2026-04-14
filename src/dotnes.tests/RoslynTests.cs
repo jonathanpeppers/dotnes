@@ -5964,4 +5964,70 @@ public class RoslynTests
         Assert.Contains("2910", hex); // PAD.UP
         Assert.Contains("2920", hex); // PAD.DOWN
     }
+
+    [Fact]
+    public void PadDpadX_WithPadState()
+    {
+        // pad_dpad_x works with pad_state (not just pad_poll).
+        // The intrinsic saves A to its own reload slot, so it doesn't
+        // depend on _padReloadAddress being set by pad_poll.
+        var bytes = GetProgramBytes(
+            """
+            byte x = 128;
+            pal_col(0, 0);
+            ppu_on_all();
+            while (true)
+            {
+                ppu_wait_nmi();
+                PAD pad = pad_poll(0);
+                PAD state = pad_state(0);
+                x = (byte)(x + pad_dpad_x(state));
+                pal_col(0, x);
+            }
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        // Should contain both direction masks
+        Assert.Contains("2940", hex); // PAD.LEFT
+        Assert.Contains("2980", hex); // PAD.RIGHT
+        // Should contain LDA #$FF (-1) and LDA #$01 (+1)
+        Assert.Contains("A9FF", hex);
+        Assert.Contains("A901", hex);
+    }
+
+    [Fact]
+    public void PadDpadX_MultiPad()
+    {
+        // Two pads polled; pad_dpad_x called on the first (not the most recent).
+        // The intrinsic must reload from its own saved copy, not _padReloadAddress
+        // which points to the second pad_poll result.
+        var bytes = GetProgramBytes(
+            """
+            byte x0 = 128;
+            byte x1 = 128;
+            pal_col(0, 0);
+            ppu_on_all();
+            while (true)
+            {
+                ppu_wait_nmi();
+                PAD pad0 = pad_poll(0);
+                PAD pad1 = pad_poll(1);
+                x0 = (byte)(x0 + pad_dpad_x(pad0));
+                x1 = (byte)(x1 + pad_dpad_x(pad1));
+                pal_col(0, x0);
+            }
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        // Two separate pad_dpad_x intrinsics, each with direction masks
+        // Count occurrences of AND #$40 (PAD.LEFT) — should appear twice
+        int leftCount = 0;
+        int idx = 0;
+        while ((idx = hex.IndexOf("2940", idx)) >= 0) { leftCount++; idx += 4; }
+        Assert.Equal(2, leftCount);
+    }
 }

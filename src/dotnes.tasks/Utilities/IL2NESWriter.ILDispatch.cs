@@ -2068,7 +2068,17 @@ partial class IL2NESWriter
                     {
                         // Inline intrinsic: returns -1, 0, or +1 from D-pad state.
                         // A has the PAD value from the preceding ldloc.
-                        // Uses _padReloadAddress (set by pad_poll/pad_trigger) for the second direction check.
+                        // Save A to _padReloadAddress so the second direction check can
+                        // reload it after the first AND destroys the full pad value.
+                        // This makes the intrinsic self-contained — it works regardless of
+                        // whether the argument came from pad_poll, pad_state, or a variable.
+                        if (_padReloadAddress == 0)
+                        {
+                            _padReloadAddress = (ushort)(local + LocalCount);
+                            LocalCount += 1;
+                        }
+                        Emit(Opcode.STA, AddressMode.Absolute, _padReloadAddress);
+
                         byte negMask, posMask;
                         if (operand == nameof(NESLib.pad_dpad_x))
                         {
