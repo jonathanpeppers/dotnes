@@ -5588,16 +5588,24 @@ public class RoslynTests
             """);
 
         var mainBlock = program.Blocks.Single(b => b.Label == "main");
-        var jsrLabels = mainBlock.InstructionsWithLabels
-            .Where(il => il.Instruction.Opcode == Opcode.JSR && il.Instruction.Operand is LabelOperand)
-            .Select(il => ((LabelOperand)il.Instruction.Operand!).Label)
-            .ToList();
+        var instructions = mainBlock.InstructionsWithLabels.ToList();
 
-        // oam_clear (from oam_begin) must appear before oam_hide_rest (from Dispose)
-        int clearIndex = jsrLabels.IndexOf("oam_clear");
-        int hideRestIndex = jsrLabels.IndexOf("oam_hide_rest");
+        static bool IsJsrTo((Instruction Instruction, string? Label) il, string label) =>
+            il.Instruction.Opcode == Opcode.JSR &&
+            il.Instruction.Operand is LabelOperand lbl &&
+            lbl.Label == label;
+
+        int loopStartIndex= instructions.FindIndex(il => IsJsrTo(il, "ppu_wait_nmi"));
+        int clearIndex = instructions.FindIndex(il => IsJsrTo(il, "oam_clear"));
+        int hideRestIndex = instructions.FindIndex(il => IsJsrTo(il, "oam_hide_rest"));
+
+        Assert.True(loopStartIndex >= 0, "Expected JSR ppu_wait_nmi at start of loop body");
         Assert.True(clearIndex >= 0, "Expected JSR oam_clear from oam_begin()");
         Assert.True(hideRestIndex >= 0, "Expected JSR oam_hide_rest from OamFrame.Dispose()");
+
+        // Both OAM calls must be inside the loop body (after ppu_wait_nmi)
+        Assert.True(loopStartIndex < clearIndex,
+            $"oam_clear (index {clearIndex}) should be inside loop body after ppu_wait_nmi (index {loopStartIndex})");
         Assert.True(clearIndex < hideRestIndex,
             $"oam_clear (index {clearIndex}) should come before oam_hide_rest (index {hideRestIndex})");
     }
