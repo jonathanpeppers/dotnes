@@ -58,19 +58,7 @@ vram_adr(NAMETABLE_A);
 vram_unrle(climbr_title_rle);
 ppu_on_all();
 
-fade_in();
+fade_in(4);
 
 // do nothing, infinite loop
 while (true) ;
-
-static void fade_in()
-{
-    for (byte vb = 0; vb <= 4; vb = (byte)(vb + 1))
-    {
-        pal_bright(vb);
-        ppu_wait_frame();
-        ppu_wait_frame();
-        ppu_wait_frame();
-        ppu_wait_frame();
-    }
-}

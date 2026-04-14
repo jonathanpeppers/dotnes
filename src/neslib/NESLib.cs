@@ -378,6 +378,16 @@ public static class NESLib
     public static void delay(byte frames) => throw null!;
 
     /// <summary>
+    /// fade in from black to normal brightness over N frames per step
+    /// </summary>
+    public static void fade_in(byte delay) => throw null!;
+
+    /// <summary>
+    /// fade out from normal brightness to black over N frames per step
+    /// </summary>
+    public static void fade_out(byte delay) => throw null!;
+
+    /// <summary>
     /// set scroll, including rhe top bits
     /// it is always applied at beginning of a TV frame, not at the function call
     /// </summary>
