@@ -5571,4 +5571,28 @@ public class RoslynTests
             il.Instruction.Operand is LabelOperand lbl && lbl.Label == "oam_hide_rest");
         Assert.True(hasOamHideRest, "Expected JSR oam_hide_rest from OamFrame.Dispose() in main block");
     }
+
+    [Fact]
+    public void StelemI1_ConstantIndex_AddExpression()
+    {
+        // Bug: tile_row[1] = (byte)(sprite + 1) emitted LDA #$01 (the constant)
+        // instead of LDA sprite; CLC; ADC #$01 (the computed value).
+        var bytes = GetProgramBytes(
+            """
+            byte sprite = (byte)pad_poll(0);
+            byte[] tile_row = new byte[4];
+            tile_row[1] = (byte)(sprite + 1);
+            pal_col(0, tile_row[1]);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"StelemI1_ConstantIndex_AddExpression hex: {hex}");
+        // Must contain LDA abs (AD) for loading sprite, CLC (18), ADC #$01 (6901)
+        // to compute sprite + 1 at runtime, NOT just LDA #$01 (A901)
+        Assert.Contains("18", hex);    // CLC
+        Assert.Contains("6901", hex);  // ADC #$01
+    }
 }
