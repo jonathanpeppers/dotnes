@@ -66,3 +66,5 @@ static NES.NESLib.oam_spr_2x2(byte x, byte y, byte topLeft, byte bottomLeft, byt
 static NES.NESLib.fade_in(byte delay) -> void
 static NES.NESLib.fade_out(byte delay) -> void
 static NES.NESLib.oam_begin() -> NES.OamFrame
+static NES.NESLib.pad_dpad_x(NES.PAD joy) -> sbyte
+static NES.NESLib.pad_dpad_y(NES.PAD joy) -> sbyte

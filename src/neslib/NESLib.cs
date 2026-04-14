@@ -163,6 +163,16 @@ public static class NESLib
     public static PAD pad_state(byte pad) => throw null!;
 
     /// <summary>
+    /// Returns -1 if LEFT is pressed, +1 if RIGHT is pressed, 0 otherwise.
+    /// </summary>
+    public static sbyte pad_dpad_x(PAD joy) => throw null!;
+
+    /// <summary>
+    /// Returns -1 if UP is pressed, +1 if DOWN is pressed, 0 otherwise.
+    /// </summary>
+    public static sbyte pad_dpad_y(PAD joy) => throw null!;
+
+    /// <summary>
     /// read from vram
     /// </summary>
     public static void vram_read(byte[] dst, uint size) => throw null!;

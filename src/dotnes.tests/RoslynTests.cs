@@ -5769,4 +5769,97 @@ public class RoslynTests
         Assert.Equal(Opcode.LDA, ldaInstr.Opcode);
         Assert.Equal(AddressMode.Absolute, ldaInstr.Mode);
     }
+
+    [Fact]
+    public void PadDpadX()
+    {
+        // pad_dpad_x returns -1 (LEFT), +1 (RIGHT), or 0
+        var bytes = GetProgramBytes(
+            """
+            byte x = 128;
+            pal_col(0, 0);
+            ppu_on_all();
+            while (true)
+            {
+                ppu_wait_nmi();
+                PAD pad = pad_poll(0);
+                x = (byte)(x + pad_dpad_x(pad));
+                pal_col(0, x);
+            }
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        // Should contain AND #$40 (PAD.LEFT mask)
+        Assert.Contains("2940", hex);
+        // Should contain AND #$80 (PAD.RIGHT mask)
+        Assert.Contains("2980", hex);
+        // Should contain LDA #$FF (-1)
+        Assert.Contains("A9FF", hex);
+        // Should contain LDA #$01 (+1)
+        Assert.Contains("A901", hex);
+    }
+
+    [Fact]
+    public void PadDpadY()
+    {
+        // pad_dpad_y returns -1 (UP), +1 (DOWN), or 0
+        var bytes = GetProgramBytes(
+            """
+            byte y = 128;
+            pal_col(0, 0);
+            ppu_on_all();
+            while (true)
+            {
+                ppu_wait_nmi();
+                PAD pad = pad_poll(0);
+                y = (byte)(y + pad_dpad_y(pad));
+                pal_col(0, y);
+            }
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        // Should contain AND #$10 (PAD.UP mask)
+        Assert.Contains("2910", hex);
+        // Should contain AND #$20 (PAD.DOWN mask)
+        Assert.Contains("2920", hex);
+        // Should contain LDA #$FF (-1)
+        Assert.Contains("A9FF", hex);
+        // Should contain LDA #$01 (+1)
+        Assert.Contains("A901", hex);
+    }
+
+    [Fact]
+    public void PadDpadXAndY()
+    {
+        // Both pad_dpad_x and pad_dpad_y used together
+        var bytes = GetProgramBytes(
+            """
+            byte x = 128;
+            byte y = 128;
+            pal_col(0, 0);
+            ppu_on_all();
+            while (true)
+            {
+                ppu_wait_nmi();
+                PAD pad = pad_poll(0);
+                x = (byte)(x + pad_dpad_x(pad));
+                y = (byte)(y + pad_dpad_y(pad));
+                oam_spr(x, y, 0xD8, 0, 0);
+            }
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        // Both X direction masks
+        Assert.Contains("2940", hex); // PAD.LEFT
+        Assert.Contains("2980", hex); // PAD.RIGHT
+        // Both Y direction masks
+        Assert.Contains("2910", hex); // PAD.UP
+        Assert.Contains("2920", hex); // PAD.DOWN
+    }
 }

@@ -2039,6 +2039,47 @@ partial class IL2NESWriter
                         _firstAndAfterPadPoll = true;
                         _immediateInA = null;
                         break;
+                    case nameof(NESLib.pad_dpad_x):
+                    case nameof(NESLib.pad_dpad_y):
+                    {
+                        // Inline intrinsic: returns -1, 0, or +1 from D-pad state.
+                        // A has the PAD value from the preceding ldloc.
+                        // Uses _padReloadAddress (set by pad_poll/pad_trigger) for the second direction check.
+                        byte negMask, posMask;
+                        if (operand == nameof(NESLib.pad_dpad_x))
+                        {
+                            negMask = 0x40; // PAD.LEFT
+                            posMask = 0x80; // PAD.RIGHT
+                        }
+                        else
+                        {
+                            negMask = 0x10; // PAD.UP
+                            posMask = 0x20; // PAD.DOWN
+                        }
+
+                        // AND #negMask — test negative direction (LEFT/UP)
+                        Emit(Opcode.AND, AddressMode.Immediate, negMask);
+                        // BEQ +4 — skip LDA+BNE if not pressed
+                        Emit(Opcode.BEQ, AddressMode.Relative, (byte)4);
+                        // LDA #$FF — result = -1
+                        Emit(Opcode.LDA, AddressMode.Immediate, 0xFF);
+                        // BNE +9 — skip to done (unconditional: A=$FF≠0)
+                        Emit(Opcode.BNE, AddressMode.Relative, (byte)9);
+                        // Reload pad value for positive direction check
+                        Emit(Opcode.LDA, AddressMode.Absolute, _padReloadAddress);
+                        // AND #posMask — test positive direction (RIGHT/DOWN)
+                        Emit(Opcode.AND, AddressMode.Immediate, posMask);
+                        // BEQ +2 — skip to done if not pressed (A=0 is correct result)
+                        Emit(Opcode.BEQ, AddressMode.Relative, (byte)2);
+                        // LDA #$01 — result = +1
+                        Emit(Opcode.LDA, AddressMode.Immediate, 0x01);
+                        // done: A contains -1, 0, or +1
+
+                        if (Stack.Count > 0) Stack.Pop();
+                        argsAlreadyPopped = true;
+                        _immediateInA = null;
+                        break;
+                    }
                     case nameof(NESLib.oam_begin):
                         // oam_begin(): reset OAM offset and clear OAM buffer
                         // Return value (OamFrame) is a zero-size sentinel — no data to store
