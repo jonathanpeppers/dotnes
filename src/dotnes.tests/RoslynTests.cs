@@ -5516,8 +5516,10 @@ public class RoslynTests
         // oam_begin() should emit: LDA #0, STA $1B (oam_off), JSR oam_clear in the main block
         var (program, _) = BuildProgram(
             """
-            using var frame = oam_begin();
-            oam_spr(10, 20, 0x01, 0, 0);
+            using (var frame = oam_begin())
+            {
+                oam_spr(10, 20, 0x01, 0, 0);
+            }
             ppu_on_all();
             while (true) ;
             """);
@@ -5551,8 +5553,10 @@ public class RoslynTests
         // oam_begin() emits JSR oam_clear; OamFrame.Dispose() emits LDA oam_off, JSR oam_hide_rest
         var (program, _) = BuildProgram(
             """
-            using var frame = oam_begin();
-            oam_spr(10, 20, 0x01, 0, 0);
+            using (var frame = oam_begin())
+            {
+                oam_spr(10, 20, 0x01, 0, 0);
+            }
             ppu_on_all();
             while (true) ;
             """);

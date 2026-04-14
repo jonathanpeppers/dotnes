@@ -389,17 +389,19 @@ while (true)
             }
 
             // Draw sprites: cursor + enemies
-            using var frame = oam_begin();
-            tempNX = (byte)(cursorX * 8);
-            tempNY = (byte)(cursorY * 8);
-            oam_off = oam_spr(tempNX, tempNY, SPR_CURSOR, 0, oam_off);
-            for (byte i = 0; i < MAX_ENEMIES; i++)
+            using (var frame = oam_begin())
             {
-                if (enemyActive[i] != 0)
+                tempNX = (byte)(cursorX * 8);
+                tempNY = (byte)(cursorY * 8);
+                oam_off = oam_spr(tempNX, tempNY, SPR_CURSOR, 0, oam_off);
+                for (byte i = 0; i < MAX_ENEMIES; i++)
                 {
-                    tempNX = (byte)(enemyX[i] * 8);
-                    tempNY = (byte)(enemyY[i] * 8);
-                    oam_off = oam_spr(tempNX, tempNY, SPR_ENEMY, 1, oam_off);
+                    if (enemyActive[i] != 0)
+                    {
+                        tempNX = (byte)(enemyX[i] * 8);
+                        tempNY = (byte)(enemyY[i] * 8);
+                        oam_off = oam_spr(tempNX, tempNY, SPR_ENEMY, 1, oam_off);
+                    }
                 }
             }
 

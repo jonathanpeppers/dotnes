@@ -192,14 +192,16 @@ while (true)
     }
 
     // draw sprites (pre-compute array args into globals)
-    using var frame = oam_begin();
-    idx = 0;
-    while (idx < snake_len)
+    using (var frame = oam_begin())
     {
-        tmpX = snake_x[idx];
-        tmpY = snake_y[idx];
-        oam_off = oam_spr(tmpX, tmpY, 0x01, 0, oam_off);
-        idx = (byte)(idx + 1);
+        idx = 0;
+        while (idx < snake_len)
+        {
+            tmpX = snake_x[idx];
+            tmpY = snake_y[idx];
+            oam_off = oam_spr(tmpX, tmpY, 0x01, 0, oam_off);
+            idx = (byte)(idx + 1);
+        }
+        oam_off = oam_spr(food_x, food_y, 0x01, 1, oam_off);
     }
-    oam_off = oam_spr(food_x, food_y, 0x01, 1, oam_off);
 }

@@ -44,12 +44,14 @@ for (byte i = 0; i < 16; i = (byte)(i + 1))
 // main loop
 while (true)
 {
-    using var frame = oam_begin();
-    for (byte i = 0; i < 16; i = (byte)(i + 1))
+    using (var frame = oam_begin())
     {
-        oam_off = oam_meta_spr(actor_x[i], actor_y[i], oam_off, metasprite);
-        actor_x[i] = (byte)(actor_x[i] + actor_dx[i]);
-        actor_y[i] = (byte)(actor_y[i] + actor_dy[i]);
+        for (byte i = 0; i < 16; i = (byte)(i + 1))
+        {
+            oam_off = oam_meta_spr(actor_x[i], actor_y[i], oam_off, metasprite);
+            actor_x[i] = (byte)(actor_x[i] + actor_dx[i]);
+            actor_y[i] = (byte)(actor_y[i] + actor_dy[i]);
+        }
     }
     ppu_wait_frame();
 }

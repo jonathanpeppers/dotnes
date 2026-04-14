@@ -69,38 +69,39 @@ for (byte i = 0; i < 8; i = (byte)(i + 1))
 // main loop
 while (true)
 {
-    using var frame = oam_begin();
-
-    // pad_trigger detects newly pressed buttons (edge detection)
-    PAD trig = pad_trigger(0);
-    if ((trig & PAD.LEFT) != 0)
-        actor_dx[0] = 254;
-    else if ((trig & PAD.RIGHT) != 0)
-        actor_dx[0] = 2;
-    else
-        actor_dx[0] = 0;
-
-    // A/B buttons change brightness (trigger = one press per tap)
-    if ((trig & PAD.A) != 0)
-        vbright = (byte)(vbright - 1);
-    if ((trig & PAD.B) != 0)
-        vbright = (byte)(vbright + 1);
-
-    // pad_state reads currently held buttons (continuous)
-    PAD state = pad_state(0);
-    if ((state & PAD.UP) != 0)
-        actor_dy[0] = 254;
-    else if ((state & PAD.DOWN) != 0)
-        actor_dy[0] = 2;
-    else
-        actor_dy[0] = 0;
-
-    // draw and move all actors
-    for (byte i = 0; i < 8; i = (byte)(i + 1))
+    using (var frame = oam_begin())
     {
-        oam_off = oam_meta_spr(actor_x[i], actor_y[i], oam_off, playerRStand);
-        actor_x[i] = (byte)(actor_x[i] + actor_dx[i]);
-        actor_y[i] = (byte)(actor_y[i] + actor_dy[i]);
+        // pad_trigger detects newly pressed buttons (edge detection)
+        PAD trig = pad_trigger(0);
+        if ((trig & PAD.LEFT) != 0)
+            actor_dx[0] = 254;
+        else if ((trig & PAD.RIGHT) != 0)
+            actor_dx[0] = 2;
+        else
+            actor_dx[0] = 0;
+
+        // A/B buttons change brightness (trigger = one press per tap)
+        if ((trig & PAD.A) != 0)
+            vbright = (byte)(vbright - 1);
+        if ((trig & PAD.B) != 0)
+            vbright = (byte)(vbright + 1);
+
+        // pad_state reads currently held buttons (continuous)
+        PAD state = pad_state(0);
+        if ((state & PAD.UP) != 0)
+            actor_dy[0] = 254;
+        else if ((state & PAD.DOWN) != 0)
+            actor_dy[0] = 2;
+        else
+            actor_dy[0] = 0;
+
+        // draw and move all actors
+        for (byte i = 0; i < 8; i = (byte)(i + 1))
+        {
+            oam_off = oam_meta_spr(actor_x[i], actor_y[i], oam_off, playerRStand);
+            actor_x[i] = (byte)(actor_x[i] + actor_dx[i]);
+            actor_y[i] = (byte)(actor_y[i] + actor_dy[i]);
+        }
     }
 
     pal_bright(vbright);

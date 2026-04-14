@@ -491,40 +491,41 @@ while (true)
     poke(APU_STATUS, snd_enable);
 
     // --- Draw sprites ---
-    using var frame = oam_begin();
-
-    // Player
-    oam_off = oam_spr(player_x, player_y, SPR_PLAYER, 0, oam_off);
-
-    // Bullets
-    for (byte i = 0; i < MAX_BULLETS; i++)
+    using (var frame = oam_begin())
     {
-        if (bullet_active[i] != 0)
-            oam_off = oam_spr(bullet_x[i], bullet_y[i], SPR_BULLET, 0, oam_off);
-    }
+        // Player
+        oam_off = oam_spr(player_x, player_y, SPR_PLAYER, 0, oam_off);
 
-    // Enemies
-    for (byte i = 0; i < MAX_ENEMIES; i++)
-    {
-        if (enemy_active[i] != 0)
-            oam_off = oam_spr(enemy_x[i], enemy_y[i], SPR_ENEMY, 1, oam_off);
-    }
-
-    // Explosions
-    for (byte i = 0; i < MAX_EXPLOSIONS; i++)
-    {
-        if (exp_timer[i] != 0)
+        // Bullets
+        for (byte i = 0; i < MAX_BULLETS; i++)
         {
-            byte tile = SPR_EXPLODE1;
-            if (exp_timer[i] < 8) tile = SPR_EXPLODE2;
-            oam_off = oam_spr(exp_x[i], exp_y[i], tile, 3, oam_off);
+            if (bullet_active[i] != 0)
+                oam_off = oam_spr(bullet_x[i], bullet_y[i], SPR_BULLET, 0, oam_off);
         }
-    }
 
-    // Stars
-    for (byte i = 0; i < MAX_STARS; i++)
-    {
-        oam_off = oam_spr(star_x[i], star_y[i], SPR_STAR, 2, oam_off);
+        // Enemies
+        for (byte i = 0; i < MAX_ENEMIES; i++)
+        {
+            if (enemy_active[i] != 0)
+                oam_off = oam_spr(enemy_x[i], enemy_y[i], SPR_ENEMY, 1, oam_off);
+        }
+
+        // Explosions
+        for (byte i = 0; i < MAX_EXPLOSIONS; i++)
+        {
+            if (exp_timer[i] != 0)
+            {
+                byte tile = SPR_EXPLODE1;
+                if (exp_timer[i] < 8) tile = SPR_EXPLODE2;
+                oam_off = oam_spr(exp_x[i], exp_y[i], tile, 3, oam_off);
+            }
+        }
+
+        // Stars
+        for (byte i = 0; i < MAX_STARS; i++)
+        {
+            oam_off = oam_spr(star_x[i], star_y[i], SPR_STAR, 2, oam_off);
+        }
     }
 
     // Update score display via VRAM buffer (processed by NMI during vblank)
