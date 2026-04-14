@@ -24,10 +24,8 @@ while (true)
     
     PAD pad = pad_poll(0);
     
-    if ((pad & PAD.LEFT) != 0) x--;
-    if ((pad & PAD.RIGHT) != 0) x++;
-    if ((pad & PAD.UP) != 0) y--;
-    if ((pad & PAD.DOWN) != 0) y++;
+    x = (byte)(x + pad_dpad_x(pad));
+    y = (byte)(y + pad_dpad_y(pad));
     
     // Draw 2x2 sprite (16x16 pixels)
     oam_spr_2x2(x, y, 0xD8, 0xD9, 0xDA, 0xDB, 0, 0);
