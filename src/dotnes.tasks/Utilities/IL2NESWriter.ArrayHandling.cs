@@ -1300,16 +1300,15 @@ partial class IL2NESWriter
                     }
                 }
             }
-            // Also find the last standalone constant (not consumed by an operation)
+            // Also find the last standalone constant (not consumed by an arithmetic operation)
             int? constValue = null;
             for (int i = valueStart; i < Index; i++)
             {
                 int? val = GetLdcValue(Instructions[i]);
                 if (val != null)
                 {
-                    // Only treat as standalone constant if NOT consumed by an arithmetic operation
                     if (i + 1 >= Index || Instructions[i + 1].OpCode is not (
-                        ILOpCode.Add or ILOpCode.Sub or ILOpCode.And or ILOpCode.Shr or ILOpCode.Shr_un or ILOpCode.Mul))
+                        ILOpCode.Add or ILOpCode.Sub or ILOpCode.And or ILOpCode.Shr or ILOpCode.Shr_un))
                         constValue = val;
                 }
             }
