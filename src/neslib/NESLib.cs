@@ -378,6 +378,16 @@ public static class NESLib
     public static void delay(byte frames) => throw null!;
 
     /// <summary>
+    /// fade in from black to normal brightness over N frames per step
+    /// </summary>
+    public static void fade_in(byte delay) => throw null!;
+
+    /// <summary>
+    /// fade out from normal brightness to black over N frames per step
+    /// </summary>
+    public static void fade_out(byte delay) => throw null!;
+
+    /// <summary>
     /// set scroll, including rhe top bits
     /// it is always applied at beginning of a TV frame, not at the function call
     /// </summary>
@@ -433,6 +443,22 @@ public static class NESLib
     /// Example: bcd_add(0x0100, 0x0001) returns 0x0101 (100 + 1 = 101).
     /// </summary>
     public static ushort bcd_add(ushort a, ushort b) => throw null!;
+
+    /// <summary>
+    /// Returns true if two axis-aligned rectangles overlap.
+    /// Uses unsigned byte arithmetic and assumes rectangle extents do not wrap:
+    /// x1+w1, x2+w2, y1+h1, and y2+h2 must all be less than or equal to 255.
+    /// Under that precondition, AABB test: overlap iff
+    /// (x1 &lt; x2+w2) &amp;&amp; (x2 &lt; x1+w1) &amp;&amp; (y1 &lt; y2+h2) &amp;&amp; (y2 &lt; y1+h1).
+    /// </summary>
+    public static bool rect_overlap(byte x1, byte y1, byte w1, byte h1, byte x2, byte y2, byte w2, byte h2) => throw null!;
+
+    /// <summary>
+    /// Returns true if two sprites overlap within a given threshold distance on both axes.
+    /// Uses unsigned absolute-difference: overlap iff |x1-x2| &lt; threshold &amp;&amp; |y1-y2| &lt; threshold.
+    /// Suitable for equal-size sprite collision checks (e.g., 8x8 sprites with threshold=8).
+    /// </summary>
+    public static bool sprite_overlap(byte x1, byte y1, byte x2, byte y2, byte threshold) => throw null!;
 
     /// <summary>
     /// when display is enabled, vram access could only be done with this vram update system

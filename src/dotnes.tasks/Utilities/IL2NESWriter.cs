@@ -68,6 +68,8 @@ partial class IL2NESWriter : NESWriter
     string? _pendingArrayType;
     int _pendingStructArrayCount;
     ushort? _pendingStructArrayBase; // Pre-allocated base address from newarr for struct arrays
+    int _pendingUshortArrayCount;
+    ushort? _pendingUshortArrayBase; // Pre-allocated base address from newarr for ushort arrays
     readonly Dictionary<string, Local> _staticFieldArrayLocals = new(); // Maps static field names to their array Local entries
     ImmutableArray<byte>? _pendingUShortArray;
 
@@ -425,6 +427,13 @@ partial class IL2NESWriter : NESWriter
     PendingByteArrayElement? _pendingByteArrayElement;
 
     /// <summary>
+    /// Pending ushort array element access state from ldelema System.UInt16.
+    /// Null when no ushort array ldelema is pending.
+    /// Used for compound assignments: arr[i]++, arr[i] += expr, etc.
+    /// </summary>
+    PendingUshortArrayElement? _pendingUshortArrayElement;
+
+    /// <summary>
     /// State for a pending struct array element access (from ldelema).
     /// </summary>
     readonly record struct PendingStructElement(
@@ -441,6 +450,17 @@ partial class IL2NESWriter : NESWriter
     /// </summary>
     readonly record struct PendingByteArrayElement(
         /// <summary>Array base address for AbsoluteX addressing (runtime index).</summary>
+        ushort ArrayBase,
+        /// <summary>Element address for constant-index access; null for runtime-index.</summary>
+        ushort? ConstantElementAddress
+    );
+
+    /// <summary>
+    /// State for a pending ushort array element access (from ldelema System.UInt16).
+    /// For variable-index access, Y holds the byte offset (index * 2).
+    /// </summary>
+    readonly record struct PendingUshortArrayElement(
+        /// <summary>Array base address for AbsoluteY addressing (runtime index).</summary>
         ushort ArrayBase,
         /// <summary>Element address for constant-index access; null for runtime-index.</summary>
         ushort? ConstantElementAddress
