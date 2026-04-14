@@ -71,14 +71,17 @@ The Transpile target automatically creates `.nes` from `.dll` + `*.s` files.
 **⚠️ When adding new public MSBuild properties**, always update [docs/msbuild-properties.md](docs/msbuild-properties.md) with the property name, type, default value, description, and an XML example.
 
 ## Testing Patterns
-Tests in [src/dotnes.tests/](src/dotnes.tests/) use **Verify snapshots**:
+Tests in [src/dotnes.tests/](src/dotnes.tests/) use **Verify snapshots** and **Roslyn-based** tests:
 - Test data DLLs live in `Data/` folder (pre-compiled debug/release)
 - `TranspilerTests.Write` verifies entire ROM output byte-for-byte
 - `TranspilerTests.ReadStaticVoidMain` verifies IL parsing
+- `RoslynTests` compile C# source at test time via Roslyn and assert on emitted 6502 bytes
 
 **⚠️ CRITICAL: The `.verified.bin` files are the source of truth for existing samples. Any code change that causes `TranspilerTests.Write` to produce different bytes for an unchanged sample is WRONG — fix the code, not the verified file. When adding or modifying a sample (e.g., changing `Program.cs`), rebuild its test DLLs and update the verified.bin to match.**
 
-**Adding new test cases:** Compile sample code, copy `.dll` to `Data/`, add `[InlineData("name", true/false)]`.
+**⚠️ Prefer RoslynTests for new transpiler features.** When adding or testing new IL opcode support, write `RoslynTests` instead of creating new `samples/` directories and pre-compiled DLLs. RoslynTests are self-contained (C# source + assertions in one test method), don't require pre-compiled DLLs, and are easier to maintain. Use `GetProgramBytes(source)` to compile and transpile, then assert on the hex output with `Assert.Contains`. Only create new samples for features that need to be run in an emulator or showcased as standalone projects.
+
+**Adding new test cases (legacy):** Compile sample code, copy `.dll` to `Data/`, add `[InlineData("name", true/false)]`.
 
 **Per-sample CHR ROM:** Tests look for `chr_{name}.s` in the Data folder first, falling back to `chr_generic.s`. The music sample uses an empty CHR (no graphics).
 
@@ -95,7 +98,7 @@ Tests in [src/dotnes.tests/](src/dotnes.tests/) use **Verify snapshots**:
 ## Adding IL Opcode Support
 1. Add case in `IL2NESWriter.Write(ILInstruction)` switch
 2. Emit via `Write(NESInstruction.*, value)`
-3. Test with new sample in `Data/`
+3. Test with a `RoslynTests` method using `GetProgramBytes` and hex assertions
 
 ## 6502 Assembly Basics
 
