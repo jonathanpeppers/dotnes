@@ -1758,6 +1758,15 @@ partial class IL2NESWriter
             _savedRuntimeToTemp = false;
             return;
         }
+        else if (sourceArray1Idx >= 0 && !hasTwoLdelems && sourceArray1Idx == targetArrayLocalIdx
+            && sourceIndex1Idx >= 0 && !hasSub && !hasAdd && !hasAnd)
+        {
+            // Pattern: arr[i] = arr[j] — same-array copy with different indices (no arithmetic)
+            // ldloc arr, ldloc i, ldloc arr, ldloc j, ldelem.u1, stelem.i1
+            var srcIndex = Locals[sourceIndex1Idx];
+            Emit(Opcode.LDX, AddressMode.Absolute, (ushort)srcIndex.Address!);
+            Emit(Opcode.LDA, AddressMode.AbsoluteX, (ushort)targetArray.Address!);
+        }
         else if (sourceArray1Idx >= 0 && !hasTwoLdelems && sourceArray1Idx != targetArrayLocalIdx
             && sourceIndex1Idx >= 0)
         {
