@@ -1503,6 +1503,8 @@ public class RoslynTests
         Assert.NotEmpty(bytes);
 
         var hex = Convert.ToHexString(bytes);
+        // Verify poke(APU_STATUS, 0x0F) emits correctly (period > 255 uses ushort path)
+        Assert.Contains("A90F" + "8D1540", hex);    // LDA #$0F, STA $4015 (APU_STATUS)
         // Assert full LDA+STA pairs as contiguous sequences
         Assert.Contains("A97A" + "8D0040", hex);   // LDA #$7A, STA $4000 (ctrl)
         Assert.Contains("A900" + "8D0140", hex);   // LDA #$00, STA $4001 (sweep)
