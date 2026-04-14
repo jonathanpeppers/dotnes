@@ -236,8 +236,8 @@ public class TranspilerTests
     [Theory]
     [InlineData("tint", false, 3)]       // 2 byte locals + 1 pad_poll temp
     [InlineData("tint", true, 3)]
-    [InlineData("peekpoke", false, 3)]   // 3 byte locals
-    [InlineData("peekpoke", true, 3)]
+    [InlineData("peekpoke", false, 4)]   // 2 byte locals + 1 ushort local (2 bytes)
+    [InlineData("peekpoke", true, 4)]
     public void LocalCountNotInflatedByReassignment(string name, bool debug, int expectedLocals)
     {
         var configuration = debug ? "debug" : "release";
