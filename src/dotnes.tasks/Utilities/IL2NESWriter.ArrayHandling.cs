@@ -241,6 +241,13 @@ partial class IL2NESWriter
             return;
         }
 
+        // Ushort arrays: compound assignment pattern (arr[i]++, arr[i] += expr)
+        if (structType == "UInt16")
+        {
+            HandleLdelemaUshort();
+            return;
+        }
+
         if (!StructLayouts.ContainsKey(structType))
             throw new TranspileException($"Arrays of type '{structType}' are not supported. Only byte[], ushort[], and struct arrays are supported.", MethodName);
 
@@ -599,6 +606,14 @@ partial class IL2NESWriter
                 _immediateInA = null;
                 _lastLoadedLocalIndex = null;
                 _runtimeValueInA = true;
+                // If this array element is an argument for a multi-arg call that
+                // uses the default path, push it to the cc65 stack now so it
+                // survives subsequent loads.
+                if (ScanForUpcomingMultiArgCall())
+                {
+                    EmitJSR("pusha");
+                    _runtimeValueInA = false;
+                }
                 return;
             }
             Emit(Opcode.LDX, AddressMode.Immediate, (byte)constantIndex.Value);
@@ -631,6 +646,14 @@ partial class IL2NESWriter
         _immediateInA = null;
         _lastLoadedLocalIndex = null;
         _runtimeValueInA = true;
+        // If this array element is an argument for a multi-arg call that
+        // uses the default path, push it to the cc65 stack now so it
+        // survives subsequent loads.
+        if (ScanForUpcomingMultiArgCall())
+        {
+            EmitJSR("pusha");
+            _runtimeValueInA = false;
+        }
     }
 
     /// <summary>
@@ -1764,6 +1787,609 @@ partial class IL2NESWriter
         _lastLoadedLocalIndex = null;
         _runtimeValueInA = false;
         _savedRuntimeToTemp = false;
+    }
+
+    // ── Ushort array handling ───────────────────────────────────────────
+
+    /// <summary>
+    /// Handles ldelem.u2: loads a 16-bit value from a ushort[] array.
+    /// Pattern: Ldloc_N (array), Ldloc_M (index), Ldelem_u2
+    /// Constant index: LDA base+i*2; LDX base+i*2+1
+    /// Variable index: LDA idx; ASL A; TAY; LDA base+1,Y; TAX; LDA base,Y
+    /// Result in A:X (lo:hi), sets _ushortInAX.
+    /// </summary>
+    void HandleLdelemU2()
+    {
+        if (Instructions is null || Index < 1)
+            throw new InvalidOperationException("HandleLdelemU2 requires at least 1 previous instruction");
+
+        if (Stack.Count > 0) Stack.Pop(); // index
+        if (Stack.Count > 0) Stack.Pop(); // array ref
+
+        var indexInstr = Instructions[Index - 1];
+        int? indexLocalIdx = GetLdlocIndex(indexInstr);
+        int? constantIndex = indexLocalIdx == null ? GetLdcValue(indexInstr) : null;
+
+        // Determine the array base address
+        ushort arrayBase;
+        int removeFromILOffset;
+
+        if (_pendingUshortArrayBase is not null)
+        {
+            // Array ref is implicit on eval stack (never stored to local — Release compiler pattern).
+            // Only the index instruction precedes ldelem.u2.
+            arrayBase = _pendingUshortArrayBase.Value;
+            removeFromILOffset = indexInstr.Offset;
+        }
+        else if (Index >= 2)
+        {
+            var arrayInstr = Instructions[Index - 2];
+            int? arrayLocalIdx = GetLdlocIndex(arrayInstr);
+            Local? arrayLocalFromField = arrayLocalIdx == null ? TryResolveArrayLocal(arrayInstr) : null;
+
+            if (arrayLocalIdx != null)
+            {
+                var arrayLocal = Locals[arrayLocalIdx.Value];
+                if (arrayLocal.Address is null)
+                    throw new TranspileException("Ushort array element access failed: the array variable has no allocated address.", MethodName);
+                arrayBase = (ushort)arrayLocal.Address;
+            }
+            else if (arrayLocalFromField?.Address is not null)
+            {
+                arrayBase = (ushort)arrayLocalFromField.Address;
+            }
+            else
+            {
+                throw new TranspileException("Ushort array element access requires the array to be stored in a local variable or static field.", MethodName);
+            }
+            removeFromILOffset = arrayInstr.Offset;
+        }
+        else
+        {
+            throw new TranspileException("Ushort array element access requires the array to be stored in a local variable or static field.", MethodName);
+        }
+
+        // Remove previously emitted instructions from WriteLdloc/WriteLdc
+        if (_blockCountAtILOffset.TryGetValue(removeFromILOffset, out int blockCountAtArray))
+        {
+            int instrToRemove = GetBufferedBlockCount() - blockCountAtArray;
+            if (instrToRemove > 0)
+            {
+                RemoveLastInstructions(instrToRemove);
+                _savedRuntimeToTemp = false;
+            }
+        }
+
+        Local? indexLocal = indexLocalIdx != null ? Locals[indexLocalIdx.Value] : null;
+
+        if (constantIndex != null)
+        {
+            // Compile-time element address
+            ushort elemAddr = (ushort)(arrayBase + constantIndex.Value * 2);
+            Emit(Opcode.LDA, AddressMode.Absolute, elemAddr);           // lo byte
+            Emit(Opcode.LDX, AddressMode.Absolute, (ushort)(elemAddr + 1)); // hi byte
+        }
+        else
+        {
+            // Variable index: compute byte offset = index * 2, use Y register
+            if (indexLocal?.Address is not null)
+                Emit(Opcode.LDA, AddressMode.Absolute, (ushort)indexLocal.Address);
+            else
+                throw new TranspileException("Ushort array element access requires the index to be a constant or local variable.", MethodName);
+
+            Emit(Opcode.ASL, AddressMode.Accumulator);                   // A = index * 2
+            Emit(Opcode.TAY, AddressMode.Implied);                       // Y = byte offset
+            Emit(Opcode.LDA, AddressMode.AbsoluteY, (ushort)(arrayBase + 1)); // hi byte first
+            Emit(Opcode.TAX, AddressMode.Implied);                       // X = hi byte
+            Emit(Opcode.LDA, AddressMode.AbsoluteY, arrayBase);          // A = lo byte
+        }
+
+        Stack.Push(0);
+        _immediateInA = null;
+        _lastLoadedLocalIndex = null;
+        _runtimeValueInA = true;
+        _ushortInAX = true;
+    }
+
+    /// <summary>
+    /// Handles stelem.i2: stores a 16-bit value into a ushort[] array.
+    /// IL stack: array_ref, index, value → (empty)
+    /// For the value, handles:
+    /// - Immediate constant (from ldc)
+    /// - Runtime ushort in A:X (from ldloc of word local, arithmetic, function call)
+    /// - Runtime byte in A (zero-extends hi byte)
+    /// </summary>
+    void HandleStelemI2()
+    {
+        if (Instructions is null)
+            throw new InvalidOperationException("HandleStelemI2 requires Instructions");
+
+        if (Stack.Count >= 3) { Stack.Pop(); Stack.Pop(); Stack.Pop(); }
+        else Stack.Clear();
+
+        ushort arrayBase;
+        int? constantIndex = null;
+        int? indexLocalIdx = null;
+        int valueStart = -1;
+        int pendingIndexILOffset = -1; // IL offset for deferred removal in pending path
+
+        if (_pendingUshortArrayBase is not null)
+        {
+            // Array ref is on the eval stack from newarr/dup chain (before stloc).
+            // Only need to find index + value (2 stack values, not 3).
+            arrayBase = _pendingUshortArrayBase.Value;
+
+            int depth = 0;
+            int indexIdx = -1;
+            for (int i = Index - 1; i >= 0; i--)
+            {
+                var il = Instructions[i];
+                int push = 0, pop = 0;
+                switch (il.OpCode)
+                {
+                    case ILOpCode.Ldloc_0: case ILOpCode.Ldloc_1: case ILOpCode.Ldloc_2: case ILOpCode.Ldloc_3:
+                    case ILOpCode.Ldloc_s:
+                    case ILOpCode.Ldsfld:
+                    case ILOpCode.Ldc_i4_m1:
+                    case ILOpCode.Ldc_i4_0: case ILOpCode.Ldc_i4_1: case ILOpCode.Ldc_i4_2: case ILOpCode.Ldc_i4_3:
+                    case ILOpCode.Ldc_i4_4: case ILOpCode.Ldc_i4_5: case ILOpCode.Ldc_i4_6: case ILOpCode.Ldc_i4_7:
+                    case ILOpCode.Ldc_i4_8: case ILOpCode.Ldc_i4_s: case ILOpCode.Ldc_i4:
+                        push = 1; break;
+                    case ILOpCode.Add: case ILOpCode.Sub: case ILOpCode.Mul: case ILOpCode.Div:
+                    case ILOpCode.And: case ILOpCode.Or: case ILOpCode.Shr: case ILOpCode.Shr_un: case ILOpCode.Shl:
+                        pop = 2; push = 1; break;
+                    case ILOpCode.Conv_u1: case ILOpCode.Conv_u2: case ILOpCode.Conv_u4:
+                    case ILOpCode.Conv_i1: case ILOpCode.Conv_i2: case ILOpCode.Conv_i4:
+                        break;
+                    default:
+                        push = 1; break;
+                }
+                depth += push - pop;
+                if (depth >= 2)
+                {
+                    indexIdx = i;
+                    break;
+                }
+            }
+
+            if (indexIdx < 0)
+                throw new TranspileException("stelem.i2: could not locate index for pending array pattern.", MethodName);
+
+            var indexInstr = Instructions[indexIdx];
+            constantIndex = GetLdcValue(indexInstr);
+            indexLocalIdx = GetLdlocIndex(indexInstr);
+            valueStart = indexIdx + 1;
+            pendingIndexILOffset = indexInstr.Offset;
+
+            // Defer removal to after value type determination — runtime values
+            // need the previously emitted 6502 code that computed A:X.
+        }
+        else
+        {
+            // Array stored in a local — walk backward for all 3 values
+            int depth = 0;
+            for (int i = Index - 1; i >= 0; i--)
+            {
+                var il = Instructions[i];
+                int push = 0, pop = 0;
+                switch (il.OpCode)
+                {
+                    case ILOpCode.Ldloc_0: case ILOpCode.Ldloc_1: case ILOpCode.Ldloc_2: case ILOpCode.Ldloc_3:
+                    case ILOpCode.Ldloc_s:
+                    case ILOpCode.Ldsfld:
+                    case ILOpCode.Ldc_i4_m1:
+                    case ILOpCode.Ldc_i4_0: case ILOpCode.Ldc_i4_1: case ILOpCode.Ldc_i4_2: case ILOpCode.Ldc_i4_3:
+                    case ILOpCode.Ldc_i4_4: case ILOpCode.Ldc_i4_5: case ILOpCode.Ldc_i4_6: case ILOpCode.Ldc_i4_7:
+                    case ILOpCode.Ldc_i4_8: case ILOpCode.Ldc_i4_s: case ILOpCode.Ldc_i4:
+                        push = 1; break;
+                    case ILOpCode.Add: case ILOpCode.Sub: case ILOpCode.Mul: case ILOpCode.Div:
+                    case ILOpCode.And: case ILOpCode.Or: case ILOpCode.Shr: case ILOpCode.Shr_un: case ILOpCode.Shl:
+                        pop = 2; push = 1; break;
+                    case ILOpCode.Conv_u1: case ILOpCode.Conv_u2: case ILOpCode.Conv_u4:
+                    case ILOpCode.Conv_i1: case ILOpCode.Conv_i2: case ILOpCode.Conv_i4:
+                        break;
+                    case ILOpCode.Call:
+                        push = 1; break;
+                    default:
+                        push = 1; break;
+                }
+                depth += push - pop;
+                if (depth >= 3)
+                {
+                    valueStart = i + 2;
+                    break;
+                }
+            }
+
+            if (valueStart < 2)
+                throw new TranspileException("stelem.i2: could not locate array/index/value boundary in IL.", MethodName);
+
+            var arrayInstr = Instructions[valueStart - 2];
+            var indexInstr = Instructions[valueStart - 1];
+
+            int? arrayLocalIdx = GetLdlocIndex(arrayInstr);
+            Local? arrayLocalFromField = null;
+            if (arrayLocalIdx == null)
+                arrayLocalFromField = TryResolveArrayLocal(arrayInstr);
+
+            if (arrayLocalIdx != null)
+            {
+                var arrayLocal = Locals[arrayLocalIdx.Value];
+                if (arrayLocal.Address is null)
+                    throw new TranspileException("stelem.i2: array has no address.", MethodName);
+                arrayBase = (ushort)arrayLocal.Address;
+            }
+            else if (arrayLocalFromField?.Address is not null)
+            {
+                arrayBase = (ushort)arrayLocalFromField.Address;
+            }
+            else
+            {
+                throw new TranspileException($"stelem.i2: could not resolve array local (arrayInstr={arrayInstr.OpCode}).", MethodName);
+            }
+
+            constantIndex = GetLdcValue(indexInstr);
+            indexLocalIdx = GetLdlocIndex(indexInstr);
+
+            // Remove previously emitted instructions for array ref and index only.
+            // Value-expression code (calls, arithmetic) must be preserved.
+            var valueStartInstr = Instructions[valueStart];
+            int arrayILOffset = arrayInstr.Offset;
+            if (_blockCountAtILOffset.TryGetValue(arrayILOffset, out int blockCountAtArray)
+                && _blockCountAtILOffset.TryGetValue(valueStartInstr.Offset, out int blockCountAtValue))
+            {
+                int instrToRemove = blockCountAtValue - blockCountAtArray;
+                if (instrToRemove > 0)
+                {
+                    // Remove only the array ref + index loads, keeping the value computation
+                    // that follows. We need to remove from the end of the value region backward.
+                    int totalBuffered = GetBufferedBlockCount();
+                    int valueRegionSize = totalBuffered - blockCountAtValue;
+                    // Remove from position blockCountAtArray, count = instrToRemove
+                    // But RemoveLastInstructions only removes from the end.
+                    // We need a different approach: remove all from array offset, then
+                    // the value code will still need re-emitting for runtime values.
+                    // For constant/local values, value code is not needed (re-emitted fresh).
+                    // For runtime values, the code is already in A:X.
+                    // So: if the value is constant or a local load, remove everything.
+                    // If the value is runtime, only remove array+index (keep value code).
+                    var valInstr = Instructions[Index - 1];
+                    if (valInstr.OpCode is ILOpCode.Conv_u2 or ILOpCode.Conv_i2 && Index - 2 >= valueStart)
+                        valInstr = Instructions[Index - 2];
+                    bool isRuntimeValue = valInstr.OpCode is ILOpCode.Add or ILOpCode.Sub or ILOpCode.Mul
+                        or ILOpCode.Shl or ILOpCode.Shr or ILOpCode.Shr_un or ILOpCode.And or ILOpCode.Or
+                        or ILOpCode.Call;
+
+                    if (isRuntimeValue)
+                    {
+                        // Runtime value: keep the value computation, only conceptually
+                        // skip the array+index removal since we can't remove from the middle.
+                        // The value computation code already set A (or A:X).
+                        // We'll save A:X to TEMP/TEMP2, emit array+index addressing, then store.
+                    }
+                    else
+                    {
+                        // Constant/local value: safe to remove everything from array offset
+                        int totalToRemove = totalBuffered - blockCountAtArray;
+                        if (totalToRemove > 0)
+                        {
+                            RemoveLastInstructions(totalToRemove);
+                            _savedRuntimeToTemp = false;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Determine the value expression type
+        // Check if value is a simple constant
+        int? valueConstant = null;
+        bool valueIsWordLocal = false;
+        int? valueLocalIdx = null;
+        bool valueIsRuntimeUshort = false;
+
+        if (valueStart == Index)
+        {
+            // Single instruction value: could be ldc or ldloc
+            // Actually it's the instruction right before stelem
+        }
+
+        var valueInstr = Instructions[Index - 1];
+        // If the value is preceded by conv.u2, look one more back
+        if (valueInstr.OpCode is ILOpCode.Conv_u2 or ILOpCode.Conv_i2 && Index - 2 >= valueStart)
+            valueInstr = Instructions[Index - 2];
+
+        if (valueInstr.OpCode is ILOpCode.Add or ILOpCode.Sub or ILOpCode.Mul or ILOpCode.Shl or ILOpCode.Shr or ILOpCode.Shr_un or ILOpCode.And or ILOpCode.Or)
+        {
+            // Runtime computed value — already in A (or A:X if ushort arithmetic)
+            valueIsRuntimeUshort = _ushortInAX;
+        }
+        else
+        {
+            int? valLdcValue = GetLdcValue(valueInstr);
+            if (valLdcValue != null)
+            {
+                valueConstant = valLdcValue;
+            }
+            else
+            {
+                int? valLocalIdx = GetLdlocIndex(valueInstr);
+                if (valLocalIdx != null && Locals.TryGetValue(valLocalIdx.Value, out var valLocal))
+                {
+                    valueLocalIdx = valLocalIdx;
+                    valueIsWordLocal = valLocal.IsWord;
+                }
+                else if (valueInstr.OpCode == ILOpCode.Call)
+                {
+                    valueIsRuntimeUshort = _ushortInAX;
+                }
+            }
+        }
+
+        // Deferred removal for pending path: only remove emitted code when
+        // the value is constant (runtime values need the already-emitted computation).
+        if (pendingIndexILOffset >= 0 && (valueConstant != null || (valueIsWordLocal && valueLocalIdx != null)))
+        {
+            if (_blockCountAtILOffset.TryGetValue(pendingIndexILOffset, out int blockCountAtIdx))
+            {
+                int instrToRemove = GetBufferedBlockCount() - blockCountAtIdx;
+                if (instrToRemove > 0)
+                {
+                    RemoveLastInstructions(instrToRemove);
+                    _savedRuntimeToTemp = false;
+                }
+            }
+        }
+
+        // Now emit 6502 code
+        if (constantIndex != null)
+        {
+            ushort elemAddr = (ushort)(arrayBase + constantIndex.Value * 2);
+
+            if (valueConstant != null)
+            {
+                // Constant value, constant index
+                Emit(Opcode.LDA, AddressMode.Immediate, (byte)(valueConstant.Value & 0xFF));
+                Emit(Opcode.STA, AddressMode.Absolute, elemAddr);
+                Emit(Opcode.LDA, AddressMode.Immediate, (byte)((valueConstant.Value >> 8) & 0xFF));
+                Emit(Opcode.STA, AddressMode.Absolute, (ushort)(elemAddr + 1));
+            }
+            else if (valueIsWordLocal && valueLocalIdx != null)
+            {
+                // Word local value, constant index
+                var valLocal = Locals[valueLocalIdx.Value];
+                Emit(Opcode.LDA, AddressMode.Absolute, (ushort)valLocal.Address!);
+                Emit(Opcode.STA, AddressMode.Absolute, elemAddr);
+                Emit(Opcode.LDA, AddressMode.Absolute, (ushort)(valLocal.Address! + 1));
+                Emit(Opcode.STA, AddressMode.Absolute, (ushort)(elemAddr + 1));
+            }
+            else
+            {
+                // Runtime value in A:X (or just A for byte), constant index
+                Emit(Opcode.STA, AddressMode.Absolute, elemAddr);
+                if (valueIsRuntimeUshort || _ushortInAX)
+                    Emit(Opcode.STX, AddressMode.Absolute, (ushort)(elemAddr + 1));
+                else
+                {
+                    Emit(Opcode.LDA, AddressMode.Immediate, 0x00);
+                    Emit(Opcode.STA, AddressMode.Absolute, (ushort)(elemAddr + 1));
+                }
+            }
+        }
+        else
+        {
+            // Variable index: need Y register for byte offset
+            Local? indexLocal = indexLocalIdx != null ? Locals[indexLocalIdx.Value] : null;
+            if (indexLocal?.Address is null)
+                throw new TranspileException("stelem.i2: variable index requires a local variable.", MethodName);
+
+            if (valueConstant != null)
+            {
+                // Constant value, variable index
+                Emit(Opcode.LDA, AddressMode.Absolute, (ushort)indexLocal.Address);
+                Emit(Opcode.ASL, AddressMode.Accumulator);
+                Emit(Opcode.TAY, AddressMode.Implied);
+                Emit(Opcode.LDA, AddressMode.Immediate, (byte)(valueConstant.Value & 0xFF));
+                Emit(Opcode.STA, AddressMode.AbsoluteY, arrayBase);
+                Emit(Opcode.LDA, AddressMode.Immediate, (byte)((valueConstant.Value >> 8) & 0xFF));
+                Emit(Opcode.STA, AddressMode.AbsoluteY, (ushort)(arrayBase + 1));
+            }
+            else
+            {
+                // Runtime value in A:X, variable index
+                // Save A:X to TEMP, compute Y offset, store both bytes
+                Emit(Opcode.STA, AddressMode.ZeroPage, TEMP);
+                if (valueIsRuntimeUshort || _ushortInAX)
+                    Emit(Opcode.STX, AddressMode.ZeroPage, TEMP2);
+                Emit(Opcode.LDA, AddressMode.Absolute, (ushort)indexLocal.Address);
+                Emit(Opcode.ASL, AddressMode.Accumulator);
+                Emit(Opcode.TAY, AddressMode.Implied);
+                Emit(Opcode.LDA, AddressMode.ZeroPage, TEMP);
+                Emit(Opcode.STA, AddressMode.AbsoluteY, arrayBase);
+                if (valueIsRuntimeUshort || _ushortInAX)
+                {
+                    Emit(Opcode.LDA, AddressMode.ZeroPage, TEMP2);
+                    Emit(Opcode.STA, AddressMode.AbsoluteY, (ushort)(arrayBase + 1));
+                }
+                else
+                {
+                    Emit(Opcode.LDA, AddressMode.Immediate, 0x00);
+                    Emit(Opcode.STA, AddressMode.AbsoluteY, (ushort)(arrayBase + 1));
+                }
+            }
+        }
+
+        _immediateInA = null;
+        _lastLoadedLocalIndex = null;
+        _runtimeValueInA = false;
+        _ushortInAX = false;
+        _savedRuntimeToTemp = false;
+    }
+
+    /// <summary>
+    /// Handles ldelema System.UInt16: sets up array+index addressing for compound
+    /// ushort array assignments (arr[i]++, arr[i] += expr, etc.).
+    /// The subsequent dup/ldind.u2/.../stind.i2 sequence uses the pending state
+    /// to emit LDA/STA with AbsoluteY addressing.
+    /// </summary>
+    void HandleLdelemaUshort()
+    {
+        // Pop index and array ref from IL evaluation stack
+        if (Stack.Count > 0) Stack.Pop(); // index
+        if (Stack.Count > 0) Stack.Pop(); // array ref
+
+        if (Instructions == null || Index < 2)
+            throw new InvalidOperationException("ldelema System.UInt16 requires at least 2 preceding instructions");
+
+        var indexInstr = Instructions[Index - 1];
+        var arrayInstr = Instructions[Index - 2];
+
+        int? arrayLocalIdx = GetLdlocIndex(arrayInstr);
+        Local? arrayLocalFromField = null;
+        if (arrayLocalIdx == null)
+            arrayLocalFromField = TryResolveArrayLocal(arrayInstr);
+
+        if (arrayLocalIdx == null && arrayLocalFromField == null)
+            throw new TranspileException("Compound ushort array assignment requires the array to be stored in a local variable or static field.", MethodName);
+
+        var arrayLocal = arrayLocalIdx != null ? Locals[arrayLocalIdx.Value] : arrayLocalFromField!;
+        if (arrayLocal.Address == null)
+            throw new TranspileException("Compound ushort array assignment failed: the array variable has no allocated address.", MethodName);
+        ushort arrayBase = (ushort)arrayLocal.Address;
+
+        int? constantIndex = GetLdcValue(indexInstr);
+        int? indexLocalIdx = GetLdlocIndex(indexInstr);
+
+        // Remove previously emitted LDA instructions from WriteLdloc/WriteLdc
+        int arrayILOffset = arrayInstr.Offset;
+        if (_blockCountAtILOffset.TryGetValue(arrayILOffset, out int blockCountAtArray))
+        {
+            int instrToRemove = GetBufferedBlockCount() - blockCountAtArray;
+            if (instrToRemove > 0)
+            {
+                RemoveLastInstructions(instrToRemove);
+                _savedRuntimeToTemp = false;
+            }
+        }
+
+        if (constantIndex != null)
+        {
+            if (constantIndex.Value == 0)
+            {
+                // Constant index 0: use direct Absolute addressing
+                _pendingUshortArrayElement = new PendingUshortArrayElement(arrayBase, arrayBase);
+            }
+            else
+            {
+                // Constant index N: compute element address at compile time
+                ushort elemAddr = (ushort)(arrayBase + constantIndex.Value * 2);
+                _pendingUshortArrayElement = new PendingUshortArrayElement(arrayBase, elemAddr);
+            }
+        }
+        else
+        {
+            // Variable index: compute byte offset in Y register
+            Local? indexLocal = indexLocalIdx != null ? Locals[indexLocalIdx.Value] : null;
+            if (indexLocal?.Address is not null)
+            {
+                Emit(Opcode.LDA, AddressMode.Absolute, (ushort)indexLocal.Address);
+                Emit(Opcode.ASL, AddressMode.Accumulator);     // A = index * 2
+                Emit(Opcode.TAY, AddressMode.Implied);         // Y = byte offset
+            }
+            else
+                throw new TranspileException("Compound ushort array assignment requires the index to be a constant or local variable.", MethodName);
+
+            _pendingUshortArrayElement = new PendingUshortArrayElement(arrayBase, ConstantElementAddress: null);
+        }
+
+        // ldelema pushes a managed reference onto the eval stack
+        Stack.Push(0);
+        _runtimeValueInA = false;
+        _lastLoadedLocalIndex = null;
+    }
+
+    /// <summary>
+    /// Handles ldind.u2: load a 16-bit value through a pointer/reference.
+    /// Used after ldelema System.UInt16 to read the current array element value.
+    /// Result in A:X (lo:hi).
+    /// </summary>
+    void HandleLdindU2()
+    {
+        if (_pendingUshortArrayElement is not { } pending)
+            throw new TranspileException("ldind.u2 without preceding ldelema System.UInt16 is not supported.", MethodName);
+
+        // Pop the address reference from the eval stack
+        if (Stack.Count > 0) Stack.Pop();
+
+        if (pending.ConstantElementAddress is { } addr)
+        {
+            // Constant element address: direct load
+            Emit(Opcode.LDA, AddressMode.Absolute, addr);                  // lo byte
+            Emit(Opcode.LDX, AddressMode.Absolute, (ushort)(addr + 1));    // hi byte
+        }
+        else
+        {
+            // Variable index: Y already holds byte offset from ldelema
+            Emit(Opcode.LDA, AddressMode.AbsoluteY, (ushort)(pending.ArrayBase + 1)); // hi byte first
+            Emit(Opcode.TAX, AddressMode.Implied);                                     // X = hi
+            Emit(Opcode.LDA, AddressMode.AbsoluteY, pending.ArrayBase);                // A = lo
+        }
+
+        Stack.Push(0);
+        _runtimeValueInA = true;
+        _ushortInAX = true;
+        _immediateInA = null;
+        _lastLoadedLocalIndex = null;
+    }
+
+    /// <summary>
+    /// Handles stind.i2: store a 16-bit value through a pointer/reference.
+    /// Used after ldelema System.UInt16 to write back the modified array element.
+    /// Value in A:X (lo:hi) or just A (zero-extends hi byte).
+    /// </summary>
+    void HandleStindI2()
+    {
+        if (_pendingUshortArrayElement is not { } pending)
+            throw new TranspileException("stind.i2 without preceding ldelema System.UInt16 is not supported.", MethodName);
+
+        // Pop the value and address reference from the eval stack
+        if (Stack.Count > 0) Stack.Pop(); // value
+        if (Stack.Count > 0) Stack.Pop(); // address
+
+        bool isUshortValue = _ushortInAX;
+
+        if (pending.ConstantElementAddress is { } addr)
+        {
+            // Constant element address
+            Emit(Opcode.STA, AddressMode.Absolute, addr);                  // lo byte
+            if (isUshortValue)
+                Emit(Opcode.STX, AddressMode.Absolute, (ushort)(addr + 1)); // hi byte
+            else
+            {
+                Emit(Opcode.LDA, AddressMode.Immediate, 0x00);
+                Emit(Opcode.STA, AddressMode.Absolute, (ushort)(addr + 1));
+            }
+        }
+        else
+        {
+            // Variable index: Y still holds byte offset from ldelema
+            // Save A:X, then store both bytes using AbsoluteY
+            Emit(Opcode.STA, AddressMode.AbsoluteY, pending.ArrayBase);                // lo byte
+            if (isUshortValue)
+            {
+                Emit(Opcode.TXA, AddressMode.Implied);
+                Emit(Opcode.STA, AddressMode.AbsoluteY, (ushort)(pending.ArrayBase + 1)); // hi byte
+            }
+            else
+            {
+                Emit(Opcode.LDA, AddressMode.Immediate, 0x00);
+                Emit(Opcode.STA, AddressMode.AbsoluteY, (ushort)(pending.ArrayBase + 1));
+            }
+        }
+
+        _pendingUshortArrayElement = null;
+        _runtimeValueInA = false;
+        _ushortInAX = false;
     }
 
     /// <summary>

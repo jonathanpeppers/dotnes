@@ -1018,11 +1018,13 @@ while (true)
             {
                 if (collided == 0 && actor_onscreen[ci] != 0 && actor_floor[ci] == actor_floor[0])
                 {
-                    byte dx = (byte)(actor_x[0] - actor_x[ci]);
-                    if (dx >= 248) dx = (byte)(0 - dx);
-                    byte dyl = (byte)(actor_yy_lo[0] - actor_yy_lo[ci]);
-                    if (dyl >= 248) dyl = (byte)(0 - dyl);
-                    if (dx < 8 && dyl < 8)
+                    // Store array values in locals before calling sprite_overlap
+                    // (the transpiler saves to TEMP for ldelem_u1 chains, which is a single register)
+                    byte px = actor_x[0];
+                    byte py = actor_yy_lo[0];
+                    byte ex = actor_x[ci];
+                    byte ey = actor_yy_lo[ci];
+                    if (sprite_overlap(px, py, ex, ey, 8))
                     {
                         collided = 1;
                     }

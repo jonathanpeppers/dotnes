@@ -13,12 +13,14 @@ namespace dotnes;
 partial class IL2NESWriter
 {
     /// <summary>
-    /// Handles stloc after newarr: allocates a runtime array (byte[] or struct[]).
+    /// Handles stloc after newarr: allocates a runtime array (byte[], ushort[], or struct[]).
     /// For struct arrays, allocates count * structSize bytes and records the struct type.
+    /// For ushort arrays, allocates count * 2 bytes and marks the local as a word array.
     /// </summary>
     void HandleStlocAfterNewarr(int localIdx)
     {
         bool isStructArray = _pendingArrayType != null && StructLayouts.ContainsKey(_pendingArrayType);
+        bool isUshortArray = _pendingArrayType is "UInt16";
         if (isStructArray)
         {
             int count = _pendingStructArrayCount;
@@ -31,6 +33,19 @@ partial class IL2NESWriter
             Locals[localIdx] = new Local(count, arrayAddr, ArraySize: totalBytes, StructArrayType: _pendingArrayType);
             _pendingStructArrayCount = 0;
             _pendingStructArrayBase = null;
+            _pendingArrayType = null;
+        }
+        else if (isUshortArray)
+        {
+            int count = _pendingUshortArrayCount;
+            int totalBytes = count * 2;
+            ushort arrayAddr = _pendingUshortArrayBase ?? (ushort)(local + LocalCount);
+            if (_pendingUshortArrayBase == null)
+                LocalCount += totalBytes;
+            Locals[localIdx] = new Local(count, arrayAddr, ArraySize: totalBytes, IsWord: true);
+            _pendingUshortArrayCount = 0;
+            _pendingUshortArrayBase = null;
+            _pendingArrayType = null;
         }
         else
         {
@@ -217,14 +232,22 @@ partial class IL2NESWriter
         }
         if (_runtimeValueInA)
         {
-            // Don't emit LDA — the runtime value in A must be preserved.
-            // The constant is tracked on the Stack for the next operation (AND, ADD, SUB, etc.)
-            // NOTE: This check must come BEFORE the LastLDA/pusha check below.
-            // When _runtimeValueInA is true, we return early without emitting a new LDA,
-            // so there's no need to save A via pusha (it won't be overwritten).
-            // Emitting pusha here would leak stack bytes that are never popped.
-            Stack.Push(operand);
-            return;
+            // Check if this constant is an argument for a multi-arg call that
+            // uses the default call path. If so, push the runtime value to the
+            // cc65 stack and emit the constant load instead of deferring.
+            if (ScanForUpcomingMultiArgCall() || IsNextCallToDefaultPathTarget())
+            {
+                EmitJSR("pusha");
+                _runtimeValueInA = false;
+                // Fall through to emit LDA #constant
+            }
+            else
+            {
+                // Don't emit LDA — the runtime value in A must be preserved.
+                // The constant is tracked on the Stack for the next operation (AND, ADD, SUB, etc.)
+                Stack.Push(operand);
+                return;
+            }
         }
         else if (LastLDA)
         {
@@ -240,6 +263,111 @@ partial class IL2NESWriter
         Emit(Opcode.LDA, AddressMode.Immediate, operand);
         _immediateInA = operand;
         Stack.Push(operand);
+    }
+
+    /// <summary>
+    /// Returns true if the named method uses the default Call path (no dedicated
+    /// intrinsic handler) and could accept multiple arguments via the cc65 stack.
+    /// When true, load instructions must emit JSR pusha between arguments.
+    /// </summary>
+    bool IsDefaultCallPathTarget(string? callTarget)
+    {
+        if (callTarget == null) return false;
+        if (UserMethodNames.Contains(callTarget)) return true;
+        // NESLib methods that use the default Call path (no dedicated intrinsic handler)
+        return callTarget is nameof(rect_overlap) or nameof(sprite_overlap);
+    }
+
+    /// <summary>
+    /// Scans ahead from the current IL index to determine if we're loading
+    /// arguments for a multi-arg call that uses the default call path.
+    /// Returns true if pusha should be emitted to preserve A before the next load.
+    /// </summary>
+    bool ScanForUpcomingMultiArgCall()
+    {
+        if (Instructions is null || Index + 1 >= Instructions.Length)
+            return false;
+
+        var nextOp = Instructions[Index + 1].OpCode;
+        bool nextIsLoad = nextOp is ILOpCode.Ldloc_0 or ILOpCode.Ldloc_1
+            or ILOpCode.Ldloc_2 or ILOpCode.Ldloc_3 or ILOpCode.Ldloc_s
+            or ILOpCode.Ldc_i4_0 or ILOpCode.Ldc_i4_1 or ILOpCode.Ldc_i4_2
+            or ILOpCode.Ldc_i4_3 or ILOpCode.Ldc_i4_4 or ILOpCode.Ldc_i4_5
+            or ILOpCode.Ldc_i4_6 or ILOpCode.Ldc_i4_7 or ILOpCode.Ldc_i4_8
+            or ILOpCode.Ldc_i4 or ILOpCode.Ldc_i4_s or ILOpCode.Ldc_i4_m1
+            or ILOpCode.Ldsfld;
+        if (!nextIsLoad)
+            return false;
+
+        int depth = 1;
+        for (int scan = Index + 2; scan < Instructions.Length; scan++)
+        {
+            var scanOp = Instructions[scan].OpCode;
+            if (scanOp == ILOpCode.Call)
+            {
+                return IsDefaultCallPathTarget(Instructions[scan].String);
+            }
+            if (scanOp is ILOpCode.Ldloc_0 or ILOpCode.Ldloc_1
+                or ILOpCode.Ldloc_2 or ILOpCode.Ldloc_3 or ILOpCode.Ldloc_s
+                or ILOpCode.Ldc_i4_0 or ILOpCode.Ldc_i4_1 or ILOpCode.Ldc_i4_2
+                or ILOpCode.Ldc_i4_3 or ILOpCode.Ldc_i4_4 or ILOpCode.Ldc_i4_5
+                or ILOpCode.Ldc_i4_6 or ILOpCode.Ldc_i4_7 or ILOpCode.Ldc_i4_8
+                or ILOpCode.Ldc_i4 or ILOpCode.Ldc_i4_s or ILOpCode.Ldc_i4_m1
+                or ILOpCode.Ldsfld)
+            {
+                depth++;
+                continue;
+            }
+            if (scanOp is ILOpCode.Add or ILOpCode.Sub
+                or ILOpCode.Mul or ILOpCode.Div or ILOpCode.Div_un
+                or ILOpCode.Rem or ILOpCode.Rem_un
+                or ILOpCode.And or ILOpCode.Or or ILOpCode.Xor
+                or ILOpCode.Shl or ILOpCode.Shr or ILOpCode.Shr_un)
+            {
+                depth--;
+                if (depth <= 0) break;
+                continue;
+            }
+            // ldelem_u1 consumes 2 (array ref + index) and produces 1 element.
+            // The preceding loads already incremented depth for those 2, so net -1.
+            if (scanOp == ILOpCode.Ldelem_u1)
+            {
+                depth--;
+                continue;
+            }
+            // stloc consumes the top value (stores to a local variable).
+            // Intermediate stores don't consume our value — they store values
+            // that were loaded above us. depth can temporarily reach 0 (empty
+            // above us) and then rise again when new values are loaded later.
+            if (scanOp is ILOpCode.Stloc_0 or ILOpCode.Stloc_1
+                or ILOpCode.Stloc_2 or ILOpCode.Stloc_3 or ILOpCode.Stloc_s)
+            {
+                depth--;
+                continue;
+            }
+            if (scanOp is ILOpCode.Conv_u1 or ILOpCode.Conv_i4
+                or ILOpCode.Conv_u2 or ILOpCode.Conv_i2
+                or ILOpCode.Conv_i1 or ILOpCode.Conv_u4)
+                continue;
+            // branches/returns/unknown ops mean we can't scan further
+            break;
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Returns true if the very next IL instruction is a Call to a default-path target.
+    /// Used by WriteLdc to determine if a constant is the last arg before a call
+    /// (when _runtimeValueInA is true and the runtime value must be pushed first).
+    /// </summary>
+    bool IsNextCallToDefaultPathTarget()
+    {
+        if (Instructions is null || Index + 1 >= Instructions.Length)
+            return false;
+        var nextOp = Instructions[Index + 1].OpCode;
+        if (nextOp != ILOpCode.Call)
+            return false;
+        return IsDefaultCallPathTarget(Instructions[Index + 1].String);
     }
 
     void WriteLdloc(Local local)
@@ -320,87 +448,12 @@ partial class IL2NESWriter
                 Emit(Opcode.LDA, AddressMode.Absolute, (ushort)local.Address);
                 _immediateInA = null;
                 // Look ahead: if the next instruction loads another value and the
-                // upcoming Call is to a user-defined function, push the current A
+                // upcoming Call uses the default call path (user-defined or NESLib
+                // methods without dedicated intrinsic handlers), push the current A
                 // value to the cc65 stack so it survives the next load.
-                // Only applies to user-defined functions — NESLib built-ins have
-                // dedicated Call handlers that manage their own arguments.
-                if (Instructions is not null && Index + 1 < Instructions.Length
-                    && UserMethodNames is { Count: > 0 })
+                if (ScanForUpcomingMultiArgCall())
                 {
-                    var nextOp = Instructions[Index + 1].OpCode;
-                    bool nextIsLoad = nextOp is ILOpCode.Ldloc_0 or ILOpCode.Ldloc_1
-                        or ILOpCode.Ldloc_2 or ILOpCode.Ldloc_3 or ILOpCode.Ldloc_s
-                        or ILOpCode.Ldc_i4_0 or ILOpCode.Ldc_i4_1 or ILOpCode.Ldc_i4_2
-                        or ILOpCode.Ldc_i4_3 or ILOpCode.Ldc_i4_4 or ILOpCode.Ldc_i4_5
-                        or ILOpCode.Ldc_i4_6 or ILOpCode.Ldc_i4_7 or ILOpCode.Ldc_i4_8
-                        or ILOpCode.Ldc_i4 or ILOpCode.Ldc_i4_s or ILOpCode.Ldc_i4_m1
-                        or ILOpCode.Ldsfld;
-                    if (nextIsLoad)
-                    {
-                        // Track IL stack depth to distinguish between:
-                        // 1. Arithmetic that consumes our loaded value (depth drops to 0) → not a call arg
-                        // 2. Arithmetic that only consumes later-loaded values (depth > 0) → computed arg
-                        // depth starts at 1 for the load at Index+1
-                        int depth = 1;
-                        // Scan ahead to find the Call instruction that consumes these args
-                        for (int scan = Index + 2; scan < Instructions.Length; scan++)
-                        {
-                            var scanOp = Instructions[scan].OpCode;
-                            if (scanOp == ILOpCode.Call)
-                            {
-                                string? callTarget = Instructions[scan].String;
-                                if (callTarget != null && UserMethodNames.Contains(callTarget))
-                                {
-                                    EmitJSR("pusha");
-                                }
-                                break;
-                            }
-                            // Track loads — each pushes one value onto the IL stack
-                            if (scanOp is ILOpCode.Ldloc_0 or ILOpCode.Ldloc_1
-                                or ILOpCode.Ldloc_2 or ILOpCode.Ldloc_3 or ILOpCode.Ldloc_s
-                                or ILOpCode.Ldc_i4_0 or ILOpCode.Ldc_i4_1 or ILOpCode.Ldc_i4_2
-                                or ILOpCode.Ldc_i4_3 or ILOpCode.Ldc_i4_4 or ILOpCode.Ldc_i4_5
-                                or ILOpCode.Ldc_i4_6 or ILOpCode.Ldc_i4_7 or ILOpCode.Ldc_i4_8
-                                or ILOpCode.Ldc_i4 or ILOpCode.Ldc_i4_s or ILOpCode.Ldc_i4_m1
-                                or ILOpCode.Ldsfld)
-                            {
-                                depth++;
-                                continue;
-                            }
-                            // Binary arithmetic: pops 2, pushes 1 → net -1.
-                            // If depth drops to 0, the arithmetic consumes our value → not a call arg.
-                            if (scanOp is ILOpCode.Add or ILOpCode.Sub
-                                or ILOpCode.Mul or ILOpCode.Div or ILOpCode.Div_un
-                                or ILOpCode.Rem or ILOpCode.Rem_un
-                                or ILOpCode.And or ILOpCode.Or or ILOpCode.Xor
-                                or ILOpCode.Shl or ILOpCode.Shr or ILOpCode.Shr_un)
-                            {
-                                depth--;
-                                if (depth <= 0)
-                                    break;
-                                continue;
-                            }
-                            // Unary conversions: pop 1, push 1 → net 0. Continue scanning.
-                            if (scanOp is ILOpCode.Conv_u1 or ILOpCode.Conv_i4
-                                or ILOpCode.Conv_u2 or ILOpCode.Conv_i2
-                                or ILOpCode.Conv_i1 or ILOpCode.Conv_u4)
-                                continue;
-                            // Stop at branches/stores — not in argument loading
-                            if (scanOp is ILOpCode.Stloc_0 or ILOpCode.Stloc_1
-                                or ILOpCode.Stloc_2 or ILOpCode.Stloc_3 or ILOpCode.Stloc_s
-                                or ILOpCode.Br or ILOpCode.Br_s
-                                or ILOpCode.Brfalse or ILOpCode.Brfalse_s
-                                or ILOpCode.Brtrue or ILOpCode.Brtrue_s
-                                or ILOpCode.Bne_un or ILOpCode.Bne_un_s
-                                or ILOpCode.Beq or ILOpCode.Beq_s
-                                or ILOpCode.Bge or ILOpCode.Bge_s or ILOpCode.Bge_un or ILOpCode.Bge_un_s
-                                or ILOpCode.Bgt or ILOpCode.Bgt_s or ILOpCode.Bgt_un or ILOpCode.Bgt_un_s
-                                or ILOpCode.Ble or ILOpCode.Ble_s or ILOpCode.Ble_un or ILOpCode.Ble_un_s
-                                or ILOpCode.Blt or ILOpCode.Blt_s or ILOpCode.Blt_un or ILOpCode.Blt_un_s
-                                or ILOpCode.Ret)
-                                break;
-                        }
-                    }
+                    EmitJSR("pusha");
                 }
             }
             else if (local.Value <= ushort.MaxValue)

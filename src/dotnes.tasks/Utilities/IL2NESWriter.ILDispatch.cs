@@ -297,19 +297,31 @@ partial class IL2NESWriter
                 _lastStaticFieldAddress = null;
                 break;
             case ILOpCode.Stelem_i1:
-            case ILOpCode.Stelem_i2:
             case ILOpCode.Stelem_i4:
             case ILOpCode.Stelem_i8:
-                // stelem.i*(stack: arrayref, index, value → stack: )
+                // stelem.i1/i4/i8: byte array store (stack: arrayref, index, value → stack: )
                 HandleStelemI1();
+                break;
+            case ILOpCode.Stelem_i2:
+                // stelem.i2 always represents a 16-bit element store.
+                HandleStelemI2();
                 break;
             case ILOpCode.Ldind_u1:
                 // ldind.u1: load byte through pointer (from ldelema System.Byte)
                 HandleLdindU1();
                 break;
+            case ILOpCode.Ldind_u2:
+            case ILOpCode.Ldind_i2:
+                // ldind.u2/i2: load ushort through pointer (from ldelema System.UInt16)
+                HandleLdindU2();
+                break;
             case ILOpCode.Stind_i1:
                 // stind.i1: store byte through pointer (from ldelema System.Byte)
                 HandleStindI1();
+                break;
+            case ILOpCode.Stind_i2:
+                // stind.i2: store ushort through pointer (from ldelema System.UInt16)
+                HandleStindI2();
                 break;
             case ILOpCode.Add:
                 HandleAddSub(isAdd: true);
@@ -1098,6 +1110,11 @@ partial class IL2NESWriter
                 // Pattern: Ldloc_N (array), Ldloc_M (index), Ldelem_u1
                 HandleLdelemU1();
                 break;
+            case ILOpCode.Ldelem_u2:
+            case ILOpCode.Ldelem_i2:
+                // ldelem.u2/i2: pop array ref and index, push ushort array[index]
+                HandleLdelemU2();
+                break;
             case ILOpCode.Endfinally:
                 {
                     // End of a finally block — jump to the leave target if it's not
@@ -1226,6 +1243,7 @@ partial class IL2NESWriter
             case ILOpCode.Newarr:
                 {
                     bool isStructArray = instruction.String != null && StructLayouts.ContainsKey(instruction.String);
+                    bool isUshortArray = instruction.String is "UInt16";
                     if (isStructArray)
                     {
                         // Struct array: remove the LDA for the count (purely compile-time allocation)
@@ -1242,6 +1260,32 @@ partial class IL2NESWriter
                         int totalBytes = _pendingStructArrayCount * structSize;
                         _pendingStructArrayBase = (ushort)(local + LocalCount);
                         LocalCount += totalBytes;
+                    }
+                    else if (isUshortArray)
+                    {
+                        // Remove the LDA for the count
+                        bool isLdcPrevious = previous == ILOpCode.Ldc_i4_s || previous == ILOpCode.Ldc_i4
+                            || (previous >= ILOpCode.Ldc_i4_0 && previous <= ILOpCode.Ldc_i4_8);
+                        if (isLdcPrevious)
+                        {
+                            int toRemove = Stack.Count > 0 && Stack.Peek() > byte.MaxValue ? 2 : 1;
+                            RemoveLastInstructions(toRemove);
+                        }
+
+                        // Check if this is a music note table (newarr; dup; ldtoken; InitializeArray)
+                        // vs a regular ushort array (newarr; dup; ldc; ldc; stelem).
+                        // Only pre-allocate zero-page space for regular arrays.
+                        bool isMusicTable = Instructions != null
+                            && Index + 2 < Instructions.Length
+                            && Instructions[Index + 1].OpCode == ILOpCode.Dup
+                            && Instructions[Index + 2].OpCode == ILOpCode.Ldtoken;
+
+                        if (!isMusicTable)
+                        {
+                            _pendingUshortArrayCount = Stack.Count > 0 ? Stack.Peek() : 0;
+                            _pendingUshortArrayBase = (ushort)(local + LocalCount);
+                            LocalCount += _pendingUshortArrayCount * 2;
+                        }
                     }
                     else if (previous == ILOpCode.Ldc_i4_s || previous == ILOpCode.Ldc_i4
                         || (previous >= ILOpCode.Ldc_i4_0 && previous <= ILOpCode.Ldc_i4_8))

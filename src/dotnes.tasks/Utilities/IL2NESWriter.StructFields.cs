@@ -95,8 +95,18 @@ partial class IL2NESWriter
         }
         else if (_runtimeValueInA && !LastLDA)
         {
-            Emit(Opcode.STA, AddressMode.ZeroPage, (byte)NESConstants.TEMP);
-            _savedRuntimeToTemp = true;
+            // When loading args for a default-path call, push to cc65 stack
+            // instead of saving to TEMP (which only holds one value).
+            if (ScanForUpcomingMultiArgCall() || IsNextCallToDefaultPathTarget())
+            {
+                EmitJSR("pusha");
+                _runtimeValueInA = false;
+            }
+            else
+            {
+                Emit(Opcode.STA, AddressMode.ZeroPage, (byte)NESConstants.TEMP);
+                _savedRuntimeToTemp = true;
+            }
         }
         else if (LastLDA)
         {
@@ -117,6 +127,15 @@ partial class IL2NESWriter
         _immediateInA = null;
         _pokeLastValue = null;
         Stack.Push(0);
+
+        // Look ahead: if the next instruction loads another value and the
+        // upcoming Call uses the default call path, push the current value
+        // to the cc65 stack so it survives the next load.
+        if (!isWord && ScanForUpcomingMultiArgCall())
+        {
+            EmitJSR("pusha");
+            _runtimeValueInA = false;
+        }
     }
 
     /// <summary>
