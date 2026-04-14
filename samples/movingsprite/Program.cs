@@ -30,9 +30,5 @@ while (true)
     if ((pad & PAD.DOWN) != 0) y++;
     
     // Draw 2x2 sprite (16x16 pixels)
-    using var frame = oam_begin();
-    oam_off = oam_spr(x, y, 0xD8, 0, oam_off);
-    oam_off = oam_spr((byte)(x + 8), y, 0xDA, 0, oam_off);
-    oam_off = oam_spr(x, (byte)(y + 8), 0xD9, 0, oam_off);
-    oam_off = oam_spr((byte)(x + 8), (byte)(y + 8), 0xDB, 0, oam_off);
+    oam_spr_2x2(x, y, 0xD8, 0xD9, 0xDA, 0xDB, 0, 0);
 }
