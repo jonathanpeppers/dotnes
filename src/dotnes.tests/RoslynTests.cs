@@ -1485,6 +1485,102 @@ public class RoslynTests
     }
 
     [Fact]
+    public void ApuPlayTone_Pulse1()
+    {
+        // apu_play_tone(0, 0x0180, 1, 10) should emit inline register writes:
+        //   ctrl = (1 << 6) | 0x30 | 10 = 0x7A -> STA $4000
+        //   sweep = 0x00 -> STA $4001
+        //   timer_lo = 0x80 -> STA $4002
+        //   timer_hi = 0x01 -> STA $4003
+        var bytes = GetProgramBytes(
+            """
+            poke(APU_STATUS, 0x0F);
+            apu_play_tone(0, 0x0180, 1, 10);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        Assert.Contains("A97A", hex);       // LDA #$7A (ctrl: duty=1, vol=10)
+        Assert.Contains("8D0040", hex);     // STA $4000 (pulse1 ctrl)
+        Assert.Contains("A900", hex);       // LDA #$00
+        Assert.Contains("8D0140", hex);     // STA $4001 (pulse1 sweep)
+        Assert.Contains("A980", hex);       // LDA #$80 (period lo)
+        Assert.Contains("8D0240", hex);     // STA $4002 (pulse1 timer lo)
+        Assert.Contains("A901", hex);       // LDA #$01 (period hi)
+        Assert.Contains("8D0340", hex);     // STA $4003 (pulse1 timer hi)
+    }
+
+    [Fact]
+    public void ApuPlayTone_Pulse2()
+    {
+        // apu_play_tone(1, 0x00FD, 2, 15) should target pulse 2 registers ($4004-$4007):
+        //   ctrl = (2 << 6) | 0x30 | 15 = 0xBF -> STA $4004
+        //   sweep = 0x00 -> STA $4005
+        //   timer_lo = 0xFD -> STA $4006
+        //   timer_hi = 0x00 -> STA $4007
+        var bytes = GetProgramBytes(
+            """
+            poke(APU_STATUS, 0x0F);
+            apu_play_tone(1, 0x00FD, 2, 15);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        Assert.Contains("A9BF", hex);       // LDA #$BF (ctrl: duty=2, vol=15)
+        Assert.Contains("8D0440", hex);     // STA $4004 (pulse2 ctrl)
+        Assert.Contains("8D0540", hex);     // STA $4005 (pulse2 sweep)
+        Assert.Contains("A9FD", hex);       // LDA #$FD (period lo)
+        Assert.Contains("8D0640", hex);     // STA $4006 (pulse2 timer lo)
+        Assert.Contains("8D0740", hex);     // STA $4007 (pulse2 timer hi)
+    }
+
+    [Fact]
+    public void ApuStop_Pulse1()
+    {
+        // apu_stop(0) should silence pulse 1:
+        //   LDA #$30, STA $4000
+        var bytes = GetProgramBytes(
+            """
+            poke(APU_STATUS, 0x0F);
+            apu_stop(0);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        Assert.Contains("A930", hex);       // LDA #$30 (constant volume, vol=0)
+        Assert.Contains("8D0040", hex);     // STA $4000 (pulse1 ctrl)
+    }
+
+    [Fact]
+    public void ApuStop_Pulse2()
+    {
+        // apu_stop(1) should silence pulse 2:
+        //   LDA #$30, STA $4004
+        var bytes = GetProgramBytes(
+            """
+            poke(APU_STATUS, 0x0F);
+            apu_stop(1);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        Assert.Contains("A930", hex);       // LDA #$30 (constant volume, vol=0)
+        Assert.Contains("8D0440", hex);     // STA $4004 (pulse2 ctrl)
+    }
+
+    [Fact]
     public void OamOff_PropertyAccessTranspiles()
     {
         // oam_off is now a property — get/set emit LDA/STA to zero page $1B

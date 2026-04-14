@@ -81,6 +81,24 @@ public static class NESLib
     public static void apu_init() => throw null!;
 
     /// <summary>
+    /// Play a tone on a pulse channel.
+    /// Packs duty/volume into the control register and splits the period
+    /// into timer lo/hi writes, so callers don't need register-level knowledge.
+    /// </summary>
+    /// <param name="channel">Pulse channel index: 0 = Pulse 1, 1 = Pulse 2</param>
+    /// <param name="period">11-bit timer period (0x000–0x7FF). Lower values = higher pitch.</param>
+    /// <param name="duty">Duty cycle 0–3: 0 = 12.5%, 1 = 25%, 2 = 50%, 3 = 75%</param>
+    /// <param name="volume">Volume 0–15</param>
+    public static void apu_play_tone(byte channel, ushort period, byte duty, byte volume) => throw null!;
+
+    /// <summary>
+    /// Stop (silence) a pulse channel.
+    /// Writes 0x30 to the channel's control register (constant volume = 0).
+    /// </summary>
+    /// <param name="channel">Pulse channel index: 0 = Pulse 1, 1 = Pulse 2</param>
+    public static void apu_stop(byte channel) => throw null!;
+
+    /// <summary>
     /// initialize FamiTone2 music library with music data
     /// Usage: famitone_init("danger_streets_music_data")
     /// The string names a data label in a linked .s file

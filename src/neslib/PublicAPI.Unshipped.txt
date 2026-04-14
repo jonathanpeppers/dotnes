@@ -66,3 +66,5 @@ static NES.NESLib.oam_spr_2x2(byte x, byte y, byte topLeft, byte bottomLeft, byt
 static NES.NESLib.fade_in(byte delay) -> void
 static NES.NESLib.fade_out(byte delay) -> void
 static NES.NESLib.oam_begin() -> NES.OamFrame
+static NES.NESLib.apu_play_tone(byte channel, ushort period, byte duty, byte volume) -> void
+static NES.NESLib.apu_stop(byte channel) -> void

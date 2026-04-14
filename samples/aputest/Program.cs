@@ -1,4 +1,4 @@
-// APU Test - demonstrates direct APU register manipulation
+// APU Test - demonstrates apu_play_tone helper and direct register access
 // Simplified port from 8bitworkshop aputest.c
 
 // Set up palette
@@ -11,10 +11,10 @@ vram_adr(NTADR_A(2, 2));
 vram_write("APU TEST");
 
 vram_adr(NTADR_A(2, 5));
-vram_write("PULSE 1");
+vram_write("PULSE 1 HELPER");
 
 vram_adr(NTADR_A(2, 8));
-vram_write("PULSE 2");
+vram_write("PULSE 2 HELPER");
 
 vram_adr(NTADR_A(2, 11));
 vram_write("TRIANGLE");
@@ -28,24 +28,18 @@ ppu_on_all();
 // Enable all sound channels (pulse1, pulse2, triangle, noise)
 poke(APU_STATUS, 0x0F);
 
-// Pulse 1: 50% duty, constant volume 15, period ~440Hz
-poke(APU_PULSE1_CTRL, 0xBF);
-poke(APU_PULSE1_SWEEP, 0x00);
-poke(APU_PULSE1_TIMER_LO, 0xFD);
-poke(APU_PULSE1_TIMER_HI, 0x00);
+// Pulse 1 via helper: 50% duty, volume 15, period ~440Hz (0x00FD)
+apu_play_tone(0, 0x00FD, 2, 15);
 
-// Pulse 2: 25% duty, constant volume 10, period ~262Hz
-poke(APU_PULSE2_CTRL, 0x7A);
-poke(APU_PULSE2_SWEEP, 0x00);
-poke(APU_PULSE2_TIMER_LO, 0xA9);
-poke(APU_PULSE2_TIMER_HI, 0x01);
+// Pulse 2 via helper: 25% duty, volume 10, period ~262Hz (0x01A9)
+apu_play_tone(1, 0x01A9, 1, 10);
 
-// Triangle: linear counter max, period ~835Hz
+// Triangle: linear counter max, period ~835Hz (direct register access)
 poke(APU_TRIANGLE_CTRL, 0xFF);
 poke(APU_TRIANGLE_TIMER_LO, 0x42);
 poke(APU_TRIANGLE_TIMER_HI, 0x00);
 
-// Noise: constant volume 15, period 6
+// Noise: constant volume 15, period 6 (direct register access)
 poke(APU_NOISE_CTRL, 0x3F);
 poke(APU_NOISE_PERIOD, 0x06);
 poke(APU_NOISE_LENGTH, 0x18);

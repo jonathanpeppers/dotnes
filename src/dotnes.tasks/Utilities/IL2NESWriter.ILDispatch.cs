@@ -2278,6 +2278,72 @@ partial class IL2NESWriter
                             argsAlreadyPopped = true;
                         }
                         break;
+                    case nameof(NESLib.apu_play_tone):
+                        {
+                            // apu_play_tone(byte channel, ushort period, byte duty, byte volume)
+                            // Packs duty/volume into control register byte and splits period into
+                            // timer lo/hi writes, emitting 4 STA instructions inline.
+                            if (Stack.Count >= 4)
+                            {
+                                int volume = Stack.Pop();
+                                int duty = Stack.Pop();
+                                int period = Stack.Pop();
+                                int channel = Stack.Pop();
+
+                                // Remove previously emitted arg-loading instructions:
+                                // channel (byte, pushed): LDA + JSR pusha = 2
+                                // period  (ushort, pushed): LDX + LDA + JSR pushax = 3
+                                // duty    (byte, pushed): LDA + JSR pusha = 2
+                                // volume  (byte, last arg in A): LDA = 1
+                                RemoveLastInstructions(8);
+
+                                ushort baseAddr = (ushort)(NESLib.APU_PULSE1_CTRL + channel * 4);
+
+                                // ctrl = (duty << 6) | 0x30 | (volume & 0x0F)
+                                // 0x30 = length counter halt + constant volume flags
+                                byte ctrl = (byte)(((duty & 3) << 6) | 0x30 | (volume & 0x0F));
+                                Emit(Opcode.LDA, AddressMode.Immediate, ctrl);
+                                Emit(Opcode.STA, AddressMode.Absolute, baseAddr);         // ctrl
+
+                                Emit(Opcode.LDA, AddressMode.Immediate, (byte)0x00);
+                                Emit(Opcode.STA, AddressMode.Absolute, (ushort)(baseAddr + 1)); // sweep disabled
+
+                                Emit(Opcode.LDA, AddressMode.Immediate, (byte)(period & 0xFF));
+                                Emit(Opcode.STA, AddressMode.Absolute, (ushort)(baseAddr + 2)); // timer lo
+
+                                Emit(Opcode.LDA, AddressMode.Immediate, (byte)((period >> 8) & 0x07));
+                                Emit(Opcode.STA, AddressMode.Absolute, (ushort)(baseAddr + 3)); // timer hi
+                            }
+                            _immediateInA = null;
+                            _pokeLastValue = null;
+                            _lastLoadedLocalIndex = null;
+                            _lastStaticFieldAddress = null;
+                            argsAlreadyPopped = true;
+                        }
+                        break;
+                    case nameof(NESLib.apu_stop):
+                        {
+                            // apu_stop(byte channel) -> silence pulse channel
+                            // Writes 0x30 to the channel's control register (constant volume = 0)
+                            if (Stack.Count >= 1)
+                            {
+                                int channel = Stack.Pop();
+
+                                // Remove previously emitted arg-loading instruction:
+                                // channel (byte, last arg in A): LDA = 1
+                                RemoveLastInstructions(1);
+
+                                ushort ctrlAddr = (ushort)(NESLib.APU_PULSE1_CTRL + channel * 4);
+                                Emit(Opcode.LDA, AddressMode.Immediate, (byte)0x30);
+                                Emit(Opcode.STA, AddressMode.Absolute, ctrlAddr);
+                            }
+                            _immediateInA = null;
+                            _pokeLastValue = null;
+                            _lastLoadedLocalIndex = null;
+                            _lastStaticFieldAddress = null;
+                            argsAlreadyPopped = true;
+                        }
+                        break;
                     case nameof(NESLib.peek):
                         {
                             // peek(ushort addr) -> LDA abs addr
