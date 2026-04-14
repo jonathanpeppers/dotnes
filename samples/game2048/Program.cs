@@ -221,21 +221,13 @@ while (true)
                     else if (v0 > 3) sprite = (byte)(sprite + 0x70);
                     else sprite = (byte)(sprite + 0x40);
 
-                    // Pre-compute NTADR args to avoid TEMP clobber in multiply
-                    p0 = (byte)(4 + j * 6);
-                    p1 = (byte)(4 + i * 6);
-                    addr = NTADR_C(p0, p1);
+                    addr = NTADR_C((byte)(4 + j * 6), (byte)(4 + i * 6));
                     for (k = 0; k < 4; k = (byte)(k + 1))
                     {
-                        // Pre-compute into locals to avoid stelem add expression bug
-                        v2 = sprite;
-                        v3 = (byte)(sprite + 1);
-                        p2 = (byte)(sprite + 2);
-                        p3 = (byte)(sprite + 3);
-                        tile_row[0] = v2;
-                        tile_row[1] = v3;
-                        tile_row[2] = p2;
-                        tile_row[3] = p3;
+                        tile_row[0] = sprite;
+                        tile_row[1] = (byte)(sprite + 1);
+                        tile_row[2] = (byte)(sprite + 2);
+                        tile_row[3] = (byte)(sprite + 3);
                         vrambuf_put(addr, tile_row, 4);
                         sprite = (byte)(sprite + 0x10);
                         addr = (ushort)(addr + 32);
@@ -248,10 +240,7 @@ while (true)
 
         // Sync prev_map so changed tiles aren't redrawn every frame
         for (k = 0; k < 16; k = (byte)(k + 1))
-        {
-            v0 = map[k];
-            prev_map[k] = v0;
-        }
+            prev_map[k] = map[k];
 
         // ----- Show notification sprites -----
         oam_id = 0;
