@@ -1524,7 +1524,7 @@ internal static class BuiltInSubroutines
              .Emit(CLC())
              .Emit(ADC(0x01))
              .Emit(CMP(0x05))
-             .Emit(BNE(-17))  // branch back to @1
+             .Emit(BNE("@1"))  // branch back to @1
              .Emit(RTS());
         return block;
     }
@@ -1557,7 +1557,7 @@ internal static class BuiltInSubroutines
              .Emit(PLA())
              .Emit(SEC())
              .Emit(SBC(0x01))
-             .Emit(BCS(-15))  // branch back to @1
+             .Emit(BCS("@1"))  // branch back to @1
              .Emit(RTS());
         return block;
     }
