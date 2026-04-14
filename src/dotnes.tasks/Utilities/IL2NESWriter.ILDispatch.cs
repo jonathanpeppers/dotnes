@@ -2045,6 +2045,8 @@ partial class IL2NESWriter
                         // Replicates the And handler's reload logic for pad_poll results.
                         {
                             int buttonMask = Stack.Pop();
+                            // Pop joy parameter — guarded because the And handler
+                            // uses the same defensive check for stack underflow
                             if (Stack.Count > 0) Stack.Pop();
 
                             // Remove the LDA #mask that was emitted by WriteLdc
