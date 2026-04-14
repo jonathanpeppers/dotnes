@@ -5733,4 +5733,40 @@ public class RoslynTests
         Assert.True(clearIndex < hideRestIndex,
             $"oam_clear (index {clearIndex}) should come before oam_hide_rest (index {hideRestIndex})");
     }
+
+    [Fact]
+    public void StelemI1_ConstantIndex_AddExpression()
+    {
+        // Bug: tile_row[1] = (byte)(sprite + 1) emitted LDA #$01 (the constant)
+        // instead of LDA sprite; CLC; ADC #$01 (the computed value).
+        var (program, _) = BuildProgram(
+            """
+            byte sprite = (byte)pad_poll(0);
+            byte[] tile_row = new byte[4];
+            tile_row[1] = (byte)(sprite + 1);
+            pal_col(0, tile_row[1]);
+            ppu_on_all();
+            while (true) ;
+            """);
+
+        var mainBlock = program.Blocks.Single(b => b.Label == "main");
+        var instructions = mainBlock.InstructionsWithLabels.ToList();
+
+        // Find the CLC instruction that starts the add sequence
+        int clcIndex = instructions.FindIndex(il =>
+            il.Instruction.Opcode == Opcode.CLC);
+        Assert.True(clcIndex >= 0, "Expected CLC for the add operation");
+
+        // The next instruction should be ADC #$01
+        var adcInstr = instructions[clcIndex + 1].Instruction;
+        Assert.Equal(Opcode.ADC, adcInstr.Opcode);
+        Assert.Equal(AddressMode.Immediate, adcInstr.Mode);
+        Assert.IsType<ImmediateOperand>(adcInstr.Operand);
+        Assert.Equal(1, ((ImmediateOperand)adcInstr.Operand).Value);
+
+        // The instruction before CLC should load the sprite local (LDA abs)
+        var ldaInstr = instructions[clcIndex - 1].Instruction;
+        Assert.Equal(Opcode.LDA, ldaInstr.Opcode);
+        Assert.Equal(AddressMode.Absolute, ldaInstr.Mode);
+    }
 }
