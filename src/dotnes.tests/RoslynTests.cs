@@ -1503,14 +1503,11 @@ public class RoslynTests
         Assert.NotEmpty(bytes);
 
         var hex = Convert.ToHexString(bytes);
-        Assert.Contains("A97A", hex);       // LDA #$7A (ctrl: duty=1, vol=10)
-        Assert.Contains("8D0040", hex);     // STA $4000 (pulse1 ctrl)
-        Assert.Contains("A900", hex);       // LDA #$00
-        Assert.Contains("8D0140", hex);     // STA $4001 (pulse1 sweep)
-        Assert.Contains("A980", hex);       // LDA #$80 (period lo)
-        Assert.Contains("8D0240", hex);     // STA $4002 (pulse1 timer lo)
-        Assert.Contains("A901", hex);       // LDA #$01 (period hi)
-        Assert.Contains("8D0340", hex);     // STA $4003 (pulse1 timer hi)
+        // Assert full LDA+STA pairs as contiguous sequences
+        Assert.Contains("A97A" + "8D0040", hex);   // LDA #$7A, STA $4000 (ctrl)
+        Assert.Contains("A900" + "8D0140", hex);   // LDA #$00, STA $4001 (sweep)
+        Assert.Contains("A980" + "8D0240", hex);   // LDA #$80, STA $4002 (timer lo)
+        Assert.Contains("A901" + "8D0340", hex);   // LDA #$01, STA $4003 (timer hi)
     }
 
     [Fact]
@@ -1532,12 +1529,11 @@ public class RoslynTests
         Assert.NotEmpty(bytes);
 
         var hex = Convert.ToHexString(bytes);
-        Assert.Contains("A9BF", hex);       // LDA #$BF (ctrl: duty=2, vol=15)
-        Assert.Contains("8D0440", hex);     // STA $4004 (pulse2 ctrl)
-        Assert.Contains("8D0540", hex);     // STA $4005 (pulse2 sweep)
-        Assert.Contains("A9FD", hex);       // LDA #$FD (period lo)
-        Assert.Contains("8D0640", hex);     // STA $4006 (pulse2 timer lo)
-        Assert.Contains("8D0740", hex);     // STA $4007 (pulse2 timer hi)
+        // Assert full LDA+STA pairs as contiguous sequences
+        Assert.Contains("A9BF" + "8D0440", hex);   // LDA #$BF, STA $4004 (ctrl)
+        Assert.Contains("A900" + "8D0540", hex);   // LDA #$00, STA $4005 (sweep)
+        Assert.Contains("A9FD" + "8D0640", hex);   // LDA #$FD, STA $4006 (timer lo)
+        Assert.Contains("A900" + "8D0740", hex);   // LDA #$00, STA $4007 (timer hi)
     }
 
     [Fact]
@@ -1556,8 +1552,7 @@ public class RoslynTests
         Assert.NotEmpty(bytes);
 
         var hex = Convert.ToHexString(bytes);
-        Assert.Contains("A930", hex);       // LDA #$30 (constant volume, vol=0)
-        Assert.Contains("8D0040", hex);     // STA $4000 (pulse1 ctrl)
+        Assert.Contains("A930" + "8D0040", hex);   // LDA #$30, STA $4000
     }
 
     [Fact]
@@ -1576,8 +1571,7 @@ public class RoslynTests
         Assert.NotEmpty(bytes);
 
         var hex = Convert.ToHexString(bytes);
-        Assert.Contains("A930", hex);       // LDA #$30 (constant volume, vol=0)
-        Assert.Contains("8D0440", hex);     // STA $4004 (pulse2 ctrl)
+        Assert.Contains("A930" + "8D0440", hex);   // LDA #$30, STA $4004
     }
 
     [Fact]

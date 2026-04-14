@@ -2280,15 +2280,21 @@ partial class IL2NESWriter
                         break;
                     case nameof(NESLib.apu_play_tone):
                         {
-                            // apu_play_tone(byte channel, ushort period, byte duty, byte volume)
+                            // apu_play_tone(PulseChannel channel, ushort period, APUDuty duty, byte volume)
                             // Packs duty/volume into control register byte and splits period into
                             // timer lo/hi writes, emitting 4 STA instructions inline.
+                            // All arguments must be compile-time constants.
                             if (Stack.Count >= 4)
                             {
                                 int volume = Stack.Pop();
                                 int duty = Stack.Pop();
                                 int period = Stack.Pop();
                                 int channel = Stack.Pop();
+
+                                if (_runtimeValueInA || _lastLoadedLocalIndex.HasValue || _lastStaticFieldAddress.HasValue)
+                                    throw new TranspileException("apu_play_tone requires all arguments to be compile-time constants.", MethodName);
+                                if (channel is not (0 or 1))
+                                    throw new TranspileException($"apu_play_tone channel must be 0 (Pulse1) or 1 (Pulse2), got {channel}.", MethodName);
 
                                 // Remove previously emitted arg-loading instructions:
                                 // channel (byte, pushed): LDA + JSR pusha = 2
@@ -2323,11 +2329,17 @@ partial class IL2NESWriter
                         break;
                     case nameof(NESLib.apu_stop):
                         {
-                            // apu_stop(byte channel) -> silence pulse channel
-                            // Writes 0x30 to the channel's control register (constant volume = 0)
+                            // apu_stop(PulseChannel channel) -> silence pulse channel
+                            // Writes 0x30 to the channel's control register (constant volume = 0).
+                            // Channel argument must be a compile-time constant.
                             if (Stack.Count >= 1)
                             {
                                 int channel = Stack.Pop();
+
+                                if (_runtimeValueInA || _lastLoadedLocalIndex.HasValue || _lastStaticFieldAddress.HasValue)
+                                    throw new TranspileException("apu_stop requires the channel argument to be a compile-time constant.", MethodName);
+                                if (channel is not (0 or 1))
+                                    throw new TranspileException($"apu_stop channel must be 0 (Pulse1) or 1 (Pulse2), got {channel}.", MethodName);
 
                                 // Remove previously emitted arg-loading instruction:
                                 // channel (byte, last arg in A): LDA = 1
