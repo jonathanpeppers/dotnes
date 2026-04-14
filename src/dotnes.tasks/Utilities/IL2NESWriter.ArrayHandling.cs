@@ -1389,11 +1389,24 @@ partial class IL2NESWriter
             if (!isUshortExtraction)
             {
                 bool hasArithmetic = valueHasAdd || valueHasSub || valueHasAnd || valueHasShr;
-                if (hasArithmetic && storeValueLocalIdx != null &&
+                // Only use the arithmetic path when every flagged operation has a
+                // non-zero immediate operand. A zero operand means the constant
+                // wasn't an immediate (e.g. two locals: a + b) and we'd emit
+                // a no-op like ADC #$00 instead of the correct computation.
+                bool arithmeticOperandsValid =
+                    (!valueHasAdd || valueAddValue != 0) &&
+                    (!valueHasSub || valueSubValue != 0) &&
+                    (!valueHasAnd || valueAndMask != 0) &&
+                    (!valueHasShr || valueShrValue != 0);
+                if (hasArithmetic && arithmeticOperandsValid &&
+                    storeValueLocalIdx != null &&
                     Locals.TryGetValue(storeValueLocalIdx.Value, out var arithLocal) &&
                     arithLocal.Address.HasValue)
                 {
-                    // Value is local with arithmetic operations — load local, then apply
+                    // Value is local with immediate arithmetic — load local, then
+                    // apply operations in shr → and → add → sub order.  This matches
+                    // the IL produced by common NES patterns like (loc >> 4) + 0x30
+                    // and (loc & 0x0F) + 0x30.
                     if (valueHasShr && valueShrValue == 8 && arithLocal.IsWord)
                     {
                         Emit(Opcode.LDA, AddressMode.Absolute, (ushort)(arithLocal.Address.Value + 1));

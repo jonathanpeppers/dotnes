@@ -5739,7 +5739,7 @@ public class RoslynTests
     {
         // Bug: tile_row[1] = (byte)(sprite + 1) emitted LDA #$01 (the constant)
         // instead of LDA sprite; CLC; ADC #$01 (the computed value).
-        var bytes = GetProgramBytes(
+        var (program, _) = BuildProgram(
             """
             byte sprite = (byte)pad_poll(0);
             byte[] tile_row = new byte[4];
@@ -5748,13 +5748,25 @@ public class RoslynTests
             ppu_on_all();
             while (true) ;
             """);
-        Assert.NotNull(bytes);
-        Assert.NotEmpty(bytes);
-        var hex = Convert.ToHexString(bytes);
-        _logger.WriteLine($"StelemI1_ConstantIndex_AddExpression hex: {hex}");
-        // Must contain LDA abs (AD) for loading sprite, CLC (18), ADC #$01 (6901)
-        // to compute sprite + 1 at runtime, NOT just LDA #$01 (A901)
-        Assert.Contains("18", hex);    // CLC
-        Assert.Contains("6901", hex);  // ADC #$01
+
+        var mainBlock = program.Blocks.Single(b => b.Label == "main");
+        var instructions = mainBlock.InstructionsWithLabels.ToList();
+
+        // Find the CLC instruction that starts the add sequence
+        int clcIndex = instructions.FindIndex(il =>
+            il.Instruction.Opcode == Opcode.CLC);
+        Assert.True(clcIndex >= 0, "Expected CLC for the add operation");
+
+        // The next instruction should be ADC #$01
+        var adcInstr = instructions[clcIndex + 1].Instruction;
+        Assert.Equal(Opcode.ADC, adcInstr.Opcode);
+        Assert.Equal(AddressMode.Immediate, adcInstr.Mode);
+        Assert.IsType<ImmediateOperand>(adcInstr.Operand);
+        Assert.Equal(1, ((ImmediateOperand)adcInstr.Operand).Value);
+
+        // The instruction before CLC should load the sprite local (LDA abs)
+        var ldaInstr = instructions[clcIndex - 1].Instruction;
+        Assert.Equal(Opcode.LDA, ldaInstr.Opcode);
+        Assert.Equal(AddressMode.Absolute, ldaInstr.Mode);
     }
 }
