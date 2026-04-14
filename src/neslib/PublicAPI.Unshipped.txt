@@ -1,5 +1,7 @@
 #nullable enable
 NES.NESColor
+static NES.NESLib.rect_overlap(byte x1, byte y1, byte w1, byte h1, byte x2, byte y2, byte w2, byte h2) -> bool
+static NES.NESLib.sprite_overlap(byte x1, byte y1, byte x2, byte y2, byte threshold) -> bool
 const NES.NESColor.Azure = 17 -> byte
 const NES.NESColor.Black = 15 -> byte
 const NES.NESColor.Blue = 18 -> byte
