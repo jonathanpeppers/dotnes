@@ -1,8 +1,9 @@
 /*
 Peek-Poke Demo: Direct NES hardware register access.
 The screen scrolls using poke() to write the PPU scroll
-register directly, and toggles grayscale every ~2 seconds
+register directly, and toggles grayscale every ~6 seconds
 via ppu_mask(). peek() resets the PPU address latch each frame.
+Uses a ushort frame counter (exceeds byte range).
 
 PPU Registers used:
   $2001 = PPU_MASK  (rendering control)
@@ -26,7 +27,7 @@ vram_write("SCROLL VIA POKE!");
 ppu_on_all();
 
 byte scroll_x = 0;
-byte frame_count = 0;
+ushort frame_count = 0;
 byte grayscale = 0;
 
 while (true)
@@ -43,9 +44,10 @@ while (true)
 
     scroll_x = (byte)(scroll_x + 1);
 
-    // toggle grayscale every ~120 frames (~2 seconds)
-    frame_count = (byte)(frame_count + 1);
-    if (frame_count == 120)
+    // toggle grayscale every ~360 frames (~6 seconds)
+    // uses ushort because the count exceeds byte range (255)
+    frame_count++;
+    if (frame_count == 360)
     {
         frame_count = 0;
         if (grayscale != 0)
