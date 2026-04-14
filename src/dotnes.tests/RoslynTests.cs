@@ -5710,8 +5710,10 @@ public class RoslynTests
             while (true)
             {
                 ppu_wait_nmi();
-                using var frame = oam_begin();
-                oam_spr(10, 20, 0x01, 0, 0);
+                using (var frame = oam_begin())
+                {
+                    oam_spr(10, 20, 0x01, 0, 0);
+                }
             }
             """);
 
@@ -5736,5 +5738,19 @@ public class RoslynTests
             $"oam_clear (index {clearIndex}) should be inside loop body after ppu_wait_nmi (index {loopStartIndex})");
         Assert.True(clearIndex < hideRestIndex,
             $"oam_clear (index {clearIndex}) should come before oam_hide_rest (index {hideRestIndex})");
+
+        // The endfinally handler must emit a backward JMP to the loop header
+        // (not fall through into the next function's code)
+        bool hasBackwardJmp = false;
+        for (int i = hideRestIndex + 1; i < instructions.Count; i++)
+        {
+            if (instructions[i].Instruction.Opcode == Opcode.JMP)
+            {
+                hasBackwardJmp = true;
+                break;
+            }
+        }
+        Assert.True(hasBackwardJmp,
+            "Expected a backward JMP after oam_hide_rest to loop back to the while(true) body");
     }
 }

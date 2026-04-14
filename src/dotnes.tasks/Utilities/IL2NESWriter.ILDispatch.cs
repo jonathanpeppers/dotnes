@@ -1204,6 +1204,8 @@ partial class IL2NESWriter
                     var region = FindEnclosingTryRegion(instruction.Offset);
                     if (region != null)
                     {
+                        if (_pendingLeaveTarget != null && _pendingLeaveTarget.Value != leaveTarget)
+                            throw new TranspileException($"Multiple leave instructions target different offsets (0x{_pendingLeaveTarget.Value:X4} vs 0x{leaveTarget:X4}) within the same try/finally block. This pattern is not supported.", MethodName);
                         _pendingLeaveTarget = leaveTarget;
                         int nextOffset = instruction.Offset + 2; // leave.s is 2 bytes
                         if (nextOffset != region.Value.HandlerOffset)
@@ -1226,6 +1228,8 @@ partial class IL2NESWriter
                     var region = FindEnclosingTryRegion(instruction.Offset);
                     if (region != null)
                     {
+                        if (_pendingLeaveTarget != null && _pendingLeaveTarget.Value != leaveTarget)
+                            throw new TranspileException($"Multiple leave instructions target different offsets (0x{_pendingLeaveTarget.Value:X4} vs 0x{leaveTarget:X4}) within the same try/finally block. This pattern is not supported.", MethodName);
                         _pendingLeaveTarget = leaveTarget;
                         int nextOffset = instruction.Offset + 5; // leave is 5 bytes
                         if (nextOffset != region.Value.HandlerOffset)
