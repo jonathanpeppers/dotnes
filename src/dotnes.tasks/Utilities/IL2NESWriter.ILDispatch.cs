@@ -2296,12 +2296,10 @@ partial class IL2NESWriter
                                 if (channel is not (0 or 1))
                                     throw new TranspileException($"apu_play_tone channel must be 0 (Pulse1) or 1 (Pulse2), got {channel}.", MethodName);
 
-                                // Remove previously emitted arg-loading instructions:
-                                // channel (byte, pushed): LDA + JSR pusha = 2
-                                // period  (ushort, pushed): LDX + LDA + JSR pushax = 3
-                                // duty    (byte, pushed): LDA + JSR pusha = 2
-                                // volume  (byte, last arg in A): LDA = 1
-                                RemoveLastInstructions(8);
+                                // Remove previously emitted arg-loading instructions.
+                                // When period > 255 it was loaded as ushort (LDX+LDA+JSR pushax = 3),
+                                // otherwise as byte (JSR pusha+LDA = 2). Other args are always bytes.
+                                RemoveLastInstructions(period > byte.MaxValue ? 8 : 7);
 
                                 ushort baseAddr = (ushort)(NESLib.APU_PULSE1_CTRL + channel * 4);
 
