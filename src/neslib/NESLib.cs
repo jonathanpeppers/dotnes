@@ -423,8 +423,10 @@ public static class NESLib
 
     /// <summary>
     /// Returns true if two axis-aligned rectangles overlap.
-    /// Uses unsigned byte arithmetic; works correctly for NES screen coordinates (0-255).
-    /// AABB test: overlap iff (x1 &lt; x2+w2) &amp;&amp; (x2 &lt; x1+w1) &amp;&amp; (y1 &lt; y2+h2) &amp;&amp; (y2 &lt; y1+h1).
+    /// Uses unsigned byte arithmetic and assumes rectangle extents do not wrap:
+    /// x1+w1, x2+w2, y1+h1, and y2+h2 must all be less than or equal to 255.
+    /// Under that precondition, AABB test: overlap iff
+    /// (x1 &lt; x2+w2) &amp;&amp; (x2 &lt; x1+w1) &amp;&amp; (y1 &lt; y2+h2) &amp;&amp; (y2 &lt; y1+h1).
     /// </summary>
     public static bool rect_overlap(byte x1, byte y1, byte w1, byte h1, byte x2, byte y2, byte w2, byte h2) => throw null!;
 

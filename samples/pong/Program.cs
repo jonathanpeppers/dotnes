@@ -108,15 +108,15 @@ while (true)
         ball_down = 0;
     }
 
-    // paddle 1 collision (left side)
-    if (ball_right == 0 && rect_overlap(ball_x, ball_y, 8, 8, 16, p1_y, 8, 24))
+    // paddle 1 collision (left side) — cheap X pre-check before rect_overlap
+    if (ball_right == 0 && ball_x < 24 && rect_overlap(ball_x, ball_y, 8, 8, 16, p1_y, 8, 24))
     {
         ball_right = 1;
         ball_x = 24;
     }
 
-    // paddle 2 collision (right side)
-    if (ball_right != 0 && rect_overlap(ball_x, ball_y, 8, 8, 232, p2_y, 8, 24))
+    // paddle 2 collision (right side) — cheap X pre-check before rect_overlap
+    if (ball_right != 0 && ball_x > 224 && rect_overlap(ball_x, ball_y, 8, 8, 232, p2_y, 8, 24))
     {
         ball_right = 0;
         ball_x = 224;
