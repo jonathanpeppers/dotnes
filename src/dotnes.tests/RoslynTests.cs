@@ -1485,6 +1485,100 @@ public class RoslynTests
     }
 
     [Fact]
+    public void ApuPlayTone_Pulse1()
+    {
+        // apu_play_tone(PulseChannel.Pulse1, 0x0180, APUDuty.Duty25, 10) should emit inline register writes:
+        //   ctrl = (1 << 6) | 0x30 | 10 = 0x7A -> STA $4000
+        //   sweep = 0x00 -> STA $4001
+        //   timer_lo = 0x80 -> STA $4002
+        //   timer_hi = 0x01 -> STA $4003
+        var bytes = GetProgramBytes(
+            """
+            poke(APU_STATUS, 0x0F);
+            apu_play_tone(PulseChannel.Pulse1, 0x0180, APUDuty.Duty25, 10);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        // Verify poke(APU_STATUS, 0x0F) emits correctly (period > 255 uses ushort path)
+        Assert.Contains("A90F" + "8D1540", hex);    // LDA #$0F, STA $4015 (APU_STATUS)
+        // Assert full LDA+STA pairs as contiguous sequences
+        Assert.Contains("A97A" + "8D0040", hex);   // LDA #$7A, STA $4000 (ctrl)
+        Assert.Contains("A900" + "8D0140", hex);   // LDA #$00, STA $4001 (sweep)
+        Assert.Contains("A980" + "8D0240", hex);   // LDA #$80, STA $4002 (timer lo)
+        Assert.Contains("A901" + "8D0340", hex);   // LDA #$01, STA $4003 (timer hi)
+    }
+
+    [Fact]
+    public void ApuPlayTone_Pulse2()
+    {
+        // apu_play_tone(PulseChannel.Pulse2, 0x00FD, APUDuty.Duty50, 15) should target pulse 2 registers ($4004-$4007):
+        //   ctrl = (2 << 6) | 0x30 | 15 = 0xBF -> STA $4004
+        //   sweep = 0x00 -> STA $4005
+        //   timer_lo = 0xFD -> STA $4006
+        //   timer_hi = 0x00 -> STA $4007
+        var bytes = GetProgramBytes(
+            """
+            poke(APU_STATUS, 0x0F);
+            apu_play_tone(PulseChannel.Pulse2, 0x00FD, APUDuty.Duty50, 15);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        // Verify poke(APU_STATUS, 0x0F) emits correctly (period <= 255 uses byte path)
+        Assert.Contains("A90F" + "8D1540", hex);    // LDA #$0F, STA $4015 (APU_STATUS)
+        // Assert full LDA+STA pairs as contiguous sequences
+        Assert.Contains("A9BF" + "8D0440", hex);   // LDA #$BF, STA $4004 (ctrl)
+        Assert.Contains("A900" + "8D0540", hex);   // LDA #$00, STA $4005 (sweep)
+        Assert.Contains("A9FD" + "8D0640", hex);   // LDA #$FD, STA $4006 (timer lo)
+        Assert.Contains("A900" + "8D0740", hex);   // LDA #$00, STA $4007 (timer hi)
+    }
+
+    [Fact]
+    public void ApuStop_Pulse1()
+    {
+        // apu_stop(PulseChannel.Pulse1) should silence pulse 1:
+        //   LDA #$30, STA $4000
+        var bytes = GetProgramBytes(
+            """
+            poke(APU_STATUS, 0x0F);
+            apu_stop(PulseChannel.Pulse1);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        Assert.Contains("A930" + "8D0040", hex);   // LDA #$30, STA $4000
+    }
+
+    [Fact]
+    public void ApuStop_Pulse2()
+    {
+        // apu_stop(PulseChannel.Pulse2) should silence pulse 2:
+        //   LDA #$30, STA $4004
+        var bytes = GetProgramBytes(
+            """
+            poke(APU_STATUS, 0x0F);
+            apu_stop(PulseChannel.Pulse2);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        Assert.Contains("A930" + "8D0440", hex);   // LDA #$30, STA $4004
+    }
+
+    [Fact]
     public void OamOff_PropertyAccessTranspiles()
     {
         // oam_off is now a property — get/set emit LDA/STA to zero page $1B
@@ -2541,6 +2635,71 @@ public class RoslynTests
         Assert.Contains("8519", hex); // STA TEMP2
         Assert.Contains("8517", hex); // STA TEMP (x from popa)
         Assert.Contains("A519", hex); // LDA TEMP2 (restore y)
+    }
+
+    [Fact]
+    public void NtadrInsideLoopWithVrambufPut()
+    {
+        // Regression: NTADR_C inside a loop body with vrambuf_put causes the
+        // backward scan for JSR pusha to match pushes from vrambuf_put instead
+        // of the NTADR_C first arg, producing incorrect nametable addresses.
+        var bytes = GetProgramBytes(
+            """
+            byte[] tile_row = new byte[4];
+            byte nx = 5;
+            byte ny = 3;
+            vrambuf_clear();
+            set_vram_update(tile_row);
+            for (byte k = 0; k < 4; k++)
+            {
+                ushort addr = NTADR_C(nx, ny);
+                vrambuf_put(addr, tile_row, 4);
+                ny = (byte)(ny + 1);
+            }
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"NtadrLoopVrambuf hex: {hex}");
+        // NTADR_C handler must correctly resolve x=nx. The nametable_c subroutine
+        // must be called (JSR nametable_c). If the backward scan matched an
+        // unrelated pusha, the codegen would be incorrect or crash.
+        // TEMP = x (nx), A = y (ny) before calling nametable_c.
+        // STA $17 (TEMP = x) must appear before JSR nametable_c
+        Assert.Contains("8517", hex); // STA TEMP (x)
+    }
+
+    [Fact]
+    public void NtadrExpressionAfterMultiArgCall()
+    {
+        // Regression: when a multi-arg function (e.g. pal_col) precedes NTADR_C
+        // with a runtime expression y arg, the yIsExpression backward scan could
+        // match pal_col's pusha instead of NTADR_C's. The fix stops the scan
+        // when a non-helper JSR is encountered.
+        var bytes = GetProgramBytes(
+            """
+            pal_col(0, 0x30);
+            for (byte row = 0; row < 4; row++)
+            {
+                ushort addr = NTADR_A(1, (byte)(row + 10));
+                vrambuf_flush();
+            }
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"NtadrAfterMultiArg hex: {hex}");
+        // The constant 10 (0x0A) must appear as ADC #$0A (690A) — the add of row+10.
+        Assert.Contains("690A", hex);
+        // NTADR args must be set up correctly with TEMP/TEMP2
+        Assert.Contains("8519", hex); // STA TEMP2
+        Assert.Contains("8517", hex); // STA TEMP (x from popa)
     }
 
     [Fact]
@@ -5846,5 +6005,42 @@ public class RoslynTests
         var ldaInstr = instructions[clcIndex - 1].Instruction;
         Assert.Equal(Opcode.LDA, ldaInstr.Opcode);
         Assert.Equal(AddressMode.Absolute, ldaInstr.Mode);
+    }
+
+    [Fact]
+    public void NtadrWithTwoRuntimeMultiplyExpressions()
+    {
+        // Regression: NTADR_C((byte)(4 + col * 6), (byte)(4 + row * 6))
+        // The multiply for the y argument clobbers TEMP which held the x value.
+        // The Mul handler's _savedRuntimeToTemp path incorrectly treats the multiply
+        // as runtime × runtime when it's actually runtime × constant.
+        var bytes = GetProgramBytes(
+            """
+            byte col = 1;
+            byte row = 2;
+            ushort addr = NTADR_C((byte)(4 + col * 6), (byte)(4 + row * 6));
+            vram_adr(addr);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"NtadrTwoMul hex: {hex}");
+
+        // Both args involve * 6 (non-power-of-2), so the multiply loop must appear.
+        // After the fix:
+        // - First multiply (col * 6) uses TEMP correctly, adds #$04 (not #$06)
+        // - First arg saved to TEMP, then pushed to cc65 stack before second multiply
+        // - Second multiply (row * 6) uses TEMP freely, adds #$04 (not #$0C)
+        // - NTADR handler recovers first arg via popa
+
+        // ADC #$04 must appear (add 4 to multiply results), not ADC #$06 or ADC #$0C
+        Assert.Contains("6904", hex); // CLC; ADC #$04
+        // The NTADR handler must set up args correctly via popa
+        Assert.Contains("8519", hex); // STA TEMP2 (save y)
+        Assert.Contains("8517", hex); // STA TEMP (save x from popa)
+        Assert.Contains("A519", hex); // LDA TEMP2 (restore y)
     }
 }
