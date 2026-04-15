@@ -1768,8 +1768,9 @@ partial class IL2NESWriter
         else if (sourceArray1Idx >= 0 && !hasTwoLdelems && sourceArray1Idx == targetArrayLocalIdx
             && (hasSub || hasAdd || hasAnd || hasOr))
         {
-            // Pattern: arr[i] = arr[i] ± N or arr[i] = arr[i] & N or arr[i] = arr[i] | N (self-referencing update)
-            // ldloc arr, ldloc idx, ldloc arr, ldloc idx, ldelem_u1, ldc N, sub/add/and/or, conv_u1, stelem_i1
+            // Pattern: arr[i] = (byte)(arr[i] op N) — self-referencing update with one or more operations
+            // Supports combinations like (arr[i] + 1) | 0xF0, arr[i] & 0x0F, arr[i] + 1, etc.
+            // ldloc arr, ldloc idx, ldloc arr, ldloc idx, ldelem_u1, [ldc N, op]*, conv_u1, stelem_i1
             Emit(Opcode.LDX, AddressMode.Absolute, targetIndexAddr);
             Emit(Opcode.LDA, AddressMode.AbsoluteX, (ushort)targetArray.Address!);
             if (hasAnd)
