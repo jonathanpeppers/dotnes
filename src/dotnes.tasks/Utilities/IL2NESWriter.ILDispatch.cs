@@ -2063,6 +2063,88 @@ partial class IL2NESWriter
                         _firstAndAfterPadPoll = true;
                         _immediateInA = null;
                         break;
+                    case nameof(NESLib.pad_dpad_x):
+                    case nameof(NESLib.pad_dpad_y):
+                    {
+                        // Inline intrinsic: returns -1, 0, or +1 from D-pad state.
+                        // A has the PAD value from the preceding ldloc.
+                        //
+                        // When used in an expression like x + pad_dpad_x(pad), the eval
+                        // stack has [x, pad] and the preceding ldloc emitted two LDAs:
+                        //   LDA x_addr   ← clobbered when ldloc pad runs
+                        //   LDA pad_addr ← current A
+                        // The add handler needs x in TEMP and the intrinsic result in A.
+                        // We detect this case (Stack.Count >= 2) and rewrite the LDAs.
+                        ushort prevValueAddr = 0;
+                        if (Stack.Count >= 2)
+                        {
+                            int count = GetBufferedBlockCount();
+                            if (count >= 2)
+                            {
+                                var prevInstr = GetBufferedInstruction(count - 2);
+                                var padInstr = GetBufferedInstruction(count - 1);
+                                if (prevInstr.Opcode == Opcode.LDA && prevInstr.Operand is AbsoluteOperand absOp
+                                    && padInstr.Opcode == Opcode.LDA && padInstr.Operand is AbsoluteOperand padOp)
+                                {
+                                    prevValueAddr = absOp.Address;
+                                    // Remove both LDAs (x and pad), re-emit x → TEMP, then pad → A
+                                    RemoveLastInstructions(2);
+                                    Emit(Opcode.LDA, AddressMode.Absolute, prevValueAddr);
+                                    Emit(Opcode.STA, AddressMode.ZeroPage, (byte)NESConstants.TEMP);
+                                    Emit(Opcode.LDA, AddressMode.Absolute, padOp.Address);
+                                }
+                            }
+                        }
+
+                        // Save A to _padReloadAddress so the second direction check can
+                        // reload it after the first AND destroys the full pad value.
+                        // This makes the intrinsic self-contained — it works regardless of
+                        // whether the argument came from pad_poll, pad_state, or a variable.
+                        if (_padReloadAddress == 0)
+                        {
+                            _padReloadAddress = (ushort)(local + LocalCount);
+                            LocalCount += 1;
+                        }
+                        Emit(Opcode.STA, AddressMode.Absolute, _padReloadAddress);
+
+                        byte negMask, posMask;
+                        if (operand == nameof(NESLib.pad_dpad_x))
+                        {
+                            negMask = 0x40; // PAD.LEFT
+                            posMask = 0x80; // PAD.RIGHT
+                        }
+                        else
+                        {
+                            negMask = 0x10; // PAD.UP
+                            posMask = 0x20; // PAD.DOWN
+                        }
+
+                        // AND #negMask — test negative direction (LEFT/UP)
+                        Emit(Opcode.AND, AddressMode.Immediate, negMask);
+                        // BEQ +4 — skip LDA+BNE if not pressed
+                        Emit(Opcode.BEQ, AddressMode.Relative, (byte)4);
+                        // LDA #$FF — result = -1
+                        Emit(Opcode.LDA, AddressMode.Immediate, 0xFF);
+                        // BNE +9 — skip to done (unconditional: A=$FF≠0)
+                        Emit(Opcode.BNE, AddressMode.Relative, (byte)9);
+                        // Reload pad value for positive direction check
+                        Emit(Opcode.LDA, AddressMode.Absolute, _padReloadAddress);
+                        // AND #posMask — test positive direction (RIGHT/DOWN)
+                        Emit(Opcode.AND, AddressMode.Immediate, posMask);
+                        // BEQ +2 — skip to done if not pressed (A=0 is correct result)
+                        Emit(Opcode.BEQ, AddressMode.Relative, (byte)2);
+                        // LDA #$01 — result = +1
+                        Emit(Opcode.LDA, AddressMode.Immediate, 0x01);
+                        // done: A contains -1, 0, or +1
+
+                        if (prevValueAddr != 0)
+                            _savedRuntimeToTemp = true;
+
+                        if (Stack.Count > 0) Stack.Pop();
+                        argsAlreadyPopped = true;
+                        _immediateInA = null;
+                        break;
+                    }
                     case nameof(NESLib.pad_pressed):
                         // pad_pressed(joy, button) is a compile-time intrinsic.
                         // Emits AND #button_mask inline — identical to (joy & button) != 0.

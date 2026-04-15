@@ -189,6 +189,16 @@ public static class NESLib
     public static PAD pad_state(byte pad) => throw null!;
 
     /// <summary>
+    /// Returns -1 if LEFT is pressed, +1 if RIGHT is pressed, 0 otherwise.
+    /// </summary>
+    public static sbyte pad_dpad_x(PAD joy) => throw null!;
+
+    /// <summary>
+    /// Returns -1 if UP is pressed, +1 if DOWN is pressed, 0 otherwise.
+    /// </summary>
+    public static sbyte pad_dpad_y(PAD joy) => throw null!;
+
+    /// <summary>
     /// Returns true if the specified button is pressed in the pad state.
     /// Compile-time intrinsic: emits inline AND + branch, identical to (joy &amp; button) != 0.
     /// <paramref name="button"/> must be a compile-time constant (e.g. <c>PAD.LEFT</c>).
