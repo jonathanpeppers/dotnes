@@ -46,17 +46,17 @@ while (true)
 {
     ppu_wait_nmi();
     PAD pad = pad_poll(0);
-    if ((pad & PAD.A) != 0)
+    if (pad_pressed(pad, PAD.A))
         mask = mask | MASK.TINT_RED;
-    if ((pad & PAD.B) != 0)
+    if (pad_pressed(pad, PAD.B))
         mask = mask | MASK.TINT_GREEN;
-    if ((pad & PAD.LEFT) != 0)
+    if (pad_pressed(pad, PAD.LEFT))
         mask = mask | MASK.TINT_BLUE;
-    if ((pad & PAD.RIGHT) != 0)
+    if (pad_pressed(pad, PAD.RIGHT))
         mask = mask | MASK.TINT_BLUE;
-    if ((pad & PAD.UP) != 0)
+    if (pad_pressed(pad, PAD.UP))
         mask = mask | MASK.MONO;
-    if ((pad & PAD.DOWN) != 0)
+    if (pad_pressed(pad, PAD.DOWN))
         mask = mask | MASK.MONO;
     ppu_mask(mask);
     mask = MASK.BG;

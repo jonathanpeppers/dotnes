@@ -66,4 +66,17 @@ NES.OamFrame.spr(byte x, byte y, byte chrnum, byte attr) -> void
 static NES.NESLib.meta_spr_2x2(byte topLeft, byte bottomLeft, byte topRight, byte bottomRight, byte attr = 0) -> byte[]!
 static NES.NESLib.meta_spr_2x2_flip(byte topLeft, byte bottomLeft, byte topRight, byte bottomRight, byte attr = 0) -> byte[]!
 static NES.NESLib.oam_spr_2x2(byte x, byte y, byte topLeft, byte bottomLeft, byte topRight, byte bottomRight, byte attr, byte sprid) -> byte
+static NES.NESLib.fade_in(byte delay) -> void
+static NES.NESLib.fade_out(byte delay) -> void
 static NES.NESLib.oam_begin() -> NES.OamFrame
+static NES.NESLib.pad_pressed(NES.PAD joy, NES.PAD button) -> bool
+NES.APUDuty
+NES.APUDuty.Duty12 = 0 -> NES.APUDuty
+NES.APUDuty.Duty25 = 1 -> NES.APUDuty
+NES.APUDuty.Duty50 = 2 -> NES.APUDuty
+NES.APUDuty.Duty75 = 3 -> NES.APUDuty
+NES.PulseChannel
+NES.PulseChannel.Pulse1 = 0 -> NES.PulseChannel
+NES.PulseChannel.Pulse2 = 1 -> NES.PulseChannel
+static NES.NESLib.apu_play_tone(NES.PulseChannel channel, ushort period, NES.APUDuty duty, byte volume) -> void
+static NES.NESLib.apu_stop(NES.PulseChannel channel) -> void

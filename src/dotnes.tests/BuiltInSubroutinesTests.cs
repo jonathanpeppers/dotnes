@@ -755,6 +755,8 @@ public class BuiltInSubroutinesTests
         Assert.Equal("flush_vram_update", BuiltInSubroutines.FlushVramUpdate().Label);
         Assert.Equal("nesclock", BuiltInSubroutines.NesClock().Label);
         Assert.Equal("delay", BuiltInSubroutines.Delay().Label);
+        Assert.Equal("fade_in", BuiltInSubroutines.FadeIn().Label);
+        Assert.Equal("fade_out", BuiltInSubroutines.FadeOut().Label);
         Assert.Equal("nmi_set_callback", BuiltInSubroutines.NmiSetCallback().Label);
         Assert.Equal("popa", BuiltInSubroutines.Popa().Label);
         Assert.Equal("popax", BuiltInSubroutines.Popax().Label);
@@ -809,6 +811,79 @@ public class BuiltInSubroutinesTests
         Assert.Equal(Opcode.STA, block[2].Opcode);
         // STX RAND_STATE+3
         Assert.Equal(Opcode.STX, block[3].Opcode);
+    }
+
+    [Fact]
+    public void FadeIn_HasCorrectInstructions()
+    {
+        var block = BuiltInSubroutines.FadeIn();
+        Assert.Equal("fade_in", block.Label);
+        Assert.Equal(12, block.Count);
+
+        // STA TEMP
+        Assert.Equal(Opcode.STA, block[0].Opcode);
+        Assert.Equal(AddressMode.ZeroPage, block[0].Mode);
+        // LDA #$00
+        Assert.Equal(Opcode.LDA, block[1].Opcode);
+        Assert.Equal(AddressMode.Immediate, block[1].Mode);
+        // PHA
+        Assert.Equal(Opcode.PHA, block[2].Opcode);
+        // JSR pal_bright
+        Assert.Equal(Opcode.JSR, block[3].Opcode);
+        // LDA TEMP
+        Assert.Equal(Opcode.LDA, block[4].Opcode);
+        Assert.Equal(AddressMode.ZeroPage, block[4].Mode);
+        // JSR delay
+        Assert.Equal(Opcode.JSR, block[5].Opcode);
+        // PLA
+        Assert.Equal(Opcode.PLA, block[6].Opcode);
+        // CLC
+        Assert.Equal(Opcode.CLC, block[7].Opcode);
+        // ADC #$01
+        Assert.Equal(Opcode.ADC, block[8].Opcode);
+        Assert.Equal(AddressMode.Immediate, block[8].Mode);
+        // CMP #$05
+        Assert.Equal(Opcode.CMP, block[9].Opcode);
+        Assert.Equal(AddressMode.Immediate, block[9].Mode);
+        // BNE @1
+        Assert.Equal(Opcode.BNE, block[10].Opcode);
+        // RTS
+        Assert.Equal(Opcode.RTS, block[11].Opcode);
+    }
+
+    [Fact]
+    public void FadeOut_HasCorrectInstructions()
+    {
+        var block = BuiltInSubroutines.FadeOut();
+        Assert.Equal("fade_out", block.Label);
+        Assert.Equal(11, block.Count);
+
+        // STA TEMP
+        Assert.Equal(Opcode.STA, block[0].Opcode);
+        Assert.Equal(AddressMode.ZeroPage, block[0].Mode);
+        // LDA #$04
+        Assert.Equal(Opcode.LDA, block[1].Opcode);
+        Assert.Equal(AddressMode.Immediate, block[1].Mode);
+        // PHA
+        Assert.Equal(Opcode.PHA, block[2].Opcode);
+        // JSR pal_bright
+        Assert.Equal(Opcode.JSR, block[3].Opcode);
+        // LDA TEMP
+        Assert.Equal(Opcode.LDA, block[4].Opcode);
+        Assert.Equal(AddressMode.ZeroPage, block[4].Mode);
+        // JSR delay
+        Assert.Equal(Opcode.JSR, block[5].Opcode);
+        // PLA
+        Assert.Equal(Opcode.PLA, block[6].Opcode);
+        // SEC
+        Assert.Equal(Opcode.SEC, block[7].Opcode);
+        // SBC #$01
+        Assert.Equal(Opcode.SBC, block[8].Opcode);
+        Assert.Equal(AddressMode.Immediate, block[8].Mode);
+        // BCS @1
+        Assert.Equal(Opcode.BCS, block[9].Opcode);
+        // RTS
+        Assert.Equal(Opcode.RTS, block[10].Opcode);
     }
 
     #endregion

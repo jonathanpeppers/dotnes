@@ -782,6 +782,10 @@ public class Program6502
             action(BuiltInSubroutines.SpriteOverlap());
         if (usedMethods.Contains("waitvsync"))
             action(BuiltInSubroutines.Waitvsync());
+        if (usedMethods.Contains("fade_in"))
+            action(BuiltInSubroutines.FadeIn());
+        if (usedMethods.Contains("fade_out"))
+            action(BuiltInSubroutines.FadeOut());
         if (usedMethods.Contains("irq_set_callback"))
         {
             action(BuiltInSubroutines.IrqSetCallback());

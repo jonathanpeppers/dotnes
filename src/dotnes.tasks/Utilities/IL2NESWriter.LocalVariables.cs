@@ -279,6 +279,16 @@ partial class IL2NESWriter
     }
 
     /// <summary>
+    /// Returns true if the label refers to a cc65 stack helper routine
+    /// (push/pop/stack-adjust), as opposed to a NESLib function call.
+    /// Used by NTADR backward scans to avoid matching pusha instructions
+    /// that were consumed by a preceding function call.
+    /// </summary>
+    static bool IsCC65StackHelper(string label) => label is
+        "pusha" or "pushax" or "popa" or "popax"
+        or "incsp1" or "incsp2" or "addysp" or "decsp4";
+
+    /// <summary>
     /// Scans ahead from the current IL index to determine if we're loading
     /// arguments for a multi-arg call that uses the default call path.
     /// Returns true if pusha should be emitted to preserve A before the next load.

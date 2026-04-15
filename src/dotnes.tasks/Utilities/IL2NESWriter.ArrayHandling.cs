@@ -1271,16 +1271,69 @@ partial class IL2NESWriter
             }
 
             // Determine the value to store from the value expression
-            int? constValue = null;
             int? storeValueLocalIdx = null;
+            bool valueHasAdd = false;
+            int valueAddValue = 0;
+            bool valueHasSub = false;
+            int valueSubValue = 0;
+            bool valueHasAnd = false;
+            int valueAndMask = 0;
+            bool valueHasShr = false;
+            int valueShrValue = 0;
+            for (int i = valueStart; i < Index; i++)
+            {
+                int? locIdx = GetLdlocIndex(Instructions[i]);
+                if (locIdx != null)
+                    storeValueLocalIdx = locIdx;
+                switch (Instructions[i].OpCode)
+                {
+                    case ILOpCode.Add:
+                        valueHasAdd = true;
+                        break;
+                    case ILOpCode.Sub:
+                        valueHasSub = true;
+                        break;
+                    case ILOpCode.And:
+                        valueHasAnd = true;
+                        break;
+                    case ILOpCode.Shr:
+                    case ILOpCode.Shr_un:
+                        valueHasShr = true;
+                        break;
+                }
+                // Map constants to their consuming operation
+                int? val = GetLdcValue(Instructions[i]);
+                if (val != null && i + 1 < Index)
+                {
+                    switch (Instructions[i + 1].OpCode)
+                    {
+                        case ILOpCode.Add:
+                            valueAddValue = val.Value;
+                            break;
+                        case ILOpCode.Sub:
+                            valueSubValue = val.Value;
+                            break;
+                        case ILOpCode.And:
+                            valueAndMask = val.Value;
+                            break;
+                        case ILOpCode.Shr:
+                        case ILOpCode.Shr_un:
+                            valueShrValue = val.Value;
+                            break;
+                    }
+                }
+            }
+            // Also find the last standalone constant (not consumed by an arithmetic operation)
+            int? constValue = null;
             for (int i = valueStart; i < Index; i++)
             {
                 int? val = GetLdcValue(Instructions[i]);
                 if (val != null)
-                    constValue = val;
-                int? locIdx = GetLdlocIndex(Instructions[i]);
-                if (locIdx != null)
-                    storeValueLocalIdx = locIdx;
+                {
+                    if (i + 1 >= Index || Instructions[i + 1].OpCode is not (
+                        ILOpCode.Add or ILOpCode.Sub or ILOpCode.And or ILOpCode.Shr or ILOpCode.Shr_un))
+                        constValue = val;
+                }
             }
 
             // Check for ushort high/low byte extraction: (byte)(ushort_local >> 8) or (byte)ushort_local
@@ -1335,7 +1388,53 @@ partial class IL2NESWriter
 
             if (!isUshortExtraction)
             {
-                if (constValue != null)
+                bool hasArithmetic = valueHasAdd || valueHasSub || valueHasAnd || valueHasShr;
+                // Only use the arithmetic path when every flagged operation has a
+                // non-zero immediate operand. A zero operand means the constant
+                // wasn't an immediate (e.g. two locals: a + b) and we'd emit
+                // a no-op like ADC #$00 instead of the correct computation.
+                bool arithmeticOperandsValid =
+                    (!valueHasAdd || valueAddValue != 0) &&
+                    (!valueHasSub || valueSubValue != 0) &&
+                    (!valueHasAnd || valueAndMask != 0) &&
+                    (!valueHasShr || valueShrValue != 0);
+                if (hasArithmetic && arithmeticOperandsValid &&
+                    storeValueLocalIdx != null &&
+                    Locals.TryGetValue(storeValueLocalIdx.Value, out var arithLocal) &&
+                    arithLocal.Address.HasValue)
+                {
+                    // Value is local with immediate arithmetic — load local, then
+                    // apply operations in shr → and → add → sub order.  This matches
+                    // the IL produced by common NES patterns like (loc >> 4) + 0x30
+                    // and (loc & 0x0F) + 0x30.
+                    if (valueHasShr && valueShrValue == 8 && arithLocal.IsWord)
+                    {
+                        Emit(Opcode.LDA, AddressMode.Absolute, (ushort)(arithLocal.Address.Value + 1));
+                    }
+                    else if (valueHasShr && valueShrValue > 0)
+                    {
+                        Emit(Opcode.LDA, AddressMode.Absolute, (ushort)arithLocal.Address.Value);
+                        for (int s = 0; s < valueShrValue; s++)
+                            Emit(Opcode.LSR, AddressMode.Accumulator);
+                    }
+                    else
+                    {
+                        Emit(Opcode.LDA, AddressMode.Absolute, (ushort)arithLocal.Address.Value);
+                    }
+                    if (valueHasAnd)
+                        Emit(Opcode.AND, AddressMode.Immediate, checked((byte)valueAndMask));
+                    if (valueHasAdd)
+                    {
+                        Emit(Opcode.CLC, AddressMode.Implied);
+                        Emit(Opcode.ADC, AddressMode.Immediate, checked((byte)valueAddValue));
+                    }
+                    if (valueHasSub)
+                    {
+                        Emit(Opcode.SEC, AddressMode.Implied);
+                        Emit(Opcode.SBC, AddressMode.Immediate, checked((byte)valueSubValue));
+                    }
+                }
+                else if (constValue != null)
                 {
                     Emit(Opcode.LDA, AddressMode.Immediate, checked((byte)constValue.Value));
                 }

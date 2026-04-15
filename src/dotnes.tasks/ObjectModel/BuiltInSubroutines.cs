@@ -1628,6 +1628,74 @@ internal static class BuiltInSubroutines
     }
 
     /// <summary>
+    /// _fade_in - Fade in from black to normal brightness
+    /// A = delay per step in frames
+    /// Loops brightness 0..4, calling pal_bright and delay each step
+    /// </summary>
+    public static Block FadeIn()
+    {
+        // STA TEMP       ; save delay
+        // LDA #$00       ; brightness = 0
+        // @1: PHA        ; save brightness
+        // JSR pal_bright ; set brightness
+        // LDA TEMP       ; load delay
+        // JSR delay      ; wait N frames
+        // PLA            ; restore brightness
+        // CLC
+        // ADC #$01       ; brightness++
+        // CMP #$05       ; done?
+        // BNE @1         ; loop
+        // RTS
+        var block = new Block(nameof(NESLib.fade_in));
+        block.Emit(STA_zpg(TEMP))
+             .Emit(LDA(0x00))
+             .Emit(PHA(), "@1")
+             .Emit(JSR(nameof(NESLib.pal_bright)))
+             .Emit(LDA_zpg(TEMP))
+             .Emit(JSR(nameof(NESLib.delay)))
+             .Emit(PLA())
+             .Emit(CLC())
+             .Emit(ADC(0x01))
+             .Emit(CMP(0x05))
+             .Emit(BNE("@1"))  // branch back to @1
+             .Emit(RTS());
+        return block;
+    }
+
+    /// <summary>
+    /// _fade_out - Fade out from normal brightness to black
+    /// A = delay per step in frames
+    /// Loops brightness 4..0, calling pal_bright and delay each step
+    /// </summary>
+    public static Block FadeOut()
+    {
+        // STA TEMP       ; save delay
+        // LDA #$04       ; brightness = 4
+        // @1: PHA        ; save brightness
+        // JSR pal_bright ; set brightness
+        // LDA TEMP       ; load delay
+        // JSR delay      ; wait N frames
+        // PLA            ; restore brightness
+        // SEC
+        // SBC #$01       ; brightness--
+        // BCS @1         ; loop while >= 0
+        // RTS
+        var block = new Block(nameof(NESLib.fade_out));
+        block.Emit(STA_zpg(TEMP))
+             .Emit(LDA(0x04))
+             .Emit(PHA(), "@1")
+             .Emit(JSR(nameof(NESLib.pal_bright)))
+             .Emit(LDA_zpg(TEMP))
+             .Emit(JSR(nameof(NESLib.delay)))
+             .Emit(PLA())
+             .Emit(SEC())
+             .Emit(SBC(0x01))
+             .Emit(BCS("@1"))  // branch back to @1
+             .Emit(RTS());
+        return block;
+    }
+
+    /// <summary>
     /// _nmi_set_callback - Set NMI callback address
     /// </summary>
     public static Block NmiSetCallback()
