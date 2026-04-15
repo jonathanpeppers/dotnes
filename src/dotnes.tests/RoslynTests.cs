@@ -5642,7 +5642,7 @@ public class RoslynTests
             """
             using (var frame = oam_begin())
             {
-                oam_spr(10, 20, 0x01, 0, 0);
+                frame.spr(10, 20, 0x01, 0);
             }
             ppu_on_all();
             while (true) ;
@@ -5679,7 +5679,7 @@ public class RoslynTests
             """
             using (var frame = oam_begin())
             {
-                oam_spr(10, 20, 0x01, 0, 0);
+                frame.spr(10, 20, 0x01, 0);
             }
             ppu_on_all();
             while (true) ;
@@ -5712,7 +5712,7 @@ public class RoslynTests
                 ppu_wait_nmi();
                 using (var frame = oam_begin())
                 {
-                    oam_spr(10, 20, 0x01, 0, 0);
+                    frame.spr(10, 20, 0x01, 0);
                 }
             }
             """);
@@ -5752,5 +5752,68 @@ public class RoslynTests
         }
         Assert.True(hasBackwardJmp,
             "Expected a backward JMP after oam_hide_rest to loop back to the while(true) body");
+    }
+
+    [Fact]
+    public void OamFrameSpr_EmitsOamOffLoadAndStore()
+    {
+        // frame.spr(x, y, chr, attr) should auto-manage oam_off:
+        // LDA $1B before JSR oam_spr, STA $1B after
+        var (program, _) = BuildProgram(
+            """
+            using (var frame = oam_begin())
+            {
+                frame.spr(10, 20, 0x01, 0);
+            }
+            ppu_on_all();
+            while (true) ;
+            """);
+
+        var mainBlock = program.Blocks.Single(b => b.Label == "main");
+        var instructions = mainBlock.InstructionsWithLabels.ToList();
+
+        // Find JSR oam_spr and verify STA $1B follows it
+        int jsrIndex = instructions.FindIndex(il =>
+            il.Instruction.Opcode == Opcode.JSR &&
+            il.Instruction.Operand is LabelOperand lbl && lbl.Label == "oam_spr");
+        Assert.True(jsrIndex >= 0, "Expected JSR oam_spr from frame.spr()");
+
+        // The instruction after JSR oam_spr should be STA $1B (store oam_off)
+        Assert.True(jsrIndex + 1 < instructions.Count, "Expected instruction after JSR oam_spr");
+        var staAfter = instructions[jsrIndex + 1].Instruction;
+        Assert.Equal(Opcode.STA, staAfter.Opcode);
+        Assert.Equal(AddressMode.ZeroPage, staAfter.Mode);
+        Assert.Equal(0x1B, ((ImmediateOperand)staAfter.Operand!).Value);
+    }
+
+    [Fact]
+    public void OamFrameMetaSpr_EmitsOamOffLoadAndStore()
+    {
+        // frame.meta_spr(x, y, data) should auto-manage oam_off
+        var source =
+            """
+            byte[] sprite = new byte[] { 0, 0, 0x01, 0, 128 };
+            using (var frame = oam_begin())
+            {
+                frame.meta_spr(10, 20, sprite);
+            }
+            ppu_on_all();
+            while (true) ;
+            """;
+        var (program, _) = BuildProgram(source);
+
+        var mainBlock = program.Blocks.Single(b => b.Label == "main");
+        var instructions = mainBlock.InstructionsWithLabels.ToList();
+
+        // Find JSR oam_meta_spr and verify STA $1B follows it
+        int jsrIndex = instructions.FindIndex(il =>
+            il.Instruction.Opcode == Opcode.JSR &&
+            il.Instruction.Operand is LabelOperand lbl && lbl.Label == "oam_meta_spr");
+        Assert.True(jsrIndex >= 0, "Expected JSR oam_meta_spr from frame.meta_spr()");
+
+        var staAfter = instructions[jsrIndex + 1].Instruction;
+        Assert.Equal(Opcode.STA, staAfter.Opcode);
+        Assert.Equal(AddressMode.ZeroPage, staAfter.Mode);
+        Assert.Equal(0x1B, ((ImmediateOperand)staAfter.Operand!).Value);
     }
 }

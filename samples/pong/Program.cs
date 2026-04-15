@@ -160,14 +160,14 @@ while (true)
     using (var frame = oam_begin())
     {
         // paddle 1 (3 sprites at x=16)
-        oam_off = oam_spr(16, p1_y, 0x01, 0, oam_off);
-        oam_off = oam_spr(16, (byte)(p1_y + 8), 0x01, 0, oam_off);
-        oam_off = oam_spr(16, (byte)(p1_y + 16), 0x01, 0, oam_off);
+        frame.spr(16, p1_y, 0x01, 0);
+        frame.spr(16, (byte)(p1_y + 8), 0x01, 0);
+        frame.spr(16, (byte)(p1_y + 16), 0x01, 0);
         // paddle 2 (3 sprites at x=232)
-        oam_off = oam_spr(232, p2_y, 0x01, 1, oam_off);
-        oam_off = oam_spr(232, (byte)(p2_y + 8), 0x01, 1, oam_off);
-        oam_off = oam_spr(232, (byte)(p2_y + 16), 0x01, 1, oam_off);
+        frame.spr(232, p2_y, 0x01, 1);
+        frame.spr(232, (byte)(p2_y + 8), 0x01, 1);
+        frame.spr(232, (byte)(p2_y + 16), 0x01, 1);
         // ball
-        oam_off = oam_spr(ball_x, ball_y, 0x01, 2, oam_off);
+        frame.spr(ball_x, ball_y, 0x01, 2);
     }
 }

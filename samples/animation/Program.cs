@@ -57,9 +57,9 @@ while (true)
     using (var frame = oam_begin())
     {
         if ((frame_counter & 8) == 0)
-            oam_off = oam_meta_spr(x, y, oam_off, walk0);
+            frame.meta_spr(x, y, walk0);
         else
-            oam_off = oam_meta_spr(x, y, oam_off, walk1);
+            frame.meta_spr(x, y, walk1);
     }
 
     // Move character to the right (wraps at byte overflow)

@@ -98,7 +98,7 @@ while (true)
         // draw and move all actors
         for (byte i = 0; i < 8; i = (byte)(i + 1))
         {
-            oam_off = oam_meta_spr(actor_x[i], actor_y[i], oam_off, playerRStand);
+            frame.meta_spr(actor_x[i], actor_y[i], playerRStand);
             actor_x[i] = (byte)(actor_x[i] + actor_dx[i]);
             actor_y[i] = (byte)(actor_y[i] + actor_dy[i]);
         }

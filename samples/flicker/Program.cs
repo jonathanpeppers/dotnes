@@ -63,7 +63,7 @@ while (true)
         {
             // palette color cycles with actor index (i & 3)
             byte pal = (byte)(i & 3);
-            oam_meta_spr_pal(actor_x[i], actor_y[i], pal, metasprite);
+            frame.meta_spr_pal(actor_x[i], actor_y[i], pal, metasprite);
 
             // update position
             actor_x[i] = (byte)(actor_x[i] + actor_dx[i]);

@@ -2071,6 +2071,26 @@ partial class IL2NESWriter
                         _immediateInA = null;
                         argsAlreadyPopped = true;
                         break;
+                    case "OamFrame.spr":
+                        _pendingStructLocal = null;
+                        EmitOamSprDecsp4(isOamFrame: true);
+                        UsedMethods?.Add("oam_spr");
+                        _lastByteArrayLabel = null;
+                        _needsByteArrayLoadInCall = false;
+                        argsAlreadyPopped = true;
+                        break;
+                    case "OamFrame.meta_spr":
+                        _pendingStructLocal = null;
+                        EmitOamMetaSpr(isOamFrame: true);
+                        UsedMethods?.Add("oam_meta_spr");
+                        argsAlreadyPopped = true;
+                        break;
+                    case "OamFrame.meta_spr_pal":
+                        _pendingStructLocal = null;
+                        EmitOamMetaSprPal();
+                        UsedMethods?.Add("oam_meta_spr_pal");
+                        argsAlreadyPopped = true;
+                        break;
                     case "oam_spr":
                         EmitOamSprDecsp4();
                         _lastByteArrayLabel = null;

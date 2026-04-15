@@ -199,9 +199,9 @@ while (true)
         {
             tmpX = snake_x[idx];
             tmpY = snake_y[idx];
-            oam_off = oam_spr(tmpX, tmpY, 0x01, 0, oam_off);
+            frame.spr(tmpX, tmpY, 0x01, 0);
             idx = (byte)(idx + 1);
         }
-        oam_off = oam_spr(food_x, food_y, 0x01, 1, oam_off);
+        frame.spr(food_x, food_y, 0x01, 1);
     }
 }

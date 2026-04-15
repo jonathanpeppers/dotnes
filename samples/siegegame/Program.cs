@@ -393,14 +393,14 @@ while (true)
             {
                 tempNX = (byte)(cursorX * 8);
                 tempNY = (byte)(cursorY * 8);
-                oam_off = oam_spr(tempNX, tempNY, SPR_CURSOR, 0, oam_off);
+                frame.spr(tempNX, tempNY, SPR_CURSOR, 0);
                 for (byte i = 0; i < MAX_ENEMIES; i++)
                 {
                     if (enemyActive[i] != 0)
                     {
                         tempNX = (byte)(enemyX[i] * 8);
                         tempNY = (byte)(enemyY[i] * 8);
-                        oam_off = oam_spr(tempNX, tempNY, SPR_ENEMY, 1, oam_off);
+                        frame.spr(tempNX, tempNY, SPR_ENEMY, 1);
                     }
                 }
             }
