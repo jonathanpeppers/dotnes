@@ -1092,6 +1092,8 @@ partial class IL2NESWriter
             int valueLocIdx = -1;
             bool valHasAdd = false;
             int valAddValue = 0;
+            bool valHasOr = false;
+            int valOrValue = 0;
             for (int i = valueStart; i < Index; i++)
             {
                 var il = Instructions[i];
@@ -1100,11 +1102,15 @@ partial class IL2NESWriter
                 {
                     if (i + 1 < Index && Instructions[i + 1].OpCode == ILOpCode.Add)
                         valAddValue = val.Value;
+                    else if (i + 1 < Index && Instructions[i + 1].OpCode == ILOpCode.Or)
+                        valOrValue = val.Value;
                     else
                         valueConst = val;
                 }
                 if (il.OpCode == ILOpCode.Add)
                     valHasAdd = true;
+                if (il.OpCode == ILOpCode.Or)
+                    valHasOr = true;
                 var locIdx = GetLdlocIndex(il);
                 if (locIdx != null)
                 {
@@ -1151,6 +1157,10 @@ partial class IL2NESWriter
                 {
                     Emit(Opcode.CLC, AddressMode.Implied);
                     Emit(Opcode.ADC, AddressMode.Immediate, checked((byte)valAddValue));
+                }
+                if (valHasOr && valOrValue != 0)
+                {
+                    Emit(Opcode.ORA, AddressMode.Immediate, checked((byte)valOrValue));
                 }
             }
             else if (valueConst != null)
@@ -1278,6 +1288,8 @@ partial class IL2NESWriter
             int valueSubValue = 0;
             bool valueHasAnd = false;
             int valueAndMask = 0;
+            bool valueHasOr = false;
+            int valueOrMask = 0;
             bool valueHasShr = false;
             int valueShrValue = 0;
             for (int i = valueStart; i < Index; i++)
@@ -1295,6 +1307,9 @@ partial class IL2NESWriter
                         break;
                     case ILOpCode.And:
                         valueHasAnd = true;
+                        break;
+                    case ILOpCode.Or:
+                        valueHasOr = true;
                         break;
                     case ILOpCode.Shr:
                     case ILOpCode.Shr_un:
@@ -1316,6 +1331,9 @@ partial class IL2NESWriter
                         case ILOpCode.And:
                             valueAndMask = val.Value;
                             break;
+                        case ILOpCode.Or:
+                            valueOrMask = val.Value;
+                            break;
                         case ILOpCode.Shr:
                         case ILOpCode.Shr_un:
                             valueShrValue = val.Value;
@@ -1331,7 +1349,7 @@ partial class IL2NESWriter
                 if (val != null)
                 {
                     if (i + 1 >= Index || Instructions[i + 1].OpCode is not (
-                        ILOpCode.Add or ILOpCode.Sub or ILOpCode.And or ILOpCode.Shr or ILOpCode.Shr_un))
+                        ILOpCode.Add or ILOpCode.Sub or ILOpCode.And or ILOpCode.Or or ILOpCode.Shr or ILOpCode.Shr_un))
                         constValue = val;
                 }
             }
@@ -1388,7 +1406,7 @@ partial class IL2NESWriter
 
             if (!isUshortExtraction)
             {
-                bool hasArithmetic = valueHasAdd || valueHasSub || valueHasAnd || valueHasShr;
+                bool hasArithmetic = valueHasAdd || valueHasSub || valueHasAnd || valueHasOr || valueHasShr;
                 // Only use the arithmetic path when every flagged operation has a
                 // non-zero immediate operand. A zero operand means the constant
                 // wasn't an immediate (e.g. two locals: a + b) and we'd emit
@@ -1397,6 +1415,7 @@ partial class IL2NESWriter
                     (!valueHasAdd || valueAddValue != 0) &&
                     (!valueHasSub || valueSubValue != 0) &&
                     (!valueHasAnd || valueAndMask != 0) &&
+                    (!valueHasOr || valueOrMask != 0) &&
                     (!valueHasShr || valueShrValue != 0);
                 if (hasArithmetic && arithmeticOperandsValid &&
                     storeValueLocalIdx != null &&
@@ -1404,7 +1423,7 @@ partial class IL2NESWriter
                     arithLocal.Address.HasValue)
                 {
                     // Value is local with immediate arithmetic — load local, then
-                    // apply operations in shr → and → add → sub order.  This matches
+                    // apply operations in shr → and → add → or → sub order.  This matches
                     // the IL produced by common NES patterns like (loc >> 4) + 0x30
                     // and (loc & 0x0F) + 0x30.
                     if (valueHasShr && valueShrValue == 8 && arithLocal.IsWord)
@@ -1428,6 +1447,8 @@ partial class IL2NESWriter
                         Emit(Opcode.CLC, AddressMode.Implied);
                         Emit(Opcode.ADC, AddressMode.Immediate, checked((byte)valueAddValue));
                     }
+                    if (valueHasOr)
+                        Emit(Opcode.ORA, AddressMode.Immediate, checked((byte)valueOrMask));
                     if (valueHasSub)
                     {
                         Emit(Opcode.SEC, AddressMode.Implied);
@@ -1487,6 +1508,8 @@ partial class IL2NESWriter
         string? callName = null;
         bool hasAnd = false;
         int andMask = 0;
+        bool hasOr = false;
+        int orMask = 0;
         bool hasSub = false;
         int subValue = 0;
         bool hasAdd = false;
@@ -1514,6 +1537,9 @@ partial class IL2NESWriter
                     break;
                 case ILOpCode.And:
                     hasAnd = true;
+                    break;
+                case ILOpCode.Or:
+                    hasOr = true;
                     break;
                 case ILOpCode.Sub:
                     hasSub = true;
@@ -1599,6 +1625,8 @@ partial class IL2NESWriter
                         {
                             if (Instructions[i + 1].OpCode == ILOpCode.And)
                                 andMask = val;
+                            else if (Instructions[i + 1].OpCode == ILOpCode.Or)
+                                orMask = val;
                             else if (Instructions[i + 1].OpCode == ILOpCode.Sub)
                                 subValue = val;
                             else if (Instructions[i + 1].OpCode == ILOpCode.Mul)
@@ -1624,6 +1652,8 @@ partial class IL2NESWriter
                         {
                             if (Instructions[i + 1].OpCode == ILOpCode.And)
                                 andMask = val;
+                            else if (Instructions[i + 1].OpCode == ILOpCode.Or)
+                                orMask = val;
                             else if (Instructions[i + 1].OpCode == ILOpCode.Sub)
                                 subValue = val;
                             else if (Instructions[i + 1].OpCode == ILOpCode.Mul)
@@ -1714,6 +1744,10 @@ partial class IL2NESWriter
                 Emit(Opcode.CLC, AddressMode.Implied);
                 Emit(Opcode.ADC, AddressMode.Immediate, checked((byte)addValue));
             }
+            if (hasOr)
+            {
+                Emit(Opcode.ORA, AddressMode.Immediate, checked((byte)orMask));
+            }
         }
         else if (hasMul && mulLocalIdx >= 0)
         {
@@ -1732,10 +1766,10 @@ partial class IL2NESWriter
             }
         }
         else if (sourceArray1Idx >= 0 && !hasTwoLdelems && sourceArray1Idx == targetArrayLocalIdx
-            && (hasSub || hasAdd || hasAnd))
+            && (hasSub || hasAdd || hasAnd || hasOr))
         {
-            // Pattern: arr[i] = arr[i] ± N or arr[i] = arr[i] & N (self-referencing update)
-            // ldloc arr, ldloc idx, ldloc arr, ldloc idx, ldelem_u1, ldc N, sub/add/and, conv_u1, stelem_i1
+            // Pattern: arr[i] = arr[i] ± N or arr[i] = arr[i] & N or arr[i] = arr[i] | N (self-referencing update)
+            // ldloc arr, ldloc idx, ldloc arr, ldloc idx, ldelem_u1, ldc N, sub/add/and/or, conv_u1, stelem_i1
             Emit(Opcode.LDX, AddressMode.Absolute, targetIndexAddr);
             Emit(Opcode.LDA, AddressMode.AbsoluteX, (ushort)targetArray.Address!);
             if (hasAnd)
@@ -1745,6 +1779,8 @@ partial class IL2NESWriter
                 Emit(Opcode.CLC, AddressMode.Implied);
                 Emit(Opcode.ADC, AddressMode.Immediate, checked((byte)addValue));
             }
+            if (hasOr)
+                Emit(Opcode.ORA, AddressMode.Immediate, checked((byte)orMask));
             if (hasSub)
             {
                 Emit(Opcode.SEC, AddressMode.Implied);
@@ -1781,6 +1817,8 @@ partial class IL2NESWriter
                 Emit(Opcode.SEC, AddressMode.Implied);
                 Emit(Opcode.SBC, AddressMode.Immediate, checked((byte)subValue));
             }
+            if (hasOr)
+                Emit(Opcode.ORA, AddressMode.Immediate, checked((byte)orMask));
         }
         else if (valueLocalIdx >= 0 && valueLocalIdx2 >= 0 && (hasAdd != hasSub))
         {
@@ -1798,6 +1836,8 @@ partial class IL2NESWriter
                 Emit(Opcode.SEC, AddressMode.Implied);
                 Emit(Opcode.SBC, AddressMode.Absolute, (ushort)loc2.Address!);
             }
+            if (hasOr)
+                Emit(Opcode.ORA, AddressMode.Immediate, checked((byte)orMask));
         }
         else if (valueLocalIdx >= 0)
         {
@@ -1828,6 +1868,8 @@ partial class IL2NESWriter
                 Emit(Opcode.CLC, AddressMode.Implied);
                 Emit(Opcode.ADC, AddressMode.Immediate, checked((byte)addValue));
             }
+            if (hasOr)
+                Emit(Opcode.ORA, AddressMode.Immediate, checked((byte)orMask));
             if (hasSub)
             {
                 Emit(Opcode.SEC, AddressMode.Implied);

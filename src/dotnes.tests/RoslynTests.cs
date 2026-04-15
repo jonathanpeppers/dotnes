@@ -6207,4 +6207,28 @@ public class RoslynTests
         while ((idx = hex.IndexOf("2940", idx)) >= 0) { leftCount++; idx += 4; }
         Assert.Equal(2, leftCount);
     }
+
+    [Fact]
+    public void StelemI1_AddThenOr()
+    {
+        // Pattern from game2048: map[idx] = (byte)((val + 1) | 0xF0)
+        // The stelem handler must emit both ADC and ORA instructions.
+        var bytes = GetProgramBytes(
+            """
+            byte[] map = new byte[16];
+            byte idx = 3;
+            byte val = 5;
+            map[idx] = (byte)((val + 1) | 0xF0);
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"StelemI1_AddThenOr hex: {hex}");
+        // Must contain CLC (18) + ADC #$01 (6901) for the add
+        Assert.Contains("186901", hex);
+        // Must contain ORA #$F0 (09F0) for the OR operation
+        Assert.Contains("09F0", hex);
+    }
 }
