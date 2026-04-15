@@ -2114,6 +2114,40 @@ partial class IL2NESWriter
                         _immediateInA = null;
                         break;
                     }
+                    case nameof(NESLib.pad_pressed):
+                        // pad_pressed(joy, button) is a compile-time intrinsic.
+                        // Emits AND #button_mask inline — identical to (joy & button) != 0.
+                        // Replicates the And handler's reload logic for pad_poll results.
+                        {
+                            int buttonMask = Stack.Pop();
+                            // Pop joy parameter — guarded because the And handler
+                            // uses the same defensive check for stack underflow
+                            if (Stack.Count > 0) Stack.Pop();
+
+                            // Remove the LDA #mask that was emitted by WriteLdc
+                            // (only if _runtimeValueInA is false — when true, WriteLdc deferred)
+                            if (!_runtimeValueInA
+                                && previous is ILOpCode.Ldc_i4_s or ILOpCode.Ldc_i4
+                                or ILOpCode.Ldc_i4_m1
+                                or ILOpCode.Ldc_i4_0 or ILOpCode.Ldc_i4_1 or ILOpCode.Ldc_i4_2
+                                or ILOpCode.Ldc_i4_3 or ILOpCode.Ldc_i4_4 or ILOpCode.Ldc_i4_5
+                                or ILOpCode.Ldc_i4_6 or ILOpCode.Ldc_i4_7 or ILOpCode.Ldc_i4_8)
+                            {
+                                RemoveLastInstructions(1);
+                            }
+
+                            // Reload pad value if A doesn't have it
+                            if (_padPollResultAvailable && !_firstAndAfterPadPoll && !_runtimeValueInA)
+                            {
+                                Emit(Opcode.LDA, AddressMode.Absolute, _padReloadAddress);
+                            }
+
+                            Emit(Opcode.AND, AddressMode.Immediate, checked((byte)buttonMask));
+                            _firstAndAfterPadPoll = false;
+                            _immediateInA = null;
+                            argsAlreadyPopped = true;
+                        }
+                        break;
                     case nameof(NESLib.oam_begin):
                         // oam_begin(): reset OAM offset and clear OAM buffer
                         // Return value (OamFrame) is a zero-size sentinel — no data to store
@@ -2348,6 +2382,82 @@ partial class IL2NESWriter
                                 }
                                 Emit(Opcode.STA, AddressMode.Absolute, (ushort)addr);
                             }
+                            _lastLoadedLocalIndex = null;
+                            _lastStaticFieldAddress = null;
+                            argsAlreadyPopped = true;
+                        }
+                        break;
+                    case nameof(NESLib.apu_play_tone):
+                        {
+                            // apu_play_tone(PulseChannel channel, ushort period, APUDuty duty, byte volume)
+                            // Packs duty/volume into control register byte and splits period into
+                            // timer lo/hi writes, emitting 4 STA instructions inline.
+                            // All arguments must be compile-time constants.
+                            if (Stack.Count >= 4)
+                            {
+                                int volume = Stack.Pop();
+                                int duty = Stack.Pop();
+                                int period = Stack.Pop();
+                                int channel = Stack.Pop();
+
+                                if (_runtimeValueInA || _lastLoadedLocalIndex.HasValue || _lastStaticFieldAddress.HasValue)
+                                    throw new TranspileException("apu_play_tone requires all arguments to be compile-time constants.", MethodName);
+                                if (channel is not (0 or 1))
+                                    throw new TranspileException($"apu_play_tone channel must be 0 (Pulse1) or 1 (Pulse2), got {channel}.", MethodName);
+
+                                // Remove previously emitted arg-loading instructions.
+                                // When period > 255 it was loaded as ushort (LDX+LDA+JSR pushax = 3),
+                                // otherwise as byte (JSR pusha+LDA = 2). Other args are always bytes.
+                                RemoveLastInstructions(period > byte.MaxValue ? 8 : 7);
+
+                                ushort baseAddr = (ushort)(NESLib.APU_PULSE1_CTRL + channel * 4);
+
+                                // ctrl = (duty << 6) | 0x30 | (volume & 0x0F)
+                                // 0x30 = length counter halt + constant volume flags
+                                byte ctrl = (byte)(((duty & 3) << 6) | 0x30 | (volume & 0x0F));
+                                Emit(Opcode.LDA, AddressMode.Immediate, ctrl);
+                                Emit(Opcode.STA, AddressMode.Absolute, baseAddr);         // ctrl
+
+                                Emit(Opcode.LDA, AddressMode.Immediate, (byte)0x00);
+                                Emit(Opcode.STA, AddressMode.Absolute, (ushort)(baseAddr + 1)); // sweep disabled
+
+                                Emit(Opcode.LDA, AddressMode.Immediate, (byte)(period & 0xFF));
+                                Emit(Opcode.STA, AddressMode.Absolute, (ushort)(baseAddr + 2)); // timer lo
+
+                                Emit(Opcode.LDA, AddressMode.Immediate, (byte)((period >> 8) & 0x07));
+                                Emit(Opcode.STA, AddressMode.Absolute, (ushort)(baseAddr + 3)); // timer hi
+                            }
+                            _immediateInA = null;
+                            _pokeLastValue = null;
+                            _lastLoadedLocalIndex = null;
+                            _lastStaticFieldAddress = null;
+                            argsAlreadyPopped = true;
+                        }
+                        break;
+                    case nameof(NESLib.apu_stop):
+                        {
+                            // apu_stop(PulseChannel channel) -> silence pulse channel
+                            // Writes 0x30 to the channel's control register (constant volume = 0).
+                            // Channel argument must be a compile-time constant.
+                            if (Stack.Count >= 1)
+                            {
+                                int channel = Stack.Pop();
+
+                                if (_runtimeValueInA || _lastLoadedLocalIndex.HasValue || _lastStaticFieldAddress.HasValue)
+                                    throw new TranspileException("apu_stop requires the channel argument to be a compile-time constant.", MethodName);
+                                if (channel is not (0 or 1))
+                                    throw new TranspileException($"apu_stop channel must be 0 (Pulse1) or 1 (Pulse2), got {channel}.", MethodName);
+
+                                // Remove previously emitted arg-loading instruction:
+                                // channel (byte, last arg in A): LDA = 1
+                                RemoveLastInstructions(1);
+
+                                ushort ctrlAddr = (ushort)(NESLib.APU_PULSE1_CTRL + channel * 4);
+                                Emit(Opcode.LDA, AddressMode.Immediate, (byte)0x30);
+                                Emit(Opcode.STA, AddressMode.Absolute, ctrlAddr);
+                            }
+                            _immediateInA = null;
+                            _pokeLastValue = null;
                             _lastLoadedLocalIndex = null;
                             _lastStaticFieldAddress = null;
                             argsAlreadyPopped = true;
@@ -2985,7 +3095,8 @@ partial class IL2NESWriter
                         // A now has a new return value; any previous pad_poll result is gone.
                         // pad_poll sets its own flag after this block, so this only clears
                         // the flag for non-pad_poll calls (e.g. rand8).
-                        if (operand != nameof(NESLib.pad_poll) && operand != nameof(NESLib.pad_trigger))
+                        if (operand != nameof(NESLib.pad_poll) && operand != nameof(NESLib.pad_trigger)
+                            && operand != nameof(NESLib.pad_pressed))
                         {
                             _padPollResultAvailable = false;
                         }
