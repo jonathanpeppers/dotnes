@@ -76,6 +76,31 @@ public static class OAM
 }
 
 /// <summary>
+/// Pulse channel selector for <see cref="NESLib.apu_play_tone"/> and <see cref="NESLib.apu_stop"/>.
+/// </summary>
+public enum PulseChannel : byte
+{
+    Pulse1 = 0,
+    Pulse2 = 1,
+}
+
+/// <summary>
+/// Duty cycle for NES APU pulse channels.
+/// Controls the waveform shape used by <see cref="NESLib.apu_play_tone"/>.
+/// </summary>
+public enum APUDuty : byte
+{
+    /// <summary>12.5% duty cycle (thin, buzzy)</summary>
+    Duty12 = 0,
+    /// <summary>25% duty cycle (hollow, reedy)</summary>
+    Duty25 = 1,
+    /// <summary>50% duty cycle (square wave, full)</summary>
+    Duty50 = 2,
+    /// <summary>75% duty cycle (same as 25% inverted)</summary>
+    Duty75 = 3,
+}
+
+/// <summary>
 /// MMC1 mirroring modes (bits 0-1 of the Control register).
 /// Cast to <c>byte</c> and OR with PRG/CHR mode bits for <see cref="NESLib.mmc1_set_mirroring(byte)"/>.
 /// </summary>

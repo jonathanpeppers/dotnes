@@ -2302,6 +2302,82 @@ partial class IL2NESWriter
                             argsAlreadyPopped = true;
                         }
                         break;
+                    case nameof(NESLib.apu_play_tone):
+                        {
+                            // apu_play_tone(PulseChannel channel, ushort period, APUDuty duty, byte volume)
+                            // Packs duty/volume into control register byte and splits period into
+                            // timer lo/hi writes, emitting 4 STA instructions inline.
+                            // All arguments must be compile-time constants.
+                            if (Stack.Count >= 4)
+                            {
+                                int volume = Stack.Pop();
+                                int duty = Stack.Pop();
+                                int period = Stack.Pop();
+                                int channel = Stack.Pop();
+
+                                if (_runtimeValueInA || _lastLoadedLocalIndex.HasValue || _lastStaticFieldAddress.HasValue)
+                                    throw new TranspileException("apu_play_tone requires all arguments to be compile-time constants.", MethodName);
+                                if (channel is not (0 or 1))
+                                    throw new TranspileException($"apu_play_tone channel must be 0 (Pulse1) or 1 (Pulse2), got {channel}.", MethodName);
+
+                                // Remove previously emitted arg-loading instructions.
+                                // When period > 255 it was loaded as ushort (LDX+LDA+JSR pushax = 3),
+                                // otherwise as byte (JSR pusha+LDA = 2). Other args are always bytes.
+                                RemoveLastInstructions(period > byte.MaxValue ? 8 : 7);
+
+                                ushort baseAddr = (ushort)(NESLib.APU_PULSE1_CTRL + channel * 4);
+
+                                // ctrl = (duty << 6) | 0x30 | (volume & 0x0F)
+                                // 0x30 = length counter halt + constant volume flags
+                                byte ctrl = (byte)(((duty & 3) << 6) | 0x30 | (volume & 0x0F));
+                                Emit(Opcode.LDA, AddressMode.Immediate, ctrl);
+                                Emit(Opcode.STA, AddressMode.Absolute, baseAddr);         // ctrl
+
+                                Emit(Opcode.LDA, AddressMode.Immediate, (byte)0x00);
+                                Emit(Opcode.STA, AddressMode.Absolute, (ushort)(baseAddr + 1)); // sweep disabled
+
+                                Emit(Opcode.LDA, AddressMode.Immediate, (byte)(period & 0xFF));
+                                Emit(Opcode.STA, AddressMode.Absolute, (ushort)(baseAddr + 2)); // timer lo
+
+                                Emit(Opcode.LDA, AddressMode.Immediate, (byte)((period >> 8) & 0x07));
+                                Emit(Opcode.STA, AddressMode.Absolute, (ushort)(baseAddr + 3)); // timer hi
+                            }
+                            _immediateInA = null;
+                            _pokeLastValue = null;
+                            _lastLoadedLocalIndex = null;
+                            _lastStaticFieldAddress = null;
+                            argsAlreadyPopped = true;
+                        }
+                        break;
+                    case nameof(NESLib.apu_stop):
+                        {
+                            // apu_stop(PulseChannel channel) -> silence pulse channel
+                            // Writes 0x30 to the channel's control register (constant volume = 0).
+                            // Channel argument must be a compile-time constant.
+                            if (Stack.Count >= 1)
+                            {
+                                int channel = Stack.Pop();
+
+                                if (_runtimeValueInA || _lastLoadedLocalIndex.HasValue || _lastStaticFieldAddress.HasValue)
+                                    throw new TranspileException("apu_stop requires the channel argument to be a compile-time constant.", MethodName);
+                                if (channel is not (0 or 1))
+                                    throw new TranspileException($"apu_stop channel must be 0 (Pulse1) or 1 (Pulse2), got {channel}.", MethodName);
+
+                                // Remove previously emitted arg-loading instruction:
+                                // channel (byte, last arg in A): LDA = 1
+                                RemoveLastInstructions(1);
+
+                                ushort ctrlAddr = (ushort)(NESLib.APU_PULSE1_CTRL + channel * 4);
+                                Emit(Opcode.LDA, AddressMode.Immediate, (byte)0x30);
+                                Emit(Opcode.STA, AddressMode.Absolute, ctrlAddr);
+                            }
+                            _immediateInA = null;
+                            _pokeLastValue = null;
+                            _lastLoadedLocalIndex = null;
+                            _lastStaticFieldAddress = null;
+                            argsAlreadyPopped = true;
+                        }
+                        break;
                     case nameof(NESLib.peek):
                         {
                             // peek(ushort addr) -> LDA abs addr

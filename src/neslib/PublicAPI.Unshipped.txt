@@ -66,3 +66,13 @@ static NES.NESLib.oam_spr_2x2(byte x, byte y, byte topLeft, byte bottomLeft, byt
 static NES.NESLib.fade_in(byte delay) -> void
 static NES.NESLib.fade_out(byte delay) -> void
 static NES.NESLib.oam_begin() -> NES.OamFrame
+NES.APUDuty
+NES.APUDuty.Duty12 = 0 -> NES.APUDuty
+NES.APUDuty.Duty25 = 1 -> NES.APUDuty
+NES.APUDuty.Duty50 = 2 -> NES.APUDuty
+NES.APUDuty.Duty75 = 3 -> NES.APUDuty
+NES.PulseChannel
+NES.PulseChannel.Pulse1 = 0 -> NES.PulseChannel
+NES.PulseChannel.Pulse2 = 1 -> NES.PulseChannel
+static NES.NESLib.apu_play_tone(NES.PulseChannel channel, ushort period, NES.APUDuty duty, byte volume) -> void
+static NES.NESLib.apu_stop(NES.PulseChannel channel) -> void
