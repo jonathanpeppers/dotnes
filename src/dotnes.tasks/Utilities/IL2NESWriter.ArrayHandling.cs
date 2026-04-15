@@ -1759,7 +1759,8 @@ partial class IL2NESWriter
             return;
         }
         else if (sourceArray1Idx >= 0 && !hasTwoLdelems && sourceArray1Idx == targetArrayLocalIdx
-            && sourceIndex1Idx >= 0 && sourceIndex1Idx != targetIndexLocalIdx)
+            && sourceIndex1Idx >= 0 && sourceIndex1Idx != targetIndexLocalIdx
+            && !hasAdd && !hasSub && !hasAnd && !hasMul && !hasShr && !hasCall)
         {
             // Pattern: arr[i] = arr[j] — same-array copy with different indices (no arithmetic)
             var srcIndex = Locals[sourceIndex1Idx];
