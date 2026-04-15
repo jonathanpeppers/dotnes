@@ -2467,6 +2467,35 @@ public class RoslynTests
     }
 
     [Fact]
+    public void StelemSameArrayDifferentIndex()
+    {
+        // Pattern: arr[i] = arr[j] — same-array copy with different indices
+        // IL: ldloc arr, ldloc i, ldloc arr, ldloc j, ldelem.u1, stelem.i1
+        // Should emit: LDX j_addr; LDA arr,X; LDX i_addr; STA arr,X
+        var bytes = GetProgramBytes(
+            """
+            byte[] arr = new byte[4];
+            byte i = 2;
+            byte j = 0;
+            arr[i] = arr[j];
+            pal_col(0, arr[i]);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"StelemSameArrayDifferentIndex hex: {hex}");
+        // Must contain LDX abs (AE) for loading source index
+        Assert.Contains("AE", hex);
+        // Must contain LDA abs,X (BD) for loading arr[j]
+        Assert.Contains("BD", hex);
+        // Must contain STA abs,X (9D) for storing to arr[i]
+        Assert.Contains("9D", hex);
+    }
+
+    [Fact]
     public void CompoundArrayIncrementByConstant()
     {
         // Pattern: arr[i] += 2 generates ldelema System.Byte / dup / ldind.u1 / ldc.i4.2 / add / conv.u1 / stind.i1
