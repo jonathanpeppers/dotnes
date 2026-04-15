@@ -1764,6 +1764,8 @@ partial class IL2NESWriter
                 Emit(Opcode.CLC, AddressMode.Implied);
                 Emit(Opcode.ADC, AddressMode.Immediate, checked((byte)addValue));
             }
+            if (hasOr)
+                Emit(Opcode.ORA, AddressMode.Immediate, checked((byte)orMask));
         }
         else if (sourceArray1Idx >= 0 && !hasTwoLdelems && sourceArray1Idx == targetArrayLocalIdx
             && (hasSub || hasAdd || hasAnd || hasOr))
@@ -1813,13 +1815,13 @@ partial class IL2NESWriter
                 Emit(Opcode.CLC, AddressMode.Implied);
                 Emit(Opcode.ADC, AddressMode.Immediate, checked((byte)addValue));
             }
+            if (hasOr)
+                Emit(Opcode.ORA, AddressMode.Immediate, checked((byte)orMask));
             if (hasSub)
             {
                 Emit(Opcode.SEC, AddressMode.Implied);
                 Emit(Opcode.SBC, AddressMode.Immediate, checked((byte)subValue));
             }
-            if (hasOr)
-                Emit(Opcode.ORA, AddressMode.Immediate, checked((byte)orMask));
         }
         else if (valueLocalIdx >= 0 && valueLocalIdx2 >= 0 && (hasAdd != hasSub))
         {

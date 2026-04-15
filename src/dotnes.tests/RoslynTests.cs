@@ -6231,4 +6231,37 @@ public class RoslynTests
         // Must contain ORA #$F0 (09F0) for the OR operation
         Assert.Contains("09F0", hex);
     }
+
+    [Fact]
+    public void StelemI1_AddThenOr_ConstantIndex()
+    {
+        // Same pattern but with constant array index: tile[0] = (byte)((v + 1) | 0xF0)
+        var (program, _) = BuildProgram(
+            """
+            byte v = (byte)pad_poll(0);
+            byte[] tile = new byte[4];
+            tile[0] = (byte)((v + 1) | 0xF0);
+            pal_col(0, tile[0]);
+            ppu_on_all();
+            while (true) ;
+            """);
+
+        var mainBlock = program.Blocks.Single(b => b.Label == "main");
+        var instructions = mainBlock.InstructionsWithLabels.ToList();
+
+        // Find CLC for the ADD
+        int clcIndex = instructions.FindIndex(il =>
+            il.Instruction.Opcode == Opcode.CLC);
+        Assert.True(clcIndex >= 0, "Expected CLC for the add operation");
+
+        // After CLC: ADC #$01
+        var adcInstr = instructions[clcIndex + 1].Instruction;
+        Assert.Equal(Opcode.ADC, adcInstr.Opcode);
+        Assert.Equal(1, ((ImmediateOperand)adcInstr.Operand!).Value);
+
+        // After ADC: ORA #$F0
+        var oraInstr = instructions[clcIndex + 2].Instruction;
+        Assert.Equal(Opcode.ORA, oraInstr.Opcode);
+        Assert.Equal(0xF0, ((ImmediateOperand)oraInstr.Operand!).Value);
+    }
 }
