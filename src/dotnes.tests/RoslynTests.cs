@@ -6252,4 +6252,62 @@ public class RoslynTests
         while ((idx = hex.IndexOf("2940", idx)) >= 0) { leftCount++; idx += 4; }
         Assert.Equal(2, leftCount);
     }
+
+    [Fact]
+    public void StelemI1_AddThenOr()
+    {
+        // Pattern from game2048: map[idx] = (byte)((val + 1) | 0xF0)
+        // The stelem handler must emit both ADC and ORA instructions.
+        var bytes = GetProgramBytes(
+            """
+            byte[] map = new byte[16];
+            byte idx = 3;
+            byte val = 5;
+            map[idx] = (byte)((val + 1) | 0xF0);
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"StelemI1_AddThenOr hex: {hex}");
+        // Must contain CLC (18) + ADC #$01 (6901) for the add
+        Assert.Contains("186901", hex);
+        // Must contain ORA #$F0 (09F0) for the OR operation
+        Assert.Contains("09F0", hex);
+    }
+
+    [Fact]
+    public void StelemI1_AddThenOr_ConstantIndex()
+    {
+        // Same pattern but with constant array index: tile[0] = (byte)((v + 1) | 0xF0)
+        var (program, _) = BuildProgram(
+            """
+            byte v = (byte)pad_poll(0);
+            byte[] tile = new byte[4];
+            tile[0] = (byte)((v + 1) | 0xF0);
+            pal_col(0, tile[0]);
+            ppu_on_all();
+            while (true) ;
+            """);
+
+        var mainBlock = program.Blocks.Single(b => b.Label == "main");
+        var instructions = mainBlock.InstructionsWithLabels.ToList();
+
+        // Find CLC for the ADD
+        int clcIndex = instructions.FindIndex(il =>
+            il.Instruction.Opcode == Opcode.CLC);
+        Assert.True(clcIndex >= 0, "Expected CLC for the add operation");
+        Assert.True(clcIndex + 2 < instructions.Count, $"Expected at least 2 instructions after CLC at index {clcIndex}, but only {instructions.Count} total");
+
+        // After CLC: ADC #$01
+        var adcInstr = instructions[clcIndex + 1].Instruction;
+        Assert.Equal(Opcode.ADC, adcInstr.Opcode);
+        Assert.Equal(1, ((ImmediateOperand)adcInstr.Operand!).Value);
+
+        // After ADC: ORA #$F0
+        var oraInstr = instructions[clcIndex + 2].Instruction;
+        Assert.Equal(Opcode.ORA, oraInstr.Opcode);
+        Assert.Equal(0xF0, ((ImmediateOperand)oraInstr.Operand!).Value);
+    }
 }
