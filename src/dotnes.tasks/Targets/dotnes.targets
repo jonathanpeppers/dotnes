@@ -8,6 +8,7 @@
   <PropertyGroup>
     <NESTargetPath>$(OutputPath)$(TargetName).nes</NESTargetPath>
     <_NESPropertiesStampFile>$(IntermediateOutputPath)dotnes.properties.stamp</_NESPropertiesStampFile>
+    <_NESTasksAssembly>$(MSBuildThisFileDirectory)dotnes.tasks.dll</_NESTasksAssembly>
     <TranspileDependsOn>$(TranspileDependsOn);_WriteNESPropertiesStamp</TranspileDependsOn>
     <IncrementalCleanDependsOn>$(IncrementalCleanDependsOn);Transpile</IncrementalCleanDependsOn>
   </PropertyGroup>
@@ -23,7 +24,7 @@
   </Target>
   <Target Name="Transpile" AfterTargets="Build"
       DependsOnTargets="$(TranspileDependsOn)"
-      Inputs="$(TargetPath);@(NESAssembly);$(_NESPropertiesStampFile)" Outputs="$(NESTargetPath)">
+      Inputs="$(TargetPath);@(NESAssembly);$(_NESPropertiesStampFile);$(_NESTasksAssembly)" Outputs="$(NESTargetPath)">
     <TranspileToNES
         TargetPath="$(TargetPath)"
         AssemblyFiles="@(NESAssembly)"
