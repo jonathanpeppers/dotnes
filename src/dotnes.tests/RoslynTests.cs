@@ -2467,6 +2467,51 @@ public class RoslynTests
     }
 
     [Fact]
+    public void StelemSameArrayDifferentIndex()
+    {
+        // Pattern: arr[i] = arr[j] — same-array copy with different indices
+        // IL: ldloc arr, ldloc i, ldloc arr, ldloc j, ldelem.u1, stelem.i1
+        // Should emit: LDX j_addr; LDA arr,X; LDX i_addr; STA arr,X
+        var bytes = GetProgramBytes(
+            """
+            byte[] arr = new byte[4];
+            byte i = 2;
+            byte j = 0;
+            arr[i] = arr[j];
+            pal_col(0, arr[i]);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"StelemSameArrayDifferentIndex hex: {hex}");
+
+        // Verify the contiguous LDX(src) -> LDA(arr,X) -> LDX(dst) -> STA(arr,X) sequence
+        // AE xx xx BD yy yy AE zz zz 9D yy yy  (yy yy must match for same array)
+        bool foundSequence = false;
+        for (int i = 0; i <= bytes.Length - 12; i++)
+        {
+            if (bytes[i] == 0xAE          // LDX abs (source index)
+                && bytes[i + 3] == 0xBD   // LDA abs,X (load from array)
+                && bytes[i + 6] == 0xAE   // LDX abs (target index)
+                && bytes[i + 9] == 0x9D   // STA abs,X (store to array)
+                && bytes[i + 4] == bytes[i + 10]   // array addr lo must match
+                && bytes[i + 5] == bytes[i + 11])  // array addr hi must match
+            {
+                // Source and target index addresses must differ
+                if (bytes[i + 1] != bytes[i + 7] || bytes[i + 2] != bytes[i + 8])
+                {
+                    foundSequence = true;
+                    break;
+                }
+            }
+        }
+        Assert.True(foundSequence, "Expected contiguous LDX(src) -> LDA(arr,X) -> LDX(dst) -> STA(arr,X) sequence not found");
+    }
+
+    [Fact]
     public void CompoundArrayIncrementByConstant()
     {
         // Pattern: arr[i] += 2 generates ldelema System.Byte / dup / ldind.u1 / ldc.i4.2 / add / conv.u1 / stind.i1
@@ -6125,5 +6170,169 @@ public class RoslynTests
         Assert.Contains("8519", hex); // STA TEMP2 (save y)
         Assert.Contains("8517", hex); // STA TEMP (save x from popa)
         Assert.Contains("A519", hex); // LDA TEMP2 (restore y)
+    }
+
+    [Fact]
+    public void PadDpadX()
+    {
+        // pad_dpad_x returns -1 (LEFT), +1 (RIGHT), or 0
+        var bytes = GetProgramBytes(
+            """
+            byte x = 128;
+            pal_col(0, 0);
+            ppu_on_all();
+            while (true)
+            {
+                ppu_wait_nmi();
+                PAD pad = pad_poll(0);
+                x = (byte)(x + pad_dpad_x(pad));
+                pal_col(0, x);
+            }
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        // Should contain AND #$40 (PAD.LEFT mask)
+        Assert.Contains("2940", hex);
+        // Should contain AND #$80 (PAD.RIGHT mask)
+        Assert.Contains("2980", hex);
+        // Should contain LDA #$FF (-1)
+        Assert.Contains("A9FF", hex);
+        // Should contain LDA #$01 (+1)
+        Assert.Contains("A901", hex);
+    }
+
+    [Fact]
+    public void PadDpadY()
+    {
+        // pad_dpad_y returns -1 (UP), +1 (DOWN), or 0
+        var bytes = GetProgramBytes(
+            """
+            byte y = 128;
+            pal_col(0, 0);
+            ppu_on_all();
+            while (true)
+            {
+                ppu_wait_nmi();
+                PAD pad = pad_poll(0);
+                y = (byte)(y + pad_dpad_y(pad));
+                pal_col(0, y);
+            }
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        // Should contain AND #$10 (PAD.UP mask)
+        Assert.Contains("2910", hex);
+        // Should contain AND #$20 (PAD.DOWN mask)
+        Assert.Contains("2920", hex);
+        // Should contain LDA #$FF (-1)
+        Assert.Contains("A9FF", hex);
+        // Should contain LDA #$01 (+1)
+        Assert.Contains("A901", hex);
+    }
+
+    [Fact]
+    public void PadDpadXAndY()
+    {
+        // Both pad_dpad_x and pad_dpad_y used together
+        var bytes = GetProgramBytes(
+            """
+            byte x = 128;
+            byte y = 128;
+            pal_col(0, 0);
+            ppu_on_all();
+            while (true)
+            {
+                ppu_wait_nmi();
+                PAD pad = pad_poll(0);
+                x = (byte)(x + pad_dpad_x(pad));
+                y = (byte)(y + pad_dpad_y(pad));
+                oam_spr(x, y, 0xD8, 0, 0);
+            }
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        // Both X direction masks
+        Assert.Contains("2940", hex); // PAD.LEFT
+        Assert.Contains("2980", hex); // PAD.RIGHT
+        // Both Y direction masks
+        Assert.Contains("2910", hex); // PAD.UP
+        Assert.Contains("2920", hex); // PAD.DOWN
+        // x + pad_dpad_x(pad) must use CLC; ADC TEMP ($17), not ADC #$00
+        Assert.Contains("186517", hex); // CLC; ADC $17 (TEMP)
+        Assert.DoesNotContain("186900", hex); // CLC; ADC #$00 would be wrong
+    }
+
+    [Fact]
+    public void PadDpadX_WithPadState()
+    {
+        // pad_dpad_x works with pad_state (not just pad_poll).
+        // The intrinsic saves A to its own reload slot, so it doesn't
+        // depend on _padReloadAddress being set by pad_poll.
+        var bytes = GetProgramBytes(
+            """
+            byte x = 128;
+            pal_col(0, 0);
+            ppu_on_all();
+            while (true)
+            {
+                ppu_wait_nmi();
+                PAD pad = pad_poll(0);
+                PAD state = pad_state(0);
+                x = (byte)(x + pad_dpad_x(state));
+                pal_col(0, x);
+            }
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        // Should contain both direction masks
+        Assert.Contains("2940", hex); // PAD.LEFT
+        Assert.Contains("2980", hex); // PAD.RIGHT
+        // Should contain LDA #$FF (-1) and LDA #$01 (+1)
+        Assert.Contains("A9FF", hex);
+        Assert.Contains("A901", hex);
+        // x + pad_dpad_x(state) must use CLC; ADC TEMP ($17), not ADC #$00
+        Assert.Contains("186517", hex); // CLC; ADC $17 (TEMP)
+    }
+
+    [Fact]
+    public void PadDpadX_MultiPad()
+    {
+        // Two pads polled; pad_dpad_x called on the first (not the most recent).
+        // The intrinsic must reload from its own saved copy, not _padReloadAddress
+        // which points to the second pad_poll result.
+        var bytes = GetProgramBytes(
+            """
+            byte x0 = 128;
+            byte x1 = 128;
+            pal_col(0, 0);
+            ppu_on_all();
+            while (true)
+            {
+                ppu_wait_nmi();
+                PAD pad0 = pad_poll(0);
+                PAD pad1 = pad_poll(1);
+                x0 = (byte)(x0 + pad_dpad_x(pad0));
+                x1 = (byte)(x1 + pad_dpad_x(pad1));
+                pal_col(0, x0);
+            }
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        // Two separate pad_dpad_x intrinsics, each with direction masks
+        // Count occurrences of AND #$40 (PAD.LEFT) — should appear twice
+        int leftCount = 0;
+        int idx = 0;
+        while ((idx = hex.IndexOf("2940", idx)) >= 0) { leftCount++; idx += 4; }
+        Assert.Equal(2, leftCount);
     }
 }
