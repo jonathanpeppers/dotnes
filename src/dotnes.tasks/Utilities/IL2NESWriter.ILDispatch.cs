@@ -2205,8 +2205,10 @@ partial class IL2NESWriter
                         break;
                     case "OamFrame.Dispose":
                         // OamFrame.Dispose(): hide all unused OAM entries from current offset
+                        // Skip if oam_off == 0 (all 64 slots used, nothing to hide)
                         _pendingStructLocal = null; // ldloca.s before Dispose is consumed
                         Emit(Opcode.LDA, AddressMode.ZeroPage, (byte)OAM_OFF);
+                        Emit(Opcode.BEQ, AddressMode.Relative, (byte)3); // skip JSR (3 bytes)
                         EmitJSR(nameof(NESLib.oam_hide_rest));
                         _immediateInA = null;
                         argsAlreadyPopped = true;
