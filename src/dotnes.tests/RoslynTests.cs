@@ -6253,6 +6253,7 @@ public class RoslynTests
         int clcIndex = instructions.FindIndex(il =>
             il.Instruction.Opcode == Opcode.CLC);
         Assert.True(clcIndex >= 0, "Expected CLC for the add operation");
+        Assert.True(clcIndex + 2 < instructions.Count, $"Expected at least 2 instructions after CLC at index {clcIndex}, but only {instructions.Count} total");
 
         // After CLC: ADC #$01
         var adcInstr = instructions[clcIndex + 1].Instruction;
