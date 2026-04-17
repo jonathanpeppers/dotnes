@@ -2467,6 +2467,51 @@ public class RoslynTests
     }
 
     [Fact]
+    public void StelemSameArrayDifferentIndex()
+    {
+        // Pattern: arr[i] = arr[j] — same-array copy with different indices
+        // IL: ldloc arr, ldloc i, ldloc arr, ldloc j, ldelem.u1, stelem.i1
+        // Should emit: LDX j_addr; LDA arr,X; LDX i_addr; STA arr,X
+        var bytes = GetProgramBytes(
+            """
+            byte[] arr = new byte[4];
+            byte i = 2;
+            byte j = 0;
+            arr[i] = arr[j];
+            pal_col(0, arr[i]);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"StelemSameArrayDifferentIndex hex: {hex}");
+
+        // Verify the contiguous LDX(src) -> LDA(arr,X) -> LDX(dst) -> STA(arr,X) sequence
+        // AE xx xx BD yy yy AE zz zz 9D yy yy  (yy yy must match for same array)
+        bool foundSequence = false;
+        for (int i = 0; i <= bytes.Length - 12; i++)
+        {
+            if (bytes[i] == 0xAE          // LDX abs (source index)
+                && bytes[i + 3] == 0xBD   // LDA abs,X (load from array)
+                && bytes[i + 6] == 0xAE   // LDX abs (target index)
+                && bytes[i + 9] == 0x9D   // STA abs,X (store to array)
+                && bytes[i + 4] == bytes[i + 10]   // array addr lo must match
+                && bytes[i + 5] == bytes[i + 11])  // array addr hi must match
+            {
+                // Source and target index addresses must differ
+                if (bytes[i + 1] != bytes[i + 7] || bytes[i + 2] != bytes[i + 8])
+                {
+                    foundSequence = true;
+                    break;
+                }
+            }
+        }
+        Assert.True(foundSequence, "Expected contiguous LDX(src) -> LDA(arr,X) -> LDX(dst) -> STA(arr,X) sequence not found");
+    }
+
+    [Fact]
     public void CompoundArrayIncrementByConstant()
     {
         // Pattern: arr[i] += 2 generates ldelema System.Byte / dup / ldind.u1 / ldc.i4.2 / add / conv.u1 / stind.i1
