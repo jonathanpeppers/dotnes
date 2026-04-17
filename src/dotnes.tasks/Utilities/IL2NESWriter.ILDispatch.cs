@@ -3041,14 +3041,14 @@ partial class IL2NESWriter
                             int col = Stack.Count > 0 ? Stack.Pop() : 0;
                             int nametable = Stack.Count > 0 ? Stack.Pop() : 0;
 
-                            // Check if tile is runtime (last LDA is absolute, not immediate)
-                            var lastInstr = block[block.Count - 1];
-                            bool tileIsRuntime = lastInstr.Opcode == Opcode.LDA && lastInstr.Mode == AddressMode.Absolute;
-
                             // Validate nametable, col, row are compile-time constants
                             // by checking the preceding instructions
                             if (block.Count < 4)
                                 throw new TranspileException("nt_put_tile requires compile-time constant nametable, col, and row arguments", MethodName);
+
+                            // Check if tile is runtime (last LDA is absolute, not immediate)
+                            var lastInstr = block[block.Count - 1];
+                            bool tileIsRuntime = lastInstr.Opcode == Opcode.LDA && lastInstr.Mode == AddressMode.Absolute;
 
                             // Compute address at compile time
                             ushort addr = (ushort)(nametable | (row << 5) | col);
@@ -3164,8 +3164,12 @@ partial class IL2NESWriter
                             // Extract string label from the Ldstr pattern:
                             // LDA #<string_N, LDX #>string_N, JSR pushax, LDX #$00, LDA #len
                             // String LDA is at -5 from end
+                            if (block.Count < 5)
+                                throw new TranspileException("nt_write requires a string literal argument", MethodName);
                             var ldaStrInstr = block[block.Count - 5];
-                            string strLabel = ((LowByteOperand)ldaStrInstr.Operand!).Label;
+                            if (ldaStrInstr.Operand is not LowByteOperand strOperand)
+                                throw new TranspileException("nt_write requires a string literal argument", MethodName);
+                            string strLabel = strOperand.Label;
 
                             // Compute address at compile time
                             ushort addr = (ushort)(nametable | (row << 5) | col);
@@ -3206,6 +3210,8 @@ partial class IL2NESWriter
                             int nametable = Stack.Count > 0 ? Stack.Pop() : 0;
 
                             // Check if palette is runtime (last LDA is absolute, not immediate)
+                            if (block.Count < 4)
+                                throw new TranspileException("nt_set_palette requires compile-time constant nametable, col, and row arguments", MethodName);
                             var lastInstr = block[block.Count - 1];
                             bool paletteIsRuntime = lastInstr.Opcode == Opcode.LDA && lastInstr.Mode == AddressMode.Absolute;
 
