@@ -1955,6 +1955,22 @@ partial class IL2NESWriter
                                             }
                                         }
 
+                                        // If we found a pusha, check it wasn't consumed by a popa
+                                        // (e.g. from an unrelated add expression like p1 = 4 + i * 6).
+                                        if (pushaIdx2 >= 0)
+                                        {
+                                            for (int bi = pushaIdx2 + 1; bi < block.Count; bi++)
+                                            {
+                                                if (block[bi].Opcode == Opcode.JSR
+                                                    && block[bi].Operand is LabelOperand popaLbl
+                                                    && popaLbl.Label == "popa")
+                                                {
+                                                    pushaIdx2 = -1; // consumed — ignore it
+                                                    break;
+                                                }
+                                            }
+                                        }
+
                                         if (pushaIdx2 >= 0 && pushaIdx2 > 0)
                                         {
                                             // Found pusha with intervening stloc instructions
@@ -3032,7 +3048,8 @@ partial class IL2NESWriter
                         // Fastcall functions (pal_bg, pal_spr, pal_all, vram_unrle) expect
                         // pointer in A:X, not on cc65 stack. Replace pushax+size with just LDA/LDX.
                         if (_ldlocByteArrayLabel != null && operand is nameof(NESLib.pal_bg)
-                            or nameof(NESLib.pal_spr) or nameof(NESLib.pal_all) or nameof(NESLib.vram_unrle))
+                            or nameof(NESLib.pal_spr) or nameof(NESLib.pal_all) or nameof(NESLib.vram_unrle)
+                            or nameof(NESLib.set_vram_update))
                         {
                             // WriteLdloc emitted: LDA #lo, LDX #hi, JSR pushax, LDX #$00, LDA #size
                             RemoveLastInstructions(5);

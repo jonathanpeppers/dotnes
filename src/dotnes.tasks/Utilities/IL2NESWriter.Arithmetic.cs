@@ -504,8 +504,10 @@ partial class IL2NESWriter
 
                 if (loadedLocal.IsWord)
                 {
-                    // 16-bit local: remove LDA $lo, LDX $hi, JSR pushax, LDA #1 (4 instructions)
-                    RemoveLastInstructions(4);
+                    // When _ushortInAX is true, WriteLdc returned early (no pushax/LDA emitted)
+                    // so only LDA $lo + LDX $hi (2 instructions) need removal.
+                    // When false, pushax was emitted: LDA $lo + LDX $hi + JSR pushax + LDA #1 (4).
+                    RemoveLastInstructions(_ushortInAX ? 2 : 4);
                     if (isAdd)
                     {
                         // INC lo; BNE +3; INC hi
