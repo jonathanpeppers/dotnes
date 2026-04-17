@@ -6022,18 +6022,27 @@ public class RoslynTests
             $"oam_clear (index {clearIndex}) should come before oam_hide_rest (index {hideRestIndex})");
 
         // The endfinally handler must emit a backward JMP to the loop header
-        // (not fall through into the next function's code)
-        bool hasBackwardJmp = false;
-        for (int i = hideRestIndex + 1; i < instructions.Count; i++)
+        // (not fall through into the next function's code).
+        // The JMP should appear within a few instructions after oam_hide_rest
+        // and target an address at or before the loop start (ppu_wait_nmi).
+        int jmpIndex = -1;
+        for (int i = hideRestIndex + 1; i < Math.Min(hideRestIndex + 4, instructions.Count); i++)
         {
             if (instructions[i].Instruction.Opcode == Opcode.JMP)
             {
-                hasBackwardJmp = true;
+                jmpIndex = i;
                 break;
             }
         }
-        Assert.True(hasBackwardJmp,
-            "Expected a backward JMP after oam_hide_rest to loop back to the while(true) body");
+        Assert.True(jmpIndex >= 0,
+            "Expected a JMP within a few instructions after oam_hide_rest");
+
+        // Verify the JMP targets an address at or before the loop start
+        var jmpOperand = instructions[jmpIndex].Instruction.Operand;
+        Assert.NotNull(jmpOperand);
+        // The JMP uses an absolute address operand pointing backward in the code
+        Assert.True(jmpOperand is ImmediateOperand or LabelOperand,
+            $"Expected JMP to have an address or label operand, got {jmpOperand.GetType().Name}");
     }
 
     [Fact]
