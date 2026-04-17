@@ -3067,6 +3067,252 @@ partial class IL2NESWriter
                             argsAlreadyPopped = true;
                         }
                         break;
+                    case nameof(NESLib.nt_put_tile):
+                        // nt_put_tile(nametable, col, row, tile) — compile-time intrinsic
+                        // Equivalent to: vram_adr(nametable | (row << 5) | col); vram_put(tile);
+                        {
+                            var block = CurrentBlock!;
+                            // Pop args: tile, row, col, nametable
+                            int tile = Stack.Count > 0 ? Stack.Pop() : 0;
+                            int row = Stack.Count > 0 ? Stack.Pop() : 0;
+                            int col = Stack.Count > 0 ? Stack.Pop() : 0;
+                            int nametable = Stack.Count > 0 ? Stack.Pop() : 0;
+
+                            // Check if tile is runtime (last LDA is absolute, not immediate)
+                            var lastInstr = block[block.Count - 1];
+                            bool tileIsRuntime = lastInstr.Opcode == Opcode.LDA && lastInstr.Mode == AddressMode.Absolute;
+
+                            // Validate nametable, col, row are compile-time constants
+                            // by checking the preceding instructions
+                            if (block.Count < 4)
+                                throw new TranspileException("nt_put_tile requires compile-time constant nametable, col, and row arguments", MethodName);
+
+                            // Compute address at compile time
+                            ushort addr = (ushort)(nametable | (row << 5) | col);
+                            byte addrHi = (byte)(addr >> 8);
+                            byte addrLo = (byte)(addr & 0xFF);
+
+                            // Remove the 4 LDA #imm instructions that loaded the args
+                            RemoveLastInstructions(4);
+
+                            // Emit vram_adr(addr)
+                            Emit(Opcode.LDX, AddressMode.Immediate, addrHi);
+                            Emit(Opcode.LDA, AddressMode.Immediate, addrLo);
+                            EmitWithLabel(Opcode.JSR, AddressMode.Absolute, nameof(NESLib.vram_adr));
+
+                            // Emit vram_put(tile)
+                            if (tileIsRuntime)
+                            {
+                                // Re-emit the LDA absolute for the runtime tile value
+                                block.Emit(lastInstr);
+                            }
+                            else
+                            {
+                                Emit(Opcode.LDA, AddressMode.Immediate, (byte)tile);
+                            }
+                            EmitWithLabel(Opcode.JSR, AddressMode.Absolute, nameof(NESLib.vram_put));
+
+                            _immediateInA = null;
+                            argsAlreadyPopped = true;
+                        }
+                        break;
+                    case nameof(NESLib.nt_put_row):
+                        // nt_put_row(nametable, col, row, buf, len) — compile-time intrinsic
+                        // Equivalent to: vrambuf_put(nametable | (row << 5) | col, buf, len);
+                        {
+                            var block = CurrentBlock!;
+                            // Detect byte array local via _lastLoadedLocalIndex
+                            Local? arrayLocal = null;
+                            bool isByteArrayLocal = _lastLoadedLocalIndex.HasValue &&
+                                Locals.TryGetValue(_lastLoadedLocalIndex.Value, out arrayLocal) &&
+                                arrayLocal.ArraySize > 0;
+
+                            // Pop args: len, buf (arraySize), row, col, nametable
+                            int len = Stack.Count > 0 ? Stack.Pop() : 0;
+                            Stack.Pop(); // array size placeholder
+                            int row = Stack.Count > 0 ? Stack.Pop() : 0;
+                            int col = Stack.Count > 0 ? Stack.Pop() : 0;
+                            int nametable = Stack.Count > 0 ? Stack.Pop() : 0;
+
+                            // Compute address at compile time
+                            ushort addr = (ushort)(nametable | (row << 5) | col);
+                            byte addrHi = (byte)(addr >> 8);
+                            byte addrLo = (byte)(addr & 0xFF);
+
+                            // Check if it's a ROM array (with label) or RAM array (with address)
+                            bool isRomArray = arrayLocal != null && arrayLocal.LabelName != null;
+                            bool isRamArray = arrayLocal != null && arrayLocal.Address.HasValue;
+
+                            // Remove ldloc buf (LDA $arrayAddr) + ldc len (LDA #len) + 3 constant args
+                            RemoveLastInstructions(5);
+
+                            // Set up TEMP/TEMP2 with address (with NT_UPD_HORZ flag on hi byte)
+                            Emit(Opcode.LDA, AddressMode.Immediate, (byte)(addrHi | NT_UPD_HORZ));
+                            Emit(Opcode.STA, AddressMode.ZeroPage, TEMP);
+                            Emit(Opcode.LDA, AddressMode.Immediate, addrLo);
+                            Emit(Opcode.STA, AddressMode.ZeroPage, TEMP2);
+
+                            // ptr1 = array base address
+                            if (isRomArray)
+                            {
+                                string label = arrayLocal!.LabelName!;
+                                EmitWithLabel(Opcode.LDA, AddressMode.Immediate_LowByte, label);
+                                Emit(Opcode.STA, AddressMode.ZeroPage, ptr1);
+                                EmitWithLabel(Opcode.LDA, AddressMode.Immediate_HighByte, label);
+                                Emit(Opcode.STA, AddressMode.ZeroPage, ptr1 + 1);
+                            }
+                            else if (isRamArray)
+                            {
+                                ushort arrayAddr = (ushort)arrayLocal!.Address!.Value;
+                                Emit(Opcode.LDA, AddressMode.Immediate, (byte)(arrayAddr & 0xFF));
+                                Emit(Opcode.STA, AddressMode.ZeroPage, ptr1);
+                                Emit(Opcode.LDA, AddressMode.Immediate, (byte)(arrayAddr >> 8));
+                                Emit(Opcode.STA, AddressMode.ZeroPage, ptr1 + 1);
+                            }
+                            else
+                            {
+                                throw new TranspileException(
+                                    "nt_put_row requires a byte array argument", MethodName);
+                            }
+
+                            // A = length
+                            Emit(Opcode.LDA, AddressMode.Immediate, checked((byte)len));
+
+                            // Call vrambuf_put subroutine
+                            UsedMethods?.Add(nameof(NESLib.vrambuf_put));
+                            EmitWithLabel(Opcode.JSR, AddressMode.Absolute, nameof(NESLib.vrambuf_put));
+
+                            _immediateInA = null;
+                            _lastLoadedLocalIndex = null;
+                            argsAlreadyPopped = true;
+                        }
+                        break;
+                    case nameof(NESLib.nt_write):
+                        // nt_write(nametable, col, row, str) — compile-time intrinsic
+                        // Equivalent to: vram_adr(nametable | (row << 5) | col); vram_write(str);
+                        {
+                            var block = CurrentBlock!;
+                            // Pop args: len (string length pushed by Ldstr), row, col, nametable
+                            int len = Stack.Count > 0 ? Stack.Pop() : 0;
+                            int row = Stack.Count > 0 ? Stack.Pop() : 0;
+                            int col = Stack.Count > 0 ? Stack.Pop() : 0;
+                            int nametable = Stack.Count > 0 ? Stack.Pop() : 0;
+
+                            // Extract string label from the Ldstr pattern:
+                            // LDA #<string_N, LDX #>string_N, JSR pushax, LDX #$00, LDA #len
+                            // String LDA is at -5 from end
+                            var ldaStrInstr = block[block.Count - 5];
+                            string strLabel = ((LowByteOperand)ldaStrInstr.Operand!).Label;
+
+                            // Compute address at compile time
+                            ushort addr = (ushort)(nametable | (row << 5) | col);
+                            byte addrHi = (byte)(addr >> 8);
+                            byte addrLo = (byte)(addr & 0xFF);
+
+                            // Remove: 3 constant args (nametable, col, row) + Ldstr pattern (5 instrs)
+                            RemoveLastInstructions(8);
+
+                            // Emit vram_adr(addr)
+                            Emit(Opcode.LDX, AddressMode.Immediate, addrHi);
+                            Emit(Opcode.LDA, AddressMode.Immediate, addrLo);
+                            EmitWithLabel(Opcode.JSR, AddressMode.Absolute, nameof(NESLib.vram_adr));
+
+                            // Emit vram_write(str, len) pattern:
+                            // LDA #<string, LDX #>string, JSR pushax, LDX #$00, LDA #len, JSR vram_write
+                            EmitWithLabel(Opcode.LDA, AddressMode.Immediate_LowByte, strLabel);
+                            EmitWithLabel(Opcode.LDX, AddressMode.Immediate_HighByte, strLabel);
+                            EmitJSR("pushax");
+                            UsedMethods?.Add("pushax");
+                            Emit(Opcode.LDX, AddressMode.Immediate, 0x00);
+                            Emit(Opcode.LDA, AddressMode.Immediate, checked((byte)len));
+                            EmitWithLabel(Opcode.JSR, AddressMode.Absolute, nameof(NESLib.vram_write));
+
+                            _immediateInA = null;
+                            argsAlreadyPopped = true;
+                        }
+                        break;
+                    case nameof(NESLib.nt_set_palette):
+                        // nt_set_palette(nametable, col, row, palette) — inline emit
+                        // Sets the 2-bit palette index for the 16x16 region at tile col/row
+                        {
+                            var block = CurrentBlock!;
+                            // Pop args: palette, row, col, nametable
+                            int palette = Stack.Count > 0 ? Stack.Pop() : 0;
+                            int row = Stack.Count > 0 ? Stack.Pop() : 0;
+                            int col = Stack.Count > 0 ? Stack.Pop() : 0;
+                            int nametable = Stack.Count > 0 ? Stack.Pop() : 0;
+
+                            // Check if palette is runtime (last LDA is absolute, not immediate)
+                            var lastInstr = block[block.Count - 1];
+                            bool paletteIsRuntime = lastInstr.Opcode == Opcode.LDA && lastInstr.Mode == AddressMode.Absolute;
+
+                            // Compute attribute table address at compile time:
+                            // attr_base = nametable + 0x3C0
+                            // attr_addr = attr_base + (row/4)*8 + (col/4)
+                            ushort attrBase = (ushort)(nametable + 0x3C0);
+                            ushort attrAddr = (ushort)(attrBase + (row / 4) * 8 + (col / 4));
+                            byte attrHi = (byte)(attrAddr >> 8);
+                            byte attrLo = (byte)(attrAddr & 0xFF);
+
+                            // Compute quadrant and shift: quadrant = (row & 2) | ((col & 2) >> 1)
+                            int quadrant = (row & 2) | ((col & 2) >> 1);
+                            int shift = quadrant * 2;
+                            byte mask = (byte)(~(0x03 << shift) & 0xFF);
+
+                            // Remove the 4 LDA #imm instructions that loaded the args
+                            RemoveLastInstructions(4);
+
+                            // Set PPU address for read
+                            Emit(Opcode.LDA, AddressMode.Immediate, attrHi);
+                            Emit(Opcode.STA, AddressMode.Absolute, NESConstants.PPU_ADDR);
+                            Emit(Opcode.LDA, AddressMode.Immediate, attrLo);
+                            Emit(Opcode.STA, AddressMode.Absolute, NESConstants.PPU_ADDR);
+
+                            // Read attribute byte (dummy read + actual read due to PPU latency)
+                            Emit(Opcode.LDA, AddressMode.Absolute, NESConstants.PPU_DATA);
+                            Emit(Opcode.LDA, AddressMode.Absolute, NESConstants.PPU_DATA);
+
+                            // Mask out the 2-bit field
+                            Emit(Opcode.AND, AddressMode.Immediate, mask);
+
+                            // OR in the new palette value (shifted to correct position)
+                            if (paletteIsRuntime)
+                            {
+                                // Save masked value to TEMP
+                                Emit(Opcode.STA, AddressMode.ZeroPage, TEMP);
+                                // Reload palette from its address
+                                block.Emit(lastInstr);
+                                // Shift palette value to correct position
+                                for (int i = 0; i < shift; i++)
+                                    Emit(Opcode.ASL, AddressMode.Accumulator);
+                                // AND with 0x03 << shift to ensure only 2 bits
+                                Emit(Opcode.AND, AddressMode.Immediate, (byte)(0x03 << shift));
+                                // OR with saved masked value
+                                Emit(Opcode.ORA, AddressMode.ZeroPage, TEMP);
+                            }
+                            else
+                            {
+                                byte shiftedPalette = (byte)((palette & 0x03) << shift);
+                                Emit(Opcode.ORA, AddressMode.Immediate, shiftedPalette);
+                            }
+
+                            // Save updated value
+                            Emit(Opcode.PHA, AddressMode.Implied);
+
+                            // Set PPU address for write (must re-set since PPU_DATA read incremented it)
+                            Emit(Opcode.LDA, AddressMode.Immediate, attrHi);
+                            Emit(Opcode.STA, AddressMode.Absolute, NESConstants.PPU_ADDR);
+                            Emit(Opcode.LDA, AddressMode.Immediate, attrLo);
+                            Emit(Opcode.STA, AddressMode.Absolute, NESConstants.PPU_ADDR);
+
+                            // Write back
+                            Emit(Opcode.PLA, AddressMode.Implied);
+                            Emit(Opcode.STA, AddressMode.Absolute, NESConstants.PPU_DATA);
+
+                            _immediateInA = null;
+                            argsAlreadyPopped = true;
+                        }
+                        break;
                     case "Array.Fill":
                         HandleArrayFill();
                         argsAlreadyPopped = true;
