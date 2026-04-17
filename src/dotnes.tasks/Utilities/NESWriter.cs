@@ -279,6 +279,16 @@ class NESWriter : IDisposable
     /// </summary>
     protected int GetBufferedBlockCount() => _bufferedBlock?.Count ?? 0;
 
+    /// <summary>
+    /// Returns the instruction at the given index in the buffered block.
+    /// </summary>
+    protected Instruction GetBufferedInstruction(int index)
+    {
+        if (_bufferedBlock == null)
+            throw new InvalidOperationException("GetBufferedInstruction requires block buffering mode");
+        return _bufferedBlock[index];
+    }
+
     public void Flush() => _writer.Flush();
 
     public void Dispose() => _writer.Dispose();
