@@ -1128,16 +1128,23 @@ partial class IL2NESWriter
                 break;
             case ILOpCode.Endfinally:
                 {
-                    // End of a finally block — jump to the instruction after the handler,
-                    // or fall through if it's already the next instruction.
-                    var region = FindEnclosingHandlerRegion(instruction.Offset);
-                    if (region != null)
+                    // End of a finally block — jump to the leave target if it's not
+                    // the next instruction (i.e., can't just fall through).
+                    int nextOffset = instruction.Offset + 1; // endfinally is 1 byte
+                    int? jumpTarget = _pendingLeaveTarget;
+                    _pendingLeaveTarget = null;
+
+                    if (jumpTarget == null)
                     {
-                        int afterHandler = region.Value.HandlerOffset + region.Value.HandlerLength;
-                        int nextOffset = instruction.Offset + 1; // endfinally is 1 byte
-                        if (nextOffset != afterHandler)
-                            EmitJMP(InstructionLabel(afterHandler));
+                        // Fallback: jump to the instruction after the handler region
+                        var region = FindEnclosingHandlerRegion(instruction.Offset);
+                        if (region != null)
+                            jumpTarget = region.Value.HandlerOffset + region.Value.HandlerLength;
                     }
+
+                    if (jumpTarget != null && jumpTarget.Value != nextOffset)
+                        EmitJMP(InstructionLabel(jumpTarget.Value));
+
                     Stack.Clear();
                     _accState = AccumulatorState.Empty;
                 }
@@ -1203,9 +1210,14 @@ partial class IL2NESWriter
                 // Exit try block (short form) — jump to finally handler start,
                 // or fall through if the handler is the next instruction.
                 {
+                    operand = (sbyte)(byte)operand;
+                    int leaveTarget = instruction.Offset + operand + 2;
                     var region = FindEnclosingTryRegion(instruction.Offset);
                     if (region != null)
                     {
+                        if (_pendingLeaveTarget != null && _pendingLeaveTarget.Value != leaveTarget)
+                            throw new TranspileException($"Multiple leave instructions target different offsets (0x{_pendingLeaveTarget.Value:X4} vs 0x{leaveTarget:X4}) within the same try/finally block. This pattern is not supported.", MethodName);
+                        _pendingLeaveTarget = leaveTarget;
                         int nextOffset = instruction.Offset + 2; // leave.s is 2 bytes
                         if (nextOffset != region.Value.HandlerOffset)
                             EmitJMP(InstructionLabel(region.Value.HandlerOffset));
@@ -1213,8 +1225,7 @@ partial class IL2NESWriter
                     else
                     {
                         // No try/finally context — treat as unconditional branch
-                        operand = (sbyte)(byte)operand;
-                        EmitJMP(InstructionLabel(instruction.Offset + operand + 2));
+                        EmitJMP(InstructionLabel(leaveTarget));
                     }
                     Stack.Clear();
                     _accState = AccumulatorState.Empty;
@@ -1224,9 +1235,13 @@ partial class IL2NESWriter
                 // Exit try block (long form) — jump to finally handler start,
                 // or fall through if the handler is the next instruction.
                 {
+                    int leaveTarget = instruction.Offset + operand + 5;
                     var region = FindEnclosingTryRegion(instruction.Offset);
                     if (region != null)
                     {
+                        if (_pendingLeaveTarget != null && _pendingLeaveTarget.Value != leaveTarget)
+                            throw new TranspileException($"Multiple leave instructions target different offsets (0x{_pendingLeaveTarget.Value:X4} vs 0x{leaveTarget:X4}) within the same try/finally block. This pattern is not supported.", MethodName);
+                        _pendingLeaveTarget = leaveTarget;
                         int nextOffset = instruction.Offset + 5; // leave is 5 bytes
                         if (nextOffset != region.Value.HandlerOffset)
                             EmitJMP(InstructionLabel(region.Value.HandlerOffset));
@@ -1234,7 +1249,7 @@ partial class IL2NESWriter
                     else
                     {
                         // No try/finally context — treat as unconditional branch
-                        EmitJMP(InstructionLabel(instruction.Offset + operand + 5));
+                        EmitJMP(InstructionLabel(leaveTarget));
                     }
                     Stack.Clear();
                     _accState = AccumulatorState.Empty;
@@ -2206,10 +2221,32 @@ partial class IL2NESWriter
                         break;
                     case "OamFrame.Dispose":
                         // OamFrame.Dispose(): hide all unused OAM entries from current offset
+                        // Skip if oam_off == 0 (all 64 slots used, nothing to hide)
                         _pendingStructLocal = null; // ldloca.s before Dispose is consumed
                         Emit(Opcode.LDA, AddressMode.ZeroPage, (byte)OAM_OFF);
+                        Emit(Opcode.BEQ, AddressMode.Relative, (byte)3); // skip JSR (3 bytes)
                         EmitJSR(nameof(NESLib.oam_hide_rest));
                         _immediateInA = null;
+                        argsAlreadyPopped = true;
+                        break;
+                    case "OamFrame.spr":
+                        _pendingStructLocal = null;
+                        EmitOamSprDecsp4(isOamFrame: true);
+                        UsedMethods?.Add("oam_spr");
+                        _lastByteArrayLabel = null;
+                        _needsByteArrayLoadInCall = false;
+                        argsAlreadyPopped = true;
+                        break;
+                    case "OamFrame.meta_spr":
+                        _pendingStructLocal = null;
+                        EmitOamMetaSpr(isOamFrame: true);
+                        UsedMethods?.Add("oam_meta_spr");
+                        argsAlreadyPopped = true;
+                        break;
+                    case "OamFrame.meta_spr_pal":
+                        _pendingStructLocal = null;
+                        EmitOamMetaSprPal();
+                        UsedMethods?.Add("oam_meta_spr_pal");
                         argsAlreadyPopped = true;
                         break;
                     case "oam_spr":

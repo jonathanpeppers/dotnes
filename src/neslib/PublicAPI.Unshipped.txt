@@ -60,6 +60,9 @@ const NES.NESColor.Yellow = 40 -> byte
 NES.OamFrame
 NES.OamFrame.Dispose() -> void
 NES.OamFrame.OamFrame() -> void
+NES.OamFrame.meta_spr(byte x, byte y, byte[]! data) -> void
+NES.OamFrame.meta_spr_pal(byte x, byte y, byte pal, byte[]! data) -> void
+NES.OamFrame.spr(byte x, byte y, byte chrnum, byte attr) -> void
 static NES.NESLib.meta_spr_2x2(byte topLeft, byte bottomLeft, byte topRight, byte bottomRight, byte attr = 0) -> byte[]!
 static NES.NESLib.meta_spr_2x2_flip(byte topLeft, byte bottomLeft, byte topRight, byte bottomRight, byte attr = 0) -> byte[]!
 static NES.NESLib.oam_spr_2x2(byte x, byte y, byte topLeft, byte bottomLeft, byte topRight, byte bottomRight, byte attr, byte sprid) -> byte

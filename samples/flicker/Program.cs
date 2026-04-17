@@ -54,30 +54,31 @@ for (i = 0; i < 24; i = (byte)(i + 1))
 // main loop - i persists across frames for flicker effect
 while (true)
 {
-    oam_off = 0;
-    byte count = 0;
-
-    // draw up to 15 actors per frame (15 * 4 = 60 sprites, under the 64 limit)
-    while (count < 15)
+    using (var frame = oam_begin())
     {
-        // palette color cycles with actor index (i & 3)
-        byte pal = (byte)(i & 3);
-        oam_meta_spr_pal(actor_x[i], actor_y[i], pal, metasprite);
+        byte count = 0;
 
-        // update position
-        actor_x[i] = (byte)(actor_x[i] + actor_dx[i]);
-        actor_y[i] = (byte)(actor_y[i] + actor_dy[i]);
-
-        // advance and wrap around actor array
-        i = (byte)(i + 1);
-        if (i >= 24)
+        // draw up to 15 actors per frame (15 * 4 = 60 sprites, under the 64 limit)
+        while (count < 15)
         {
-            i = (byte)(i - 24);
-        }
+            // palette color cycles with actor index (i & 3)
+            byte pal = (byte)(i & 3);
+            frame.meta_spr_pal(actor_x[i], actor_y[i], pal, metasprite);
 
-        count = (byte)(count + 1);
+            // update position
+            actor_x[i] = (byte)(actor_x[i] + actor_dx[i]);
+            actor_y[i] = (byte)(actor_y[i] + actor_dy[i]);
+
+            // advance and wrap around actor array
+            i = (byte)(i + 1);
+            if (i >= 24)
+            {
+                i = (byte)(i - 24);
+            }
+
+            count = (byte)(count + 1);
+        }
     }
 
-    oam_hide_rest(oam_off);
     ppu_wait_nmi();
 }

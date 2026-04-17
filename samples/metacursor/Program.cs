@@ -71,49 +71,48 @@ for (byte i = 0; i < 8; i = (byte)(i + 1))
 // main loop
 while (true)
 {
-    byte oam_id = 0;
-
-    // poll controller 0 (player 1 controls actor 0)
-    PAD pad = pad_poll(0);
-    if ((pad & PAD.LEFT) != 0)
-        actor_dx[0] = 254; // -2 as unsigned byte
-    else if ((pad & PAD.RIGHT) != 0)
-        actor_dx[0] = 2;
-    else
-        actor_dx[0] = 0;
-
-    if ((pad & PAD.UP) != 0)
-        actor_dy[0] = 254; // -2
-    else if ((pad & PAD.DOWN) != 0)
-        actor_dy[0] = 2;
-    else
-        actor_dy[0] = 0;
-
-    // poll controller 1 (player 2 controls actor 1)
-    pad = pad_poll(1);
-    if ((pad & PAD.LEFT) != 0)
-        actor_dx[1] = 254;
-    else if ((pad & PAD.RIGHT) != 0)
-        actor_dx[1] = 2;
-    else
-        actor_dx[1] = 0;
-
-    if ((pad & PAD.UP) != 0)
-        actor_dy[1] = 254;
-    else if ((pad & PAD.DOWN) != 0)
-        actor_dy[1] = 2;
-    else
-        actor_dy[1] = 0;
-
-    // draw and move all actors
-    for (byte i = 0; i < 8; i = (byte)(i + 1))
+    using (var frame = oam_begin())
     {
-        oam_id = oam_meta_spr(actor_x[i], actor_y[i], oam_id, playerRStand);
-        actor_x[i] = (byte)(actor_x[i] + actor_dx[i]);
-        actor_y[i] = (byte)(actor_y[i] + actor_dy[i]);
+        // poll controller 0 (player 1 controls actor 0)
+        PAD pad = pad_poll(0);
+        if ((pad & PAD.LEFT) != 0)
+            actor_dx[0] = 254; // -2 as unsigned byte
+        else if ((pad & PAD.RIGHT) != 0)
+            actor_dx[0] = 2;
+        else
+            actor_dx[0] = 0;
+
+        if ((pad & PAD.UP) != 0)
+            actor_dy[0] = 254; // -2
+        else if ((pad & PAD.DOWN) != 0)
+            actor_dy[0] = 2;
+        else
+            actor_dy[0] = 0;
+
+        // poll controller 1 (player 2 controls actor 1)
+        pad = pad_poll(1);
+        if ((pad & PAD.LEFT) != 0)
+            actor_dx[1] = 254;
+        else if ((pad & PAD.RIGHT) != 0)
+            actor_dx[1] = 2;
+        else
+            actor_dx[1] = 0;
+
+        if ((pad & PAD.UP) != 0)
+            actor_dy[1] = 254;
+        else if ((pad & PAD.DOWN) != 0)
+            actor_dy[1] = 2;
+        else
+            actor_dy[1] = 0;
+
+        // draw and move all actors
+        for (byte i = 0; i < 8; i = (byte)(i + 1))
+        {
+            frame.meta_spr(actor_x[i], actor_y[i], playerRStand);
+            actor_x[i] = (byte)(actor_x[i] + actor_dx[i]);
+            actor_y[i] = (byte)(actor_y[i] + actor_dy[i]);
+        }
     }
 
-    if (oam_id != 0)
-        oam_hide_rest(oam_id);
     ppu_wait_frame();
 }

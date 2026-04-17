@@ -15,14 +15,16 @@ partial class IL2NESWriter
     /// <summary>
     /// Emits oam_spr call using decsp4 + inline STA ($22),Y pattern.
     /// Used when arguments include runtime variables (deferred byte array mode).
+    /// When isOamFrame is true, scans for 4 args (no sprid) and auto-manages oam_off.
     /// </summary>
-    void EmitOamSprDecsp4()
+    void EmitOamSprDecsp4(bool isOamFrame = false)
     {
         if (Instructions is null)
             throw new InvalidOperationException("EmitOamSprDecsp4 requires Instructions");
 
         // oam_spr has 5 args: x, y, tile, attr, id
-        // Walk back through IL to find the 5 argument-producing IL instructions.
+        // OamFrame.spr has 4 args: x, y, tile, attr (id managed via oam_off)
+        // Walk back through IL to find the argument-producing IL instructions.
         // Uses stack-depth tracking to correctly handle compound expressions like
         // (byte)(0x30 + (score >> 4)) as a single argument.
         //
@@ -39,7 +41,7 @@ partial class IL2NESWriter
             string? compoundStaticFieldName)>();
 
         int ilIdx = Index - 1;
-        int needed = 5;
+        int needed = isOamFrame ? 4 : 5;
         int firstArgIlIdx = -1;
         int depth = 0;
 
@@ -464,7 +466,12 @@ partial class IL2NESWriter
         }
 
         // 5th arg (id) stays in A
-        if (argInfos.Count >= 5)
+        if (isOamFrame)
+        {
+            // OamFrame.spr: load oam_off as the sprid argument
+            Emit(Opcode.LDA, AddressMode.ZeroPage, (byte)OAM_OFF);
+        }
+        else if (argInfos.Count >= 5)
         {
             var idArg = argInfos[4];
             if (idArg.isStaticField)
@@ -512,7 +519,17 @@ partial class IL2NESWriter
         // JSR oam_spr
         EmitWithLabel(Opcode.JSR, AddressMode.Absolute, "oam_spr");
         _immediateInA = null;
-        _runtimeValueInA = true; // oam_spr returns next OAM offset in A
+
+        if (isOamFrame)
+        {
+            // Store result back to oam_off
+            Emit(Opcode.STA, AddressMode.ZeroPage, (byte)OAM_OFF);
+            _runtimeValueInA = false;
+        }
+        else
+        {
+            _runtimeValueInA = true; // oam_spr returns next OAM offset in A
+        }
     }
 
     /// <summary>
@@ -537,15 +554,17 @@ partial class IL2NESWriter
     /// Emits oam_meta_spr call with proper argument setup.
     /// Supports constants, locals, and array elements for x, y, sprid args.
     /// Sets up: TEMP = x, TEMP2 = y, PTR = data pointer, A = sprid
+    /// When isOamFrame is true, skips sprid scan and auto-manages oam_off.
     /// </summary>
-    void EmitOamMetaSpr()
+    void EmitOamMetaSpr(bool isOamFrame = false)
     {
         if (Instructions is null)
             throw new InvalidOperationException("EmitOamMetaSpr requires Instructions");
 
-        // Scan backward from the call to find all 4 argument sources
-        // Args order: x (byte), y (byte), sprid (byte), data (byte[])
-        // We scan in reverse order: data, sprid, y, x
+        // Scan backward from the call to find argument sources
+        // oam_meta_spr: x (byte), y (byte), sprid (byte), data (byte[])
+        // OamFrame.meta_spr: x (byte), y (byte), data (byte[]) — sprid via oam_off
+        // We scan in reverse order: data, [sprid], y, x
 
         int scan = Index - 1;
 
@@ -569,10 +588,10 @@ partial class IL2NESWriter
             }
         }
 
-        // --- Arg 3: sprid (byte) ---
+        // --- Arg 3: sprid (byte) — skipped for OamFrame (uses oam_off) ---
         int? spridConst = null;
         ushort? spridAddr = null;
-        if (scan >= 0)
+        if (!isOamFrame && scan >= 0)
         {
             var si = Instructions[scan];
             var sLocIdx = GetLdlocIndex(si);
@@ -714,7 +733,11 @@ partial class IL2NESWriter
         }
 
         // 4. Load sprid into A
-        if (spridAddr != null)
+        if (isOamFrame)
+        {
+            Emit(Opcode.LDA, AddressMode.ZeroPage, (byte)NESConstants.OAM_OFF);
+        }
+        else if (spridAddr != null)
         {
             Emit(Opcode.LDA, AddressMode.Absolute, spridAddr.Value);
         }
@@ -726,7 +749,17 @@ partial class IL2NESWriter
         // 5. Call oam_meta_spr
         EmitWithLabel(Opcode.JSR, AddressMode.Absolute, nameof(NESLib.oam_meta_spr));
         _immediateInA = null;
-        _runtimeValueInA = true; // Return value in A
+
+        if (isOamFrame)
+        {
+            // Store result back to oam_off
+            Emit(Opcode.STA, AddressMode.ZeroPage, (byte)NESConstants.OAM_OFF);
+            _runtimeValueInA = false;
+        }
+        else
+        {
+            _runtimeValueInA = true; // Return value in A
+        }
     }
 
     /// <summary>

@@ -5922,8 +5922,10 @@ public class RoslynTests
         // oam_begin() should emit: LDA #0, STA $1B (oam_off), JSR oam_clear in the main block
         var (program, _) = BuildProgram(
             """
-            using var frame = oam_begin();
-            oam_spr(10, 20, 0x01, 0, 0);
+            using (var frame = oam_begin())
+            {
+                frame.spr(10, 20, 0x01, 0);
+            }
             ppu_on_all();
             while (true) ;
             """);
@@ -5957,8 +5959,10 @@ public class RoslynTests
         // oam_begin() emits JSR oam_clear; OamFrame.Dispose() emits LDA oam_off, JSR oam_hide_rest
         var (program, _) = BuildProgram(
             """
-            using var frame = oam_begin();
-            oam_spr(10, 20, 0x01, 0, 0);
+            using (var frame = oam_begin())
+            {
+                frame.spr(10, 20, 0x01, 0);
+            }
             ppu_on_all();
             while (true) ;
             """);
@@ -5988,8 +5992,10 @@ public class RoslynTests
             while (true)
             {
                 ppu_wait_nmi();
-                using var frame = oam_begin();
-                oam_spr(10, 20, 0x01, 0, 0);
+                using (var frame = oam_begin())
+                {
+                    frame.spr(10, 20, 0x01, 0);
+                }
             }
             """);
 
@@ -6014,6 +6020,92 @@ public class RoslynTests
             $"oam_clear (index {clearIndex}) should be inside loop body after ppu_wait_nmi (index {loopStartIndex})");
         Assert.True(clearIndex < hideRestIndex,
             $"oam_clear (index {clearIndex}) should come before oam_hide_rest (index {hideRestIndex})");
+
+        // The endfinally handler must emit a backward JMP to the loop header
+        // (not fall through into the next function's code).
+        // The JMP should appear within a few instructions after oam_hide_rest
+        // and target an address at or before the loop start (ppu_wait_nmi).
+        int jmpIndex = -1;
+        for (int i = hideRestIndex + 1; i < Math.Min(hideRestIndex + 4, instructions.Count); i++)
+        {
+            if (instructions[i].Instruction.Opcode == Opcode.JMP)
+            {
+                jmpIndex = i;
+                break;
+            }
+        }
+        Assert.True(jmpIndex >= 0,
+            "Expected a JMP within a few instructions after oam_hide_rest");
+
+        // Verify the JMP targets an address at or before the loop start
+        var jmpOperand = instructions[jmpIndex].Instruction.Operand;
+        Assert.NotNull(jmpOperand);
+        // The JMP uses an absolute address operand pointing backward in the code
+        Assert.True(jmpOperand is ImmediateOperand or LabelOperand,
+            $"Expected JMP to have an address or label operand, got {jmpOperand.GetType().Name}");
+    }
+
+    [Fact]
+    public void OamFrameSpr_EmitsOamOffLoadAndStore()
+    {
+        // frame.spr(x, y, chr, attr) should auto-manage oam_off:
+        // LDA $1B before JSR oam_spr, STA $1B after
+        var (program, _) = BuildProgram(
+            """
+            using (var frame = oam_begin())
+            {
+                frame.spr(10, 20, 0x01, 0);
+            }
+            ppu_on_all();
+            while (true) ;
+            """);
+
+        var mainBlock = program.Blocks.Single(b => b.Label == "main");
+        var instructions = mainBlock.InstructionsWithLabels.ToList();
+
+        // Find JSR oam_spr and verify STA $1B follows it
+        int jsrIndex = instructions.FindIndex(il =>
+            il.Instruction.Opcode == Opcode.JSR &&
+            il.Instruction.Operand is LabelOperand lbl && lbl.Label == "oam_spr");
+        Assert.True(jsrIndex >= 0, "Expected JSR oam_spr from frame.spr()");
+
+        // The instruction after JSR oam_spr should be STA $1B (store oam_off)
+        Assert.True(jsrIndex + 1 < instructions.Count, "Expected instruction after JSR oam_spr");
+        var staAfter = instructions[jsrIndex + 1].Instruction;
+        Assert.Equal(Opcode.STA, staAfter.Opcode);
+        Assert.Equal(AddressMode.ZeroPage, staAfter.Mode);
+        Assert.Equal(0x1B, ((ImmediateOperand)staAfter.Operand!).Value);
+    }
+
+    [Fact]
+    public void OamFrameMetaSpr_EmitsOamOffLoadAndStore()
+    {
+        // frame.meta_spr(x, y, data) should auto-manage oam_off
+        var source =
+            """
+            byte[] sprite = new byte[] { 0, 0, 0x01, 0, 128 };
+            using (var frame = oam_begin())
+            {
+                frame.meta_spr(10, 20, sprite);
+            }
+            ppu_on_all();
+            while (true) ;
+            """;
+        var (program, _) = BuildProgram(source);
+
+        var mainBlock = program.Blocks.Single(b => b.Label == "main");
+        var instructions = mainBlock.InstructionsWithLabels.ToList();
+
+        // Find JSR oam_meta_spr and verify STA $1B follows it
+        int jsrIndex = instructions.FindIndex(il =>
+            il.Instruction.Opcode == Opcode.JSR &&
+            il.Instruction.Operand is LabelOperand lbl && lbl.Label == "oam_meta_spr");
+        Assert.True(jsrIndex >= 0, "Expected JSR oam_meta_spr from frame.meta_spr()");
+
+        var staAfter = instructions[jsrIndex + 1].Instruction;
+        Assert.Equal(Opcode.STA, staAfter.Opcode);
+        Assert.Equal(AddressMode.ZeroPage, staAfter.Mode);
+        Assert.Equal(0x1B, ((ImmediateOperand)staAfter.Operand!).Value);
     }
 
     [Fact]
