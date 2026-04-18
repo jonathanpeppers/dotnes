@@ -491,23 +491,23 @@ while (true)
     poke(APU_STATUS, snd_enable);
 
     // --- Draw sprites ---
-    using (var frame = oam_begin())
+    using (var oam = new OamScope())
     {
         // Player
-        frame.spr(player_x, player_y, SPR_PLAYER, 0);
+        oam.spr(player_x, player_y, SPR_PLAYER, 0);
 
         // Bullets
         for (byte i = 0; i < MAX_BULLETS; i++)
         {
             if (bullet_active[i] != 0)
-                frame.spr(bullet_x[i], bullet_y[i], SPR_BULLET, 0);
+                oam.spr(bullet_x[i], bullet_y[i], SPR_BULLET, 0);
         }
 
         // Enemies
         for (byte i = 0; i < MAX_ENEMIES; i++)
         {
             if (enemy_active[i] != 0)
-                frame.spr(enemy_x[i], enemy_y[i], SPR_ENEMY, 1);
+                oam.spr(enemy_x[i], enemy_y[i], SPR_ENEMY, 1);
         }
 
         // Explosions
@@ -517,14 +517,14 @@ while (true)
             {
                 byte tile = SPR_EXPLODE1;
                 if (exp_timer[i] < 8) tile = SPR_EXPLODE2;
-                frame.spr(exp_x[i], exp_y[i], tile, 3);
+                oam.spr(exp_x[i], exp_y[i], tile, 3);
             }
         }
 
         // Stars
         for (byte i = 0; i < MAX_STARS; i++)
         {
-            frame.spr(star_x[i], star_y[i], SPR_STAR, 2);
+            oam.spr(star_x[i], star_y[i], SPR_STAR, 2);
         }
     }
 

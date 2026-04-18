@@ -54,12 +54,12 @@ while (true)
 
     // Select animation frame based on counter
     // Bit 3 toggles every 8 frames for ~7.5 fps animation
-    using (var frame = oam_begin())
+    using (var oam = new OamScope())
     {
         if ((frame_counter & 8) == 0)
-            frame.meta_spr(x, y, walk0);
+            oam.meta_spr(x, y, walk0);
         else
-            frame.meta_spr(x, y, walk1);
+            oam.meta_spr(x, y, walk1);
     }
 
     // Move character to the right (wraps at byte overflow)
