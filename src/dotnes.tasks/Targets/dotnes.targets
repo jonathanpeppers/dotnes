@@ -1,10 +1,4 @@
 <Project>
-  <!-- Local dev: run task out-of-process so the build server doesn't lock dotnes.tasks.dll -->
-  <UsingTask TaskName="dotnes.TranspileToNES" AssemblyFile="dotnes.tasks.dll"
-             TaskFactory="TaskHostFactory" Condition="'$(DotNESLocalDev)' == 'true'" />
-  <!-- NuGet package consumers: run in-process for performance -->
-  <UsingTask TaskName="dotnes.TranspileToNES" AssemblyFile="dotnes.tasks.dll"
-             Condition="'$(DotNESLocalDev)' != 'true'" />
   <PropertyGroup>
     <NESTargetPath>$(OutputPath)$(TargetName).nes</NESTargetPath>
     <_NESPropertiesStampFile>$(IntermediateOutputPath)dotnes.properties.stamp</_NESPropertiesStampFile>
@@ -12,6 +6,12 @@
     <TranspileDependsOn>$(TranspileDependsOn);_WriteNESPropertiesStamp</TranspileDependsOn>
     <IncrementalCleanDependsOn>$(IncrementalCleanDependsOn);Transpile</IncrementalCleanDependsOn>
   </PropertyGroup>
+  <!-- Local dev: run task out-of-process so the build server doesn't lock dotnes.tasks.dll -->
+  <UsingTask TaskName="dotnes.TranspileToNES" AssemblyFile="$(_NESTasksAssembly)"
+             TaskFactory="TaskHostFactory" Condition="'$(DotNESLocalDev)' == 'true'" />
+  <!-- NuGet package consumers: run in-process for performance -->
+  <UsingTask TaskName="dotnes.TranspileToNES" AssemblyFile="$(_NESTasksAssembly)"
+             Condition="'$(DotNESLocalDev)' != 'true'" />
   <Target Name="_WriteNESPropertiesStamp">
     <WriteLinesToFile
         File="$(_NESPropertiesStampFile)"
