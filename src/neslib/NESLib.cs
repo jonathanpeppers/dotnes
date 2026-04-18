@@ -376,11 +376,6 @@ public static class NESLib
     public static void oam_hide_rest(byte sprid) => throw null!;
 
     /// <summary>
-    /// Returns an OamFrame that auto-hides remaining sprites on Dispose
-    /// </summary>
-    public static OamFrame oam_begin() => throw null!;
-
-    /// <summary>
     /// set vram pointer to write operations if you need to write some data to vram
     /// </summary>
     public static void vram_adr(ushort adr) => throw null!;

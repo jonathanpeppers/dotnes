@@ -57,18 +57,17 @@ const NES.NESColor.Teal = 27 -> byte
 const NES.NESColor.Violet = 19 -> byte
 const NES.NESColor.White = 48 -> byte
 const NES.NESColor.Yellow = 40 -> byte
-NES.OamFrame
-NES.OamFrame.Dispose() -> void
-NES.OamFrame.OamFrame() -> void
-NES.OamFrame.meta_spr(byte x, byte y, byte[]! data) -> void
-NES.OamFrame.meta_spr_pal(byte x, byte y, byte pal, byte[]! data) -> void
-NES.OamFrame.spr(byte x, byte y, byte chrnum, byte attr) -> void
+NES.OamScope
+NES.OamScope.Dispose() -> void
+NES.OamScope.OamScope() -> void
+NES.OamScope.meta_spr(byte x, byte y, byte[]! data) -> void
+NES.OamScope.meta_spr_pal(byte x, byte y, byte pal, byte[]! data) -> void
+NES.OamScope.spr(byte x, byte y, byte chrnum, byte attr) -> void
 static NES.NESLib.meta_spr_2x2(byte topLeft, byte bottomLeft, byte topRight, byte bottomRight, byte attr = 0) -> byte[]!
 static NES.NESLib.meta_spr_2x2_flip(byte topLeft, byte bottomLeft, byte topRight, byte bottomRight, byte attr = 0) -> byte[]!
 static NES.NESLib.oam_spr_2x2(byte x, byte y, byte topLeft, byte bottomLeft, byte topRight, byte bottomRight, byte attr, byte sprid) -> byte
 static NES.NESLib.fade_in(byte delay) -> void
 static NES.NESLib.fade_out(byte delay) -> void
-static NES.NESLib.oam_begin() -> NES.OamFrame
 static NES.NESLib.pad_dpad_x(NES.PAD joy) -> sbyte
 static NES.NESLib.pad_dpad_y(NES.PAD joy) -> sbyte
 static NES.NESLib.pad_pressed(NES.PAD joy, NES.PAD button) -> bool

@@ -2210,17 +2210,17 @@ partial class IL2NESWriter
                             argsAlreadyPopped = true;
                         }
                         break;
-                    case nameof(NESLib.oam_begin):
-                        // oam_begin(): reset OAM offset and clear OAM buffer
-                        // Return value (OamFrame) is a zero-size sentinel — no data to store
+                    case "OamScope..ctor":
+                        // OamScope constructor: reset OAM offset and clear OAM buffer
+                        _pendingStructLocal = null;
                         Emit(Opcode.LDA, AddressMode.Immediate, 0x00);
                         Emit(Opcode.STA, AddressMode.ZeroPage, (byte)OAM_OFF);
                         EmitJSR(nameof(NESLib.oam_clear));
                         _immediateInA = null;
                         argsAlreadyPopped = true;
                         break;
-                    case "OamFrame.Dispose":
-                        // OamFrame.Dispose(): hide all unused OAM entries from current offset
+                    case "OamScope.Dispose":
+                        // OamScope.Dispose(): hide all unused OAM entries from current offset
                         // Skip if oam_off == 0 (all 64 slots used, nothing to hide)
                         _pendingStructLocal = null; // ldloca.s before Dispose is consumed
                         Emit(Opcode.LDA, AddressMode.ZeroPage, (byte)OAM_OFF);
@@ -2229,21 +2229,21 @@ partial class IL2NESWriter
                         _immediateInA = null;
                         argsAlreadyPopped = true;
                         break;
-                    case "OamFrame.spr":
+                    case "OamScope.spr":
                         _pendingStructLocal = null;
-                        EmitOamSprDecsp4(isOamFrame: true);
+                        EmitOamSprDecsp4(isOamScope: true);
                         UsedMethods?.Add("oam_spr");
                         _lastByteArrayLabel = null;
                         _needsByteArrayLoadInCall = false;
                         argsAlreadyPopped = true;
                         break;
-                    case "OamFrame.meta_spr":
+                    case "OamScope.meta_spr":
                         _pendingStructLocal = null;
-                        EmitOamMetaSpr(isOamFrame: true);
+                        EmitOamMetaSpr(isOamScope: true);
                         UsedMethods?.Add("oam_meta_spr");
                         argsAlreadyPopped = true;
                         break;
-                    case "OamFrame.meta_spr_pal":
+                    case "OamScope.meta_spr_pal":
                         _pendingStructLocal = null;
                         EmitOamMetaSprPal();
                         UsedMethods?.Add("oam_meta_spr_pal");

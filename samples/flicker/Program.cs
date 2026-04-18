@@ -54,7 +54,7 @@ for (i = 0; i < 24; i = (byte)(i + 1))
 // main loop - i persists across frames for flicker effect
 while (true)
 {
-    using (var frame = oam_begin())
+    using (var oam = new OamScope())
     {
         byte count = 0;
 
@@ -63,7 +63,7 @@ while (true)
         {
             // palette color cycles with actor index (i & 3)
             byte pal = (byte)(i & 3);
-            frame.meta_spr_pal(actor_x[i], actor_y[i], pal, metasprite);
+            oam.meta_spr_pal(actor_x[i], actor_y[i], pal, metasprite);
 
             // update position
             actor_x[i] = (byte)(actor_x[i] + actor_dx[i]);

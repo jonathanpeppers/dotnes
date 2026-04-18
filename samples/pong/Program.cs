@@ -3,7 +3,7 @@ Pong — 2-player game.
 Player 1: controller 1 UP/DOWN.
 Player 2: controller 2 UP/DOWN.
 Ball bounces off walls and paddles. Score at top.
-APIs: pad_poll, oam_spr, oam_begin, vrambuf_put, ppu_wait_nmi.
+APIs: pad_poll, oam_spr, new OamScope(), vrambuf_put, ppu_wait_nmi.
 */
 
 byte[] PALETTE = [
@@ -157,17 +157,17 @@ while (true)
     }
 
     // draw sprites
-    using (var frame = oam_begin())
+    using (var oam = new OamScope())
     {
         // paddle 1 (3 sprites at x=16)
-        frame.spr(16, p1_y, 0x01, 0);
-        frame.spr(16, (byte)(p1_y + 8), 0x01, 0);
-        frame.spr(16, (byte)(p1_y + 16), 0x01, 0);
+        oam.spr(16, p1_y, 0x01, 0);
+        oam.spr(16, (byte)(p1_y + 8), 0x01, 0);
+        oam.spr(16, (byte)(p1_y + 16), 0x01, 0);
         // paddle 2 (3 sprites at x=232)
-        frame.spr(232, p2_y, 0x01, 1);
-        frame.spr(232, (byte)(p2_y + 8), 0x01, 1);
-        frame.spr(232, (byte)(p2_y + 16), 0x01, 1);
+        oam.spr(232, p2_y, 0x01, 1);
+        oam.spr(232, (byte)(p2_y + 8), 0x01, 1);
+        oam.spr(232, (byte)(p2_y + 16), 0x01, 1);
         // ball
-        frame.spr(ball_x, ball_y, 0x01, 2);
+        oam.spr(ball_x, ball_y, 0x01, 2);
     }
 }

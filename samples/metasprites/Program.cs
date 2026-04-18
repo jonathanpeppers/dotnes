@@ -44,11 +44,11 @@ for (byte i = 0; i < 16; i = (byte)(i + 1))
 // main loop
 while (true)
 {
-    using (var frame = oam_begin())
+    using (var oam = new OamScope())
     {
         for (byte i = 0; i < 16; i = (byte)(i + 1))
         {
-            frame.meta_spr(actor_x[i], actor_y[i], metasprite);
+            oam.meta_spr(actor_x[i], actor_y[i], metasprite);
             actor_x[i] = (byte)(actor_x[i] + actor_dx[i]);
             actor_y[i] = (byte)(actor_y[i] + actor_dy[i]);
         }

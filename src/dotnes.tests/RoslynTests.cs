@@ -5917,14 +5917,14 @@ public class RoslynTests
     }
 
     [Fact]
-    public void OamBegin_EmitsLdaStaJsrInMainBlock()
+    public void OamScope_EmitsLdaStaJsrInMainBlock()
     {
-        // oam_begin() should emit: LDA #0, STA $1B (oam_off), JSR oam_clear in the main block
+        // new OamScope() should emit: LDA #0, STA $1B (oam_off), JSR oam_clear in the main block
         var (program, _) = BuildProgram(
             """
-            using (var frame = oam_begin())
+            using (var oam = new OamScope())
             {
-                frame.spr(10, 20, 0x01, 0);
+                oam.spr(10, 20, 0x01, 0);
             }
             ppu_on_all();
             while (true) ;
@@ -5954,14 +5954,14 @@ public class RoslynTests
     }
 
     [Fact]
-    public void OamBegin_EmitsOamClearAndOamHideRestInMainBlock()
+    public void OamScope_EmitsOamClearAndOamHideRestInMainBlock()
     {
-        // oam_begin() emits JSR oam_clear; OamFrame.Dispose() emits LDA oam_off, JSR oam_hide_rest
+        // OamScope constructor emits JSR oam_clear; OamScope.Dispose() emits LDA oam_off, JSR oam_hide_rest
         var (program, _) = BuildProgram(
             """
-            using (var frame = oam_begin())
+            using (var oam = new OamScope())
             {
-                frame.spr(10, 20, 0x01, 0);
+                oam.spr(10, 20, 0x01, 0);
             }
             ppu_on_all();
             while (true) ;
@@ -5969,32 +5969,32 @@ public class RoslynTests
 
         var mainBlock = program.Blocks.Single(b => b.Label == "main");
 
-        // Verify JSR oam_clear is emitted in the main block (from oam_begin)
+        // Verify JSR oam_clear is emitted in the main block (from OamScope constructor)
         bool hasOamClear = mainBlock.InstructionsWithLabels.Any(il =>
             il.Instruction.Opcode == Opcode.JSR &&
             il.Instruction.Operand is LabelOperand lbl && lbl.Label == "oam_clear");
-        Assert.True(hasOamClear, "Expected JSR oam_clear from oam_begin() in main block");
+        Assert.True(hasOamClear, "Expected JSR oam_clear from new OamScope() in main block");
 
-        // Verify JSR oam_hide_rest is emitted in the main block (from OamFrame.Dispose)
+        // Verify JSR oam_hide_rest is emitted in the main block (from OamScope.Dispose)
         bool hasOamHideRest = mainBlock.InstructionsWithLabels.Any(il =>
             il.Instruction.Opcode == Opcode.JSR &&
             il.Instruction.Operand is LabelOperand lbl && lbl.Label == "oam_hide_rest");
-        Assert.True(hasOamHideRest, "Expected JSR oam_hide_rest from OamFrame.Dispose() in main block");
+        Assert.True(hasOamHideRest, "Expected JSR oam_hide_rest from OamScope.Dispose() in main block");
     }
 
     [Fact]
-    public void OamBegin_InsideLoopBody_EmitsCorrectOrdering()
+    public void OamScope_InsideLoopBody_EmitsCorrectOrdering()
     {
-        // Realistic game loop: oam_begin inside while(true), Dispose called each iteration
+        // Realistic game loop: new OamScope() inside while(true), Dispose called each iteration
         var (program, _) = BuildProgram(
             """
             ppu_on_all();
             while (true)
             {
                 ppu_wait_nmi();
-                using (var frame = oam_begin())
+                using (var oam = new OamScope())
                 {
-                    frame.spr(10, 20, 0x01, 0);
+                    oam.spr(10, 20, 0x01, 0);
                 }
             }
             """);
@@ -6012,8 +6012,8 @@ public class RoslynTests
         int hideRestIndex = instructions.FindIndex(il => IsJsrTo(il, "oam_hide_rest"));
 
         Assert.True(loopStartIndex >= 0, "Expected JSR ppu_wait_nmi at start of loop body");
-        Assert.True(clearIndex >= 0, "Expected JSR oam_clear from oam_begin()");
-        Assert.True(hideRestIndex >= 0, "Expected JSR oam_hide_rest from OamFrame.Dispose()");
+        Assert.True(clearIndex >= 0, "Expected JSR oam_clear from new OamScope()");
+        Assert.True(hideRestIndex >= 0, "Expected JSR oam_hide_rest from OamScope.Dispose()");
 
         // Both OAM calls must be inside the loop body (after ppu_wait_nmi)
         Assert.True(loopStartIndex < clearIndex,
@@ -6046,15 +6046,15 @@ public class RoslynTests
     }
 
     [Fact]
-    public void OamFrameSpr_EmitsOamOffLoadAndStore()
+    public void OamScopeSpr_EmitsOamOffLoadAndStore()
     {
-        // frame.spr(x, y, chr, attr) should auto-manage oam_off:
+        // oam.spr(x, y, chr, attr) should auto-manage oam_off:
         // LDA $1B before JSR oam_spr, STA $1B after
         var (program, _) = BuildProgram(
             """
-            using (var frame = oam_begin())
+            using (var oam = new OamScope())
             {
-                frame.spr(10, 20, 0x01, 0);
+                oam.spr(10, 20, 0x01, 0);
             }
             ppu_on_all();
             while (true) ;
@@ -6067,7 +6067,7 @@ public class RoslynTests
         int jsrIndex = instructions.FindIndex(il =>
             il.Instruction.Opcode == Opcode.JSR &&
             il.Instruction.Operand is LabelOperand lbl && lbl.Label == "oam_spr");
-        Assert.True(jsrIndex >= 0, "Expected JSR oam_spr from frame.spr()");
+        Assert.True(jsrIndex >= 0, "Expected JSR oam_spr from oam.spr()");
 
         // The instruction after JSR oam_spr should be STA $1B (store oam_off)
         Assert.True(jsrIndex + 1 < instructions.Count, "Expected instruction after JSR oam_spr");
@@ -6078,15 +6078,15 @@ public class RoslynTests
     }
 
     [Fact]
-    public void OamFrameMetaSpr_EmitsOamOffLoadAndStore()
+    public void OamScopeMetaSpr_EmitsOamOffLoadAndStore()
     {
-        // frame.meta_spr(x, y, data) should auto-manage oam_off
+        // oam.meta_spr(x, y, data) should auto-manage oam_off
         var source =
             """
             byte[] sprite = new byte[] { 0, 0, 0x01, 0, 128 };
-            using (var frame = oam_begin())
+            using (var oam = new OamScope())
             {
-                frame.meta_spr(10, 20, sprite);
+                oam.meta_spr(10, 20, sprite);
             }
             ppu_on_all();
             while (true) ;
@@ -6100,7 +6100,7 @@ public class RoslynTests
         int jsrIndex = instructions.FindIndex(il =>
             il.Instruction.Opcode == Opcode.JSR &&
             il.Instruction.Operand is LabelOperand lbl && lbl.Label == "oam_meta_spr");
-        Assert.True(jsrIndex >= 0, "Expected JSR oam_meta_spr from frame.meta_spr()");
+        Assert.True(jsrIndex >= 0, "Expected JSR oam_meta_spr from oam.meta_spr()");
 
         var staAfter = instructions[jsrIndex + 1].Instruction;
         Assert.Equal(Opcode.STA, staAfter.Opcode);

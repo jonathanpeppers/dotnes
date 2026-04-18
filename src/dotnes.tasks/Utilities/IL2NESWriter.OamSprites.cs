@@ -15,15 +15,15 @@ partial class IL2NESWriter
     /// <summary>
     /// Emits oam_spr call using decsp4 + inline STA ($22),Y pattern.
     /// Used when arguments include runtime variables (deferred byte array mode).
-    /// When isOamFrame is true, scans for 4 args (no sprid) and auto-manages oam_off.
+    /// When isOamScope is true, scans for 4 args (no sprid) and auto-manages oam_off.
     /// </summary>
-    void EmitOamSprDecsp4(bool isOamFrame = false)
+    void EmitOamSprDecsp4(bool isOamScope = false)
     {
         if (Instructions is null)
             throw new InvalidOperationException("EmitOamSprDecsp4 requires Instructions");
 
         // oam_spr has 5 args: x, y, tile, attr, id
-        // OamFrame.spr has 4 args: x, y, tile, attr (id managed via oam_off)
+        // OamScope.spr has 4 args: x, y, tile, attr (id managed via oam_off)
         // Walk back through IL to find the argument-producing IL instructions.
         // Uses stack-depth tracking to correctly handle compound expressions like
         // (byte)(0x30 + (score >> 4)) as a single argument.
@@ -41,7 +41,7 @@ partial class IL2NESWriter
             string? compoundStaticFieldName)>();
 
         int ilIdx = Index - 1;
-        int needed = isOamFrame ? 4 : 5;
+        int needed = isOamScope ? 4 : 5;
         int firstArgIlIdx = -1;
         int depth = 0;
 
@@ -466,9 +466,9 @@ partial class IL2NESWriter
         }
 
         // 5th arg (id) stays in A
-        if (isOamFrame)
+        if (isOamScope)
         {
-            // OamFrame.spr: load oam_off as the sprid argument
+            // OamScope.spr: load oam_off as the sprid argument
             Emit(Opcode.LDA, AddressMode.ZeroPage, (byte)OAM_OFF);
         }
         else if (argInfos.Count >= 5)
@@ -520,7 +520,7 @@ partial class IL2NESWriter
         EmitWithLabel(Opcode.JSR, AddressMode.Absolute, "oam_spr");
         _immediateInA = null;
 
-        if (isOamFrame)
+        if (isOamScope)
         {
             // Store result back to oam_off
             Emit(Opcode.STA, AddressMode.ZeroPage, (byte)OAM_OFF);
@@ -554,16 +554,16 @@ partial class IL2NESWriter
     /// Emits oam_meta_spr call with proper argument setup.
     /// Supports constants, locals, and array elements for x, y, sprid args.
     /// Sets up: TEMP = x, TEMP2 = y, PTR = data pointer, A = sprid
-    /// When isOamFrame is true, skips sprid scan and auto-manages oam_off.
+    /// When isOamScope is true, skips sprid scan and auto-manages oam_off.
     /// </summary>
-    void EmitOamMetaSpr(bool isOamFrame = false)
+    void EmitOamMetaSpr(bool isOamScope = false)
     {
         if (Instructions is null)
             throw new InvalidOperationException("EmitOamMetaSpr requires Instructions");
 
         // Scan backward from the call to find argument sources
         // oam_meta_spr: x (byte), y (byte), sprid (byte), data (byte[])
-        // OamFrame.meta_spr: x (byte), y (byte), data (byte[]) — sprid via oam_off
+        // OamScope.meta_spr: x (byte), y (byte), data (byte[]) — sprid via oam_off
         // We scan in reverse order: data, [sprid], y, x
 
         int scan = Index - 1;
@@ -588,10 +588,10 @@ partial class IL2NESWriter
             }
         }
 
-        // --- Arg 3: sprid (byte) — skipped for OamFrame (uses oam_off) ---
+        // --- Arg 3: sprid (byte) — skipped for OamScope (uses oam_off) ---
         int? spridConst = null;
         ushort? spridAddr = null;
-        if (!isOamFrame && scan >= 0)
+        if (!isOamScope && scan >= 0)
         {
             var si = Instructions[scan];
             var sLocIdx = GetLdlocIndex(si);
@@ -733,7 +733,7 @@ partial class IL2NESWriter
         }
 
         // 4. Load sprid into A
-        if (isOamFrame)
+        if (isOamScope)
         {
             Emit(Opcode.LDA, AddressMode.ZeroPage, (byte)NESConstants.OAM_OFF);
         }
@@ -750,7 +750,7 @@ partial class IL2NESWriter
         EmitWithLabel(Opcode.JSR, AddressMode.Absolute, nameof(NESLib.oam_meta_spr));
         _immediateInA = null;
 
-        if (isOamFrame)
+        if (isOamScope)
         {
             // Store result back to oam_off
             Emit(Opcode.STA, AddressMode.ZeroPage, (byte)NESConstants.OAM_OFF);
