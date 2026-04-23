@@ -6402,4 +6402,140 @@ public class RoslynTests
         Assert.Equal(Opcode.ORA, oraInstr.Opcode);
         Assert.Equal(0xF0, ((ImmediateOperand)oraInstr.Operand!).Value);
     }
+
+    [Fact]
+    public void NtPutTile()
+    {
+        // nt_put_tile(NAMETABLE_A, 5, 10, 0x42) should emit:
+        // vram_adr(0x2000 | (10 << 5) | 5) = vram_adr(0x2145)
+        // vram_put(0x42)
+        var bytes = GetProgramBytes(
+            """
+            nt_put_tile(NAMETABLE_A, 5, 10, 0x42);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        // Address 0x2145: hi=0x21, lo=0x45
+        // LDX #$21 (A221), LDA #$45 (A945), JSR vram_adr
+        Assert.Contains("A221", hex);
+        Assert.Contains("A945", hex);
+        // LDA #$42 (A942), JSR vram_put
+        Assert.Contains("A942", hex);
+    }
+
+    [Fact]
+    public void NtPutRow()
+    {
+        // nt_put_row(NAMETABLE_A, 2, 5, buf, 4) should emit vrambuf_put setup
+        var bytes = GetProgramBytes(
+            """
+            byte[] buf = new byte[8] { 1, 2, 3, 4, 5, 6, 7, 8 };
+            nt_put_row(NAMETABLE_A, 2, 5, buf, 4);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        // Address 0x2000 | (5 << 5) | 2 = 0x20A2
+        // Hi byte with NT_UPD_HORZ (0x40): 0x20 | 0x40 = 0x60
+        // LDA #$60 (A960), STA TEMP ($17)
+        Assert.Contains("A960", hex);
+        Assert.Contains("8517", hex); // STA $17 (TEMP)
+        // LDA #$A2 (A9A2), STA TEMP2 ($19)
+        Assert.Contains("A9A2", hex);
+        Assert.Contains("8519", hex); // STA $19 (TEMP2)
+        // LDA #$04 (A904) for length
+        Assert.Contains("A904", hex);
+    }
+
+    [Fact]
+    public void NtWrite()
+    {
+        // nt_write(NAMETABLE_A, 2, 2, "HI") should emit:
+        // vram_adr(0x2000 | (2 << 5) | 2) = vram_adr(0x2042)
+        // vram_write("HI", 2)
+        var bytes = GetProgramBytes(
+            """
+            nt_write(NAMETABLE_A, 2, 2, "HI");
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        // Address 0x2042: hi=0x20, lo=0x42
+        // LDX #$20 (A220), LDA #$42 (A942), JSR vram_adr
+        Assert.Contains("A220", hex);
+        Assert.Contains("A942", hex);
+        // LDA #$02 (A902) for string length
+        Assert.Contains("A902", hex);
+    }
+
+    [Fact]
+    public void NtSetPalette()
+    {
+        // nt_set_palette(NAMETABLE_A, 4, 4, 2) should:
+        // - Compute attr_addr = (nametable + 0x3C0) + (row/4)*8 + (col/4)
+        //   = (0x2000 + 0x3C0) + (4/4)*8 + (4/4) = 0x23C0 + 8 + 1 = 0x23C9
+        // - Compute quadrant = (row & 2) | ((col & 2) >> 1) = (4&2)|(4&2>>1) = 0|0 = 0
+        // - shift = 0, mask = 0xFC
+        // - Emit read-modify-write PPU code
+        var bytes = GetProgramBytes(
+            """
+            nt_set_palette(NAMETABLE_A, 4, 4, 2);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        // Attribute address 0x23C9: hi=0x23, lo=0xC9
+        // LDA #$23 (A923), STA $2006 (PPU_ADDR)
+        Assert.Contains("A923", hex);
+        Assert.Contains("8D0620", hex); // STA $2006
+        // LDA #$C9 (A9C9)
+        Assert.Contains("A9C9", hex);
+        // AND #$FC (29FC) for mask (quadrant 0, shift 0)
+        Assert.Contains("29FC", hex);
+        // ORA #$02 (0902) for palette 2 shifted by 0
+        Assert.Contains("0902", hex);
+        // PHA (48) to save value
+        Assert.Contains("48", hex);
+        // PLA (68) to restore
+        Assert.Contains("68", hex);
+        // STA $2007 (PPU_DATA)
+        Assert.Contains("8D0720", hex);
+    }
+
+    [Fact]
+    public void NtSetPaletteQuadrant3()
+    {
+        // Test quadrant 3 (shift 6): col=6, row=6 -> quadrant = (6&2)|((6&2)>>1) = 2|1 = 3
+        // shift = 6, mask = ~(0x03 << 6) & 0xFF = ~0xC0 & 0xFF = 0x3F
+        var bytes = GetProgramBytes(
+            """
+            nt_set_palette(NAMETABLE_A, 6, 6, 1);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        // attr_addr = 0x23C0 + (6/4)*8 + (6/4) = 0x23C0 + 8 + 1 = 0x23C9
+        Assert.Contains("A923", hex);
+        Assert.Contains("A9C9", hex);
+        // AND #$3F (293F) for mask
+        Assert.Contains("293F", hex);
+        // ORA #$40 (0940) for palette 1 shifted by 6
+        Assert.Contains("0940", hex);
+    }
 }
