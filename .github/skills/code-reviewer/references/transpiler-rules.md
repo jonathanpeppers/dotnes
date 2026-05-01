@@ -34,6 +34,21 @@ produce silently broken ROMs.
 
 ---
 
+## cc65 Software Stack (pusha/popa)
+
+The transpiler uses a *software stack* (cc65's `pusha`/`popa` subroutines) on
+top of the hardware 6502 stack. This is the most common source of subtle bugs.
+
+| Check | What to look for |
+|-------|-----------------|
+| **pusha/popa balance** | Every `pusha` (push accumulator to cc65 stack) must be paired with a `popa` on all code paths. If an intrinsic sets `argsAlreadyPopped = true` but conditionally pops (e.g., `if (Stack.Count > 0) Stack.Pop()`), the call-site stack can become imbalanced. Verify both the normal and edge-case paths balance. |
+| **Single-slot state variables** | The transpiler uses single-slot fields like `_pendingLeaveTarget`, `_savedConstantViaPusha`, and `_runtimeValueInA` to track state across IL instructions. A single slot can only hold one value — if multiple IL sequences need the same slot concurrently (e.g., nested `leave` targets, overlapping pusha chains), the second write silently overwrites the first. When adding or modifying these, consider whether the slot can be entered from multiple paths. |
+| **State flag interactions** | Flags like `_savedConstantViaPusha` and `_runtimeValueInA` interact with each other. Widening one flag's scope (e.g., making popa trigger in more cases) can conflict with other paths that use the same cc65 stack slot for different purposes (function-call arguments vs arithmetic operands). Trace through all paths that read the flag. |
+| **Backward instruction scans** | The transpiler sometimes scans backward through previously emitted bytes to find/modify/remove instructions (e.g., removing a preceding `LDA` when inlining an intrinsic, or patching branch offsets). These scans are inherently fragile — they assume a specific instruction sequence (e.g., "5 consecutive `ldc` instructions") that may break if the C# compiler changes its IL emission patterns. When reviewing backward scans: (1) check that the scan has a failure mode (throws, not silently produces wrong code), (2) document the assumed IL pattern. |
+| **Conditional operation tracking** | Patterns like `hasOr`/`orMask`, `hasAnd`/`andMask` pair a boolean flag with a value. The flag may be set in cases where the value isn't populated (e.g., non-immediate operands), leading to operations applied with a stale or default mask. Verify that the flag and value are always set together. |
+
+---
+
 ## Built-in Subroutines (BuiltInSubroutines.cs)
 
 | Check | What to look for |
