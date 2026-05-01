@@ -91,7 +91,7 @@ partial class Transpiler
             {
                 if (instructions[j].OpCode == ILOpCode.Dup)
                     continue;
-                int? stlocIdx = GetStlocIndex(instructions[j]);
+                int? stlocIdx = instructions[j].GetStlocIndex();
                 if (stlocIdx.HasValue)
                     newarrStlocTargets.Add(stlocIdx.Value);
                 break;
@@ -102,7 +102,7 @@ partial class Transpiler
         var countedLocals = new HashSet<int>();
         for (int i = 0; i < instructions.Length; i++)
         {
-            int? stlocIdx = GetStlocIndex(instructions[i]);
+            int? stlocIdx = instructions[i].GetStlocIndex();
             if (stlocIdx.HasValue
                 && !countedLocals.Contains(stlocIdx.Value)
                 && !newarrStlocTargets.Contains(stlocIdx.Value))
@@ -163,16 +163,6 @@ partial class Transpiler
 
         return totalBytes;
     }
-
-    static int? GetStlocIndex(ILInstruction inst) => inst.OpCode switch
-    {
-        ILOpCode.Stloc_0 => 0,
-        ILOpCode.Stloc_1 => 1,
-        ILOpCode.Stloc_2 => 2,
-        ILOpCode.Stloc_3 => 3,
-        ILOpCode.Stloc_s or ILOpCode.Stloc => inst.Integer,
-        _ => null
-    };
 
     static int? GetLdcValue(ILInstruction inst) => inst.OpCode switch
     {
@@ -304,7 +294,7 @@ partial class Transpiler
         var addresses = new Dictionary<string, ushort>(StringComparer.Ordinal);
         var wordFields = new HashSet<string>(StringComparer.Ordinal);
         var arrayFields = new Dictionary<string, (ushort Address, int ArraySize)>(StringComparer.Ordinal);
-        ushort offset = 0;
+        int offset = 0;
         foreach (var name in fieldNames.OrderBy(n => n, StringComparer.Ordinal))
         {
             addresses[name] = (ushort)(NESConstants.LocalStackBase + offset);
@@ -314,16 +304,20 @@ partial class Transpiler
                 // Array field: negative size encodes array byte count
                 int arraySize = -size;
                 arrayFields[name] = ((ushort)(NESConstants.LocalStackBase + offset), arraySize);
-                offset += (ushort)arraySize;
+                offset += arraySize;
                 _logger.WriteLine($"Static field '{name}' allocated at ${addresses[name]:X4} (byte[{arraySize}])");
             }
             else
             {
                 if (size > 1)
                     wordFields.Add(name);
-                offset += (ushort)size;
+                offset += size;
                 _logger.WriteLine($"Static field '{name}' allocated at ${addresses[name]:X4} ({size} byte{(size > 1 ? "s" : "")})");
             }
+            if (offset > NESConstants.MaxLocalBytes)
+                throw new TranspileException(
+                    $"Static fields require {offset} bytes but only {NESConstants.MaxLocalBytes} bytes are available " +
+                    $"in NES RAM (${NESConstants.LocalStackBase:X4}–$07FF). Reduce the number or size of static fields.");
         }
         return (addresses, wordFields, offset, arrayFields);
     }

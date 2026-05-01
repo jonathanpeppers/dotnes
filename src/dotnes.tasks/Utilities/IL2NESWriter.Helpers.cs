@@ -13,20 +13,6 @@ namespace dotnes;
 partial class IL2NESWriter
 {
     /// <summary>
-    /// Gets the local index for a Stloc opcode, or null if not a Stloc.
-    /// </summary>
-    static int? GetStlocIndex(ILOpCode opCode) => opCode switch
-    {
-        ILOpCode.Stloc_0 => 0,
-        ILOpCode.Stloc_1 => 1,
-        ILOpCode.Stloc_2 => 2,
-        ILOpCode.Stloc_3 => 3,
-        ILOpCode.Stloc => null, // Would need operand
-        ILOpCode.Stloc_s => null, // Would need operand  
-        _ => null
-    };
-
-    /// <summary>
     /// Gets the local index from a Ldloc instruction.
     /// </summary>
     static int? GetLdlocIndex(ILInstruction instr) => instr.OpCode switch

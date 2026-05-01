@@ -229,4 +229,21 @@ public class LocalVariableManagerTests
         Assert.Equal("Position", manager.GetStructType(1));
         Assert.True(manager.IsStructLocal(1));
     }
+
+    [Fact]
+    public void LocalCount_AtMaxLocalBytes_Succeeds()
+    {
+        var manager = new LocalVariableManager();
+        manager.LocalCount = NESConstants.MaxLocalBytes;
+        Assert.Equal(NESConstants.MaxLocalBytes, manager.LocalCount);
+    }
+
+    [Fact]
+    public void LocalCount_ExceedsMaxLocalBytes_Throws()
+    {
+        var manager = new LocalVariableManager();
+        var ex = Assert.Throws<TranspileException>(() =>
+            manager.LocalCount = NESConstants.MaxLocalBytes + 1);
+        Assert.Contains("NES RAM", ex.Message);
+    }
 }
