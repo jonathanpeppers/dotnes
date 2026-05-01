@@ -6432,4 +6432,41 @@ public class RoslynTests
         Assert.Contains("NES RAM", ex.Message);
         Assert.Contains("$0325", ex.Message);
     }
+
+    [Fact]
+    public void IncrementLocalIndex4_UsesStlocS()
+    {
+        // Regression test for #485: GetStlocIndex must handle Stloc_s (local index > 3).
+        // With 5+ locals, the compiler uses Stloc_s for the 5th local (index 4).
+        // Before the fix, GetStlocIndex returned null for Stloc_s, so the x++ pattern
+        // was not detected and the less efficient pushax/popax path was used instead of INC.
+        var bytes = GetProgramBytes(
+            """
+            byte a = 1;
+            byte b = 2;
+            byte c = 3;
+            byte d = 4;
+            byte e = 5;
+            pal_col(0, a);
+            pal_col(1, b);
+            pal_col(2, c);
+            pal_col(3, d);
+            ppu_on_all();
+            while (true)
+            {
+                ppu_wait_nmi();
+                e++;
+                pal_col(0, e);
+            }
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"IncrementLocalIndex4 hex: {hex}");
+
+        // Local e (index 4) is at address $0329. INC absolute = EE.
+        // The optimized x++ pattern should emit EE2903 (INC $0329).
+        Assert.Contains("EE2903", hex);
+    }
 }

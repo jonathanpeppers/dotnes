@@ -376,8 +376,8 @@ partial class Transpiler
             staticFieldBytes += size;
             if (staticFieldBytes > NESConstants.MaxLocalBytes)
                 throw new TranspileException(
-                    $"Static and closure fields require {staticFieldBytes} bytes but only {NESConstants.MaxLocalBytes} bytes are available in NES RAM ($0325–$07FF). " +
-                    "Reduce the number or size of fields.");
+                    $"Static and closure fields require {staticFieldBytes} bytes but only {NESConstants.MaxLocalBytes} bytes are available " +
+                    $"in NES RAM (${NESConstants.LocalStackBase:X4}–$07FF). Reduce the number or size of fields.");
             _logger.WriteLine($"Closure field '{kvp.Key}' allocated at ${_closureFieldAddresses[kvp.Key]:X4} ({size} byte{(size > 1 ? "s" : "")})");
         }
     }
