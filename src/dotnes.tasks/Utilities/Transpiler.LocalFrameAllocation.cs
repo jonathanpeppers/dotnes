@@ -91,7 +91,7 @@ partial class Transpiler
             {
                 if (instructions[j].OpCode == ILOpCode.Dup)
                     continue;
-                int? stlocIdx = GetStlocIndex(instructions[j]);
+                int? stlocIdx = instructions[j].GetStlocIndex();
                 if (stlocIdx.HasValue)
                     newarrStlocTargets.Add(stlocIdx.Value);
                 break;
@@ -102,7 +102,7 @@ partial class Transpiler
         var countedLocals = new HashSet<int>();
         for (int i = 0; i < instructions.Length; i++)
         {
-            int? stlocIdx = GetStlocIndex(instructions[i]);
+            int? stlocIdx = instructions[i].GetStlocIndex();
             if (stlocIdx.HasValue
                 && !countedLocals.Contains(stlocIdx.Value)
                 && !newarrStlocTargets.Contains(stlocIdx.Value))
@@ -163,16 +163,6 @@ partial class Transpiler
 
         return totalBytes;
     }
-
-    static int? GetStlocIndex(ILInstruction inst) => inst.OpCode switch
-    {
-        ILOpCode.Stloc_0 => 0,
-        ILOpCode.Stloc_1 => 1,
-        ILOpCode.Stloc_2 => 2,
-        ILOpCode.Stloc_3 => 3,
-        ILOpCode.Stloc_s or ILOpCode.Stloc => inst.Integer,
-        _ => null
-    };
 
     static int? GetLdcValue(ILInstruction inst) => inst.OpCode switch
     {
