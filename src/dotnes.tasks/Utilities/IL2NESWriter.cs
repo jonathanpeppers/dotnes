@@ -479,7 +479,7 @@ partial class IL2NESWriter : NESWriter
     ushort _structArrayBaseForRuntimeIndex;
 
     /// <summary>
-    /// Cumulative bytes allocated for locals on zero page.
+    /// Cumulative bytes allocated for locals in NES RAM ($0325+).
     /// Forwarded to <see cref="Variables"/>.
     /// </summary>
     public int LocalCount { get => Variables.LocalCount; set => Variables.LocalCount = value; }

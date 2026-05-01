@@ -28,7 +28,7 @@ class LocalVariableManager
     int _localCount;
 
     /// <summary>
-    /// Cumulative bytes allocated for locals on zero page.
+    /// Cumulative bytes allocated for locals in NES RAM ($0325+).
     /// A program with 0 locals has a base address at <see cref="LocalStackBase"/>.
     /// Throws <see cref="TranspileException"/> if the allocation exceeds NES RAM.
     /// </summary>

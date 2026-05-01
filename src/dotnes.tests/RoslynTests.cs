@@ -6428,7 +6428,8 @@ public class RoslynTests
 
         var ex = Assert.Throws<TranspileException>(() =>
             GetProgramBytes(source));
-        Assert.Contains("bytes", ex.Message);
+        Assert.Contains("1300 bytes", ex.Message);
         Assert.Contains("NES RAM", ex.Message);
+        Assert.Contains("$0325", ex.Message);
     }
 }

@@ -304,7 +304,7 @@ partial class Transpiler
         var addresses = new Dictionary<string, ushort>(StringComparer.Ordinal);
         var wordFields = new HashSet<string>(StringComparer.Ordinal);
         var arrayFields = new Dictionary<string, (ushort Address, int ArraySize)>(StringComparer.Ordinal);
-        ushort offset = 0;
+        int offset = 0;
         foreach (var name in fieldNames.OrderBy(n => n, StringComparer.Ordinal))
         {
             addresses[name] = (ushort)(NESConstants.LocalStackBase + offset);
@@ -314,14 +314,14 @@ partial class Transpiler
                 // Array field: negative size encodes array byte count
                 int arraySize = -size;
                 arrayFields[name] = ((ushort)(NESConstants.LocalStackBase + offset), arraySize);
-                offset += (ushort)arraySize;
+                offset += arraySize;
                 _logger.WriteLine($"Static field '{name}' allocated at ${addresses[name]:X4} (byte[{arraySize}])");
             }
             else
             {
                 if (size > 1)
                     wordFields.Add(name);
-                offset += (ushort)size;
+                offset += size;
                 _logger.WriteLine($"Static field '{name}' allocated at ${addresses[name]:X4} ({size} byte{(size > 1 ? "s" : "")})");
             }
             if (offset > NESConstants.MaxLocalBytes)
