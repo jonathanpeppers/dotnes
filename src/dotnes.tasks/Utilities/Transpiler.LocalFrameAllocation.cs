@@ -324,6 +324,10 @@ partial class Transpiler
                 offset += (ushort)size;
                 _logger.WriteLine($"Static field '{name}' allocated at ${addresses[name]:X4} ({size} byte{(size > 1 ? "s" : "")})");
             }
+            if (offset > NESConstants.MaxLocalBytes)
+                throw new TranspileException(
+                    $"Static fields require {offset} bytes but only {NESConstants.MaxLocalBytes} bytes are available in NES RAM ($0325–$07FF). " +
+                    "Reduce the number or size of static fields.");
         }
         return (addresses, wordFields, offset, arrayFields);
     }
