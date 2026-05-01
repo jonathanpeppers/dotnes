@@ -49,7 +49,7 @@ garbage collector. The transpiler supports a strict subset of C#.
 
 | Check | What to look for |
 |-------|-----------------|
-| **Music subroutines go before `main()`** | In the ROM layout, `play_music` and `start_music` are emitted before the `main` entry point to match cc65's layout. Don't reorder these. |
+| **Music subroutines go before `main()`** | In the ROM layout, `music_tick` and `start_music` are emitted before the `main` entry point to match cc65's layout. Don't reorder these. |
 | **Note table format** | `set_music_pulse_table(ushort[])` and `set_music_triangle_table(ushort[])` store note frequencies as interleaved lo/hi byte pairs. The transpiler handles the byte interleaving — the C# code provides a plain `ushort[]`. |
 | **`apu_init()` before `start_music()`** | The APU must be initialized before starting music playback. Calling `start_music` without `apu_init` produces undefined APU state. |
-| **`play_music()` in the main loop** | `play_music()` must be called every frame (inside the `while (true)` loop, typically after `ppu_wait_nmi`). Missing it causes music to stall. |
+| **`music_tick()` in the main loop** | `music_tick()` (the built-in music engine) must be called every frame (inside the `while (true)` loop, typically after `ppu_wait_nmi`). Missing it causes music to stall. Note: `music_play(byte)` is the separate FamiTone2 extern — don't confuse the two. |
