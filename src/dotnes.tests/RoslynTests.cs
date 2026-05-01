@@ -6402,4 +6402,21 @@ public class RoslynTests
         Assert.Equal(Opcode.ORA, oraInstr.Opcode);
         Assert.Equal(0xF0, ((ImmediateOperand)oraInstr.Operand!).Value);
     }
+
+    [Fact]
+    public void MetaSpr2x2BeforeNewarrDoesNotThrow()
+    {
+        // Regression test for #484: meta_spr_2x2 removes its argument LDAs from
+        // the block, then the subsequent newarr handler tried to remove an LDA
+        // that no longer existed, causing an InvalidOperationException.
+        var bytes = GetProgramBytes(
+            """
+            byte[] metasprite = meta_spr_2x2(0xD8, 0xD9, 0xDA, 0xDB);
+            byte[] actor_x = new byte[16];
+            byte[] actor_y = new byte[16];
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+    }
 }
