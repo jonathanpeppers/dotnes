@@ -490,7 +490,7 @@ partial class IL2NESWriter
             var next1 = Instructions[Index + 1];
             var next2 = Instructions[Index + 2];
             
-            int? storeLocalIndex = GetStlocIndex(next2);
+            int? storeLocalIndex = next2.GetStlocIndex();
             
             if ((next1.OpCode == ILOpCode.Conv_u1 || next1.OpCode == ILOpCode.Conv_u2 ||
                  next1.OpCode == ILOpCode.Conv_u4 || next1.OpCode == ILOpCode.Conv_u8) &&
