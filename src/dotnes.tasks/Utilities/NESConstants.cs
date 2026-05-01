@@ -44,6 +44,12 @@ internal static class NESConstants
     // Local variable storage
     public const ushort LocalStackBase = 0x0325;
 
+    /// <summary>
+    /// Maximum bytes available for local variables and static fields.
+    /// NES internal RAM ends at $0800; locals/statics start at <see cref="LocalStackBase"/>.
+    /// </summary>
+    public const int MaxLocalBytes = 0x0800 - LocalStackBase;
+
     // PRG ROM
     public const ushort PrgRomStart = 0x8000;
 

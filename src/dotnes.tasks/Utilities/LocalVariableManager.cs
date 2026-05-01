@@ -25,11 +25,25 @@ class LocalVariableManager
     /// </summary>
     public Dictionary<int, Local> Locals { get; } = new();
 
+    int _localCount;
+
     /// <summary>
-    /// Cumulative bytes allocated for locals on zero page.
+    /// Cumulative bytes allocated for locals in NES RAM ($0325+).
     /// A program with 0 locals has a base address at <see cref="LocalStackBase"/>.
+    /// Throws <see cref="TranspileException"/> if the allocation exceeds NES RAM.
     /// </summary>
-    public int LocalCount { get; set; }
+    public int LocalCount
+    {
+        get => _localCount;
+        set
+        {
+            if (value > MaxLocalBytes)
+                throw new TranspileException(
+                    $"Local variables and static fields require {value} bytes but only {MaxLocalBytes} bytes are available " +
+                    $"in NES RAM (${LocalStackBase:X4}–$07FF). Reduce the number or size of variables and fields.");
+            _localCount = value;
+        }
+    }
 
     /// <summary>
     /// Local variable indices that are word-sized (ushort). Detected by pre-scanning

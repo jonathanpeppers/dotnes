@@ -6404,6 +6404,36 @@ public class RoslynTests
     }
 
     [Fact]
+    public void StaticFieldOverflow_Throws()
+    {
+        // Allocating too many static fields must throw, not silently corrupt memory.
+        // MaxLocalBytes is 0x0800 - 0x0325 = 1243 bytes.
+        // 13 byte[100] arrays = 1300 bytes, which exceeds the limit.
+        var fieldDecls = new System.Text.StringBuilder();
+        var fieldUsage = new System.Text.StringBuilder();
+        for (int i = 0; i < 13; i++)
+        {
+            fieldDecls.AppendLine($"    public static byte[] f{i:D2};");
+            fieldUsage.AppendLine($"G.f{i:D2} = new byte[100];");
+        }
+
+        var source = fieldUsage.ToString() + """
+
+            ppu_on_all();
+            while (true) ;
+
+            static class G
+            {
+            """ + fieldDecls.ToString() + "}";
+
+        var ex = Assert.Throws<TranspileException>(() =>
+            GetProgramBytes(source));
+        Assert.Contains("1300 bytes", ex.Message);
+        Assert.Contains("NES RAM", ex.Message);
+        Assert.Contains("$0325", ex.Message);
+    }
+
+    [Fact]
     public void IncrementLocalIndex4_UsesStlocS()
     {
         // Regression test for #485: GetStlocIndex must handle Stloc_s (local index > 3).
