@@ -1289,7 +1289,7 @@ partial class IL2NESWriter
                                 RemoveLastInstructions(toRemove);
                         }
 
-                        // Check if this is a music note table(newarr; dup; ldtoken; InitializeArray)
+                        // Check if this is a music note table (newarr; dup; ldtoken; InitializeArray)
                         // vs a regular ushort array (newarr; dup; ldc; ldc; stelem).
                         // Only pre-allocate zero-page space for regular arrays.
                         bool isMusicTable = Instructions != null
