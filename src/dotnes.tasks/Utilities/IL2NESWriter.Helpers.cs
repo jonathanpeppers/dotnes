@@ -44,22 +44,7 @@ partial class IL2NESWriter
         return null;
     }
 
-    static int? GetLdcValue(ILInstruction instr) => instr.OpCode switch
-    {
-        ILOpCode.Ldc_i4_m1 => -1,
-        ILOpCode.Ldc_i4_0 => 0,
-        ILOpCode.Ldc_i4_1 => 1,
-        ILOpCode.Ldc_i4_2 => 2,
-        ILOpCode.Ldc_i4_3 => 3,
-        ILOpCode.Ldc_i4_4 => 4,
-        ILOpCode.Ldc_i4_5 => 5,
-        ILOpCode.Ldc_i4_6 => 6,
-        ILOpCode.Ldc_i4_7 => 7,
-        ILOpCode.Ldc_i4_8 => 8,
-        ILOpCode.Ldc_i4_s => instr.Integer,
-        ILOpCode.Ldc_i4 => instr.Integer,
-        _ => null
-    };
+    static int? GetLdcValue(ILInstruction instr) => instr.GetLdcValue();
 
     /// <summary>
     /// Returns true if the next IL instruction is a branch comparison opcode
