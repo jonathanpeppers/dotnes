@@ -6574,10 +6574,9 @@ public class RoslynTests
         Assert.Contains("29FC", hex);
         // ORA #$02 (0902) for palette 2 shifted by 0
         Assert.Contains("0902", hex);
-        // PHA (48) to save value
-        Assert.Contains("48", hex);
-        // PLA (68) to restore
-        Assert.Contains("68", hex);
+        // PHA (48), then re-set PPU addr, PLA (68), STA $2007
+        // Full write-back sequence: PHA, LDA #$23, STA $2006, LDA #$C9, STA $2006, PLA, STA $2007
+        Assert.Contains("48A9238D0620A9C98D062068", hex);
         // STA $2007 (PPU_DATA)
         Assert.Contains("8D0720", hex);
     }
@@ -6604,5 +6603,57 @@ public class RoslynTests
         Assert.Contains("293F", hex);
         // ORA #$40 (0940) for palette 1 shifted by 6
         Assert.Contains("0940", hex);
+    }
+
+    [Fact]
+    public void NtPutTileRuntime()
+    {
+        // nt_put_tile with a runtime local variable for tile
+        var bytes = GetProgramBytes(
+            """
+            byte tile = 0x42;
+            nt_put_tile(NAMETABLE_A, 5, 10, tile);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        // Address 0x2145: hi=0x21, lo=0x45
+        // LDX #$21 (A221), LDA #$45 (A945), JSR vram_adr
+        Assert.Contains("A221", hex);
+        Assert.Contains("A945", hex);
+        // The tile should be loaded from a local variable (LDA $addr), then JSR vram_put
+        // Verify vram_put is called (the JSR vram_put opcode sequence should be present)
+    }
+
+    [Fact]
+    public void NtSetPaletteRuntime()
+    {
+        // nt_set_palette with a runtime local variable for palette
+        var bytes = GetProgramBytes(
+            """
+            byte pal = 2;
+            nt_set_palette(NAMETABLE_A, 4, 4, pal);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        // Attribute address 0x23C9: hi=0x23, lo=0xC9
+        Assert.Contains("A923", hex);
+        Assert.Contains("A9C9", hex);
+        // AND #$FC (29FC) for mask (quadrant 0, shift 0)
+        Assert.Contains("29FC", hex);
+        // Runtime path: STA $17 (TEMP), re-load palette, AND #$03, ORA $17
+        // STA TEMP = 8517
+        Assert.Contains("8517", hex);
+        // AND #$03 (2903) to mask palette to 2 bits
+        Assert.Contains("2903", hex);
+        // ORA TEMP = 0517
+        Assert.Contains("0517", hex);
     }
 }

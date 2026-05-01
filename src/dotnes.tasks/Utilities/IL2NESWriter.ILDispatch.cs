@@ -3078,22 +3078,36 @@ partial class IL2NESWriter
                             int col = Stack.Count > 0 ? Stack.Pop() : 0;
                             int nametable = Stack.Count > 0 ? Stack.Pop() : 0;
 
-                            // Validate nametable, col, row are compile-time constants
-                            // by checking the preceding instructions
-                            if (block.Count < 4)
-                                throw new TranspileException("nt_put_tile requires compile-time constant nametable, col, and row arguments", MethodName);
-
-                            // Check if tile is runtime (last LDA is absolute, not immediate)
+                            // Check if tile is runtime (local variable or static field)
                             var lastInstr = block[block.Count - 1];
                             bool tileIsRuntime = lastInstr.Opcode == Opcode.LDA && lastInstr.Mode == AddressMode.Absolute;
+                            bool tileIsLocal = _lastLoadedLocalIndex.HasValue;
+                            bool tileIsStaticField = _lastStaticFieldAddress.HasValue;
+                            if (!tileIsRuntime && (_runtimeValueInA || tileIsLocal || tileIsStaticField))
+                                throw new TranspileException("nt_put_tile: tile must be a compile-time constant or a simple local variable.", MethodName);
+
+                            // Validate arg-load pattern: need enough instructions for
+                            // (ushort: LDX+LDA+pushax=3, byte: LDA+pusha=2) * 3 args + last arg LDA = 8 or 7
+                            int instrToRemove = nametable > byte.MaxValue ? 8 : 7;
+                            if (block.Count < instrToRemove)
+                                throw new TranspileException("nt_put_tile requires compile-time constant nametable, col, and row arguments.", MethodName);
+
+                            // Bounds validation
+                            if (col > 31)
+                                throw new TranspileException($"nt_put_tile: col ({col}) must be 0-31.", MethodName);
+                            if (row > 29)
+                                throw new TranspileException($"nt_put_tile: row ({row}) must be 0-29 (rows 30-31 overlap the attribute table).", MethodName);
 
                             // Compute address at compile time
                             ushort addr = (ushort)(nametable | (row << 5) | col);
                             byte addrHi = (byte)(addr >> 8);
                             byte addrLo = (byte)(addr & 0xFF);
 
-                            // Remove the 4 LDA #imm instructions that loaded the args
-                            RemoveLastInstructions(4);
+                            // Remove arg-loading instructions:
+                            // ushort nametable: LDX+LDA+JSR pushax = 3, then
+                            // byte col: LDA+JSR pusha = 2, byte row: LDA+JSR pusha = 2,
+                            // byte tile (last arg): LDA = 1. Total = 8 (or 7 for byte nametable).
+                            RemoveLastInstructions(instrToRemove);
 
                             // Emit vram_adr(addr)
                             Emit(Opcode.LDX, AddressMode.Immediate, addrHi);
@@ -3113,6 +3127,8 @@ partial class IL2NESWriter
                             EmitWithLabel(Opcode.JSR, AddressMode.Absolute, nameof(NESLib.vram_put));
 
                             _immediateInA = null;
+                            _lastLoadedLocalIndex = null;
+                            _lastStaticFieldAddress = null;
                             argsAlreadyPopped = true;
                         }
                         break;
@@ -3123,16 +3139,21 @@ partial class IL2NESWriter
                             var block = CurrentBlock!;
                             // Detect byte array local via _lastLoadedLocalIndex
                             Local? arrayLocal = null;
-                            bool isByteArrayLocal = _lastLoadedLocalIndex.HasValue &&
-                                Locals.TryGetValue(_lastLoadedLocalIndex.Value, out arrayLocal) &&
-                                arrayLocal.ArraySize > 0;
+                            if (_lastLoadedLocalIndex.HasValue)
+                                Locals.TryGetValue(_lastLoadedLocalIndex.Value, out arrayLocal);
 
                             // Pop args: len, buf (arraySize), row, col, nametable
                             int len = Stack.Count > 0 ? Stack.Pop() : 0;
-                            Stack.Pop(); // array size placeholder
+                            if (Stack.Count > 0) Stack.Pop(); // array size placeholder
                             int row = Stack.Count > 0 ? Stack.Pop() : 0;
                             int col = Stack.Count > 0 ? Stack.Pop() : 0;
                             int nametable = Stack.Count > 0 ? Stack.Pop() : 0;
+
+                            // Bounds validation
+                            if (col > 31)
+                                throw new TranspileException($"nt_put_row: col ({col}) must be 0-31.", MethodName);
+                            if (row > 29)
+                                throw new TranspileException($"nt_put_row: row ({row}) must be 0-29 (rows 30-31 overlap the attribute table).", MethodName);
 
                             // Compute address at compile time
                             ushort addr = (ushort)(nametable | (row << 5) | col);
@@ -3143,8 +3164,22 @@ partial class IL2NESWriter
                             bool isRomArray = arrayLocal != null && arrayLocal.LabelName != null;
                             bool isRamArray = arrayLocal != null && arrayLocal.Address.HasValue;
 
-                            // Remove ldloc buf (LDA $arrayAddr) + ldc len (LDA #len) + 3 constant args
-                            RemoveLastInstructions(5);
+                            // Remove arg-loading instructions by walking backwards.
+                            // The arg-load sequence consists of LDA/LDX/JSR(pusha|pushax)
+                            // instructions. The count varies depending on array type
+                            // (ROM arrays emit more instructions than RAM arrays).
+                            int instrToRemove = 0;
+                            for (int i = block.Count - 1; i >= 0; i--)
+                            {
+                                var instr = block[i];
+                                if (instr.Opcode is Opcode.LDA or Opcode.LDX
+                                    || (instr.Opcode == Opcode.JSR && instr.Operand is LabelOperand lbl
+                                        && lbl.Label is "pusha" or "pushax"))
+                                    instrToRemove++;
+                                else
+                                    break;
+                            }
+                            RemoveLastInstructions(instrToRemove);
 
                             // Set up TEMP/TEMP2 with address (with NT_UPD_HORZ flag on hi byte)
                             Emit(Opcode.LDA, AddressMode.Immediate, (byte)(addrHi | NT_UPD_HORZ));
@@ -3172,7 +3207,7 @@ partial class IL2NESWriter
                             else
                             {
                                 throw new TranspileException(
-                                    "nt_put_row requires a byte array argument", MethodName);
+                                    "nt_put_row requires a byte array argument.", MethodName);
                             }
 
                             // A = length
@@ -3202,19 +3237,46 @@ partial class IL2NESWriter
                             // LDA #<string_N, LDX #>string_N, JSR pushax, LDX #$00, LDA #len
                             // String LDA is at -5 from end
                             if (block.Count < 5)
-                                throw new TranspileException("nt_write requires a string literal argument", MethodName);
+                                throw new TranspileException("nt_write requires a string literal argument.", MethodName);
                             var ldaStrInstr = block[block.Count - 5];
                             if (ldaStrInstr.Operand is not LowByteOperand strOperand)
-                                throw new TranspileException("nt_write requires a string literal argument", MethodName);
+                                throw new TranspileException("nt_write requires a string literal argument.", MethodName);
                             string strLabel = strOperand.Label;
+
+                            // Bounds validation
+                            if (col > 31)
+                                throw new TranspileException($"nt_write: col ({col}) must be 0-31.", MethodName);
+                            if (row > 29)
+                                throw new TranspileException($"nt_write: row ({row}) must be 0-29 (rows 30-31 overlap the attribute table).", MethodName);
 
                             // Compute address at compile time
                             ushort addr = (ushort)(nametable | (row << 5) | col);
                             byte addrHi = (byte)(addr >> 8);
                             byte addrLo = (byte)(addr & 0xFF);
 
-                            // Remove: 3 constant args (nametable, col, row) + Ldstr pattern (5 instrs)
-                            RemoveLastInstructions(8);
+                            // Remove arg-loading instructions:
+                            // ushort nametable: LDX+LDA+JSR pushax = 3 (or 2 for byte)
+                            // byte col: LDA+JSR pusha = 2, byte row: LDA+JSR pusha = 2
+                            // JSR pusha (save row before Ldstr) = 1
+                            // Ldstr pattern: LDA #<str, LDX #>str, JSR pushax, LDX #$00, LDA #len = 5
+                            // Total: 3+2+2+1+5 = 13 (ushort) or 2+2+2+1+5 = 12 (byte)
+                            int instrToRemove = nametable > byte.MaxValue ? 13 : 12;
+                            if (block.Count < instrToRemove)
+                            {
+                                // Fall back to backward walk if block is smaller than expected
+                                instrToRemove = 0;
+                                for (int i = block.Count - 1; i >= 0; i--)
+                                {
+                                    var instr = block[i];
+                                    if (instr.Opcode is Opcode.LDA or Opcode.LDX
+                                        || (instr.Opcode == Opcode.JSR && instr.Operand is LabelOperand lbl
+                                            && lbl.Label is "pusha" or "pushax"))
+                                        instrToRemove++;
+                                    else
+                                        break;
+                                }
+                            }
+                            RemoveLastInstructions(instrToRemove);
 
                             // Emit vram_adr(addr)
                             Emit(Opcode.LDX, AddressMode.Immediate, addrHi);
@@ -3246,11 +3308,24 @@ partial class IL2NESWriter
                             int col = Stack.Count > 0 ? Stack.Pop() : 0;
                             int nametable = Stack.Count > 0 ? Stack.Pop() : 0;
 
-                            // Check if palette is runtime (last LDA is absolute, not immediate)
-                            if (block.Count < 4)
-                                throw new TranspileException("nt_set_palette requires compile-time constant nametable, col, and row arguments", MethodName);
+                            // Check if palette is runtime (local variable or static field)
                             var lastInstr = block[block.Count - 1];
                             bool paletteIsRuntime = lastInstr.Opcode == Opcode.LDA && lastInstr.Mode == AddressMode.Absolute;
+                            bool paletteIsLocal = _lastLoadedLocalIndex.HasValue;
+                            bool paletteIsStaticField = _lastStaticFieldAddress.HasValue;
+                            if (!paletteIsRuntime && (_runtimeValueInA || paletteIsLocal || paletteIsStaticField))
+                                throw new TranspileException("nt_set_palette: palette must be a compile-time constant or a simple local variable.", MethodName);
+
+                            // Validate arg-load pattern
+                            int instrToRemove = nametable > byte.MaxValue ? 8 : 7;
+                            if (block.Count < instrToRemove)
+                                throw new TranspileException("nt_set_palette requires compile-time constant nametable, col, and row arguments.", MethodName);
+
+                            // Bounds validation
+                            if (col > 31)
+                                throw new TranspileException($"nt_set_palette: col ({col}) must be 0-31.", MethodName);
+                            if (row > 29)
+                                throw new TranspileException($"nt_set_palette: row ({row}) must be 0-29 (rows 30-31 overlap the attribute table).", MethodName);
 
                             // Compute attribute table address at compile time:
                             // attr_base = nametable + 0x3C0
@@ -3265,8 +3340,8 @@ partial class IL2NESWriter
                             int shift = quadrant * 2;
                             byte mask = (byte)(~(0x03 << shift) & 0xFF);
 
-                            // Remove the 4 LDA #imm instructions that loaded the args
-                            RemoveLastInstructions(4);
+                            // Remove arg-loading instructions (same pattern as nt_put_tile)
+                            RemoveLastInstructions(instrToRemove);
 
                             // Set PPU address for read
                             Emit(Opcode.LDA, AddressMode.Immediate, attrHi);
@@ -3316,6 +3391,8 @@ partial class IL2NESWriter
                             Emit(Opcode.STA, AddressMode.Absolute, NESConstants.PPU_DATA);
 
                             _immediateInA = null;
+                            _lastLoadedLocalIndex = null;
+                            _lastStaticFieldAddress = null;
                             argsAlreadyPopped = true;
                         }
                         break;

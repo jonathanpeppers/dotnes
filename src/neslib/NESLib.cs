@@ -585,9 +585,9 @@ public static class NESLib
     /// Equivalent to: vram_adr(nametable | (row &lt;&lt; 5) | col); vram_put(tile);
     /// Must be called when PPU rendering is off.
     /// </summary>
-    /// <param name="nametable">Nametable base address (NAMETABLE_A, B, C, or D)</param>
-    /// <param name="col">Column (0-31)</param>
-    /// <param name="row">Row (0-29)</param>
+    /// <param name="nametable">Nametable base address (NAMETABLE_A, B, C, or D). Must be a compile-time constant.</param>
+    /// <param name="col">Column (0-31). Must be a compile-time constant.</param>
+    /// <param name="row">Row (0-29). Must be a compile-time constant.</param>
     /// <param name="tile">Tile index to write</param>
     public static void nt_put_tile(ushort nametable, byte col, byte row, byte tile) => throw null!;
 
@@ -596,9 +596,9 @@ public static class NESLib
     /// Equivalent to: vrambuf_put(nametable | (row &lt;&lt; 5) | col, buf, len);
     /// Can be called with PPU on — updates are flushed during NMI.
     /// </summary>
-    /// <param name="nametable">Nametable base address (NAMETABLE_A, B, C, or D)</param>
-    /// <param name="col">Starting column (0-31)</param>
-    /// <param name="row">Row (0-29)</param>
+    /// <param name="nametable">Nametable base address (NAMETABLE_A, B, C, or D). Must be a compile-time constant.</param>
+    /// <param name="col">Starting column (0-31). Must be a compile-time constant.</param>
+    /// <param name="row">Row (0-29). Must be a compile-time constant.</param>
     /// <param name="buf">Byte array of tile indices</param>
     /// <param name="len">Number of tiles to write</param>
     public static void nt_put_row(ushort nametable, byte col, byte row, byte[] buf, byte len) => throw null!;
@@ -608,9 +608,9 @@ public static class NESLib
     /// Equivalent to: vram_adr(nametable | (row &lt;&lt; 5) | col); vram_write(str);
     /// Must be called when PPU rendering is off.
     /// </summary>
-    /// <param name="nametable">Nametable base address (NAMETABLE_A, B, C, or D)</param>
-    /// <param name="col">Starting column (0-31)</param>
-    /// <param name="row">Row (0-29)</param>
+    /// <param name="nametable">Nametable base address (NAMETABLE_A, B, C, or D). Must be a compile-time constant.</param>
+    /// <param name="col">Starting column (0-31). Must be a compile-time constant.</param>
+    /// <param name="row">Row (0-29). Must be a compile-time constant.</param>
     /// <param name="str">String to write</param>
     public static void nt_write(ushort nametable, byte col, byte row, string str) => throw null!;
 
@@ -620,9 +620,9 @@ public static class NESLib
     /// the correct 2-bit field within the packed attribute byte.
     /// Must be called when PPU rendering is off.
     /// </summary>
-    /// <param name="nametable">Nametable base address (NAMETABLE_A, B, C, or D)</param>
-    /// <param name="col">Tile column (0-31), determines which 16x16 block</param>
-    /// <param name="row">Tile row (0-29), determines which 16x16 block</param>
+    /// <param name="nametable">Nametable base address (NAMETABLE_A, B, C, or D). Must be a compile-time constant.</param>
+    /// <param name="col">Tile column (0-31), determines which 16x16 block. Must be a compile-time constant.</param>
+    /// <param name="row">Tile row (0-29), determines which 16x16 block. Must be a compile-time constant.</param>
     /// <param name="palette">Palette index (0-3)</param>
     public static void nt_set_palette(ushort nametable, byte col, byte row, byte palette) => throw null!;
 
