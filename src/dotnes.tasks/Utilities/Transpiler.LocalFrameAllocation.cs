@@ -164,21 +164,7 @@ partial class Transpiler
         return totalBytes;
     }
 
-    static int? GetLdcValue(ILInstruction inst) => inst.OpCode switch
-    {
-        ILOpCode.Ldc_i4_0 => 0,
-        ILOpCode.Ldc_i4_1 => 1,
-        ILOpCode.Ldc_i4_2 => 2,
-        ILOpCode.Ldc_i4_3 => 3,
-        ILOpCode.Ldc_i4_4 => 4,
-        ILOpCode.Ldc_i4_5 => 5,
-        ILOpCode.Ldc_i4_6 => 6,
-        ILOpCode.Ldc_i4_7 => 7,
-        ILOpCode.Ldc_i4_8 => 8,
-        ILOpCode.Ldc_i4_s or ILOpCode.Ldc_i4 => inst.Integer,
-        ILOpCode.Ldc_i4_m1 => -1,
-        _ => null
-    };
+    static int? GetLdcValue(ILInstruction inst) => inst.GetLdcValue();
 
     /// <summary>
     /// Compute frame offsets for each user method based on the call graph.
