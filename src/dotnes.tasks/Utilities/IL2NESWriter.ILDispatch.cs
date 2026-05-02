@@ -1267,7 +1267,8 @@ partial class IL2NESWriter
                         if (isLdcPrevious)
                         {
                             int toRemove = Stack.Count > 0 && Stack.Peek() > byte.MaxValue ? 2 : 1;
-                            RemoveLastInstructions(toRemove);
+                            if (GetBufferedBlockCount() >= toRemove)
+                                RemoveLastInstructions(toRemove);
                         }
                         _pendingStructArrayCount = Stack.Count > 0 ? Stack.Peek() : 0;
                         // Pre-allocate the struct array now (optimizer uses dup before stloc)
@@ -1284,7 +1285,8 @@ partial class IL2NESWriter
                         if (isLdcPrevious)
                         {
                             int toRemove = Stack.Count > 0 && Stack.Peek() > byte.MaxValue ? 2 : 1;
-                            RemoveLastInstructions(toRemove);
+                            if (GetBufferedBlockCount() >= toRemove)
+                                RemoveLastInstructions(toRemove);
                         }
 
                         // Check if this is a music note table (newarr; dup; ldtoken; InitializeArray)
@@ -1307,7 +1309,8 @@ partial class IL2NESWriter
                     {
                         // Remove LDA emitted for the array size constant
                         int toRemove = Stack.Count > 0 && Stack.Peek() > byte.MaxValue ? 2 : 1;
-                        RemoveLastInstructions(toRemove);
+                        if (GetBufferedBlockCount() >= toRemove)
+                            RemoveLastInstructions(toRemove);
                     }
                     // Track the array element type so the next Ldtoken can handle non-byte arrays
                     _pendingArrayType = instruction.String;

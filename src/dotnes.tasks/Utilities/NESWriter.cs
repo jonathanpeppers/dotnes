@@ -202,7 +202,11 @@ class NESWriter : IDisposable
     {
         if (_bufferedBlock == null)
             throw new InvalidOperationException("RemoveLastInstructions called but not in block buffering mode");
-        
+
+        if (_bufferedBlock.Count < count)
+            throw new InvalidOperationException(
+                $"Cannot remove {count} instruction(s): only {_bufferedBlock.Count} available in block");
+
         LastLDA = false;
         _logger.WriteLine($"Removing last {count} instruction(s) from block");
         _bufferedBlock.RemoveLast(count);
