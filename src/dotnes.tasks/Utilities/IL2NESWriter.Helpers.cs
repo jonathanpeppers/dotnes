@@ -13,26 +13,13 @@ namespace dotnes;
 partial class IL2NESWriter
 {
     /// <summary>
-    /// Gets the local index from a Ldloc instruction.
-    /// </summary>
-    static int? GetLdlocIndex(ILInstruction instr) => instr.OpCode switch
-    {
-        ILOpCode.Ldloc_0 => 0,
-        ILOpCode.Ldloc_1 => 1,
-        ILOpCode.Ldloc_2 => 2,
-        ILOpCode.Ldloc_3 => 3,
-        ILOpCode.Ldloc_s => instr.Integer,
-        _ => null
-    };
-
-    /// <summary>
     /// Tries to resolve an array Local from an IL instruction.
     /// Handles both ldloc (local variable) and ldsfld (static field) array sources.
     /// </summary>
     Local? TryResolveArrayLocal(ILInstruction instr)
     {
         // Try local variable first
-        var localIdx = GetLdlocIndex(instr);
+        var localIdx = instr.GetLdlocIndex();
         if (localIdx != null && Locals.TryGetValue(localIdx.Value, out var loc))
             return loc;
 
@@ -43,23 +30,6 @@ partial class IL2NESWriter
 
         return null;
     }
-
-    static int? GetLdcValue(ILInstruction instr) => instr.OpCode switch
-    {
-        ILOpCode.Ldc_i4_m1 => -1,
-        ILOpCode.Ldc_i4_0 => 0,
-        ILOpCode.Ldc_i4_1 => 1,
-        ILOpCode.Ldc_i4_2 => 2,
-        ILOpCode.Ldc_i4_3 => 3,
-        ILOpCode.Ldc_i4_4 => 4,
-        ILOpCode.Ldc_i4_5 => 5,
-        ILOpCode.Ldc_i4_6 => 6,
-        ILOpCode.Ldc_i4_7 => 7,
-        ILOpCode.Ldc_i4_8 => 8,
-        ILOpCode.Ldc_i4_s => instr.Integer,
-        ILOpCode.Ldc_i4 => instr.Integer,
-        _ => null
-    };
 
     /// <summary>
     /// Returns true if the next IL instruction is a branch comparison opcode

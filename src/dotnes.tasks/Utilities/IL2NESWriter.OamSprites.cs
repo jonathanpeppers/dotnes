@@ -74,8 +74,8 @@ partial class IL2NESWriter
                         // Standalone array element arg
                         ilIdx--;
                         int idxLoc = -1, arrLoc = -1;
-                        if (ilIdx >= 0) { idxLoc = GetLdlocIndex(Instructions[ilIdx]) ?? -1; ilIdx--; }
-                        if (ilIdx >= 0) { arrLoc = GetLdlocIndex(Instructions[ilIdx]) ?? -1; }
+                        if (ilIdx >= 0) { idxLoc = Instructions[ilIdx].GetLdlocIndex() ?? -1; ilIdx--; }
+                        if (ilIdx >= 0) { arrLoc = Instructions[ilIdx].GetLdlocIndex() ?? -1; }
                         argInfos.Add((false, 0, 0, false, 0, true, arrLoc, idxLoc,
                             false, 0, ILOpCode.Nop, 0, 0, false, null, null));
                         needed--;
@@ -577,7 +577,7 @@ partial class IL2NESWriter
         if (scan >= 0)
         {
             var dataInstr = Instructions[scan];
-            var dataLocIdx = GetLdlocIndex(dataInstr);
+            var dataLocIdx = dataInstr.GetLdlocIndex();
             if (dataLocIdx != null && Locals.TryGetValue(dataLocIdx.Value, out var dataLocal))
             {
                 if (dataLocal.LabelName != null)
@@ -594,13 +594,13 @@ partial class IL2NESWriter
         if (!isOamScope && scan >= 0)
         {
             var si = Instructions[scan];
-            var sLocIdx = GetLdlocIndex(si);
+            var sLocIdx = si.GetLdlocIndex();
             if (sLocIdx != null && Locals.TryGetValue(sLocIdx.Value, out var sLoc) && sLoc.Address != null)
             {
                 spridAddr = (ushort)sLoc.Address;
                 scan--;
             }
-            else if ((GetLdcValue(si) is int sv))
+            else if ((si.GetLdcValue() is int sv))
             {
                 spridConst = sv;
                 scan--;
@@ -615,19 +615,19 @@ partial class IL2NESWriter
         if (scan >= 0 && Instructions[scan].OpCode == ILOpCode.Ldelem_u1)
         {
             scan--; // skip ldelem
-            if (scan >= 0) { indexIdx = GetLdlocIndex(Instructions[scan]); scan--; }
-            if (scan >= 0) { yArrayIdx = GetLdlocIndex(Instructions[scan]); scan--; }
+            if (scan >= 0) { indexIdx = Instructions[scan].GetLdlocIndex(); scan--; }
+            if (scan >= 0) { yArrayIdx = Instructions[scan].GetLdlocIndex(); scan--; }
         }
         else if (scan >= 0)
         {
             var yi = Instructions[scan];
-            var yLocIdx = GetLdlocIndex(yi);
+            var yLocIdx = yi.GetLdlocIndex();
             if (yLocIdx != null && Locals.TryGetValue(yLocIdx.Value, out var yLoc) && yLoc.Address != null)
             {
                 yAddr = (ushort)yLoc.Address;
                 scan--;
             }
-            else if ((GetLdcValue(yi) is int yv))
+            else if ((yi.GetLdcValue() is int yv))
             {
                 yConst = yv;
                 scan--;
@@ -645,20 +645,20 @@ partial class IL2NESWriter
             scan--; // skip index ldloc (same index as y)
             if (scan >= 0)
             {
-                xArrayIdx = GetLdlocIndex(Instructions[scan]);
+                xArrayIdx = Instructions[scan].GetLdlocIndex();
                 firstArgILOffset = Instructions[scan].Offset;
             }
         }
         else if (scan >= 0)
         {
             var xi = Instructions[scan];
-            var xLocIdx = GetLdlocIndex(xi);
+            var xLocIdx = xi.GetLdlocIndex();
             if (xLocIdx != null && Locals.TryGetValue(xLocIdx.Value, out var xLoc) && xLoc.Address != null)
             {
                 xAddr = (ushort)xLoc.Address;
                 firstArgILOffset = xi.Offset;
             }
-            else if ((GetLdcValue(xi) is int xv))
+            else if ((xi.GetLdcValue() is int xv))
             {
                 xConst = xv;
                 firstArgILOffset = xi.Offset;
@@ -787,7 +787,7 @@ partial class IL2NESWriter
         if (scan >= 0)
         {
             var dataInstr = Instructions[scan];
-            var dataLocIdx = GetLdlocIndex(dataInstr);
+            var dataLocIdx = dataInstr.GetLdlocIndex();
             if (dataLocIdx != null && Locals.TryGetValue(dataLocIdx.Value, out var dataLocal))
             {
                 if (dataLocal.LabelName != null)
@@ -806,19 +806,19 @@ partial class IL2NESWriter
         if (scan >= 0 && Instructions[scan].OpCode == ILOpCode.Ldelem_u1)
         {
             scan--; // skip ldelem
-            if (scan >= 0) { palIndexIdx = GetLdlocIndex(Instructions[scan]); scan--; }
-            if (scan >= 0) { palArrayIdx = GetLdlocIndex(Instructions[scan]); scan--; }
+            if (scan >= 0) { palIndexIdx = Instructions[scan].GetLdlocIndex(); scan--; }
+            if (scan >= 0) { palArrayIdx = Instructions[scan].GetLdlocIndex(); scan--; }
         }
         else if (scan >= 0)
         {
             var pi = Instructions[scan];
-            var pLocIdx = GetLdlocIndex(pi);
+            var pLocIdx = pi.GetLdlocIndex();
             if (pLocIdx != null && Locals.TryGetValue(pLocIdx.Value, out var pLoc) && pLoc.Address != null)
             {
                 palAddr = (ushort)pLoc.Address;
                 scan--;
             }
-            else if (GetLdcValue(pi) is int pv)
+            else if (pi.GetLdcValue() is int pv)
             {
                 palConst = pv;
                 scan--;
@@ -833,19 +833,19 @@ partial class IL2NESWriter
         if (scan >= 0 && Instructions[scan].OpCode == ILOpCode.Ldelem_u1)
         {
             scan--; // skip ldelem
-            if (scan >= 0) { yIndexIdx = GetLdlocIndex(Instructions[scan]); scan--; }
-            if (scan >= 0) { yArrayIdx = GetLdlocIndex(Instructions[scan]); scan--; }
+            if (scan >= 0) { yIndexIdx = Instructions[scan].GetLdlocIndex(); scan--; }
+            if (scan >= 0) { yArrayIdx = Instructions[scan].GetLdlocIndex(); scan--; }
         }
         else if (scan >= 0)
         {
             var yi = Instructions[scan];
-            var yLocIdx = GetLdlocIndex(yi);
+            var yLocIdx = yi.GetLdlocIndex();
             if (yLocIdx != null && Locals.TryGetValue(yLocIdx.Value, out var yLoc) && yLoc.Address != null)
             {
                 yAddr = (ushort)yLoc.Address;
                 scan--;
             }
-            else if (GetLdcValue(yi) is int yv)
+            else if (yi.GetLdcValue() is int yv)
             {
                 yConst = yv;
                 scan--;
@@ -861,23 +861,23 @@ partial class IL2NESWriter
         if (scan >= 0 && Instructions[scan].OpCode == ILOpCode.Ldelem_u1)
         {
             scan--; // skip ldelem
-            if (scan >= 0) { xIndexIdx = GetLdlocIndex(Instructions[scan]); scan--; }
+            if (scan >= 0) { xIndexIdx = Instructions[scan].GetLdlocIndex(); scan--; }
             if (scan >= 0)
             {
-                xArrayIdx = GetLdlocIndex(Instructions[scan]);
+                xArrayIdx = Instructions[scan].GetLdlocIndex();
                 firstArgILOffset = Instructions[scan].Offset;
             }
         }
         else if (scan >= 0)
         {
             var xi = Instructions[scan];
-            var xLocIdx = GetLdlocIndex(xi);
+            var xLocIdx = xi.GetLdlocIndex();
             if (xLocIdx != null && Locals.TryGetValue(xLocIdx.Value, out var xLoc) && xLoc.Address != null)
             {
                 xAddr = (ushort)xLoc.Address;
                 firstArgILOffset = xi.Offset;
             }
-            else if (GetLdcValue(xi) is int xv)
+            else if (xi.GetLdcValue() is int xv)
             {
                 xConst = xv;
                 firstArgILOffset = xi.Offset;
@@ -1029,7 +1029,7 @@ partial class IL2NESWriter
                 continue;
             }
 
-            bool isValueProducer = GetLdcValue(il) != null || GetLdlocIndex(il) != null
+            bool isValueProducer = il.GetLdcValue() != null || il.GetLdlocIndex() != null
                 || il.OpCode is ILOpCode.Ldsfld;
 
             // Conv_u1 doesn't produce a new value (just converts top-of-stack), skip it
@@ -1046,7 +1046,7 @@ partial class IL2NESWriter
                 continue;
             }
 
-            var ldcValue = GetLdcValue(il);
+            var ldcValue = il.GetLdcValue();
             if (ldcValue != null)
             {
                 args[argIdx] = (true, ldcValue.Value, -1, false, null);
@@ -1056,7 +1056,7 @@ partial class IL2NESWriter
             }
             else
             {
-                var locIdx = GetLdlocIndex(il);
+                var locIdx = il.GetLdlocIndex();
                 if (locIdx != null)
                 {
                     args[argIdx] = (false, 0, locIdx.Value, false, null);
