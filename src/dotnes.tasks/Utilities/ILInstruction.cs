@@ -22,6 +22,19 @@ record ILInstruction(ILOpCode OpCode, int Offset = 0, int? Integer = null, strin
     };
 
     /// <summary>
+    /// Gets the local index for a Ldloc opcode, or null if not a Ldloc.
+    /// </summary>
+    public int? GetLdlocIndex() => OpCode switch
+    {
+        ILOpCode.Ldloc_0 => 0,
+        ILOpCode.Ldloc_1 => 1,
+        ILOpCode.Ldloc_2 => 2,
+        ILOpCode.Ldloc_3 => 3,
+        ILOpCode.Ldloc_s => Integer,
+        _ => null
+    };
+
+    /// <summary>
     /// Gets the constant value for a Ldc_i4 opcode, or null if not a Ldc_i4.
     /// </summary>
     public int? GetLdcValue() => OpCode switch

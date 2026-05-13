@@ -28,15 +28,7 @@ partial class Transpiler
                 continue;
 
             var next = instructions[i + 1];
-            int? idx = next.OpCode switch
-            {
-                ILOpCode.Stloc_0 => 0,
-                ILOpCode.Stloc_1 => 1,
-                ILOpCode.Stloc_2 => 2,
-                ILOpCode.Stloc_3 => 3,
-                ILOpCode.Stloc_s => next.Integer,
-                _ => null
-            };
+            int? idx = next.GetStlocIndex();
             if (idx.HasValue)
                 result.Add(idx.Value);
         }
@@ -69,7 +61,7 @@ partial class Transpiler
                 continue;
 
             // Look back for ldc to get array size
-            int? count = i > 0 ? GetLdcValue(instructions[i - 1]) : null;
+            int? count = i > 0 ? instructions[i - 1].GetLdcValue() : null;
             if (!count.HasValue || count.Value <= 0)
                 continue;
 
@@ -163,8 +155,6 @@ partial class Transpiler
 
         return totalBytes;
     }
-
-    static int? GetLdcValue(ILInstruction inst) => inst.GetLdcValue();
 
     /// <summary>
     /// Compute frame offsets for each user method based on the call graph.
