@@ -16,7 +16,7 @@
     <Using Include="NES" />
     <InternalsVisibleTo Include="dotnes.tests" />
     <PackageReference Include="Microsoft.Build.Tasks.Core" Version="18.4.0" />
-    <PackageReference Include="Microsoft.Build.Utilities.Core" Version="18.4.0" />
+    <PackageReference Include="Microsoft.Build.Utilities.Core" Version="18.6.3" />
     <PackageReference Include="System.Reflection.Metadata" Version="10.0.8" />
     <None Update="Targets\*" CopyToOutputDirectory="PreserveNewest" TargetPath="%(FileName)%(Extension)" />
   </ItemGroup>
