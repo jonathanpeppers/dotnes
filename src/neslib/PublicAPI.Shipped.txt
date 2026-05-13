@@ -111,6 +111,10 @@ static NES.NESLib.music_stop() -> void
 static NES.NESLib.music_tick() -> void
 static NES.NESLib.nesclock() -> byte
 static NES.NESLib.nmi_set_callback(delegate*<void> callback) -> void
+static NES.NESLib.nt_put_row(ushort nametable, byte col, byte row, byte[]! buf, byte len) -> void
+static NES.NESLib.nt_put_tile(ushort nametable, byte col, byte row, byte tile) -> void
+static NES.NESLib.nt_set_palette(ushort nametable, byte col, byte row, byte palette) -> void
+static NES.NESLib.nt_write(ushort nametable, byte col, byte row, string! str) -> void
 static NES.NESLib.oam_clear() -> void
 static NES.NESLib.oam_clear_fast() -> void
 static NES.NESLib.oam_hide_rest(byte sprid) -> void
