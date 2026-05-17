@@ -530,8 +530,27 @@ public static class NESLib
     public static void flush_vram_update(byte[] buf) => throw null!;
 
     // VRAM update buffer constants
+
+    /// <summary>
+    /// Flag bit used in the VRAM update buffer to indicate a horizontal nametable update.
+    /// </summary>
+    /// <remarks>Represents a bit flag in the ROM's VRAM update buffer format. When set on an update entry,
+    /// the entry is interpreted as a horizontal write operation and should be combined with the update address and data
+    /// bytes to perform a horizontal name table update.</remarks>
     public const byte NT_UPD_HORZ = 0x40;
+
+    /// <summary>
+    /// Flag indicating a vertical nametable update.
+    /// </summary>
+    /// <remarks>Used as a bit mask in nametable update operations; combine with other NT_* flags as
+    /// needed.</remarks>
     public const byte NT_UPD_VERT = 0x80;
+
+    /// <summary>
+    /// Marker value that signals the end of a nametable update sequence.
+    /// </summary>
+    /// <remarks>Used as a sentinel in nametable update streams; not a valid tile index and should not be used
+    /// as data.</remarks>
     public const byte NT_UPD_EOF = 0xFF;
 
     /// <summary>
@@ -588,50 +607,279 @@ public static class NESLib
 
     // These are from: https://github.com/mhughson/attributes/blob/master/neslib.h
 
+    /// <summary>
+    /// Base PPU nametable address for nametable A (0x2000).
+    /// </summary>
+    /// <remarks>Represents the start address of nametable A in the NES PPU address space. Nametables occupy
+    /// the $2000–$23FF range and the $2000–$2FFF region contains four nametable slots with mirroring behavior
+    /// determined by cartridge wiring.</remarks>
     public const ushort NAMETABLE_A = 0x2000;
+    /// <summary>
+    /// Base PPU nametable address for nametable B (0x2400).
+    /// </summary>
+    /// <remarks>Represents the start address of nametable B in the NES PPU address space. Nametables occupy
+    /// the $2400–$27FF range and the $2000–$2FFF region contains four nametable slots with mirroring behavior
+    /// determined by cartridge wiring.</remarks>
     public const ushort NAMETABLE_B = 0x2400;
+    /// <summary>
+    /// Base PPU nametable address for nametable C (0x2800).
+    /// </summary>
+    /// <remarks>Represents the start address of nametable C in the NES PPU address space. Nametables occupy
+    /// the $2800–$2BFF range and the $2000–$2FFF region contains four nametable slots with mirroring behavior
+    /// determined by cartridge wiring.</remarks>
     public const ushort NAMETABLE_C = 0x2800;
+    /// <summary>
+    /// Base PPU nametable address for nametable D (0x2c00).
+    /// </summary>
+    /// <remarks>Represents the start address of nametable D in the NES PPU address space. Nametables occupy
+    /// the $2c00–$2FFF range and the $2000–$2FFF region contains four nametable slots with mirroring behavior
+    /// determined by cartridge wiring.</remarks>
     public const ushort NAMETABLE_D = 0x2c00;
 
     // PPU register addresses for direct hardware access via poke()/peek()
+
+    /// <summary>
+    /// Address of the NES PPU control register (PPUCTRL), used to configure core PPU options.
+    /// </summary>
+    /// <remarks>Access this register with poke() for direct hardware writes. Writes set bits
+    /// such as NMI enable on VBlank, sprite/background pattern table selection, VRAM address increment mode, and base
+    /// nametable. This register is write-only; reads are open-bus on real hardware.</remarks>
     public const ushort PPU_CTRL = 0x2000;
+
+    /// <summary>
+    /// The CPU memory-mapped address of the NES PPU mask register (PPUMASK).
+    /// </summary>
+    /// <remarks>Controls PPU rendering options such as grayscale, background and sprite visibility, and color
+    /// emphasis. Accessed via the CPU memory map at $2001; reads are typically open-bus on real hardware.</remarks>
     public const ushort PPU_MASK = 0x2001;
+
+    /// <summary>
+    /// CPU address for the NES PPU status register (PPUSTATUS) at $2002.
+    /// </summary>
+    /// <remarks>Memory-mapped, read-only register that returns PPU status flags: VBlank (bit 7), Sprite 0 Hit
+    /// (bit 6), Sprite Overflow (bit 5), with lower bits typically open-bus or unused. Reading this register clears the
+    /// VBlank flag and resets the PPU address latch used by subsequent $2005/$2006 writes. PPU registers $2000–$2007
+    /// are mirrored every $8 bytes through $3FFF.</remarks>
     public const ushort PPU_STATUS = 0x2002;
+
+    /// <summary>
+    /// NES PPU scroll register address ($2005). Writing to this register sets the background scroll position; the first
+    /// write updates horizontal scroll (coarse X and fine X) and the second write updates vertical scroll (coarse Y and
+    /// fine Y).
+    /// </summary>
+    /// <remarks>This register is write-only. The PPU maintains an internal write toggle that determines
+    /// whether a write affects horizontal or vertical scroll; reading PPUSTATUS ($2002) resets that toggle. Update this
+    /// register during VBlank or via NMI to avoid visible rendering artifacts.</remarks>
     public const ushort PPU_SCROLL = 0x2005;
+
+    /// <summary>
+    /// CPU address port for the NES Picture Processing Unit (PPU), corresponding to the PPUADDR register.
+    /// </summary>
+    /// <remarks>Set the PPU's VRAM address by writing to this register before accessing the PPU data port
+    /// ($2007). Writes occur in two steps (high byte then low byte) using the internal address latch; writing updates
+    /// the PPU's VRAM address and affects subsequent VRAM reads/writes. This register is generally used as a write-only
+    /// memory-mapped I/O port on the NES.</remarks>
     public const ushort PPU_ADDR = 0x2006;
+
+    /// <summary>
+    /// Address of the NES PPU data register ($2007) used to read from and write to PPU VRAM via the CPU bus.
+    /// </summary>
+    /// <remarks>Reads from this register are buffered: the first read returns the internal buffer and then
+    /// updates the buffer with the VRAM byte at the current VRAM address; subsequent reads return the buffered value.
+    /// Writes store a byte to VRAM at the current VRAM address and then increment the VRAM address by 1 or 32 depending
+    /// on the PPUCTRL address-increment flag (bit 2). The register is mirrored every eight bytes in the CPU $2000–$3FFF
+    /// range.</remarks>
     public const ushort PPU_DATA = 0x2007;
 
     // APU register addresses for direct hardware access via poke()/peek()
+
+    /// <summary>
+    /// Address of the APU Pulse 1 control register (0x4000) for direct hardware access via poke()/peek().
+    /// </summary>
+    /// <remarks>Writing to this register configures the channel's duty, envelope/constant volume, and length
+    /// counter halt/loop behavior. Bits 7-6 select duty, bit 5 is length counter halt/envelope loop, bit 4 is constant
+    /// volume, and bits 3-0 specify envelope period or volume. This register is write-only.</remarks>
     public const ushort APU_PULSE1_CTRL = 0x4000;
+
+    /// <summary>
+    /// Address of the APU Pulse channel 1 sweep register.
+    /// </summary>
+    /// <remarks>Memory-mapped I/O register used to configure the pulse-1 sweep unit (enable, period, negate,
+    /// and shift); writes modify the channel's frequency sweep behavior.</remarks>
     public const ushort APU_PULSE1_SWEEP = 0x4001;
+
+    /// <summary>
+    /// Low-byte register address for the NES APU Pulse channel 1 timer (register $4002).
+    /// </summary>
+    /// <remarks>Paired with the high-byte register at $4003 to form the channel's 11-bit timer value that
+    /// controls the pulse waveform frequency. Write the low 8 bits here; combine with the high byte to update the
+    /// period.</remarks>
     public const ushort APU_PULSE1_TIMER_LO = 0x4002;
+
+    /// <summary>
+    /// CPU address of the APU Pulse 1 high-timer and length-counter register ($4003).
+    /// </summary>
+    /// <remarks>Writes to this register set the high bits of the 11-bit timer for pulse channel 1 and load
+    /// the length counter; typically written after the low timer byte to finalize the channel's frequency and
+    /// duration.</remarks>
     public const ushort APU_PULSE1_TIMER_HI = 0x4003;
+
+    /// <summary>
+    /// Address of the NES APU Pulse 2 control register.
+    /// </summary>
+    /// <remarks>Write-only register controlling pulse channel 2. Bits 6-7 select the duty cycle, bit 5 is
+    /// length-counter halt / envelope loop, bit 4 enables constant volume, and bits 0-3 specify envelope/volume. Used
+    /// to configure duty, envelope, and length-counter behavior for pulse channel 2.</remarks>
     public const ushort APU_PULSE2_CTRL = 0x4004;
+
+    /// <summary>
+    /// Address of the APU pulse channel 2 sweep register.
+    /// </summary>
+    /// <remarks>Write-only hardware register that configures the sweep unit for pulse channel 2; writing to
+    /// this address updates sweep parameters that alter the channel's frequency over time.</remarks>
     public const ushort APU_PULSE2_SWEEP = 0x4005;
+
+    /// <summary>
+    /// Low-byte address of the Pulse 2 timer register in the NES APU.
+    /// </summary>
+    /// <remarks>Write-only register; writing stores the low 8 bits of Pulse 2's timer period. The timer's
+    /// high bits and the length counter are written to the corresponding high-byte register at 0x4007.</remarks>
     public const ushort APU_PULSE2_TIMER_LO = 0x4006;
+
+    /// <summary>
+    /// Memory-mapped APU register address for the Pulse 2 channel timer high and length counter.
+    /// </summary>
+    /// <remarks>Writing to this register sets the high bits of Pulse 2's 11-bit timer and loads the length
+    /// counter (write-only in the NES APU).</remarks>
     public const ushort APU_PULSE2_TIMER_HI = 0x4007;
+
+    /// <summary>
+    /// Memory-mapped address of the NES APU triangle channel linear counter / length control register.
+    /// </summary>
+    /// <remarks>Bit 7 is the control/length-counter halt flag; bits 6–0 contain the 7-bit linear counter
+    /// reload value. Writing to this address updates the triangle channel's linear counter reload and the
+    /// length-counter halt flag.</remarks>
     public const ushort APU_TRIANGLE_CTRL = 0x4008;
+
+    /// <summary>
+    /// Address of the APU triangle channel timer low register (low 8 bits).
+    /// </summary>
+    /// <remarks>Write the low byte of the triangle channel timer/period. Combined with APU_TRIANGLE_TIMER_HI
+    /// (0x400B) which supplies the high bits and length-counter control; updates affect the triangle waveform
+    /// frequency.</remarks>
     public const ushort APU_TRIANGLE_TIMER_LO = 0x400A;
+
+    /// <summary>
+    /// Memory-mapped address of the APU triangle channel timer high / length-counter register.
+    /// </summary>
+    /// <remarks>Writes to this register provide the high bits of the triangle channel's frequency timer and,
+    /// per NES APU behavior, also load the length counter and affect the linear counter/reload sequence.</remarks>
     public const ushort APU_TRIANGLE_TIMER_HI = 0x400B;
+
+    /// <summary>
+    /// Memory-mapped CPU address of the NES APU noise channel control register.
+    /// </summary>
+    /// <remarks>Writing to this register configures the noise channel's envelope/constant-volume and
+    /// loop/length behaviour.</remarks>
     public const ushort APU_NOISE_CTRL = 0x400C;
+
+    /// <summary>
+    /// Memory-mapped CPU address of the NES APU noise channel period (timer) register.
+    /// </summary>
+    /// <remarks>Used to set the noise channel's period/timer via CPU memory-mapped I/O; writing a byte to
+    /// this address updates the APU noise channel timing.</remarks>
     public const ushort APU_NOISE_PERIOD = 0x400E;
+
+    /// <summary>
+    /// CPU memory-mapped register address for the NES APU noise channel (0x400F).
+    /// </summary>
+    /// <remarks>Represents the APU noise channel's register used when writing length counter and related
+    /// control data via the CPU memory map.</remarks>
     public const ushort APU_NOISE_LENGTH = 0x400F;
+
+    /// <summary>
+    /// CPU address of the NES APU status register ($4015).
+    /// </summary>
+    /// <remarks>Read to obtain audio channel and APU interrupt status; write to enable or disable individual
+    /// APU channels and update status flags.</remarks>
     public const ushort APU_STATUS = 0x4015;
 
     // Battery-backed SRAM address range ($6000-$7FFF) for use with peek()/poke()
+
+    /// <summary>
+    /// Starting address of the battery-backed SRAM region used by peek()/poke().
+    /// </summary>
+    /// <remarks>SRAM occupies the $6000–$7FFF range in the NES memory map; data written here is
+    /// battery-backed and persists across power cycles. Use peek()/poke() to access offsets within this
+    /// region.</remarks>
     public const ushort SRAM_START = 0x6000;
+
+    /// <summary>
+    /// The inclusive end address of the cartridge SRAM region in the NES CPU address space.
+    /// </summary>
+    /// <remarks>SRAM occupies the $6000–$7FFF range in the NES memory map; data written here is
+    /// battery-backed and persists across power cycles. Use peek()/poke() to access offsets within this
+    /// region.</remarks>
     public const ushort SRAM_END = 0x7FFF;
 
     // MMC3 mapper register addresses for bank switching via poke()
+
+    /// <summary>
+    /// Address of the MMC3 bank select register used for bank switching via poke().
+    /// </summary>
+    /// <remarks>Write to this address to select which internal MMC3 bank register will be modified; a
+    /// subsequent write to the bank data register (0x8001) updates the selected bank mapping.</remarks>
     public const ushort MMC3_BANK_SELECT = 0x8000;
+
+    /// <summary>
+    /// Address of the MMC3 mapper bank data register ($8001) used to update PRG and CHR bank mappings.
+    /// </summary>
+    /// <remarks>Used by MMC3 (mapper 4). Writes to this register set the bank data selected by the bank
+    /// select register at $8000 and affect either PRG or CHR mapping depending on the current bank select
+    /// value.</remarks>
     public const ushort MMC3_BANK_DATA = 0x8001;
+
+    /// <summary>
+    /// Address of the MMC3 mapper's mirroring control register ($A000).
+    /// </summary>
+    /// <remarks>Writes to this address select the PPU nametable mirroring mode; bit 0 = 0 for horizontal
+    /// mirroring and 1 for vertical mirroring. Used by the MMC3 mapper to control nametable mapping.</remarks>
     public const ushort MMC3_MIRRORING = 0xA000;
+
+    /// <summary>
+    /// CPU address for the MMC3 mapper register that controls PRG RAM (WRAM) enable and protection.
+    /// </summary>
+    /// <remarks>Writes to this address set PRG RAM write-enable/protect bits on MMC3-compatible mappers.
+    /// Behavior is mapper-specific and these registers are typically mirrored across the $8000–$FFFF CPU address
+    /// range.</remarks>
     public const ushort MMC3_WRAM_ENABLE = 0xA001;
 
     // MMC3 IRQ register addresses for scanline counting via poke()
+
+    /// <summary>
+    /// Memory-mapped address of the MMC3 IRQ latch register used for scanline counting.
+    /// </summary>
+    /// <remarks>Write a byte to this address (for example via poke()) to set the MMC3 IRQ latch. The latched
+    /// value is transferred to the IRQ counter on reload; use the MMC3 IRQ enable/disable registers to control IRQ
+    /// behavior.</remarks>
     public const ushort MMC3_IRQ_LATCH = 0xC000;
+    /// <summary>
+    /// Memory-mapped CPU address of the MMC3 IRQ reload register.
+    /// </summary>
+    /// <remarks>Writing to this address reloads the MMC3 mapper's IRQ/scanline counter. Typically used by NES
+    /// cartridges and emulators to control scanline-timed IRQs for split-screen rendering and raster effects.</remarks>
     public const ushort MMC3_IRQ_RELOAD = 0xC001;
+    /// <summary>
+    /// CPU memory address that disables MMC3 mapper IRQs when written.
+    /// </summary>
+    /// <remarks>Writing any value to this address clears the MMC3 IRQ enable flag and stops the IRQ counter.
+    /// Use the corresponding enable address (0xE001) to re-enable IRQs. Represents the CPU address $E000.</remarks>
     public const ushort MMC3_IRQ_DISABLE = 0xE000;
+    /// <summary>
+    /// Address of the MMC3 IRQ enable register in the mapper's CPU memory-mapped I/O space.
+    /// </summary>
+    /// <remarks>Writing to this address enables the MMC3 scanline IRQ generator. Typically used together with
+    /// the IRQ disable register (0xE000) and the IRQ latch/counter registers.</remarks>
     public const ushort MMC3_IRQ_ENABLE = 0xE001;
 
     /// <summary>
@@ -647,9 +895,36 @@ public static class NESLib
     public static void mmc3_set_chr_bank(byte reg, byte bank) => throw null!;
 
     // MMC1 mapper register addresses for serial shift register writes via mmc1_write()
+
+    /// <summary>
+    /// Base address of the MMC1 mapper control register used for serial shift-register writes via mmc1_write().
+    /// </summary>
+    /// <remarks>Writes to this address follow the MMC1 serial write protocol: consecutive writes shift bits
+    /// into an internal 5-bit register; a write with bit 7 set resets the shift register. After five valid writes the
+    /// 5-bit value is latched and controls mirroring, PRG banking mode, and CHR banking. This constant represents the
+    /// control register region base (typically mapped to 0x8000–0x9FFF).</remarks>
     public const ushort MMC1_CONTROL = 0x8000;
+
+    /// <summary>
+    /// Address of the MMC1 CHR bank 0 register in the NES CPU memory map.
+    /// </summary>
+    /// <remarks>Used to select the first CHR bank when the MMC1 mapper's CHR banking mode is active. Writing
+    /// to this address sets the lower 4 KB CHR bank; behavior depends on the MMC1 control register's CHR
+    /// mode.</remarks>
     public const ushort MMC1_CHR_BANK0 = 0xA000;
+
+    /// <summary>
+    /// Address label for the MMC1 mapper's CHR bank 1 in the assembled NES ROM.
+    /// </summary>
+    /// <remarks>Used as a 16-bit ROM address when emitting or referencing the first CHR bank for MMC1-based
+    /// cartridges.</remarks>
     public const ushort MMC1_CHR_BANK1 = 0xC000;
+
+    /// <summary>
+    /// Address of the MMC1 PRG bank register used to select the active PRG ROM bank.
+    /// </summary>
+    /// <remarks>Memory-mapped CPU address $E000 for the MMC1 mapper's PRG bank register; writes to this
+    /// address update the mapper's active program bank selection.</remarks>
     public const ushort MMC1_PRG_BANK = 0xE000;
 
     // MMC1 Control register PRG/CHR mode bits: use mirror | (MMC1Mirror)prg_chr_bits
@@ -691,37 +966,37 @@ public static class NESLib
 
     /// <summary>
     /// macro to calculate nametable address from X,Y in compile time
-    /// #define NTADR_A(x,y)	 	(NAMETABLE_A|(((y)<<5)|(x)))
+    /// <code>#define NTADR_A(x,y)	 	(NAMETABLE_A|(((y)&lt;&lt;5)|(x)))</code>
     /// </summary>
     public static ushort NTADR_A(byte x, byte y) => (ushort)(NAMETABLE_A | ((y << 5) | x));
 
     /// <summary>
     /// macro to calculate nametable address from X,Y in compile time
-    /// #define NTADR_B(x,y) 		(NAMETABLE_B|(((y)<<5)|(x)))
+    /// <code>#define NTADR_B(x,y) 		(NAMETABLE_B|(((y)&lt;&lt;5)|(x)))</code>
     /// </summary>
     public static ushort NTADR_B(byte x, byte y) => (ushort)(NAMETABLE_B | ((y << 5) | x));
 
     /// <summary>
     /// macro to calculate nametable address from X,Y in compile time
-    /// #define NTADR_C(x,y) 		(NAMETABLE_C|(((y)<<5)|(x)))
+    /// <code>#define NTADR_C(x,y) 		(NAMETABLE_C|(((y)&lt;&lt;5)|(x)))</code>
     /// </summary>
     public static ushort NTADR_C(byte x, byte y) => (ushort)(NAMETABLE_C | ((y << 5) | x));
 
     /// <summary>
     /// macro to calculate nametable address from X,Y in compile time
-    /// #define NTADR_D(x,y) 		(NAMETABLE_D|(((y)<<5)|(x)))
+    /// <code>#define NTADR_D(x,y) 		(NAMETABLE_D|(((y)&lt;&lt;5)|(x)))</code>
     /// </summary>
     public static ushort NTADR_D(byte x, byte y) => (ushort)(NAMETABLE_D | ((y << 5) | x));
 
     /// <summary>
     /// macro to get most significant byte in compile time
-    /// #define MSB(x)			(((x)>>8))
+    /// <code>#define MSB(x)			(((x)>>8))</code>
     /// </summary>
     public static byte MSB(ushort x) => (byte)(x >> 8);
 
     /// <summary>
     /// macro to get least significant byte in compile time
-    /// #define LSB(x)			(((x)&0xff))
+    /// <code>#define LSB(x)			(((x)&amp;0xff))</code>
     /// </summary>
     public static byte LSB(ushort x) => (byte)(x & 0xff);
 
