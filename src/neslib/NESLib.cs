@@ -641,9 +641,9 @@ public static class NESLib
     /// <summary>
     /// Address of the NES PPU control register (PPUCTRL), used to configure core PPU options.
     /// </summary>
-    /// <remarks>Access this register with poke()/peek() for direct hardware reads and writes. Writes set bits
+    /// <remarks>Access this register with poke() for direct hardware writes. Writes set bits
     /// such as NMI enable on VBlank, sprite/background pattern table selection, VRAM address increment mode, and base
-    /// nametable; reads return the current control flags.</remarks>
+    /// nametable. This register is write-only; reads are open-bus on real hardware.</remarks>
     public const ushort PPU_CTRL = 0x2000;
 
     /// <summary>
@@ -698,7 +698,7 @@ public static class NESLib
     /// </summary>
     /// <remarks>Writing to this register configures the channel's duty, envelope/constant volume, and length
     /// counter halt/loop behavior. Bits 7-6 select duty, bit 5 is length counter halt/envelope loop, bit 4 is constant
-    /// volume, and bits 3-0 specify envelope period or volume. Reads return the last written value.</remarks>
+    /// volume, and bits 3-0 specify envelope period or volume. This register is write-only.</remarks>
     public const ushort APU_PULSE1_CTRL = 0x4000;
 
     /// <summary>

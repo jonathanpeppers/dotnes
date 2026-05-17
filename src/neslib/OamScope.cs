@@ -28,6 +28,8 @@ public ref struct OamScope
     /// </summary>
     public void meta_spr_pal(byte x, byte y, byte pal, byte[] data) => throw null!;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Finalizes OAM writes and hides any remaining unused sprite slots for this frame.
+    /// </summary>
     public void Dispose() => throw null!;
 }
