@@ -53,6 +53,17 @@ partial class IL2NESWriter
             ushort arrayAddr = (ushort)(local + LocalCount);
             LocalCount += arraySize;
             Locals[localIdx] = new Local(arraySize, arrayAddr, ArraySize: arraySize);
+
+            // If this stloc follows a dup+stelem inline init, record the element
+            // values for compile-time resolution by HandleLdelemU1.
+            if (_pendingInlineArrayInit && _pendingInlineElements.Count > 0)
+            {
+                var elements = new Dictionary<int, int>();
+                foreach (var (idx, val) in _pendingInlineElements)
+                    elements[idx] = val;
+                _inlineArrayElements[localIdx] = elements;
+                _pendingInlineElements.Clear();
+            }
         }
     }
 

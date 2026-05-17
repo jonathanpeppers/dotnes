@@ -680,6 +680,40 @@ partial class IL2NESWriter
         }
 
         // Emit: LDX index; LDA array_base,X
+        // First, check if this is an inline-initialized array with known constant elements.
+        // If so, resolve the value at compile time instead of emitting RAM loads.
+        if (constantIndex != null && arrayLocalIdx != null
+            && _inlineArrayElements.TryGetValue(arrayLocalIdx.Value, out var inlineElements)
+            && inlineElements.TryGetValue(constantIndex.Value, out int inlineValue))
+        {
+            // If there's a preceding LDA #imm in the block (from a prior inline
+            // resolution), emit JSR pusha to save it — downstream handlers like
+            // NTADR_A expect the standard LDA-pusha-LDA pattern for two-arg calls.
+            int blockCount = GetBufferedBlockCount();
+            if (blockCount > 0)
+            {
+                var block = CurrentBlock!;
+                var lastInstr = block[blockCount - 1];
+                if (lastInstr.Opcode == Opcode.LDA && lastInstr.Mode == AddressMode.Immediate)
+                {
+                    EmitJSR("pusha");
+                    _savedConstantViaPusha = true;
+                }
+            }
+
+            Emit(Opcode.LDA, AddressMode.Immediate, (byte)inlineValue);
+            Stack.Push(inlineValue);
+            _immediateInA = (byte)inlineValue;
+            _lastLoadedLocalIndex = null;
+            _runtimeValueInA = false;
+            if (ScanForUpcomingMultiArgCall())
+            {
+                EmitJSR("pusha");
+                _immediateInA = null;
+            }
+            return;
+        }
+
         if (constantIndex != null)
         {
             if (constantIndex.Value == 0 && arrayLocal.Address is not null)
@@ -1140,7 +1174,64 @@ partial class IL2NESWriter
 
         if (targetArrayLocalIdx < 0 && targetArrayFromField == null)
         {
-            // Can't identify target array at all
+            // Check for dup+newarr inline array init pattern:
+            // newarr → dup → [ldc_idx, ldc_val, stelem.i1]+ → stloc
+            // The array ref is on the eval stack from dup (not in a local).
+            // Clean up all emitted instructions from the init sequence and defer
+            // to stloc to allocate the array. Element values are stored in
+            // _pendingInlineElements and associated with the local at stloc time.
+            bool isDupNewarr = false;
+            for (int i = Index - 1; i >= 0; i--)
+            {
+                var op = Instructions[i].OpCode;
+                if (op == ILOpCode.Dup)
+                {
+                    // Check if newarr is right before the dup
+                    if (i > 0 && Instructions[i - 1].OpCode == ILOpCode.Newarr)
+                    {
+                        isDupNewarr = true;
+                        // Find the IL offset of the ldc before newarr (the array size constant)
+                        int cleanupOffset = i > 1 ? Instructions[i - 2].Offset : Instructions[i - 1].Offset;
+                        if (_blockCountAtILOffset.TryGetValue(cleanupOffset, out int blockCount))
+                        {
+                            int instrToRemove = GetBufferedBlockCount() - blockCount;
+                            if (instrToRemove > 0)
+                                RemoveLastInstructions(instrToRemove);
+                        }
+
+                        // Collect the element index and value from the stelem's operands.
+                        // Pattern: dup, ldc_idx, ldc_val, stelem.i1 (Index points to stelem)
+                        if (Index >= 2)
+                        {
+                            int? elemIdx = Instructions[Index - 2].GetLdcValue();
+                            int? elemVal = Instructions[Index - 1].GetLdcValue();
+                            if (elemIdx != null && elemVal != null)
+                                _pendingInlineElements.Add((elemIdx.Value, elemVal.Value));
+                        }
+                        _pendingInlineArrayInit = true;
+                    }
+                    break;
+                }
+                if (op == ILOpCode.Newarr)
+                    break;
+                // Skip past ldc, stelem.i1 in the init sequence
+                if (op is not (ILOpCode.Ldc_i4_0 or ILOpCode.Ldc_i4_1 or ILOpCode.Ldc_i4_2
+                    or ILOpCode.Ldc_i4_3 or ILOpCode.Ldc_i4_4 or ILOpCode.Ldc_i4_5
+                    or ILOpCode.Ldc_i4_6 or ILOpCode.Ldc_i4_7 or ILOpCode.Ldc_i4_8
+                    or ILOpCode.Ldc_i4_s or ILOpCode.Ldc_i4 or ILOpCode.Ldc_i4_m1
+                    or ILOpCode.Stelem_i1))
+                    break;
+            }
+
+            if (!isDupNewarr)
+            {
+                // Can't identify target array at all
+                _runtimeValueInA = false;
+                _savedRuntimeToTemp = false;
+                _lastLoadedLocalIndex = null;
+                return;
+            }
+
             _runtimeValueInA = false;
             _savedRuntimeToTemp = false;
             _lastLoadedLocalIndex = null;

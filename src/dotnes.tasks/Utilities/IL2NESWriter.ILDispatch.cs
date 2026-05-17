@@ -161,9 +161,10 @@ partial class IL2NESWriter
                     _stloc0IsLdtokenPath = true;
                     Stack.Pop(); // Discard marker
                 }
-                else if (previous == ILOpCode.Newarr)
+                else if (previous == ILOpCode.Newarr || _pendingInlineArrayInit)
                 {
                     HandleStlocAfterNewarr(0);
+                    _pendingInlineArrayInit = false;
                 }
                 else
                 {
@@ -185,9 +186,10 @@ partial class IL2NESWriter
                     _pendingByteArrayFromIntrinsic = false;
                     Stack.Pop();
                 }
-                else if (previous == ILOpCode.Newarr)
+                else if (previous == ILOpCode.Newarr || _pendingInlineArrayInit)
                 {
                     HandleStlocAfterNewarr(1);
+                    _pendingInlineArrayInit = false;
                 }
                 else
                 {
@@ -209,9 +211,10 @@ partial class IL2NESWriter
                     _pendingByteArrayFromIntrinsic = false;
                     Stack.Pop();
                 }
-                else if (previous == ILOpCode.Newarr)
+                else if (previous == ILOpCode.Newarr || _pendingInlineArrayInit)
                 {
                     HandleStlocAfterNewarr(2);
+                    _pendingInlineArrayInit = false;
                 }
                 else
                 {
@@ -233,9 +236,10 @@ partial class IL2NESWriter
                     _pendingByteArrayFromIntrinsic = false;
                     Stack.Pop();
                 }
-                else if (previous == ILOpCode.Newarr)
+                else if (previous == ILOpCode.Newarr || _pendingInlineArrayInit)
                 {
                     HandleStlocAfterNewarr(3);
+                    _pendingInlineArrayInit = false;
                 }
                 else
                 {
@@ -1330,9 +1334,10 @@ partial class IL2NESWriter
                         Locals[localIdx] = new Local(Stack.Pop(), Locals[localIdx].Address, IsWord: Locals[localIdx].IsWord);
                         _pendingIncDecLocal = null;
                     }
-                    else if (previous == ILOpCode.Newarr)
+                    else if (previous == ILOpCode.Newarr || _pendingInlineArrayInit)
                     {
                         HandleStlocAfterNewarr(localIdx);
+                        _pendingInlineArrayInit = false;
                     }
                     else if (previous == ILOpCode.Ldtoken || _pendingByteArrayFromIntrinsic)
                     {

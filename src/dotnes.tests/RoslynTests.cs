@@ -6546,4 +6546,54 @@ public class RoslynTests
         // x[0]=0x42 should be resolved at compile time (LDA #$42 = A942)
         Assert.Contains("A942", hex);
     }
+
+    [Fact]
+    public void InlineArrayInit_NoPushaDeadCode()
+    {
+        // Regression test: when the compiler optimizes byte[] x = [2] with a
+        // dup + stelem.i1 pattern, HandleStelemI1 must clean up the instructions
+        // that WriteLdc emitted for the stelem index/value constants.
+        // Without the fix, dead JSR pusha instructions corrupt the cc65 stack.
+        var bytes = GetProgramBytes(
+            """
+            byte[] x = [2];
+            pal_col(0, x[0]);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"InlineArrayInit_NoPushaDeadCode hex: {hex}");
+
+        // The value x[0]=2 should resolve to LDA #$02 (A902)
+        Assert.Contains("A902", hex);
+
+        // Verify the output contains exactly the expected sequence for pal_col(0, x[0]):
+        // LDA #$00 (A900) → JSR pusha (20 xx xx) → LDA #$02 (A902) → JSR pal_col (20 yy yy)
+        // The key check: every JSR pusha should be followed (after the next LDA) by a real
+        // JSR call, not by another orphaned instruction.
+        // Count how many JSR pusha instructions exist — should be exactly 1 (for pal_col's 2-arg call).
+        // Find pusha address by looking at JSR instructions
+        int jsrPushaCount = 0;
+        for (int i = 0; i < bytes.Length - 2; i++)
+        {
+            if (bytes[i] == 0x20) // JSR
+            {
+                // Check the next instruction after the JSR target - look for pattern
+                // "JSR pusha" followed by "LDA #imm" followed by "JSR xxx"
+                if (i + 5 < bytes.Length && bytes[i + 3] == 0xA9 && bytes[i + 5] == 0x20)
+                {
+                    // This could be a pusha — if the outer JSR's target matches across
+                    // multiple occurrences, that confirms it's the pusha subroutine
+                    jsrPushaCount++;
+                }
+            }
+        }
+        // There should be at most 1 pusha pattern (for pal_col), not 2+ (which would
+        // indicate dead code from stelem init)
+        Assert.True(jsrPushaCount <= 1,
+            $"Found {jsrPushaCount} JSR-pusha patterns — expected at most 1. Extra patterns indicate dead code from stelem init.");
+    }
 }

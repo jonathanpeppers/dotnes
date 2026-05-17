@@ -66,6 +66,9 @@ partial class IL2NESWriter : NESWriter
     readonly ReflectionCache _reflectionCache = new();
     ILOpCode previous;
     string? _pendingArrayType;
+    bool _pendingInlineArrayInit; // Set by HandleStelemI1 when dup+newarr inline init detected
+    readonly Dictionary<int, Dictionary<int, int>> _inlineArrayElements = new(); // Maps local idx → (element idx → value)
+    readonly List<(int Index, int Value)> _pendingInlineElements = new(); // Pending elements from dup+stelem init
     int _pendingStructArrayCount;
     ushort? _pendingStructArrayBase; // Pre-allocated base address from newarr for struct arrays
     int _pendingUshortArrayCount;
