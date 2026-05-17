@@ -4,6 +4,10 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    ignore:
+      # gh-aw lock files must be updated via `gh aw compile`, not individual
+      # SHA bumps. Partial version bumps break the workflow.
+      - dependency-name: "github/gh-aw-actions"
   - package-ecosystem: "nuget"
     directory: "/"
     schedule:
