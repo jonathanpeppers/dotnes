@@ -6486,4 +6486,64 @@ public class RoslynTests
         // The optimized x++ pattern should emit EE2903 (INC $0329).
         Assert.Contains("EE2903", hex);
     }
+
+    [Fact]
+    public void ArrayElement_UsedInNTADR_A()
+    {
+        // Regression: byte[] x = [2]; byte[] y = [2]; vram_adr(NTADR_A(y[0], x[0]))
+        // was throwing "Array element access requires the array to be stored in a local variable"
+        // because the compiler inlines the array creation without storing to a local.
+        var bytes = GetProgramBytes(
+            """
+            pal_col(0, 0x30);
+            byte[] x = [2];
+            byte[] y = [2];
+            vram_adr(NTADR_A(y[0], x[0]));
+            vram_write("B");
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+    }
+
+    [Fact]
+    public void ArrayElement_InlineBothArrays()
+    {
+        // Both arrays are inlined (neither stored to locals) — both should resolve
+        // at compile time. NTADR_A(3, 5) = 0x2000 | (3 << 5) | 5 = 0x2065
+        var bytes = GetProgramBytes(
+            """
+            byte[] y = [3];
+            byte[] x = [5];
+            vram_adr(NTADR_A(y[0], x[0]));
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+    }
+
+    [Fact]
+    public void ArrayElement_InlineConstantResolution()
+    {
+        // Verify inline array element access resolves to the correct constant.
+        // Uses pal_bright (single-arg call) to avoid complex multi-arg interactions.
+        // The compiler inlines the array when it's used only once.
+        var bytes = GetProgramBytes(
+            """
+            byte[] x = [0x42];
+            pal_bright(x[0]);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"ArrayElement_InlineConstantResolution hex: {hex}");
+
+        // x[0]=0x42 should be resolved at compile time (LDA #$42 = A942)
+        Assert.Contains("A942", hex);
+    }
 }
