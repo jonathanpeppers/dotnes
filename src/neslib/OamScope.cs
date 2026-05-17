@@ -28,5 +28,6 @@ public ref struct OamScope
     /// </summary>
     public void meta_spr_pal(byte x, byte y, byte pal, byte[] data) => throw null!;
 
+    /// <inheritdoc/>
     public void Dispose() => throw null!;
 }
