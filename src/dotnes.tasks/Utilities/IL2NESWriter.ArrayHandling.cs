@@ -478,6 +478,61 @@ partial class IL2NESWriter
     }
 
     /// <summary>
+    /// Attempts to resolve an inline array element access where the compiler optimized
+    /// away the local variable. Handles the pattern:
+    ///   newarr → dup → [ldc_idx, ldc_val, stelem.i1]+ → ldc_load_idx → ldelem.u1
+    /// Walks backward from the current ldelem.u1 through the stelem patterns to find
+    /// the value stored at the specified index.
+    /// </summary>
+    bool TryResolveInlineArrayElement(int loadIndex, out int value)
+    {
+        value = 0;
+        if (Instructions is null || Index < 4)
+            return false;
+
+        // Walk backward from Index-2 (which should be stelem.i1 or the last instruction
+        // of the array initialization sequence) to find matching stelem.i1 entries.
+        // Pattern per element: [dup], ldc_idx, ldc_val, stelem.i1
+        int scan = Index - 2;
+        while (scan >= 0)
+        {
+            var op = Instructions[scan].OpCode;
+            if (op == ILOpCode.Stelem_i1)
+            {
+                // Found a stelem.i1 — check if index and value are constants
+                if (scan < 2) break;
+                int? stelemVal = Instructions[scan - 1].GetLdcValue();
+                int? stelemIdx = Instructions[scan - 2].GetLdcValue();
+                if (stelemIdx != null && stelemVal != null && stelemIdx.Value == loadIndex)
+                {
+                    value = stelemVal.Value;
+                    return true;
+                }
+                // Move past this stelem triplet (ldc_idx, ldc_val, stelem)
+                scan -= 3;
+                // Skip dup if present before the triplet
+                if (scan >= 0 && Instructions[scan].OpCode == ILOpCode.Dup)
+                    scan--;
+            }
+            else if (op == ILOpCode.Dup)
+            {
+                scan--;
+            }
+            else if (op == ILOpCode.Newarr)
+            {
+                // Reached the newarr — no matching stelem found for our index
+                break;
+            }
+            else
+            {
+                // Unexpected instruction — not an inline array pattern
+                break;
+            }
+        }
+        return false;
+    }
+
+    /// <summary>
     /// Handles ldelem.u1: loads a byte from an array at a runtime index.
     /// Pattern: Ldloc_N (array), Ldloc_M (index), Ldelem_u1
     /// Emits: LDX index_addr; LDA array_base,X (for RAM arrays)
@@ -530,7 +585,36 @@ partial class IL2NESWriter
             return;
         }
         if (arrayLocalIdx == null && arrayLocalFromField == null)
+        {
+            // Handle inline array creation pattern: the compiler optimized away the local
+            // variable and the array reference is still on the stack from dup.
+            // Pattern: newarr → dup → [ldc_idx, ldc_val, stelem.i1]+ → ldc_load_idx → ldelem.u1
+            if (constantIndex != null && TryResolveInlineArrayElement(constantIndex.Value, out int resolvedValue))
+            {
+                // Remove any instructions emitted for the index ldc at Index-1
+                int indexILOffset = indexInstr.Offset;
+                if (_blockCountAtILOffset.TryGetValue(indexILOffset, out int blockCountAtIndex))
+                {
+                    int instrToRemove = GetBufferedBlockCount() - blockCountAtIndex;
+                    if (instrToRemove > 0)
+                        RemoveLastInstructions(instrToRemove);
+                }
+
+                // Emit the resolved constant value
+                Emit(Opcode.LDA, AddressMode.Immediate, (byte)resolvedValue);
+                Stack.Push(resolvedValue);
+                _immediateInA = (byte)resolvedValue;
+                _lastLoadedLocalIndex = null;
+                _runtimeValueInA = false;
+                if (ScanForUpcomingMultiArgCall())
+                {
+                    EmitJSR("pusha");
+                    _immediateInA = null;
+                }
+                return;
+            }
             throw new TranspileException("Array element access requires the array to be stored in a local variable.", MethodName);
+        }
 
         Local? indexLocal = indexLocalIdx != null ? Locals[indexLocalIdx.Value] : null;
         var arrayLocal = arrayLocalIdx != null ? Locals[arrayLocalIdx.Value] : arrayLocalFromField!;
