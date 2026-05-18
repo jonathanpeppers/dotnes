@@ -1829,9 +1829,9 @@ partial class IL2NESWriter
                     case nameof(NTADR_D):
                         {
                             var block = CurrentBlock!;
-                            // Check if y (last loaded value) is runtime: LDA $abs vs LDA #imm
+                            // Check if y (last loaded value) is runtime: LDA $abs or LDA $abs,X vs LDA #imm
                             var lastInstr = block[block.Count - 1];
-                            bool yIsRuntime = lastInstr.Mode == AddressMode.Absolute
+                            bool yIsRuntime = (lastInstr.Mode == AddressMode.Absolute || lastInstr.Mode == AddressMode.AbsoluteX)
                                 && lastInstr.Opcode == Opcode.LDA;
 
                             // Check if y is a runtime expression (e.g. row + 10):
@@ -1938,14 +1938,20 @@ partial class IL2NESWriter
                                             Emit(Opcode.STA, AddressMode.ZeroPage, TEMP);
                                             block.Emit(lastInstr); // re-emit LDA $y_addr
                                         }
-                                        else if (xLoadInstr.Mode == AddressMode.Absolute
+                                        else if ((xLoadInstr.Mode == AddressMode.Absolute || xLoadInstr.Mode == AddressMode.AbsoluteX)
                                             && xLoadInstr.Opcode == Opcode.LDA)
                                         {
                                             // Both runtime: directly load x and y without pusha/popa
-                                            RemoveLastInstructions(3);
-                                            block.Emit(xLoadInstr); // re-emit LDA $x_addr → A = x
+                                            // For AbsoluteX, also re-emit the preceding LDX
+                                            Instruction? xLdx = xLoadInstr.Mode == AddressMode.AbsoluteX
+                                                && block.Count >= 4 && block[block.Count - 4].Opcode == Opcode.LDX
+                                                ? block[block.Count - 4] : null;
+                                            int toRemove = xLdx != null ? 4 : 3;
+                                            RemoveLastInstructions(toRemove);
+                                            if (xLdx != null) block.Emit(xLdx);
+                                            block.Emit(xLoadInstr); // re-emit LDA $x_addr[,X] → A = x
                                             Emit(Opcode.STA, AddressMode.ZeroPage, TEMP); // TEMP = x
-                                            block.Emit(lastInstr); // re-emit LDA $y_addr → A = y
+                                            block.Emit(lastInstr); // re-emit LDA $y_addr[,X] → A = y
                                         }
                                         else
                                         {
@@ -1998,20 +2004,33 @@ partial class IL2NESWriter
                                         {
                                             // Found pusha with intervening stloc instructions
                                             var xLoadInstr2 = block[pushaIdx2 - 1];
-                                            int instrToRemove2 = block.Count - (pushaIdx2 - 1);
                                             if (xLoadInstr2.Operand is ImmediateOperand immX2)
                                             {
+                                                int instrToRemove2 = block.Count - (pushaIdx2 - 1);
                                                 RemoveLastInstructions(instrToRemove2);
                                                 Emit(Opcode.LDA, AddressMode.Immediate, immX2.Value);
                                                 Emit(Opcode.STA, AddressMode.ZeroPage, TEMP);
                                                 block.Emit(lastInstr);
                                             }
-                                            else if (xLoadInstr2.Mode == AddressMode.Absolute
+                                            else if ((xLoadInstr2.Mode == AddressMode.Absolute || xLoadInstr2.Mode == AddressMode.AbsoluteX)
                                                 && xLoadInstr2.Opcode == Opcode.LDA)
                                             {
+                                                // For AbsoluteX, also capture the preceding LDX for x and the LDX for y
+                                                Instruction? xLdx2 = xLoadInstr2.Mode == AddressMode.AbsoluteX
+                                                    && pushaIdx2 >= 2 && block[pushaIdx2 - 2].Opcode == Opcode.LDX
+                                                    ? block[pushaIdx2 - 2] : null;
+                                                // Capture y's LDX before removal (it's right before lastInstr)
+                                                Instruction? yLdx2 = lastInstr.Mode == AddressMode.AbsoluteX
+                                                    && block.Count >= 2 && block[block.Count - 2].Opcode == Opcode.LDX
+                                                    ? block[block.Count - 2] : null;
+
+                                                int removeFrom2 = xLdx2 != null ? pushaIdx2 - 2 : pushaIdx2 - 1;
+                                                int instrToRemove2 = block.Count - removeFrom2;
                                                 RemoveLastInstructions(instrToRemove2);
+                                                if (xLdx2 != null) block.Emit(xLdx2);
                                                 block.Emit(xLoadInstr2);
                                                 Emit(Opcode.STA, AddressMode.ZeroPage, TEMP);
+                                                if (yLdx2 != null) block.Emit(yLdx2);
                                                 block.Emit(lastInstr);
                                             }
                                             else
@@ -2027,7 +2046,7 @@ partial class IL2NESWriter
                                             // Scan backwards past STA/LDA pairs from stloc
                                             for (int bi = block.Count - 2; bi >= 0; bi--)
                                             {
-                                                if (block[bi].Mode == AddressMode.Absolute
+                                                if ((block[bi].Mode == AddressMode.Absolute || block[bi].Mode == AddressMode.AbsoluteX)
                                                     && block[bi].Opcode == Opcode.LDA)
                                                 {
                                                     xLdaIdx = bi;
@@ -2036,12 +2055,28 @@ partial class IL2NESWriter
                                             }
                                             if (xLdaIdx >= 0)
                                             {
-                                                var prevInstr = block[xLdaIdx];
-                                                int instrToRemove2 = block.Count - xLdaIdx;
+                                                var xLdaInstr = block[xLdaIdx];
+                                                // For AbsoluteX loads (array element access via LDX+LDA),
+                                                // also capture and re-emit the preceding LDX instruction.
+                                                bool xIsAbsoluteX = xLdaInstr.Mode == AddressMode.AbsoluteX;
+                                                Instruction? xLdxInstr = xIsAbsoluteX && xLdaIdx > 0
+                                                    && block[xLdaIdx - 1].Opcode == Opcode.LDX
+                                                    ? block[xLdaIdx - 1] : null;
+
+                                                // For y's AbsoluteX load, capture its preceding LDX
+                                                bool yIsAbsoluteX = lastInstr.Mode == AddressMode.AbsoluteX;
+                                                Instruction? yLdxInstr = yIsAbsoluteX && block.Count >= 2
+                                                    && block[block.Count - 2].Opcode == Opcode.LDX
+                                                    ? block[block.Count - 2] : null;
+
+                                                int removeFrom = xLdxInstr != null ? xLdaIdx - 1 : xLdaIdx;
+                                                int instrToRemove2 = block.Count - removeFrom;
                                                 RemoveLastInstructions(instrToRemove2);
-                                                block.Emit(prevInstr); // re-emit LDA $x_addr
+                                                if (xLdxInstr != null) block.Emit(xLdxInstr);
+                                                block.Emit(xLdaInstr); // re-emit LDA $x_addr[,X]
                                                 Emit(Opcode.STA, AddressMode.ZeroPage, TEMP);
-                                                block.Emit(lastInstr); // re-emit LDA $y_addr
+                                                if (yLdxInstr != null) block.Emit(yLdxInstr);
+                                                block.Emit(lastInstr); // re-emit LDA $y_addr[,X]
                                             }
                                             else
                                             {

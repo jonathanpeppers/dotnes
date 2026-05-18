@@ -6628,9 +6628,32 @@ public class RoslynTests
 
         var hex = Convert.ToHexString(bytes);
         _logger.WriteLine($"CollectionExprArrayIdx hex: {hex}");
-        // x[0] = 2 and y[0] = 2, so NTADR_A(2, 2) = 0x2000 | (2<<5) | 2 = 0x2042
-        // The LDA for array elements should load value 2 (from ROM label)
-        // We should see LDX #$00 and LDA label,X pattern or direct constant resolution
-        Assert.Contains("A902", hex); // LDA #$02 (value 2 from array)
+        // x[0] loaded via LDX #0; LDA bytearray,X then STA $17 (TEMP) to preserve for NTADR_A
+        Assert.Contains("8517", hex); // STA TEMP (x argument saved)
+        // y[0] loaded via LDX #0; LDA bytearray,X then JSR nametable_a
+        Assert.Contains("A200", hex); // LDX #$00 (constant index 0)
+    }
+
+    [Fact]
+    public void CollectionExpressionArrayIndexingNonZero()
+    {
+        // Same as above but with non-zero indices (x[1], y[1])
+        var bytes = GetProgramBytes(
+            """
+            byte[] x = [2, 3, 4, 5, 6, 7, 8, 9, 10];
+            byte[] y = [2, 2, 2, 2, 2, 2, 2, 2, 2];
+            vram_adr(NTADR_A(x[1], y[1]));
+            vram_write("L");
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"CollectionExprArrayIdxNonZero hex: {hex}");
+        // x[1] loaded via LDX #1; LDA bytearray,X then STA $17 (TEMP)
+        Assert.Contains("A201", hex); // LDX #$01 (constant index 1)
+        Assert.Contains("8517", hex); // STA TEMP (x argument saved)
     }
 }
