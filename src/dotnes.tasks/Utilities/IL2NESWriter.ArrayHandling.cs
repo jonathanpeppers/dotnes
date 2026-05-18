@@ -689,6 +689,9 @@ partial class IL2NESWriter
             // If there's a preceding LDA #imm in the block (from a prior inline
             // resolution), emit JSR pusha to save it — downstream handlers like
             // NTADR_A expect the standard LDA-pusha-LDA pattern for two-arg calls.
+            // Note: do NOT set _savedConstantViaPusha here — this pusha is for
+            // call argument preservation, not arithmetic. Setting it would cause
+            // a later Add/Sub handler to emit popa and corrupt the cc65 stack.
             int blockCount = GetBufferedBlockCount();
             if (blockCount > 0)
             {
@@ -697,7 +700,6 @@ partial class IL2NESWriter
                 if (lastInstr.Opcode == Opcode.LDA && lastInstr.Mode == AddressMode.Immediate)
                 {
                     EmitJSR("pusha");
-                    _savedConstantViaPusha = true;
                 }
             }
 
@@ -1208,7 +1210,33 @@ partial class IL2NESWriter
                             if (elemIdx != null && elemVal != null)
                                 _pendingInlineElements.Add((elemIdx.Value, elemVal.Value));
                         }
-                        _pendingInlineArrayInit = true;
+                        // Only set the pending flag if a stloc actually follows the
+                        // init sequence. If the array is used as an expression (e.g.,
+                        // passed directly to a call), there's no stloc and the flag
+                        // would corrupt the next unrelated stloc.
+                        bool followedByStloc = false;
+                        if (Instructions != null)
+                        {
+                            for (int j = Index + 1; j < Instructions.Length; j++)
+                            {
+                                var nextOp = Instructions[j].OpCode;
+                                if (nextOp is ILOpCode.Stloc_0 or ILOpCode.Stloc_1 or ILOpCode.Stloc_2
+                                    or ILOpCode.Stloc_3 or ILOpCode.Stloc_s or ILOpCode.Stloc)
+                                {
+                                    followedByStloc = true;
+                                    break;
+                                }
+                                // Skip past remaining init sequence opcodes
+                                if (nextOp is not (ILOpCode.Dup or ILOpCode.Ldc_i4_0 or ILOpCode.Ldc_i4_1
+                                    or ILOpCode.Ldc_i4_2 or ILOpCode.Ldc_i4_3 or ILOpCode.Ldc_i4_4
+                                    or ILOpCode.Ldc_i4_5 or ILOpCode.Ldc_i4_6 or ILOpCode.Ldc_i4_7
+                                    or ILOpCode.Ldc_i4_8 or ILOpCode.Ldc_i4_s or ILOpCode.Ldc_i4
+                                    or ILOpCode.Ldc_i4_m1 or ILOpCode.Stelem_i1))
+                                    break;
+                            }
+                        }
+                        if (followedByStloc)
+                            _pendingInlineArrayInit = true;
                     }
                     break;
                 }
@@ -1237,6 +1265,11 @@ partial class IL2NESWriter
             _lastLoadedLocalIndex = null;
             return;
         }
+
+        // Invalidate compile-time constant mapping for this array since it's
+        // being modified at runtime — prevents stale constant folding in ldelem.u1.
+        if (targetArrayLocalIdx >= 0)
+            _inlineArrayElements.Remove(targetArrayLocalIdx);
 
         // Resolve the target array Local from either local variable or static field
         Local resolvedTargetArray = targetArrayLocalIdx >= 0 ? Locals[targetArrayLocalIdx] : targetArrayFromField!;

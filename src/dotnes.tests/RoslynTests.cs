@@ -6574,26 +6574,37 @@ public class RoslynTests
         // LDA #$00 (A900) → JSR pusha (20 xx xx) → LDA #$02 (A902) → JSR pal_col (20 yy yy)
         // The key check: every JSR pusha should be followed (after the next LDA) by a real
         // JSR call, not by another orphaned instruction.
-        // Count how many JSR pusha instructions exist — should be exactly 1 (for pal_col's 2-arg call).
-        // Find pusha address by looking at JSR instructions
-        int jsrPushaCount = 0;
-        for (int i = 0; i < bytes.Length - 2; i++)
+        // Count how many JSR instructions target the pusha subroutine.
+        // First, find the pusha address by looking for the pattern:
+        // LDA #$00, JSR pusha, LDA #$02, JSR pal_col
+        // The first JSR in that sequence targets pusha.
+        ushort? pushaAddr = null;
+        for (int i = 0; i < bytes.Length - 5; i++)
         {
-            if (bytes[i] == 0x20) // JSR
+            // Look for: LDA #imm (A9 xx), JSR addr (20 lo hi), LDA #imm (A9 xx), JSR addr (20 lo hi)
+            if (bytes[i] == 0xA9 && bytes[i + 2] == 0x20 && bytes[i + 5] == 0xA9 && bytes[i + 7] == 0x20)
             {
-                // Check the next instruction after the JSR target - look for pattern
-                // "JSR pusha" followed by "LDA #imm" followed by "JSR xxx"
-                if (i + 5 < bytes.Length && bytes[i + 3] == 0xA9 && bytes[i + 5] == 0x20)
-                {
-                    // This could be a pusha — if the outer JSR's target matches across
-                    // multiple occurrences, that confirms it's the pusha subroutine
-                    jsrPushaCount++;
-                }
+                pushaAddr = (ushort)(bytes[i + 3] | (bytes[i + 4] << 8));
+                break;
             }
         }
-        // There should be at most 1 pusha pattern (for pal_col), not 2+ (which would
-        // indicate dead code from stelem init)
-        Assert.True(jsrPushaCount <= 1,
-            $"Found {jsrPushaCount} JSR-pusha patterns — expected at most 1. Extra patterns indicate dead code from stelem init.");
+
+        if (pushaAddr != null)
+        {
+            int jsrPushaCount = 0;
+            for (int i = 0; i < bytes.Length - 2; i++)
+            {
+                if (bytes[i] == 0x20) // JSR
+                {
+                    ushort target = (ushort)(bytes[i + 1] | (bytes[i + 2] << 8));
+                    if (target == pushaAddr.Value)
+                        jsrPushaCount++;
+                }
+            }
+            // There should be exactly 1 pusha call (for pal_col's 2-arg call), not 2+
+            // (which would indicate dead code from stelem init)
+            Assert.True(jsrPushaCount <= 1,
+                $"Found {jsrPushaCount} JSR pusha instructions — expected at most 1. Extra calls indicate dead code from stelem init.");
+        }
     }
 }
