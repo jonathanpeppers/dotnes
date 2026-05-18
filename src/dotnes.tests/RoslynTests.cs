@@ -6607,4 +6607,30 @@ public class RoslynTests
                 $"Found {jsrPushaCount} JSR pusha instructions — expected at most 1. Extra calls indicate dead code from stelem init.");
         }
     }
+
+    [Fact]
+    public void CollectionExpressionArrayIndexing()
+    {
+        // Collection expressions like byte[] x = [2, 3, 4] compile to
+        // newarr → dup → ldtoken → call InitializeArray → stloc
+        // The transpiler must correctly handle ldelem.u1 on these arrays.
+        var bytes = GetProgramBytes(
+            """
+            byte[] x = [2, 3, 4, 5, 6, 7, 8, 9, 10];
+            byte[] y = [2, 2, 2, 2, 2, 2, 2, 2, 2];
+            vram_adr(NTADR_A(x[0], y[0]));
+            vram_write("B");
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"CollectionExprArrayIdx hex: {hex}");
+        // x[0] = 2 and y[0] = 2, so NTADR_A(2, 2) = 0x2000 | (2<<5) | 2 = 0x2042
+        // The LDA for array elements should load value 2 (from ROM label)
+        // We should see LDX #$00 and LDA label,X pattern or direct constant resolution
+        Assert.Contains("A902", hex); // LDA #$02 (value 2 from array)
+    }
 }
