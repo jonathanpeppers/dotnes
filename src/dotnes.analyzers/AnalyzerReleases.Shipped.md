@@ -1,6 +1,14 @@
 ; Shipped analyzer release
 ; https://github.com/dotnet/roslyn-analyzers/blob/main/src/Microsoft.CodeAnalysis.Analyzers/ReleaseTrackingAnalyzers.Help.md
 
+## Release 0.3.2
+
+### New Rules
+
+Rule ID | Category | Severity | Notes
+--------|----------|----------|-------
+NES013 | NES | Error | throw is not supported
+
 ## Release 0.3.1
 
 ### New Rules
