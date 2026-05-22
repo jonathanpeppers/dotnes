@@ -12,12 +12,12 @@ public class PpuTests : RoslynTests
     public void WaitvsyncEmitsJsr()
     {
         // waitvsync() should emit JSR to waitvsync subroutine
-        var (program, _) = BuildProgram(
+        using var transpiler = BuildProgram(
             """
             waitvsync();
             ppu_on_all();
             while (true) ;
-            """);
+            """, out var program);
         var mainBlock = program.GetMainBlock();
         Assert.NotNull(mainBlock);
         Assert.NotEmpty(mainBlock);

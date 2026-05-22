@@ -244,7 +244,7 @@ public class ControlFlowTests : RoslynTests
         // The IL has two 'ret' instructions. The transpiler treats 'ret' as no-op,
         // so the early 'return 1' falls through to 'return 0', making the function
         // always return 0.
-        var (program, transpiler) = BuildProgram(
+        using var transpiler = BuildProgram(
             """
             byte prev1 = 3;
             byte prev2 = 7;
@@ -270,7 +270,7 @@ public class ControlFlowTests : RoslynTests
                     return 1;
                 return 0;
             }
-            """);
+            """, out var program);
 
         program.ResolveAddresses();
 

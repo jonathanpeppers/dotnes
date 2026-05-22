@@ -218,7 +218,7 @@ public class SpritesTests : RoslynTests
     public void OamScope_EmitsLdaStaJsrInMainBlock()
     {
         // new OamScope() should emit: LDA #0, STA $1B (oam_off), JSR oam_clear in the main block
-        var (program, _) = BuildProgram(
+        using var transpiler = BuildProgram(
             """
             using (var oam = new OamScope())
             {
@@ -226,7 +226,7 @@ public class SpritesTests : RoslynTests
             }
             ppu_on_all();
             while (true) ;
-            """);
+            """, out var program);
 
         var mainBlock = program.Blocks.Single(b => b.Label == "main");
         var instructions = mainBlock.InstructionsWithLabels.ToList();
@@ -255,7 +255,7 @@ public class SpritesTests : RoslynTests
     public void OamScope_EmitsOamClearAndOamHideRestInMainBlock()
     {
         // OamScope constructor emits JSR oam_clear; OamScope.Dispose() emits LDA oam_off, JSR oam_hide_rest
-        var (program, _) = BuildProgram(
+        using var transpiler = BuildProgram(
             """
             using (var oam = new OamScope())
             {
@@ -263,7 +263,7 @@ public class SpritesTests : RoslynTests
             }
             ppu_on_all();
             while (true) ;
-            """);
+            """, out var program);
 
         var mainBlock = program.Blocks.Single(b => b.Label == "main");
 
@@ -284,7 +284,7 @@ public class SpritesTests : RoslynTests
     public void OamScope_InsideLoopBody_EmitsCorrectOrdering()
     {
         // Realistic game loop: new OamScope() inside while(true), Dispose called each iteration
-        var (program, _) = BuildProgram(
+        using var transpiler = BuildProgram(
             """
             ppu_on_all();
             while (true)
@@ -295,7 +295,7 @@ public class SpritesTests : RoslynTests
                     oam.spr(10, 20, 0x01, 0);
                 }
             }
-            """);
+            """, out var program);
 
         var mainBlock = program.Blocks.Single(b => b.Label == "main");
         var instructions = mainBlock.InstructionsWithLabels.ToList();
@@ -348,7 +348,7 @@ public class SpritesTests : RoslynTests
     {
         // oam.spr(x, y, chr, attr) should auto-manage oam_off:
         // LDA $1B before JSR oam_spr, STA $1B after
-        var (program, _) = BuildProgram(
+        using var transpiler = BuildProgram(
             """
             using (var oam = new OamScope())
             {
@@ -356,7 +356,7 @@ public class SpritesTests : RoslynTests
             }
             ppu_on_all();
             while (true) ;
-            """);
+            """, out var program);
 
         var mainBlock = program.Blocks.Single(b => b.Label == "main");
         var instructions = mainBlock.InstructionsWithLabels.ToList();
@@ -389,7 +389,7 @@ public class SpritesTests : RoslynTests
             ppu_on_all();
             while (true) ;
             """;
-        var (program, _) = BuildProgram(source);
+        using var transpiler = BuildProgram(source, out var program);
 
         var mainBlock = program.Blocks.Single(b => b.Label == "main");
         var instructions = mainBlock.InstructionsWithLabels.ToList();

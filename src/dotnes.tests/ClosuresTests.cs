@@ -15,7 +15,7 @@ public class ClosuresTests : RoslynTests
         // the compiler generates a closure struct. The transpiler should handle
         // this by mapping closure byte[] fields to ROM data labels and scalar
         // fields to zero-page addresses.
-        var (program, transpiler) = BuildProgram(
+        using var transpiler = BuildProgram(
             """
             byte[] palette = [0x0F, 0x10, 0x20, 0x30];
             apply_palette();
@@ -26,7 +26,7 @@ public class ClosuresTests : RoslynTests
             {
                 pal_bg(palette);
             }
-            """);
+            """, out var program);
 
         // The program should compile without errors
         var mainBlock = program.GetMainBlock();
@@ -82,7 +82,7 @@ public class ClosuresTests : RoslynTests
         // Test: closure method that has real parameters in addition to
         // the implicit closure struct ref. Roslyn places the closure ref
         // as the LAST parameter, not the first.
-        var (program, _) = BuildProgram(
+        using var transpiler = BuildProgram(
             """
             byte[] palette = [0x0F, 0x10, 0x20, 0x30];
             byte color = 0x15;
@@ -95,7 +95,7 @@ public class ClosuresTests : RoslynTests
                 pal_col(index, c);
                 pal_bg(palette);
             }
-            """);
+            """, out var program);
 
         var mainBlock = program.GetMainBlock();
         Assert.NotNull(mainBlock);

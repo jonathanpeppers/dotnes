@@ -88,7 +88,7 @@ partial class Transpiler : IDisposable
 
     public Transpiler(Stream stream, IList<AssemblyReader> assemblyFiles, ILogger? logger = null, string mirroring = "Horizontal", int mapper = 0, int prgBanks = 2, int chrBanks = 1, bool battery = false)
     {
-        _pe = new PEReader(stream);
+        _pe = new PEReader(stream, PEStreamOptions.LeaveOpen);
         _reader = _pe.GetMetadataReader();
         _assemblyFiles = assemblyFiles;
         _logger = logger ?? new NullLogger();
