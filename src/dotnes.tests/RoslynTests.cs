@@ -6607,4 +6607,34 @@ public class RoslynTests
                 $"Found {jsrPushaCount} JSR pusha instructions — expected at most 1. Extra calls indicate dead code from stelem init.");
         }
     }
+
+    [Fact]
+    public void TwoLocals_AddModulo_AssignBack()
+    {
+        // Regression test: nx = (byte)((x1 + y1) % 32); x1 = nx;
+        // When Roslyn optimizes away stloc/ldloc for x1 and nx, the runtime
+        // arithmetic result stays in A. WriteLdloc saves it to TEMP before
+        // loading y. The NTADR handler must recognize this _savedRuntimeToTemp
+        // pattern: TEMP = x (runtime result), A = y (loaded from local).
+        var bytes = GetProgramBytes("""
+            byte y1 = 2;
+            byte x1 = 5;
+            byte nx;
+            nx = (byte)((x1 + y1) % 32);
+            x1 = nx;
+            vrambuf_put(NTADR_A(x1, y1), "B");
+            while (true) ;
+            """);
+        var hex = Convert.ToHexString(bytes);
+
+        // CLC (18) + ADC $0325 (6D2503) for runtime addition
+        Assert.Contains("186D2503", hex);
+
+        // AND #$1F (291F) for % 32 (power-of-2 modulo)
+        Assert.Contains("291F", hex);
+
+        // STA TEMP ($17) to save runtime result before loading y
+        // 8517 = STA $17 (zero page)
+        Assert.Contains("8517", hex);
+    }
 }
