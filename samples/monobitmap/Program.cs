@@ -17,9 +17,9 @@ Key concepts:
 // Monochrome palette (from 8bitworkshop monobitmap.c)
 byte[] PALETTE = new byte[] {
     DarkViolet,
-    White, DarkViolet, White, 0x00,
-    DarkViolet, White, White, 0x00,
-    White, DarkViolet, White, 0x00,
+    White, DarkViolet, White, DarkGray,
+    DarkViolet, White, White, DarkGray,
+    White, DarkViolet, White, DarkGray,
     DarkViolet, White, White
 };
 
