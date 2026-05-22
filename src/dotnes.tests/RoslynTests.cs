@@ -2748,6 +2748,39 @@ public class RoslynTests
     }
 
     [Fact]
+    public void NtadrWithBothVariableArgs()
+    {
+        // Regression: NTADR_A(x1, y1) where both x1 and y1 are local byte
+        // variables should produce correct VRAM address (2,2) = position 2,2.
+        // Previously it showed the letter at the wrong position.
+        var (program, transpiler) = BuildProgram(
+            """
+            byte x1 = 2;
+            byte y1 = 2;
+            vram_adr(NTADR_A(x1, y1));
+            vram_write("B");
+            ppu_on_all();
+            while (true) ;
+            """);
+        // Dump the IL instructions
+        _stream.Seek(0, SeekOrigin.Begin);
+        var transpiler2 = new Transpiler(_stream, new List<AssemblyReader>(), _logger);
+        foreach (var il in transpiler2.ReadStaticVoidMain())
+            Console.WriteLine(il);
+
+        var bytes = program.GetMainBlock();
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        Console.WriteLine($"NtadrBothVars hex: {hex}");
+        // Disassemble for debugging
+        var sb = new System.Text.StringBuilder();
+        Disassembler6502.DisassembleRange(bytes, 0, bytes.Length, 0x8000, sb);
+        Console.WriteLine(sb.ToString());
+    }
+
+    [Fact]
     public void LdelemConstantIndexCompareWithConstant()
     {
         // Pattern from climber: while (actor_floor[0] != MAX_FLOORS - 1)
