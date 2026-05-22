@@ -1999,9 +1999,21 @@ partial class IL2NESWriter
                                             // Found pusha with intervening stloc instructions
                                             var xLoadInstr2 = block[pushaIdx2 - 1];
                                             int instrToRemove2 = block.Count - (pushaIdx2 - 1);
+
+                                            // Save intervening instructions between pusha and
+                                            // the y load (e.g. stloc pairs like LDA #val, STA $addr).
+                                            // These must be preserved because the y load may read
+                                            // from the address that stloc initialized.
+                                            var intervening = new List<Instruction>();
+                                            for (int bi = pushaIdx2 + 1; bi < block.Count - 1; bi++)
+                                                intervening.Add(block[bi]);
+
                                             if (xLoadInstr2.Operand is ImmediateOperand immX2)
                                             {
                                                 RemoveLastInstructions(instrToRemove2);
+                                                // Re-emit the intervening stloc instructions first
+                                                foreach (var instr in intervening)
+                                                    block.Emit(instr);
                                                 Emit(Opcode.LDA, AddressMode.Immediate, immX2.Value);
                                                 Emit(Opcode.STA, AddressMode.ZeroPage, TEMP);
                                                 block.Emit(lastInstr);
@@ -2010,6 +2022,9 @@ partial class IL2NESWriter
                                                 && xLoadInstr2.Opcode == Opcode.LDA)
                                             {
                                                 RemoveLastInstructions(instrToRemove2);
+                                                // Re-emit the intervening stloc instructions first
+                                                foreach (var instr in intervening)
+                                                    block.Emit(instr);
                                                 block.Emit(xLoadInstr2);
                                                 Emit(Opcode.STA, AddressMode.ZeroPage, TEMP);
                                                 block.Emit(lastInstr);
