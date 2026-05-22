@@ -164,6 +164,50 @@ public class IL2NESWriterTests
         Assert.Equal(0, writer.Stack.Peek()); // Placeholder value
     }
 
+    [Fact]
+    public void NTADR_RuntimeAbsoluteY_RewritesArgsCorrectly()
+    {
+        using var writer = GetWriter();
+        writer.Labels["pusha"] = 0x85A2;
+        writer.Labels["nametable_a"] = 0x8600;
+
+        var block = writer.CurrentBlock!;
+        block.Emit(new Instruction(Opcode.LDY, AddressMode.Immediate, new ImmediateOperand(0x00)));
+        block.Emit(new Instruction(Opcode.LDA, AddressMode.AbsoluteY, new AbsoluteOperand(0x0400)));
+        block.Emit(new Instruction(Opcode.JSR, AddressMode.Absolute, new LabelOperand("pusha", OperandSize.Word)));
+        block.Emit(new Instruction(Opcode.LDY, AddressMode.Immediate, new ImmediateOperand(0x01)));
+        block.Emit(new Instruction(Opcode.LDA, AddressMode.AbsoluteY, new AbsoluteOperand(0x0410)));
+
+        // NTADR_A expects two IL stack args (x, y). Use runtime placeholders.
+        writer.Stack.Push(0);
+        writer.Stack.Push(0);
+
+        writer.Write(new ILInstruction(ILOpCode.Call), nameof(NTADR_A));
+
+        // Should preserve both LDY+LDA AbsoluteY loads and save x to TEMP ($17)
+        bool foundXStore = false;
+        bool foundRuntimeJsr = false;
+        for (int i = 0; i < block.Count; i++)
+        {
+            if (block[i].Opcode == Opcode.STA
+                && block[i].Mode == AddressMode.ZeroPage
+                && block[i].Operand is ImmediateOperand sta && sta.Value == 0x17)
+            {
+                foundXStore = true;
+            }
+
+            if (block[i].Opcode == Opcode.JSR
+                && block[i].Operand is LabelOperand label
+                && label.Label == "nametable_a")
+            {
+                foundRuntimeJsr = true;
+            }
+        }
+
+        Assert.True(foundXStore, "Expected STA $17 (TEMP) for runtime x argument.");
+        Assert.True(foundRuntimeJsr, "Expected JSR nametable_a for runtime NTADR_A.");
+    }
+
     /// <summary>
     /// Test that the ternary operator optimization for compile-time arithmetic works correctly.
     /// This verifies the refactoring of if-else to ternary operator in HandleAddSub.
