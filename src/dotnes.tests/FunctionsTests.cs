@@ -252,7 +252,7 @@ public class FunctionsTests : RoslynTests
         // memory corruption when the function is called.
         // Main allocates an array of 20 bytes; the user function has a local.
         // The function's local must be at an address >= main's array end.
-        var (program, transpiler) = BuildProgram(
+        using var transpiler = BuildProgram(
             """
             static byte add_offset(byte x)
             {
@@ -263,7 +263,7 @@ public class FunctionsTests : RoslynTests
             data[0] = add_offset(3);
             pal_col(0, data[0]);
             while (true) ;
-            """);
+            """, out var program);
 
         var mainBytes = program.GetMainBlock();
         Assert.NotNull(mainBytes);
@@ -280,7 +280,6 @@ public class FunctionsTests : RoslynTests
         // It should be $0339 or higher.
         Assert.DoesNotContain("8D2503", userHex);
 
-        transpiler.Dispose();
     }
 
     [Fact]
@@ -288,7 +287,7 @@ public class FunctionsTests : RoslynTests
     {
         // When outer_func calls inner_func, each must have its own local storage
         // to prevent inner_func from clobbering outer_func's locals.
-        var (program, transpiler) = BuildProgram(
+        using var transpiler = BuildProgram(
             """
             outer_func();
             ppu_on_all();
@@ -306,8 +305,7 @@ public class FunctionsTests : RoslynTests
                 byte local_inner = 99;
                 pal_col(1, local_inner);
             }
-            """);
-        transpiler.Dispose();
+            """, out var program);
 
         // Get full program bytes (main + user methods)
         var allBytes = program.ToBytes();
@@ -330,7 +328,7 @@ public class FunctionsTests : RoslynTests
     {
         // When a caller has multiple locals, the callee's frame must start
         // AFTER all the caller's locals, not just 1 byte later.
-        var (program, transpiler) = BuildProgram(
+        using var transpiler = BuildProgram(
             """
             multi_local_func();
             ppu_on_all();
@@ -354,8 +352,7 @@ public class FunctionsTests : RoslynTests
                 byte val = 77;
                 pal_col(0, val);
             }
-            """);
-        transpiler.Dispose();
+            """, out var program);
 
         var allBytes = program.ToBytes();
         var hex = Convert.ToHexString(allBytes);
@@ -389,7 +386,7 @@ public class FunctionsTests : RoslynTests
                 pal_col(0, x);
                 recurse();
             }
-            """));
+            """, out _));
 
         Assert.Contains("ecursive", ex.Message, StringComparison.OrdinalIgnoreCase);
     }

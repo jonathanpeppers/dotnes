@@ -62,12 +62,11 @@ public abstract class RoslynTests
 
     protected byte[] GetProgramBytes(string csharpSource, IList<AssemblyReader>? additionalAssemblyFiles, bool allowUnsafe = false)
     {
-        var (program, transpiler) = BuildProgram(csharpSource, additionalAssemblyFiles, allowUnsafe);
-        transpiler.Dispose();
+        using var transpiler = BuildProgram(csharpSource, out var program, additionalAssemblyFiles, allowUnsafe);
         return program.GetMainBlock();
     }
 
-    private protected (Program6502 program, Transpiler transpiler) BuildProgram(string csharpSource, IList<AssemblyReader>? additionalAssemblyFiles = null, bool allowUnsafe = false)
+    private protected Transpiler BuildProgram(string csharpSource, out Program6502 program, IList<AssemblyReader>? additionalAssemblyFiles = null, bool allowUnsafe = false)
     {
         _stream.SetLength(0);
         csharpSource = $"using NES;using static NES.NESLib;{Environment.NewLine}{csharpSource}";
@@ -94,11 +93,19 @@ public abstract class RoslynTests
         if (additionalAssemblyFiles != null)
             assemblyFiles.AddRange(additionalAssemblyFiles);
         var transpiler = new Transpiler(_stream, assemblyFiles, _logger);
-        var program = transpiler.BuildProgram6502(out _, out _);
-        return (program, transpiler);
+        try
+        {
+            program = transpiler.BuildProgram6502(out _, out _);
+            return transpiler;
+        }
+        catch
+        {
+            transpiler.Dispose();
+            throw;
+        }
     }
 
-    private protected (Program6502 program, Transpiler transpiler) BuildProgramMultiFile(string[] csharpSources, IList<AssemblyReader>? additionalAssemblyFiles = null)
+    private protected Transpiler BuildProgramMultiFile(string[] csharpSources, out Program6502 program, IList<AssemblyReader>? additionalAssemblyFiles = null)
     {
         _stream.SetLength(0);
         var syntaxTrees = csharpSources.Select(source =>
@@ -127,8 +134,16 @@ public abstract class RoslynTests
         if (additionalAssemblyFiles != null)
             assemblyFiles.AddRange(additionalAssemblyFiles);
         var transpiler = new Transpiler(_stream, assemblyFiles, _logger);
-        var program = transpiler.BuildProgram6502(out _, out _);
-        return (program, transpiler);
+        try
+        {
+            program = transpiler.BuildProgram6502(out _, out _);
+            return transpiler;
+        }
+        catch
+        {
+            transpiler.Dispose();
+            throw;
+        }
     }
 
 }

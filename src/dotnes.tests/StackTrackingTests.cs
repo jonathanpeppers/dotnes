@@ -14,7 +14,7 @@ public class StackTrackingTests : RoslynTests
         // Regression: when _runtimeValueInA is true (e.g., from nesclock())
         // followed by ldloc of a ushort local, must emit JSR pusha to save A
         // before the word local clobbers it.
-        var (program, transpiler) = BuildProgram(
+        using var transpiler = BuildProgram(
             """
             ushort total = 100;
             byte val = nesclock();
@@ -22,8 +22,7 @@ public class StackTrackingTests : RoslynTests
             pal_col(0, (byte)result);
             ppu_on_all();
             while (true) ;
-            """);
-        transpiler.Dispose();
+            """, out var program);
 
         // Scan all blocks for JSR pusha
         bool hasPusha = program.Blocks.Any(b =>
@@ -263,7 +262,7 @@ public class StackTrackingTests : RoslynTests
         // a corresponding popa or incsp1, otherwise the cc65 stack leaks.
         // This mimics the climber sample's draw_entire_stage init pattern with
         // preceding array stores that set LastLDA = true before word local loads.
-        var (program, transpiler) = BuildProgram(
+        using var transpiler = BuildProgram(
             """
             byte[] arr_lo = new byte[8];
             byte[] arr_hi = new byte[8];
@@ -282,8 +281,7 @@ public class StackTrackingTests : RoslynTests
             }
             ppu_on_all();
             while (true) ;
-            """);
-        transpiler.Dispose();
+            """, out var program);
 
         // Count JSR pusha and JSR popa/incsp1 in the main block
         var mainBlock = program.GetBlock("main");
@@ -315,7 +313,7 @@ public class StackTrackingTests : RoslynTests
         // Test the stloc variant: byte lo = (byte)ushort_var where the result is
         // stored to a byte local (not an array). This goes through WriteStloc
         // instead of HandleStelemI1.
-        var (program, transpiler) = BuildProgram(
+        using var transpiler = BuildProgram(
             """
             byte[] ypos = new byte[8];
             ypos[0] = 10;
@@ -329,8 +327,7 @@ public class StackTrackingTests : RoslynTests
             }
             ppu_on_all();
             while (true) ;
-            """);
-        transpiler.Dispose();
+            """, out var program);
 
         var mainBlock = program.GetBlock("main");
         Assert.NotNull(mainBlock);
