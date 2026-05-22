@@ -6647,6 +6647,57 @@ public class RoslynTests
     }
 
     [Fact]
+    public void TwoLocals_AddModulo_AssignBack()
+    {
+        // Regression test: nx = (byte)((x1 + y1) % 32); x1 = nx;
+        // When Roslyn optimizes away stloc/ldloc for x1 and nx, the runtime
+        // arithmetic result stays in A. WriteLdloc saves it to TEMP before
+        // loading y. The NTADR handler must recognize this _savedRuntimeToTemp
+        // pattern: TEMP = x (runtime result), A = y (loaded from local).
+        var bytes = GetProgramBytes("""
+            byte y1 = 2;
+            byte x1 = 5;
+            byte nx;
+            nx = (byte)((x1 + y1) % 32);
+            x1 = nx;
+            vrambuf_put(NTADR_A(x1, y1), "B");
+            while (true) ;
+            """);
+        var hex = Convert.ToHexString(bytes);
+
+        // CLC (18) + ADC $0325 (6D2503) for runtime addition
+        Assert.Contains("186D2503", hex);
+
+        // AND #$1F (291F) for % 32 (power-of-2 modulo)
+        Assert.Contains("291F", hex);
+
+        // STA TEMP ($17) to save runtime result before loading y
+        // 8517 = STA $17 (zero page)
+        Assert.Contains("8517", hex);
+
+        // STA TEMP2 ($19) — NTADR result lo byte stored after nametable_a returns
+        Assert.Contains("8519", hex);
+
+        // Verify the runtime-NTADR sequence: STA TEMP must be immediately
+        // followed by LDA absolute (AD) loading y from its local address,
+        // and a JSR (20) for nametable_a must appear between the TEMP and
+        // TEMP2 stores. This catches regressions where the NTADR handler
+        // emits the wrong instruction sequence (e.g., popa instead of using
+        // the already-saved TEMP, producing a wrong-position address).
+        int tempIdx = hex.IndexOf("8517");
+        int temp2Idx = hex.IndexOf("8519");
+        Assert.True(tempIdx >= 0, "Expected STA TEMP (8517) in output.");
+        Assert.True(temp2Idx > tempIdx, "TEMP2 store should occur after TEMP store.");
+
+        // STA TEMP (8517) immediately followed by LDA absolute (AD) for y.
+        Assert.Equal("AD", hex.Substring(tempIdx + 4, 2));
+
+        // JSR (20) between TEMP and TEMP2 stores — the nametable_a call.
+        string between = hex.Substring(tempIdx, temp2Idx - tempIdx);
+        Assert.Contains("20", between);
+    }
+
+    [Fact]
     public void CollectionExpressionArrayIndexing()
     {
         // Collection expressions like byte[] x = [2, 3, 4] compile to

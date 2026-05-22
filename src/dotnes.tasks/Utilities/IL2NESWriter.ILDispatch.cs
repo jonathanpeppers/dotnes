@@ -1931,7 +1931,20 @@ partial class IL2NESWriter
                                 {
                                     // Runtime y: block has [x load], JSR pusha, LDA $y_addr
                                     // x could be constant (ImmediateOperand) or runtime (AbsoluteOperand)
-                                    if (block.Count >= 3
+                                    if (_savedRuntimeToTemp
+                                        && block.Count >= 2
+                                        && block[block.Count - 2].Opcode == Opcode.STA
+                                        && block[block.Count - 2].Mode == AddressMode.ZeroPage
+                                        && block[block.Count - 2].Operand is ImmediateOperand staTempOp
+                                        && staTempOp.Value == (byte)TEMP)
+                                    {
+                                        // Runtime x from expression (add/sub/rem etc.) was saved
+                                        // to TEMP by WriteLdloc, and y was loaded into A.
+                                        // Block already has: STA TEMP, LDA $y_addr
+                                        // TEMP = x, A = y — exactly what the nametable subroutine expects.
+                                        _savedRuntimeToTemp = false;
+                                    }
+                                    else if (block.Count >= 3
                                         && block[block.Count - 2].Opcode == Opcode.JSR
                                         && block[block.Count - 2].Operand is LabelOperand pushaLbl
                                         && pushaLbl.Label == "pusha")
