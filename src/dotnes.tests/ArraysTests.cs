@@ -1162,4 +1162,110 @@ public class ArraysTests : RoslynTests
         Assert.True(found,
             "Expected NTADR_A pattern: LDX #0; LDA xarr,X; STA TEMP; LDA #2; JSR nametable_a");
     }
+
+    [Fact]
+    public void Array2D_ConstantIndex()
+    {
+        // Rectangular byte[2,3] literal indexed with two constants.
+        // Expected: a[1,2] resolves to ROM byte at offset 1*3 + 2 = 5, value 6.
+        var bytes = GetProgramBytes(
+            """
+            byte[,] a = new byte[2, 3]
+            {
+                { 1, 2, 3 },
+                { 4, 5, 6 }
+            };
+            byte v = a[1, 2];
+            pal_col(0, v);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"Array2D_ConstantIndex hex: {hex}");
+
+        // Constant index 5 → LDX #$05 (A2 05); LDA bytearray_0,X (BD lo hi)
+        Assert.Contains("A205BD", hex);
+    }
+
+    [Fact]
+    public void Array2D_PowerOfTwoStride_RuntimeIndex()
+    {
+        // 4-wide rectangular array — stride of 4 is a power of two, so the
+        // index should be computed with ASL A, ASL A (no multiplication).
+        var bytes = GetProgramBytes(
+            """
+            byte[,] def_L = new byte[4, 4]
+            {
+                { 0, 1, 2, 6 },
+                { 1, 5, 9, 8 },
+                { 0, 4, 5, 6 },
+                { 1, 0, 4, 8 },
+            };
+            byte rotation = 2;
+            byte slot     = 1;
+            byte offset   = def_L[rotation, slot];
+            pal_col(0, offset);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"Array2D_PowerOfTwoStride_RuntimeIndex hex: {hex}");
+
+        // Expected sequence somewhere in the body:
+        //   LDA rotation_addr   (AD lo hi)
+        //   ASL A               (0A)
+        //   ASL A               (0A)
+        //   CLC                 (18)
+        //   ADC slot_addr       (6D lo hi)
+        //   TAX                 (AA)
+        //   LDA bytearray_0,X   (BD lo hi)
+        // Power-of-two stride must use ASL not a multiplication subroutine.
+        Assert.Contains("0A0A18", hex); // ASL; ASL; CLC
+        Assert.Contains("AABD", hex);   // TAX; LDA abs,X
+        // Make sure no multiplication helper (umul/smul) was emitted.
+        Assert.DoesNotContain("umul", hex.ToLower());
+        Assert.DoesNotContain("smul", hex.ToLower());
+    }
+
+    [Fact]
+    public void Array2D_NonPowerOfTwoStride_RuntimeIndex()
+    {
+        // Stride of 3 is NOT a power of two. The fallback shift-and-add path
+        // (STA TEMP; ASL; CLC; ADC TEMP) should be emitted instead of ASLs.
+        var bytes = GetProgramBytes(
+            """
+            byte[,] tbl = new byte[2, 3]
+            {
+                { 10, 20, 30 },
+                { 40, 50, 60 }
+            };
+            byte r = 1;
+            byte c = 2;
+            byte v = tbl[r, c];
+            pal_col(0, v);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"Array2D_NonPowerOfTwoStride_RuntimeIndex hex: {hex}");
+
+        // For stride 3 (binary 11), the multiplier emits:
+        //   STA $17 (TEMP)     ; 85 17
+        //   ASL A              ; 0A
+        //   CLC                ; 18
+        //   ADC $17 (TEMP)     ; 65 17
+        Assert.Contains("85170A1865", hex);
+        // The result is then combined with the column and used to index the array.
+        Assert.Contains("AABD", hex); // TAX; LDA abs,X
+    }
 }
+
