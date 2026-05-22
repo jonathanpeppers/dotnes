@@ -1829,10 +1829,16 @@ partial class IL2NESWriter
                     case nameof(NTADR_D):
                         {
                             var block = CurrentBlock!;
-                            // Check if y (last loaded value) is runtime: LDA $abs or LDA $abs,X vs LDA #imm
+                            // Check if y (last loaded value) is runtime: LDA $abs or LDA $abs,X vs LDA #imm.
+                            // For AbsoluteX/AbsoluteY (typically a byte-array element load), we must also see
+                            // evidence of a separate x load earlier in the block — otherwise lastInstr IS the
+                            // runtime x load and the y constant was skipped by WriteLdc(byte) because
+                            // _runtimeValueInA was true. That case must go through the xFromFlag path below.
                             var lastInstr = block[block.Count - 1];
-                            bool yIsRuntime = (lastInstr.Mode == AddressMode.Absolute || lastInstr.Mode == AddressMode.AbsoluteX || lastInstr.Mode == AddressMode.AbsoluteY)
-                                && lastInstr.Opcode == Opcode.LDA;
+                            bool yIsRuntime = lastInstr.Opcode == Opcode.LDA && (
+                                lastInstr.Mode == AddressMode.Absolute
+                                || ((lastInstr.Mode == AddressMode.AbsoluteX || lastInstr.Mode == AddressMode.AbsoluteY)
+                                    && HasSeparateXLoadBefore(block, block.Count - 1)));
 
                             // Check if y is a runtime expression (e.g. row + 10):
                             // _runtimeValueInA is true AND there's a JSR pusha in the block
@@ -2013,10 +2019,23 @@ partial class IL2NESWriter
                                             var xLoadInstr2 = block[pushaIdx2 - 1];
                                             if (xLoadInstr2.Operand is ImmediateOperand immX2)
                                             {
+                                                // y may be an AbsoluteX/Y array element load preceded by
+                                                // LDX/LDY of its index — capture it before removal so we can
+                                                // re-emit it right before lastInstr.
+                                                Instruction? yIndexImm = lastInstr.Mode == AddressMode.AbsoluteX
+                                                    && block.Count >= 2 && block[block.Count - 2].Opcode == Opcode.LDX
+                                                    ? block[block.Count - 2] : null;
+                                                if (yIndexImm == null
+                                                    && lastInstr.Mode == AddressMode.AbsoluteY
+                                                    && block.Count >= 2 && block[block.Count - 2].Opcode == Opcode.LDY)
+                                                {
+                                                    yIndexImm = block[block.Count - 2];
+                                                }
                                                 int instrToRemove2 = block.Count - (pushaIdx2 - 1);
                                                 RemoveLastInstructions(instrToRemove2);
                                                 Emit(Opcode.LDA, AddressMode.Immediate, immX2.Value);
                                                 Emit(Opcode.STA, AddressMode.ZeroPage, TEMP);
+                                                if (yIndexImm != null) block.Emit(yIndexImm);
                                                 block.Emit(lastInstr);
                                             }
                                             else if ((xLoadInstr2.Mode == AddressMode.Absolute || xLoadInstr2.Mode == AddressMode.AbsoluteX || xLoadInstr2.Mode == AddressMode.AbsoluteY)
