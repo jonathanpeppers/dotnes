@@ -120,6 +120,91 @@ public class ControlFlowTests : RoslynTests
     }
 
     [Fact]
+    public void SwitchWithDefault()
+    {
+        // switch on byte with 4+ cases and a default clause.
+        // The default must run when the discriminator does not match any case.
+        var bytes = GetProgramBytes(
+            """
+            byte op = 4;
+            byte r = 0;
+            switch (op) {
+                case 0: r = 0x10; break;
+                case 1: r = 0x20; break;
+                case 2: r = 0x30; break;
+                case 3: r = 0x16; break;
+                default: r = 0x26; break;
+            }
+            pal_col(0, r);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        // CMP #$01, #$02, #$03 for cases 1..3
+        Assert.Contains("C901", hex);
+        Assert.Contains("C902", hex);
+        Assert.Contains("C903", hex);
+        // BNE (D0) for skipping JMP on mismatch
+        Assert.Contains("D0", hex);
+        // JMP (4C) for jumping to case/default targets
+        Assert.Contains("4C", hex);
+        // The default value 0x26 must appear (LDA #$26 = A926)
+        Assert.Contains("A926", hex);
+    }
+
+    [Fact]
+    public void SwitchStateMachine()
+    {
+        // The state-machine pattern from the issue: title / playing / over with a default.
+        // Roslyn lowers a dense byte switch with default into IL `switch` + br to default.
+        var bytes = GetProgramBytes(
+            """
+            const byte STATE_TITLE   = 0;
+            const byte STATE_PLAYING = 1;
+            const byte STATE_OVER    = 2;
+
+            byte state = STATE_TITLE;
+            byte lives = 3;
+
+            while (true)
+            {
+                pad_poll(0);
+                switch (state)
+                {
+                    case STATE_TITLE:
+                        if ((pad_trigger(0) & PAD.START) != 0)
+                            state = STATE_PLAYING;
+                        break;
+                    case STATE_PLAYING:
+                        if (lives == 0)
+                            state = STATE_OVER;
+                        break;
+                    case STATE_OVER:
+                        if ((pad_trigger(0) & PAD.START) != 0)
+                            state = STATE_TITLE;
+                        break;
+                    default:
+                        state = STATE_TITLE;
+                        break;
+                }
+                ppu_wait_nmi();
+            }
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        // CMP #$01 and CMP #$02 for case 1 and case 2 of the dense switch
+        Assert.Contains("C901", hex);
+        Assert.Contains("C902", hex);
+        // JMP (4C) trampolines from the switch dispatch
+        Assert.Contains("4C", hex);
+    }
+
+    [Fact]
     public void DoWhileLoop()
     {
         // do { } while (cond) — body executes at least once
