@@ -303,6 +303,41 @@ partial class IL2NESWriter
         or "incsp1" or "incsp2" or "addysp" or "decsp4";
 
     /// <summary>
+    /// Returns true if there's evidence of a separate "x" argument load in the block
+    /// prior to <paramref name="lastIndex"/>. Used by the NTADR_* handler to disambiguate
+    /// the runtime-y case (where lastInstr is the y load and x was loaded earlier) from
+    /// the runtime-x case (where lastInstr IS the x load and the constant y was skipped
+    /// by WriteLdc because _runtimeValueInA was already true).
+    ///
+    /// Evidence is either a JSR to a stack-push helper (pusha/pushax) — meaning x was
+    /// preserved on the cc65 stack — or another LDA Absolute/AbsoluteX/AbsoluteY earlier
+    /// in the block. We stop scanning at a JSR to any non-helper subroutine, since that
+    /// would have consumed earlier pushes.
+    /// </summary>
+    static bool HasSeparateXLoadBefore(Block block, int lastIndex)
+    {
+        for (int i = lastIndex - 1; i >= 0; i--)
+        {
+            var instr = block[i];
+            if (instr.Opcode == Opcode.JSR && instr.Operand is LabelOperand lbl)
+            {
+                if (lbl.Label is "pusha" or "pushax")
+                    return true;
+                if (!IsCC65StackHelper(lbl.Label))
+                    return false;
+            }
+            else if (instr.Opcode == Opcode.LDA
+                && (instr.Mode == AddressMode.Absolute
+                    || instr.Mode == AddressMode.AbsoluteX
+                    || instr.Mode == AddressMode.AbsoluteY))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /// <summary>
     /// Scans ahead from the current IL index to determine if we're loading
     /// arguments for a multi-arg call that uses the default call path.
     /// Returns true if pusha should be emitted to preserve A before the next load.
