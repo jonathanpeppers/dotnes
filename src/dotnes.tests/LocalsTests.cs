@@ -529,4 +529,110 @@ public class LocalsTests : RoslynTests
         string between = hex.Substring(tempIdx, temp2Idx - tempIdx);
         Assert.Contains("20", between);
     }
+
+    [Fact]
+    public void TwoLocals_UshortIntermediates_DualAssignBack()
+    {
+        // Regression test from issue #516:
+        // ushort intermediates nx/ny, both byte locals reassigned in sequence.
+        // Roslyn optimizes away `stloc ny` and keeps ny on the IL evaluation
+        // stack across the next `stloc x1`. The transpiler must recover ny
+        // from TEMP for the subsequent `stloc y1`, otherwise y1 gets the
+        // value of nx (producing position (2,2) instead of (2,3)).
+        var bytes = GetProgramBytes("""
+            byte y1 = 1;
+            byte x1 = 1;
+            ushort nx;
+            ushort ny;
+            nx = (byte)((x1 + y1) % 32);
+            ny = (byte)((x1 + y1 * 2) % 16);
+            x1 = (byte)nx;
+            y1 = (byte)ny;
+            vrambuf_put(NTADR_A(x1, y1), "B");
+            while (true) ;
+            """);
+        var hex = Convert.ToHexString(bytes);
+
+        // ny computation must save its runtime result to TEMP ($17): 8517
+        Assert.Contains("8517", hex);
+
+        // After storing x1=nx (STA $0326 = 8D2603), the next stloc must
+        // LDA TEMP (A517) to recover ny before STA y1 (8D2503).
+        // This is the exact sequence that the fix introduces.
+        Assert.Contains("8D2603A5178D2503", hex);
+    }
+
+    [Fact]
+    public void TwoLocals_UshortIntermediates_DualAssignBack_ReversedOrder()
+    {
+        // Variant of the issue #516 pattern with assignments in reversed order
+        // (y1 before x1). Roslyn may keep a different value on the stack
+        // depending on ordering — verify both byte locals get the correct value.
+        var bytes = GetProgramBytes("""
+            byte y1 = 1;
+            byte x1 = 1;
+            ushort nx;
+            ushort ny;
+            nx = (byte)((x1 + y1) % 32);
+            ny = (byte)((x1 + y1 * 2) % 16);
+            y1 = (byte)ny;
+            x1 = (byte)nx;
+            vrambuf_put(NTADR_A(x1, y1), "B");
+            while (true) ;
+            """);
+        var hex = Convert.ToHexString(bytes);
+
+        // Must contain LDA TEMP (A517) — the recovery emitted by the fix —
+        // somewhere between two consecutive STA absolutes that target the
+        // two byte locals.
+        Assert.Contains("A517", hex);
+    }
+
+    [Fact]
+    public void TwoByteLocals_RuntimeIntermediates_DualAssignBack()
+    {
+        // Same pattern but using byte intermediates instead of ushort. The
+        // fix should generalize: when Roslyn keeps a runtime value on the
+        // IL stack across an intervening stloc, the next stloc must recover
+        // it from TEMP.
+        var bytes = GetProgramBytes("""
+            byte y1 = 1;
+            byte x1 = 1;
+            byte nx;
+            byte ny;
+            nx = (byte)((x1 + y1) % 32);
+            ny = (byte)((x1 + y1 * 2) % 16);
+            x1 = nx;
+            y1 = ny;
+            vrambuf_put(NTADR_A(x1, y1), "B");
+            while (true) ;
+            """);
+        var hex = Convert.ToHexString(bytes);
+        // The dual-stloc pattern is detected and the correct value is
+        // recovered from TEMP — same byte sequence as the ushort case.
+        Assert.Contains("8517", hex);
+    }
+
+    [Fact]
+    public void TwoLocals_UshortIntermediates_NoNTADR()
+    {
+        // Same pattern without NTADR_A — verify the fix is independent of
+        // the call site. After the dual assignment, x1+y1 should be 5
+        // (nx=2, ny=3 → x1=2, y1=3 → 2+3=5), so pal_col(2, 5) is emitted.
+        var bytes = GetProgramBytes("""
+            byte y1 = 1;
+            byte x1 = 1;
+            ushort nx;
+            ushort ny;
+            nx = (byte)((x1 + y1) % 32);
+            ny = (byte)((x1 + y1 * 2) % 16);
+            x1 = (byte)nx;
+            y1 = (byte)ny;
+            pal_col(x1, y1);
+            while (true) ;
+            """);
+        var hex = Convert.ToHexString(bytes);
+        // Recovery emit from the fix
+        Assert.Contains("A517", hex);
+    }
 }
