@@ -4,9 +4,9 @@ using Xunit.Abstractions;
 
 namespace dotnes.tests;
 
-public class RoslynTests_Random : RoslynTests
+public class RandomTests : RoslynTests
 {
-    public RoslynTests_Random(ITestOutputHelper output) : base(output) { }
+    public RandomTests(ITestOutputHelper output) : base(output) { }
 
     [Fact]
     public void Rand16_Returns16Bit()

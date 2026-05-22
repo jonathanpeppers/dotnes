@@ -4,9 +4,9 @@ using Xunit.Abstractions;
 
 namespace dotnes.tests;
 
-public class RoslynTests_Locals : RoslynTests
+public class LocalsTests : RoslynTests
 {
-    public RoslynTests_Locals(ITestOutputHelper output) : base(output) { }
+    public LocalsTests(ITestOutputHelper output) : base(output) { }
 
     [Fact]
     public void EnumVariable()

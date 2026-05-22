@@ -4,9 +4,9 @@ using Xunit.Abstractions;
 
 namespace dotnes.tests;
 
-public class RoslynTests_Apu : RoslynTests
+public class ApuTests : RoslynTests
 {
-    public RoslynTests_Apu(ITestOutputHelper output) : base(output) { }
+    public ApuTests(ITestOutputHelper output) : base(output) { }
 
     [Fact]
     public void ApuPlayTone_Pulse1()

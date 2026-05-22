@@ -4,9 +4,9 @@ using Xunit.Abstractions;
 
 namespace dotnes.tests;
 
-public class RoslynTests_Arithmetic : RoslynTests
+public class ArithmeticTests : RoslynTests
 {
-    public RoslynTests_Arithmetic(ITestOutputHelper output) : base(output) { }
+    public ArithmeticTests(ITestOutputHelper output) : base(output) { }
 
     [Fact]
     public void BcdAddConstant()

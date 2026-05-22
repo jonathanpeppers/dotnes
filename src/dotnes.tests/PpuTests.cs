@@ -4,9 +4,9 @@ using Xunit.Abstractions;
 
 namespace dotnes.tests;
 
-public class RoslynTests_Ppu : RoslynTests
+public class PpuTests : RoslynTests
 {
-    public RoslynTests_Ppu(ITestOutputHelper output) : base(output) { }
+    public PpuTests(ITestOutputHelper output) : base(output) { }
 
     [Fact]
     public void WaitvsyncEmitsJsr()

@@ -4,9 +4,9 @@ using Xunit.Abstractions;
 
 namespace dotnes.tests;
 
-public class RoslynTests_StackTracking : RoslynTests
+public class StackTrackingTests : RoslynTests
 {
-    public RoslynTests_StackTracking(ITestOutputHelper output) : base(output) { }
+    public StackTrackingTests(ITestOutputHelper output) : base(output) { }
 
     [Fact]
     public void RuntimeValueInA_ThenWordLocal_EmitsPusha()

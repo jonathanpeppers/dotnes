@@ -4,9 +4,9 @@ using Xunit.Abstractions;
 
 namespace dotnes.tests;
 
-public class RoslynTests_Functions : RoslynTests
+public class FunctionsTests : RoslynTests
 {
-    public RoslynTests_Functions(ITestOutputHelper output) : base(output) { }
+    public FunctionsTests(ITestOutputHelper output) : base(output) { }
 
     [Fact]
     public void FunctionReturnConstant()

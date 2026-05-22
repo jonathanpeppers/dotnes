@@ -4,9 +4,9 @@ using Xunit.Abstractions;
 
 namespace dotnes.tests;
 
-public class RoslynTests_Samples : RoslynTests
+public class SamplesTests : RoslynTests
 {
-    public RoslynTests_Samples(ITestOutputHelper output) : base(output) { }
+    public SamplesTests(ITestOutputHelper output) : base(output) { }
 
     [Fact]
     public void HelloWorld()

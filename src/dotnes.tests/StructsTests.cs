@@ -4,9 +4,9 @@ using Xunit.Abstractions;
 
 namespace dotnes.tests;
 
-public class RoslynTests_Structs : RoslynTests
+public class StructsTests : RoslynTests
 {
-    public RoslynTests_Structs(ITestOutputHelper output) : base(output) { }
+    public StructsTests(ITestOutputHelper output) : base(output) { }
 
     [Fact]
     public void StructFieldAccess()

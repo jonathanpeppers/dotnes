@@ -4,9 +4,9 @@ using Xunit.Abstractions;
 
 namespace dotnes.tests;
 
-public class RoslynTests_Pad : RoslynTests
+public class PadTests : RoslynTests
 {
-    public RoslynTests_Pad(ITestOutputHelper output) : base(output) { }
+    public PadTests(ITestOutputHelper output) : base(output) { }
 
     [Fact]
     public void PadPollUpDown_UsesCorrectAndImmediateOperands()

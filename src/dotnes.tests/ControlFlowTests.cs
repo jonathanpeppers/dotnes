@@ -4,9 +4,9 @@ using Xunit.Abstractions;
 
 namespace dotnes.tests;
 
-public class RoslynTests_ControlFlow : RoslynTests
+public class ControlFlowTests : RoslynTests
 {
-    public RoslynTests_ControlFlow(ITestOutputHelper output) : base(output) { }
+    public ControlFlowTests(ITestOutputHelper output) : base(output) { }
 
     [Fact]
     public void EnumSwitch()

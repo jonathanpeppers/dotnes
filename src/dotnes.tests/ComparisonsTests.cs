@@ -4,9 +4,9 @@ using Xunit.Abstractions;
 
 namespace dotnes.tests;
 
-public class RoslynTests_Comparisons : RoslynTests
+public class ComparisonsTests : RoslynTests
 {
-    public RoslynTests_Comparisons(ITestOutputHelper output) : base(output) { }
+    public ComparisonsTests(ITestOutputHelper output) : base(output) { }
 
     [Fact]
     public void SbyteComparison()

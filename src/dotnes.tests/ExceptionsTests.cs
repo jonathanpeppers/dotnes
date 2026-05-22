@@ -4,9 +4,9 @@ using Xunit.Abstractions;
 
 namespace dotnes.tests;
 
-public class RoslynTests_Exceptions : RoslynTests
+public class ExceptionsTests : RoslynTests
 {
-    public RoslynTests_Exceptions(ITestOutputHelper output) : base(output) { }
+    public ExceptionsTests(ITestOutputHelper output) : base(output) { }
 
     [Fact]
     public void TryFinally()

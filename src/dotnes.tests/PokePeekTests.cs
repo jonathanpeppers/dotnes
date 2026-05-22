@@ -4,9 +4,9 @@ using Xunit.Abstractions;
 
 namespace dotnes.tests;
 
-public class RoslynTests_PokePeek : RoslynTests
+public class PokePeekTests : RoslynTests
 {
-    public RoslynTests_PokePeek(ITestOutputHelper output) : base(output) { }
+    public PokePeekTests(ITestOutputHelper output) : base(output) { }
 
     [Fact]
     public void PokeConstant()

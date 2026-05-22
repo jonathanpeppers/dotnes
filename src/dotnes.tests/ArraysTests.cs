@@ -4,9 +4,9 @@ using Xunit.Abstractions;
 
 namespace dotnes.tests;
 
-public class RoslynTests_Arrays : RoslynTests
+public class ArraysTests : RoslynTests
 {
-    public RoslynTests_Arrays(ITestOutputHelper output) : base(output) { }
+    public ArraysTests(ITestOutputHelper output) : base(output) { }
 
     [Fact]
     public void ArrayIndexers()

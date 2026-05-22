@@ -4,9 +4,9 @@ using Xunit.Abstractions;
 
 namespace dotnes.tests;
 
-public class RoslynTests_Sprites : RoslynTests
+public class SpritesTests : RoslynTests
 {
-    public RoslynTests_Sprites(ITestOutputHelper output) : base(output) { }
+    public SpritesTests(ITestOutputHelper output) : base(output) { }
 
     [Fact]
     public void OamOff_PropertyAccessTranspiles()

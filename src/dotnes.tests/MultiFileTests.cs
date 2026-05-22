@@ -4,9 +4,9 @@ using Xunit.Abstractions;
 
 namespace dotnes.tests;
 
-public class RoslynTests_MultiFile : RoslynTests
+public class MultiFileTests : RoslynTests
 {
-    public RoslynTests_MultiFile(ITestOutputHelper output) : base(output) { }
+    public MultiFileTests(ITestOutputHelper output) : base(output) { }
 
     [Fact]
     public void MultiFile_StaticHelperClass()

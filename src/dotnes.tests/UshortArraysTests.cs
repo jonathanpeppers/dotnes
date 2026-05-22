@@ -4,9 +4,9 @@ using Xunit.Abstractions;
 
 namespace dotnes.tests;
 
-public class RoslynTests_UshortArrays : RoslynTests
+public class UshortArraysTests : RoslynTests
 {
-    public RoslynTests_UshortArrays(ITestOutputHelper output) : base(output) { }
+    public UshortArraysTests(ITestOutputHelper output) : base(output) { }
 
     [Fact]
     public void UshortArray_NewarrAndConstantStore()

@@ -4,9 +4,9 @@ using Xunit.Abstractions;
 
 namespace dotnes.tests;
 
-public class RoslynTests_Closures : RoslynTests
+public class ClosuresTests : RoslynTests
 {
-    public RoslynTests_Closures(ITestOutputHelper output) : base(output) { }
+    public ClosuresTests(ITestOutputHelper output) : base(output) { }
 
     [Fact]
     public void ClosureCapturingByteArray()

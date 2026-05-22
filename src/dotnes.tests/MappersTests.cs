@@ -4,9 +4,9 @@ using Xunit.Abstractions;
 
 namespace dotnes.tests;
 
-public class RoslynTests_Mappers : RoslynTests
+public class MappersTests : RoslynTests
 {
-    public RoslynTests_Mappers(ITestOutputHelper output) : base(output) { }
+    public MappersTests(ITestOutputHelper output) : base(output) { }
 
     [Fact]
     public void Poke_To_MMC3_Registers()
