@@ -21,9 +21,9 @@ byte[] ATTRIBUTE_TABLE = [
 byte[] PALETTE = [
     DarkViolet,                                // screen color
 
-    Azure, White, LightOrange, 0x0,            // background palette 0
-    Cyan, LightGray, LightCyan, 0x0,           // background palette 1
-    DarkGray, Gray, LightGray, 0x0,            // background palette 2
+    Azure, White, LightOrange, DarkGray,       // background palette 0
+    Cyan, LightGray, LightCyan, DarkGray,      // background palette 1
+    DarkGray, Gray, LightGray, DarkGray,       // background palette 2
     DarkRed, Red, LightRed                     // background palette 3
 ];
 
