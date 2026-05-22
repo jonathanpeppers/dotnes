@@ -822,7 +822,7 @@ public class ArraysTests : RoslynTests
     {
         // Bug: tile_row[1] = (byte)(sprite + 1) emitted LDA #$01 (the constant)
         // instead of LDA sprite; CLC; ADC #$01 (the computed value).
-        var (program, _) = BuildProgram(
+        var (program, transpiler) = BuildProgram(
             """
             byte sprite = (byte)pad_poll(0);
             byte[] tile_row = new byte[4];
@@ -831,6 +831,7 @@ public class ArraysTests : RoslynTests
             ppu_on_all();
             while (true) ;
             """);
+        transpiler.Dispose();
 
         var mainBlock = program.Blocks.Single(b => b.Label == "main");
         var instructions = mainBlock.InstructionsWithLabels.ToList();
@@ -881,7 +882,7 @@ public class ArraysTests : RoslynTests
     public void StelemI1_AddThenOr_ConstantIndex()
     {
         // Same pattern but with constant array index: tile[0] = (byte)((v + 1) | 0xF0)
-        var (program, _) = BuildProgram(
+        var (program, transpiler) = BuildProgram(
             """
             byte v = (byte)pad_poll(0);
             byte[] tile = new byte[4];
@@ -890,6 +891,7 @@ public class ArraysTests : RoslynTests
             ppu_on_all();
             while (true) ;
             """);
+        transpiler.Dispose();
 
         var mainBlock = program.Blocks.Single(b => b.Label == "main");
         var instructions = mainBlock.InstructionsWithLabels.ToList();

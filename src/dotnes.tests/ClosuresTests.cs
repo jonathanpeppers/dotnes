@@ -41,6 +41,7 @@ public class ClosuresTests : RoslynTests
         var fullHex = Convert.ToHexString(fullBytes);
         _logger.WriteLine($"CapturingByteArray fullHex: {fullHex}");
         Assert.Contains("0F102030", fullHex); // byte array ROM data
+        transpiler.Dispose();
     }
 
     [Fact]
@@ -82,7 +83,7 @@ public class ClosuresTests : RoslynTests
         // Test: closure method that has real parameters in addition to
         // the implicit closure struct ref. Roslyn places the closure ref
         // as the LAST parameter, not the first.
-        var (program, _) = BuildProgram(
+        var (program, transpiler) = BuildProgram(
             """
             byte[] palette = [0x0F, 0x10, 0x20, 0x30];
             byte color = 0x15;
@@ -96,6 +97,7 @@ public class ClosuresTests : RoslynTests
                 pal_bg(palette);
             }
             """);
+        transpiler.Dispose();
 
         var mainBlock = program.GetMainBlock();
         Assert.NotNull(mainBlock);

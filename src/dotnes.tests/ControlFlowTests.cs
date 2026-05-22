@@ -309,5 +309,6 @@ public class ControlFlowTests : RoslynTests
         Assert.True(earlyReturnHasJmp,
             "User method with early 'return 1' must JMP to epilogue. " +
             "Without it, A is overwritten by 'return 0' and the function always returns 0.");
+        transpiler.Dispose();
     }
 }

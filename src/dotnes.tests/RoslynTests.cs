@@ -62,7 +62,8 @@ public abstract class RoslynTests
 
     protected byte[] GetProgramBytes(string csharpSource, IList<AssemblyReader>? additionalAssemblyFiles, bool allowUnsafe = false)
     {
-        var (program, _) = BuildProgram(csharpSource, additionalAssemblyFiles, allowUnsafe);
+        var (program, transpiler) = BuildProgram(csharpSource, additionalAssemblyFiles, allowUnsafe);
+        transpiler.Dispose();
         return program.GetMainBlock();
     }
 

@@ -14,7 +14,7 @@ public class MultiFileTests : RoslynTests
         // Verify that methods in a separate static class are correctly transpiled.
         // This tests the basic multi-file scenario where helper methods live in
         // a static class in a different file.
-        var (program, _) = BuildProgramMultiFile([
+        var (program, transpiler) = BuildProgramMultiFile([
             // File 1: Program.cs (top-level statements)
             """
             Palette.setup();
@@ -35,6 +35,7 @@ public class MultiFileTests : RoslynTests
             }
             """
         ]);
+        transpiler.Dispose();
 
         var mainBlock = program.GetMainBlock();
         Assert.NotNull(mainBlock);
@@ -66,7 +67,7 @@ public class MultiFileTests : RoslynTests
             }
             """);
 
-        var (multiFileProgram, _) = BuildProgramMultiFile([
+        var (multiFileProgram, transpiler) = BuildProgramMultiFile([
             """
             Palette.setup();
             ppu_on_all();
@@ -85,6 +86,7 @@ public class MultiFileTests : RoslynTests
             }
             """
         ]);
+        transpiler.Dispose();
 
         var multiFileBytes = multiFileProgram.GetMainBlock();
 
@@ -98,7 +100,7 @@ public class MultiFileTests : RoslynTests
     public void MethodWithParameters()
     {
         // Verify that methods with parameters in a separate class work correctly.
-        var (program, _) = BuildProgramMultiFile([
+        var (program, transpiler) = BuildProgramMultiFile([
             """
             Graphics.set_color(0, 0x30);
             ppu_on_all();
@@ -114,6 +116,7 @@ public class MultiFileTests : RoslynTests
             }
             """
         ]);
+        transpiler.Dispose();
 
         var mainBlock = program.GetMainBlock();
         Assert.NotNull(mainBlock);
@@ -131,7 +134,7 @@ public class MultiFileTests : RoslynTests
     public void MethodWithReturnValue()
     {
         // Verify that methods with return values in a separate class work correctly.
-        var (program, _) = BuildProgramMultiFile([
+        var (program, transpiler) = BuildProgramMultiFile([
             """
             pal_col(0, Colors.white());
             ppu_on_all();
@@ -144,6 +147,7 @@ public class MultiFileTests : RoslynTests
             }
             """
         ]);
+        transpiler.Dispose();
 
         var mainBlock = program.GetMainBlock();
         Assert.NotNull(mainBlock);
@@ -160,7 +164,7 @@ public class MultiFileTests : RoslynTests
     public void MultipleHelperClasses()
     {
         // Verify that methods across multiple static helper classes work correctly.
-        var (program, _) = BuildProgramMultiFile([
+        var (program, transpiler) = BuildProgramMultiFile([
             """
             Palette.setup();
             Display.enable();
@@ -186,6 +190,7 @@ public class MultiFileTests : RoslynTests
             }
             """
         ]);
+        transpiler.Dispose();
 
         var mainBlock = program.GetMainBlock();
         Assert.NotNull(mainBlock);

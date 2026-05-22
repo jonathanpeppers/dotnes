@@ -288,7 +288,7 @@ public class FunctionsTests : RoslynTests
     {
         // When outer_func calls inner_func, each must have its own local storage
         // to prevent inner_func from clobbering outer_func's locals.
-        var (program, _) = BuildProgram(
+        var (program, transpiler) = BuildProgram(
             """
             outer_func();
             ppu_on_all();
@@ -307,6 +307,7 @@ public class FunctionsTests : RoslynTests
                 pal_col(1, local_inner);
             }
             """);
+        transpiler.Dispose();
 
         // Get full program bytes (main + user methods)
         var allBytes = program.ToBytes();
@@ -329,7 +330,7 @@ public class FunctionsTests : RoslynTests
     {
         // When a caller has multiple locals, the callee's frame must start
         // AFTER all the caller's locals, not just 1 byte later.
-        var (program, _) = BuildProgram(
+        var (program, transpiler) = BuildProgram(
             """
             multi_local_func();
             ppu_on_all();
@@ -354,6 +355,7 @@ public class FunctionsTests : RoslynTests
                 pal_col(0, val);
             }
             """);
+        transpiler.Dispose();
 
         var allBytes = program.ToBytes();
         var hex = Convert.ToHexString(allBytes);
