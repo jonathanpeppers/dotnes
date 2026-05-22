@@ -2031,10 +2031,30 @@ partial class IL2NESWriter
                                                 {
                                                     yIndexImm = block[block.Count - 2];
                                                 }
+                                                // Save intervening instructions between pusha and the
+                                                // y load (e.g. stloc pairs like LDA #val, STA $addr).
+                                                // These must be preserved because the y load may read
+                                                // from the address that stloc initialized. The y-index
+                                                // load (if any) sits between intervening and lastInstr,
+                                                // so exclude it from the intervening range.
+                                                int yTail = yIndexImm != null ? 2 : 1;
+                                                var intervening = new List<Instruction>();
+                                                for (int bi = pushaIdx2 + 1; bi < block.Count - yTail; bi++)
+                                                    intervening.Add(block[bi]);
                                                 int instrToRemove2 = block.Count - (pushaIdx2 - 1);
                                                 RemoveLastInstructions(instrToRemove2);
+                                                // Emit the x→TEMP setup FIRST so any pending label
+                                                // (e.g. anchored at the NTADR call's IL offset by
+                                                // RemoveLastInstructions returning labels to the
+                                                // pending queue) attaches to the first NTADR-generated
+                                                // instruction rather than to the intervening stloc.
                                                 Emit(Opcode.LDA, AddressMode.Immediate, immX2.Value);
                                                 Emit(Opcode.STA, AddressMode.ZeroPage, TEMP);
+                                                // Then re-emit the intervening stloc instructions
+                                                // (they must precede the y load because the y load
+                                                // may read the address that stloc just initialized).
+                                                foreach (var instr in intervening)
+                                                    block.Emit(instr);
                                                 if (yIndexImm != null) block.Emit(yIndexImm);
                                                 block.Emit(lastInstr);
                                             }
@@ -2061,13 +2081,24 @@ partial class IL2NESWriter
                                                 {
                                                     yIndex2 = block[block.Count - 2];
                                                 }
+                                                // Save intervening stloc instructions between pusha
+                                                // and the y-index/y-load (see immediate-x branch above).
+                                                int yTail2 = yIndex2 != null ? 2 : 1;
+                                                var intervening = new List<Instruction>();
+                                                for (int bi = pushaIdx2 + 1; bi < block.Count - yTail2; bi++)
+                                                    intervening.Add(block[bi]);
 
                                                 int removeFrom2 = xIndex2 != null ? pushaIdx2 - 2 : pushaIdx2 - 1;
                                                 int instrToRemove2 = block.Count - removeFrom2;
                                                 RemoveLastInstructions(instrToRemove2);
+                                                // Emit x→TEMP setup first (see comment above) so the
+                                                // pending label anchors to the NTADR's first instr.
                                                 if (xIndex2 != null) block.Emit(xIndex2);
                                                 block.Emit(xLoadInstr2);
                                                 Emit(Opcode.STA, AddressMode.ZeroPage, TEMP);
+                                                // Then re-emit intervening stloc, then y-index, then y load.
+                                                foreach (var instr in intervening)
+                                                    block.Emit(instr);
                                                 if (yIndex2 != null) block.Emit(yIndex2);
                                                 block.Emit(lastInstr);
                                             }

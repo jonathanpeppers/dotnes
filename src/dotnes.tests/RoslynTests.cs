@@ -2748,6 +2748,44 @@ public class RoslynTests
     }
 
     [Fact]
+    public void NtadrWithBothVariableArgs()
+    {
+        // Regression: NTADR_A(x1, y1) with byte local args. Roslyn (Release)
+        // inlines x1 to a constant but keeps y1 as a local, emitting an
+        // stloc *between* the two NTADR args:
+        //   ldc.i4.2; ldc.i4.2; stloc.0; ldloc.0; call NTADR_A
+        // The NTADR handler's backward scan from `pusha` was wiping out
+        // the stloc pair (LDA #val, STA $addr), so the re-emitted
+        // LDA $addr (the y load) read uninitialized memory.
+        var bytes = GetProgramBytes(
+            """
+            byte x1 = 2;
+            byte y1 = 2;
+            vram_adr(NTADR_A(x1, y1));
+            vram_write("B");
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"NtadrWithBothVariableArgs hex: {hex}");
+        // Required generated sequence at the NTADR_A call site, in order
+        // (Roslyn eliminates x1; y1 is the only local at $0325):
+        //   LDA #$02    A902     — x constant
+        //   STA $17     8517     — STA TEMP (x), emitted first so the
+        //                          NTADR call's pending label anchors here
+        //   LDA #$02    A902     — y init value
+        //   STA $0325   8D2503   — stloc y1
+        //   LDA $0325   AD2503   — ldloc y1 (NTADR's y arg)
+        // Asserting the full ordered substring guarantees the stloc is
+        // preserved AND that the subsequent ldloc reads the same address
+        // it was just stored to.
+        Assert.Contains("A9028517A9028D2503AD2503", hex);
+    }
+
+    [Fact]
     public void LdelemConstantIndexCompareWithConstant()
     {
         // Pattern from climber: while (actor_floor[0] != MAX_FLOORS - 1)
