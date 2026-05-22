@@ -6645,4 +6645,135 @@ public class RoslynTests
                 $"Found {jsrPushaCount} JSR pusha instructions — expected at most 1. Extra calls indicate dead code from stelem init.");
         }
     }
+
+    [Fact]
+    public void CollectionExpressionArrayIndexing()
+    {
+        // Collection expressions like byte[] x = [2, 3, 4] compile to
+        // newarr → dup → ldtoken → call InitializeArray → stloc
+        // The transpiler must correctly handle ldelem.u1 on these arrays.
+        var bytes = GetProgramBytes(
+            """
+            byte[] x = [2, 3, 4, 5, 6, 7, 8, 9, 10];
+            byte[] y = [2, 2, 2, 2, 2, 2, 2, 2, 2];
+            vram_adr(NTADR_A(x[0], y[0]));
+            vram_write("B");
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"CollectionExprArrayIdx hex: {hex}");
+
+        // Look for the specific NTADR_A argument-load pattern:
+        //   LDX #$00         (A2 00)  ; x index
+        //   LDA xarr,X       (BD lo hi)
+        //   STA $17          (85 17)  ; TEMP = x
+        //   LDX #$00         (A2 00)  ; y index
+        //   LDA yarr,X       (BD lo hi)
+        //   JSR nametable_a  (20 lo hi)
+        bool found = false;
+        for (int i = 0; i <= bytes.Length - 14; i++)
+        {
+            if (bytes[i] == 0xA2 && bytes[i + 1] == 0x00      // LDX #$00
+                && bytes[i + 2] == 0xBD                       // LDA abs,X (x[0])
+                && bytes[i + 5] == 0x85 && bytes[i + 6] == 0x17 // STA $17
+                && bytes[i + 7] == 0xA2 && bytes[i + 8] == 0x00 // LDX #$00
+                && bytes[i + 9] == 0xBD                       // LDA abs,X (y[0])
+                && bytes[i + 12] == 0x20)                     // JSR (nametable_a)
+            {
+                found = true;
+                break;
+            }
+        }
+        Assert.True(found,
+            "Expected NTADR_A pattern: LDX #0; LDA xarr,X; STA TEMP; LDX #0; LDA yarr,X; JSR nametable_a");
+    }
+
+    [Fact]
+    public void CollectionExpressionArrayIndexingNonZero()
+    {
+        // Same as above but with non-zero indices (x[1], y[1])
+        var bytes = GetProgramBytes(
+            """
+            byte[] x = [2, 3, 4, 5, 6, 7, 8, 9, 10];
+            byte[] y = [2, 2, 2, 2, 2, 2, 2, 2, 2];
+            vram_adr(NTADR_A(x[1], y[1]));
+            vram_write("L");
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"CollectionExprArrayIdxNonZero hex: {hex}");
+
+        // Same pattern as above, but with LDX #$01 instead of LDX #$00.
+        bool found = false;
+        for (int i = 0; i <= bytes.Length - 14; i++)
+        {
+            if (bytes[i] == 0xA2 && bytes[i + 1] == 0x01      // LDX #$01
+                && bytes[i + 2] == 0xBD                       // LDA abs,X (x[1])
+                && bytes[i + 5] == 0x85 && bytes[i + 6] == 0x17 // STA $17
+                && bytes[i + 7] == 0xA2 && bytes[i + 8] == 0x01 // LDX #$01
+                && bytes[i + 9] == 0xBD                       // LDA abs,X (y[1])
+                && bytes[i + 12] == 0x20)                     // JSR (nametable_a)
+            {
+                found = true;
+                break;
+            }
+        }
+        Assert.True(found,
+            "Expected NTADR_A pattern: LDX #1; LDA xarr,X; STA TEMP; LDX #1; LDA yarr,X; JSR nametable_a");
+    }
+
+    [Fact]
+    public void CollectionExpressionArrayIndexingConstantY()
+    {
+        // Regression test: NTADR_A(x[i], <constant>) — runtime x from an array element
+        // plus a constant y. WriteLdc skips emitting LDA #y because _runtimeValueInA
+        // is true after the AbsoluteX array load, so the block ends with the x load
+        // (LDA arr,X) and the constant y lives only on the IL stack.
+        // The NTADR handler must route this through the xFromFlag path, not misclassify
+        // the trailing AbsoluteX load as a runtime y.
+        var bytes = GetProgramBytes(
+            """
+            byte[] x = [2, 3, 4, 5, 6, 7, 8, 9, 10];
+            byte[] y = [2, 2, 2, 2, 2, 2, 2, 2, 2];
+            vram_adr(NTADR_A(x[0], 2));
+            pal_col(0, y[0]);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"CollectionExprArrayIdxConstY hex: {hex}");
+
+        // Look for the xFromFlag pattern:
+        //   LDX #$00         (A2 00)  ; x index
+        //   LDA xarr,X       (BD lo hi)
+        //   STA $17          (85 17)  ; TEMP = x
+        //   LDA #$02         (A9 02)  ; constant y
+        //   JSR nametable_a  (20 lo hi)
+        bool found = false;
+        for (int i = 0; i <= bytes.Length - 12; i++)
+        {
+            if (bytes[i] == 0xA2 && bytes[i + 1] == 0x00      // LDX #$00
+                && bytes[i + 2] == 0xBD                       // LDA abs,X (x[0])
+                && bytes[i + 5] == 0x85 && bytes[i + 6] == 0x17 // STA $17
+                && bytes[i + 7] == 0xA9 && bytes[i + 8] == 0x02 // LDA #$02
+                && bytes[i + 9] == 0x20)                      // JSR (nametable_a)
+            {
+                found = true;
+                break;
+            }
+        }
+        Assert.True(found,
+            "Expected NTADR_A pattern: LDX #0; LDA xarr,X; STA TEMP; LDA #2; JSR nametable_a");
+    }
 }
