@@ -2011,22 +2011,31 @@ partial class IL2NESWriter
                                             if (xLoadInstr2.Operand is ImmediateOperand immX2)
                                             {
                                                 RemoveLastInstructions(instrToRemove2);
-                                                // Re-emit the intervening stloc instructions first
-                                                foreach (var instr in intervening)
-                                                    block.Emit(instr);
+                                                // Emit the x→TEMP setup FIRST so any pending label
+                                                // (e.g. anchored at the NTADR call's IL offset by
+                                                // RemoveLastInstructions returning labels to the
+                                                // pending queue) attaches to the first NTADR-generated
+                                                // instruction rather than to the intervening stloc.
                                                 Emit(Opcode.LDA, AddressMode.Immediate, immX2.Value);
                                                 Emit(Opcode.STA, AddressMode.ZeroPage, TEMP);
+                                                // Then re-emit the intervening stloc instructions
+                                                // (they must precede the y load because the y load
+                                                // may read the address that stloc just initialized).
+                                                foreach (var instr in intervening)
+                                                    block.Emit(instr);
                                                 block.Emit(lastInstr);
                                             }
                                             else if (xLoadInstr2.Mode == AddressMode.Absolute
                                                 && xLoadInstr2.Opcode == Opcode.LDA)
                                             {
                                                 RemoveLastInstructions(instrToRemove2);
-                                                // Re-emit the intervening stloc instructions first
-                                                foreach (var instr in intervening)
-                                                    block.Emit(instr);
+                                                // Emit x→TEMP setup first (see comment above) so the
+                                                // pending label anchors to the NTADR's first instr.
                                                 block.Emit(xLoadInstr2);
                                                 Emit(Opcode.STA, AddressMode.ZeroPage, TEMP);
+                                                // Then re-emit intervening stloc, then y load.
+                                                foreach (var instr in intervening)
+                                                    block.Emit(instr);
                                                 block.Emit(lastInstr);
                                             }
                                             else
