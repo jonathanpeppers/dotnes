@@ -9,7 +9,7 @@ public class PadTests : RoslynTests
     public PadTests(ITestOutputHelper output) : base(output) { }
 
     [Fact]
-    public void PadPollUpDown_UsesCorrectAndImmediateOperands()
+    public void PollUpDown_UsesCorrectAndImmediateOperands()
     {
         // Regression: climber had PAD_UP=0x08 (START) and PAD_DOWN=0x04 (SELECT).
         // Correct values are PAD.UP=0x10 and PAD.DOWN=0x20.
@@ -40,7 +40,7 @@ public class PadTests : RoslynTests
     }
 
     [Fact]
-    public void PadPollAndRand8_IndependentAndOperations()
+    public void PollAndRand8_IndependentAndOperations()
     {
         // Regression: the AND handler had a _padPollResultAvailable flag that was never
         // cleared after non-pad_poll calls, so AND operations on rand8() results would
@@ -113,7 +113,7 @@ public class PadTests : RoslynTests
     }
 
     [Fact]
-    public void PadPollAndArrayElement_NoStaleReload()
+    public void PollAndArrayElement_NoStaleReload()
     {
         // Regression for the !_runtimeValueInA guard in the AND handler:
         // After pad_poll(), _padPollResultAvailable stays true until the next Call.
@@ -185,7 +185,7 @@ public class PadTests : RoslynTests
     }
 
     [Fact]
-    public void PadPressed_ProducesSameCodeAsManualAnd()
+    public void Pressed_ProducesSameCodeAsManualAnd()
     {
         // pad_pressed(pad, PAD.LEFT) should produce identical 6502 code
         // to the manual (pad & PAD.LEFT) != 0 pattern.
@@ -229,7 +229,7 @@ public class PadTests : RoslynTests
     }
 
     [Fact]
-    public void PadPressed_MultipleButtons()
+    public void Pressed_MultipleButtons()
     {
         // Verify pad_pressed emits correct AND immediate for multiple button checks
         var bytes = GetProgramBytes(
@@ -250,7 +250,7 @@ public class PadTests : RoslynTests
             """);
         Assert.NotNull(bytes);
         var hex = Convert.ToHexString(bytes);
-        _logger.WriteLine($"PadPressed_MultipleButtons hex: {hex}");
+        _logger.WriteLine($"Pressed_MultipleButtons hex: {hex}");
 
         // AND #$10 for PAD.UP
         Assert.Contains("2910", hex);
@@ -263,7 +263,7 @@ public class PadTests : RoslynTests
     }
 
     [Fact]
-    public void PadDpadX()
+    public void DpadX()
     {
         // pad_dpad_x returns -1 (LEFT), +1 (RIGHT), or 0
         var bytes = GetProgramBytes(
@@ -294,7 +294,7 @@ public class PadTests : RoslynTests
     }
 
     [Fact]
-    public void PadDpadY()
+    public void DpadY()
     {
         // pad_dpad_y returns -1 (UP), +1 (DOWN), or 0
         var bytes = GetProgramBytes(
@@ -325,7 +325,7 @@ public class PadTests : RoslynTests
     }
 
     [Fact]
-    public void PadDpadXAndY()
+    public void DpadXAndY()
     {
         // Both pad_dpad_x and pad_dpad_y used together
         var bytes = GetProgramBytes(
@@ -359,7 +359,7 @@ public class PadTests : RoslynTests
     }
 
     [Fact]
-    public void PadDpadX_WithPadState()
+    public void DpadX_WithPadState()
     {
         // pad_dpad_x works with pad_state (not just pad_poll).
         // The intrinsic saves A to its own reload slot, so it doesn't
@@ -393,7 +393,7 @@ public class PadTests : RoslynTests
     }
 
     [Fact]
-    public void PadDpadX_MultiPad()
+    public void DpadX_MultiPad()
     {
         // Two pads polled; pad_dpad_x called on the first (not the most recent).
         // The intrinsic must reload from its own saved copy, not _padReloadAddress

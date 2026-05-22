@@ -9,7 +9,7 @@ public class StructsTests : RoslynTests
     public StructsTests(ITestOutputHelper output) : base(output) { }
 
     [Fact]
-    public void StructFieldAccess()
+    public void FieldAccess()
     {
         // Struct with byte fields — stfld/ldfld map to STA/LDA on zero page
         var bytes = GetProgramBytes(
@@ -37,7 +37,7 @@ public class StructsTests : RoslynTests
     }
 
     [Fact]
-    public void StructFieldArithmetic()
+    public void FieldArithmetic()
     {
         // Read struct fields, do arithmetic, use result
         var bytes = GetProgramBytes(
@@ -64,7 +64,7 @@ public class StructsTests : RoslynTests
     }
 
     [Fact]
-    public void StructArrayConstantIndex()
+    public void ArrayConstantIndex()
     {
         // Store and load struct fields via constant array index
         var bytes = GetProgramBytes(
@@ -90,7 +90,7 @@ public class StructsTests : RoslynTests
     }
 
     [Fact]
-    public void StructArrayFieldReadWrite()
+    public void ArrayFieldReadWrite()
     {
         // Write to one element, read from another, pass to function
         var bytes = GetProgramBytes(
@@ -115,7 +115,7 @@ public class StructsTests : RoslynTests
     }
 
     [Fact]
-    public void StructArrayThreeFields()
+    public void ArrayThreeFields()
     {
         // Struct with 3 fields to verify field offset calculation
         var bytes = GetProgramBytes(

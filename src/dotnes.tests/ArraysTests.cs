@@ -9,7 +9,7 @@ public class ArraysTests : RoslynTests
     public ArraysTests(ITestOutputHelper output) : base(output) { }
 
     [Fact]
-    public void ArrayIndexers()
+    public void Indexers()
     {
         AssertProgram(
             csharpSource:
@@ -73,7 +73,7 @@ public class ArraysTests : RoslynTests
     }
 
     [Fact]
-    public void ArrayIndexers_i4()
+    public void Indexers_i4()
     {
         AssertProgram(
             csharpSource:
@@ -94,7 +94,7 @@ public class ArraysTests : RoslynTests
     }
 
     [Fact]
-    public void ArrayFillConstant()
+    public void FillConstant()
     {
         // Array.Fill with a constant value — no subsequent array access
         var bytes = GetProgramBytes(
@@ -115,7 +115,7 @@ public class ArraysTests : RoslynTests
     }
 
     [Fact]
-    public void ArrayFillZero()
+    public void FillZero()
     {
         // Array.Fill with zero — common memset(buf, 0, n) pattern
         var bytes = GetProgramBytes(
@@ -136,7 +136,7 @@ public class ArraysTests : RoslynTests
     }
 
     [Fact]
-    public void ArrayCopyBasic()
+    public void CopyBasic()
     {
         // Array.Copy between two runtime arrays
         var bytes = GetProgramBytes(
@@ -652,7 +652,7 @@ public class ArraysTests : RoslynTests
     }
 
     [Fact]
-    public void ArrayStelem_TwoLocalsAdd()
+    public void Stelem_TwoLocalsAdd()
     {
         // arr[i] = (byte)(local1 + local2) — both operands are locals.
         // Regression test: previously the second ldloc overwrote the first,
@@ -676,7 +676,7 @@ public class ArraysTests : RoslynTests
     }
 
     [Fact]
-    public void ArrayStelem_TwoLocalsSub()
+    public void Stelem_TwoLocalsSub()
     {
         // arr[i] = (byte)(local1 - local2) — subtraction variant.
         var bytes = GetProgramBytes(
@@ -912,7 +912,7 @@ public class ArraysTests : RoslynTests
     }
 
     [Fact]
-    public void ArrayElement_UsedInNTADR_A()
+    public void Element_UsedInNTADR_A()
     {
         // Regression: byte[] x = [2]; byte[] y = [2]; vram_adr(NTADR_A(y[0], x[0]))
         // was throwing "Array element access requires the array to be stored in a local variable"
@@ -932,7 +932,7 @@ public class ArraysTests : RoslynTests
     }
 
     [Fact]
-    public void ArrayElement_InlineBothArrays()
+    public void Element_InlineBothArrays()
     {
         // Both arrays are inlined (neither stored to locals) — both should resolve
         // at compile time. NTADR_A(3, 5) = 0x2000 | (3 << 5) | 5 = 0x2065
@@ -949,7 +949,7 @@ public class ArraysTests : RoslynTests
     }
 
     [Fact]
-    public void ArrayElement_InlineConstantResolution()
+    public void Element_InlineConstantResolution()
     {
         // Verify inline array element access resolves to the correct constant.
         // Uses pal_bright (single-arg call) to avoid complex multi-arg interactions.
@@ -965,7 +965,7 @@ public class ArraysTests : RoslynTests
         Assert.NotEmpty(bytes);
 
         var hex = Convert.ToHexString(bytes);
-        _logger.WriteLine($"ArrayElement_InlineConstantResolution hex: {hex}");
+        _logger.WriteLine($"Element_InlineConstantResolution hex: {hex}");
 
         // x[0]=0x42 should be resolved at compile time (LDA #$42 = A942)
         Assert.Contains("A942", hex);

@@ -9,7 +9,7 @@ public class UshortArraysTests : RoslynTests
     public UshortArraysTests(ITestOutputHelper output) : base(output) { }
 
     [Fact]
-    public void UshortArray_NewarrAndConstantStore()
+    public void NewarrAndConstantStore()
     {
         // ushort[] newarr allocates count*2 bytes; constant-index stelem.i2 stores lo/hi at computed addresses
         var bytes = GetProgramBytes(
@@ -26,7 +26,7 @@ public class UshortArraysTests : RoslynTests
         Assert.NotEmpty(bytes);
 
         var hex = Convert.ToHexString(bytes);
-        _logger.WriteLine($"UshortArray_NewarrAndConstantStore hex: {hex}");
+        _logger.WriteLine($"NewarrAndConstantStore hex: {hex}");
 
         // arr[0] = 100 (0x0064): STA base+0 with 0x64, STA base+1 with 0x00
         Assert.Contains("A964", hex); // LDA #$64 (lo byte of 100)
@@ -42,7 +42,7 @@ public class UshortArraysTests : RoslynTests
     }
 
     [Fact]
-    public void UshortArray_VariableIndexLoad()
+    public void VariableIndexLoad()
     {
         // Variable-index ldelem.u2 uses ASL A, TAY, LDA base,Y / LDA base+1,Y
         var bytes = GetProgramBytes(
@@ -62,7 +62,7 @@ public class UshortArraysTests : RoslynTests
         Assert.NotEmpty(bytes);
 
         var hex = Convert.ToHexString(bytes);
-        _logger.WriteLine($"UshortArray_VariableIndexLoad hex: {hex}");
+        _logger.WriteLine($"VariableIndexLoad hex: {hex}");
 
         // Variable index load pattern: ASL A (0A), TAY (A8)
         Assert.Contains("0AA8", hex); // ASL A; TAY (double index for 16-bit elements)
@@ -72,7 +72,7 @@ public class UshortArraysTests : RoslynTests
     }
 
     [Fact]
-    public void UshortArray_VariableIndexStore()
+    public void VariableIndexStore()
     {
         // Variable-index stelem.i2 saves value, computes Y offset, stores both bytes
         var bytes = GetProgramBytes(
@@ -88,7 +88,7 @@ public class UshortArraysTests : RoslynTests
         Assert.NotEmpty(bytes);
 
         var hex = Convert.ToHexString(bytes);
-        _logger.WriteLine($"UshortArray_VariableIndexStore hex: {hex}");
+        _logger.WriteLine($"VariableIndexStore hex: {hex}");
 
         // 310 = 0x0136: lo=0x36, hi=0x01
         Assert.Contains("A936", hex); // LDA #$36 (lo byte of 310)
@@ -103,7 +103,7 @@ public class UshortArraysTests : RoslynTests
     }
 
     [Fact]
-    public void UshortArray_LoadStoresIn16BitLocal()
+    public void LoadStoresIn16BitLocal()
     {
         // ldelem.u2 result stored to ushort local uses STA $xxxx + STX $xxxx+1
         var bytes = GetProgramBytes(
@@ -121,7 +121,7 @@ public class UshortArraysTests : RoslynTests
         Assert.NotEmpty(bytes);
 
         var hex = Convert.ToHexString(bytes);
-        _logger.WriteLine($"UshortArray_LoadStoresIn16BitLocal hex: {hex}");
+        _logger.WriteLine($"LoadStoresIn16BitLocal hex: {hex}");
 
         // arr[0] = 500 (0x01F4): lo=0xF4, hi=0x01
         Assert.Contains("A9F4", hex); // LDA #$F4

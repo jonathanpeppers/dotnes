@@ -9,7 +9,7 @@ public class MultiFileTests : RoslynTests
     public MultiFileTests(ITestOutputHelper output) : base(output) { }
 
     [Fact]
-    public void MultiFile_StaticHelperClass()
+    public void StaticHelperClass()
     {
         // Verify that methods in a separate static class are correctly transpiled.
         // This tests the basic multi-file scenario where helper methods live in
@@ -40,14 +40,14 @@ public class MultiFileTests : RoslynTests
         Assert.NotNull(mainBlock);
         Assert.NotEmpty(mainBlock);
 
-        _logger.WriteLine($"MultiFile_StaticHelperClass main hex: {Convert.ToHexString(mainBlock)}");
+        _logger.WriteLine($"StaticHelperClass main hex: {Convert.ToHexString(mainBlock)}");
 
         // First instruction in main should be JSR (0x20) to the setup method
         Assert.Equal(0x20, mainBlock[0]);
     }
 
     [Fact]
-    public void MultiFile_MatchesSingleFile()
+    public void MatchesSingleFile()
     {
         // Verify that a multi-file program produces the same main block bytes
         // as the equivalent single-file program with a local function.
@@ -95,7 +95,7 @@ public class MultiFileTests : RoslynTests
     }
 
     [Fact]
-    public void MultiFile_MethodWithParameters()
+    public void MethodWithParameters()
     {
         // Verify that methods with parameters in a separate class work correctly.
         var (program, _) = BuildProgramMultiFile([
@@ -120,7 +120,7 @@ public class MultiFileTests : RoslynTests
         Assert.NotEmpty(mainBlock);
 
         var hex = Convert.ToHexString(mainBlock);
-        _logger.WriteLine($"MultiFile_MethodWithParameters main hex: {hex}");
+        _logger.WriteLine($"MethodWithParameters main hex: {hex}");
 
         // Should contain LDA #$00 for index and LDA #$30 for color
         Assert.Contains("A900", hex);
@@ -128,7 +128,7 @@ public class MultiFileTests : RoslynTests
     }
 
     [Fact]
-    public void MultiFile_MethodWithReturnValue()
+    public void MethodWithReturnValue()
     {
         // Verify that methods with return values in a separate class work correctly.
         var (program, _) = BuildProgramMultiFile([
@@ -150,14 +150,14 @@ public class MultiFileTests : RoslynTests
         Assert.NotEmpty(mainBlock);
 
         var hex = Convert.ToHexString(mainBlock);
-        _logger.WriteLine($"MultiFile_MethodWithReturnValue main hex: {hex}");
+        _logger.WriteLine($"MethodWithReturnValue main hex: {hex}");
 
         // Should contain LDA #$00 for pal_col index arg
         Assert.Contains("A900", hex);
     }
 
     [Fact]
-    public void MultiFile_MultipleHelperClasses()
+    public void MultipleHelperClasses()
     {
         // Verify that methods across multiple static helper classes work correctly.
         var (program, _) = BuildProgramMultiFile([
@@ -191,7 +191,7 @@ public class MultiFileTests : RoslynTests
         Assert.NotNull(mainBlock);
         Assert.NotEmpty(mainBlock);
 
-        _logger.WriteLine($"MultiFile_MultipleHelperClasses main hex: {Convert.ToHexString(mainBlock)}");
+        _logger.WriteLine($"MultipleHelperClasses main hex: {Convert.ToHexString(mainBlock)}");
 
         // Main should begin with two JSR (0x20) calls at instruction boundaries:
         // JSR setup (3 bytes) then JSR enable (3 bytes)

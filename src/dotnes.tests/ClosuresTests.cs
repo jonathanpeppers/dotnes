@@ -9,7 +9,7 @@ public class ClosuresTests : RoslynTests
     public ClosuresTests(ITestOutputHelper output) : base(output) { }
 
     [Fact]
-    public void ClosureCapturingByteArray()
+    public void CapturingByteArray()
     {
         // When a non-static local function captures an outer byte[] variable,
         // the compiler generates a closure struct. The transpiler should handle
@@ -39,12 +39,12 @@ public class ClosuresTests : RoslynTests
         // The full ROM should contain the byte array data (0x0F, 0x10, 0x20, 0x30)
         var fullBytes = program.ToBytes();
         var fullHex = Convert.ToHexString(fullBytes);
-        _logger.WriteLine($"ClosureCapturingByteArray fullHex: {fullHex}");
+        _logger.WriteLine($"CapturingByteArray fullHex: {fullHex}");
         Assert.Contains("0F102030", fullHex); // byte array ROM data
     }
 
     [Fact]
-    public void ClosureCapturingByteArrayAndScalar()
+    public void CapturingByteArrayAndScalar()
     {
         // Test: closure capturing both a byte[] (ROM data) and a scalar byte variable.
         // The byte[] field should use ROM labels, the scalar should use a zero-page address.
@@ -66,7 +66,7 @@ public class ClosuresTests : RoslynTests
         Assert.NotEmpty(bytes);
 
         var hex = Convert.ToHexString(bytes);
-        _logger.WriteLine($"ClosureCapturingByteArrayAndScalar hex: {hex}");
+        _logger.WriteLine($"CapturingByteArrayAndScalar hex: {hex}");
 
         // Verify the scalar closure field (color = 0x15) is stored at its address.
         // The main should emit LDA #$15 (A915) followed by STA $addr (8D xx xx).
@@ -77,7 +77,7 @@ public class ClosuresTests : RoslynTests
     }
 
     [Fact]
-    public void ClosureMethodWithRealParams()
+    public void MethodWithRealParams()
     {
         // Test: closure method that has real parameters in addition to
         // the implicit closure struct ref. Roslyn places the closure ref
@@ -103,7 +103,7 @@ public class ClosuresTests : RoslynTests
 
         var fullBytes = program.ToBytes();
         var fullHex = Convert.ToHexString(fullBytes);
-        _logger.WriteLine($"ClosureMethodWithRealParams hex: {fullHex}");
+        _logger.WriteLine($"MethodWithRealParams hex: {fullHex}");
 
         // Verify palette data is in the full ROM
         Assert.Contains("0F102030", fullHex);
