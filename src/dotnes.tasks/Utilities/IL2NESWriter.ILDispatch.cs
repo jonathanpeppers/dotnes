@@ -1927,7 +1927,9 @@ partial class IL2NESWriter
                                     if (_savedRuntimeToTemp
                                         && block.Count >= 2
                                         && block[block.Count - 2].Opcode == Opcode.STA
-                                        && block[block.Count - 2].Mode == AddressMode.ZeroPage)
+                                        && block[block.Count - 2].Mode == AddressMode.ZeroPage
+                                        && block[block.Count - 2].Operand is ImmediateOperand staTempOp
+                                        && staTempOp.Value == (byte)TEMP)
                                     {
                                         // Runtime x from expression (add/sub/rem etc.) was saved
                                         // to TEMP by WriteLdloc, and y was loaded into A.
