@@ -32,6 +32,34 @@ partial class IL2NESWriter
     }
 
     /// <summary>
+    /// Returns true if the next IL instruction is <see cref="ILOpCode.Ldlen"/>.
+    /// Used by Ldsfld/Ldloc handlers to suppress emission when the array reference
+    /// is only being loaded to read its length (which is constant-folded at transpile time).
+    /// </summary>
+    bool NextIsLdlen()
+    {
+        return Instructions is not null && Index + 1 < Instructions.Length &&
+            Instructions[Index + 1].OpCode == ILOpCode.Ldlen;
+    }
+
+    /// <summary>
+    /// If the next IL instruction is Ldlen and the given local is an array (ROM byte array,
+    /// RAM byte/ushort array, or struct array), suppress the Ldloc emission and stash the
+    /// array Local so Ldlen can fold to a constant LDA #count.
+    /// </summary>
+    bool TryHandleLdlocForLdlen(int localIdx)
+    {
+        if (!NextIsLdlen())
+            return false;
+        if (!Locals.TryGetValue(localIdx, out var loc))
+            return false;
+        if (loc.ArraySize <= 0 && loc.LabelName is null)
+            return false;
+        _pendingLdlenSource = loc;
+        return true;
+    }
+
+    /// <summary>
     /// Returns true if the next IL instruction is a branch comparison opcode
     /// (Bne, Beq, Blt, Ble, Bge, Bgt in both short and long forms).
     /// Used by WriteLdc to preserve A:X for 16-bit comparisons.
@@ -103,9 +131,10 @@ partial class IL2NESWriter
             "This is typically caused by calling an instance method or virtual method on an object. " +
             "Use only static methods and NESLib API calls.",
         ILOpCode.Ldlen =>
-            $"The IL opcode '{opCode}' is not supported. " +
-            "This is typically caused by accessing '.Length' on an array. " +
-            "Track array length in a separate variable instead.",
+            $"The IL opcode '{opCode}' is not supported in this context. " +
+            "Accessing '.Length' is supported on arrays whose size is known at transpile time " +
+            "(static readonly byte[]/ushort[] tables and local byte[]/ushort[] allocated with 'new'). " +
+            "Ensure the array reference loaded immediately before '.Length' is one of these.",
         ILOpCode.Neg =>
             $"The IL opcode '{opCode}' is not supported. " +
             "This is typically caused by the unary negation operator ('-x'). " +

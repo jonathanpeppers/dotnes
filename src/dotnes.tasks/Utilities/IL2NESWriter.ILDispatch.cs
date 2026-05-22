@@ -249,18 +249,22 @@ partial class IL2NESWriter
                 }
                 break;
             case ILOpCode.Ldloc_0:
+                if (TryHandleLdlocForLdlen(0)) break;
                 WriteLdloc(Locals[0]);
                 _lastLoadedLocalIndex = 0;
                 break;
             case ILOpCode.Ldloc_1:
+                if (TryHandleLdlocForLdlen(1)) break;
                 WriteLdloc(Locals[1]);
                 _lastLoadedLocalIndex = 1;
                 break;
             case ILOpCode.Ldloc_2:
+                if (TryHandleLdlocForLdlen(2)) break;
                 WriteLdloc(Locals[2]);
                 _lastLoadedLocalIndex = 2;
                 break;
             case ILOpCode.Ldloc_3:
+                if (TryHandleLdlocForLdlen(3)) break;
                 WriteLdloc(Locals[3]);
                 _lastLoadedLocalIndex = 3;
                 break;
@@ -1153,6 +1157,40 @@ partial class IL2NESWriter
                     _accState = AccumulatorState.Empty;
                 }
                 break;
+            case ILOpCode.Ldlen:
+                {
+                    int? count = null;
+                    if (_pendingLdlenSource is { } src)
+                    {
+                        _pendingLdlenSource = null;
+                        count = src.Value;
+                    }
+                    else if (previous == ILOpCode.Newarr && Stack.Count > 0)
+                    {
+                        // Roslyn (Release) elides the local for `new T[N].Length`, emitting
+                        // ldc; newarr; ldlen directly. The element count is on the Stack
+                        // (the Newarr handler left it there after removing the size LDA).
+                        // For byte[] the count IS the length; for ushort[] it was already
+                        // popped during newarr processing, so this path only handles byte[].
+                        count = Stack.Pop();
+                    }
+                    if (count is null)
+                    {
+                        throw new TranspileException(GetUnsupportedOpcodeMessage(instruction.OpCode), MethodName);
+                    }
+                    if (count.Value <= byte.MaxValue)
+                        WriteLdc((byte)count.Value);
+                    else
+                        WriteLdc((ushort)count.Value);
+                }
+                break;
+            case ILOpCode.Sizeof:
+                // Native integer size (nint/IntPtr) on the 6502 is 1 byte (8-bit CPU).
+                // Fixed-size primitive types (byte, ushort, int, etc.) are folded by Roslyn at compile time
+                // and typically never reach this opcode; this implementation only handles platform-dependent
+                // native integer sizeof values and will always push 1 here.
+                WriteLdc(1);
+                break;
             default:
                 throw new TranspileException(GetUnsupportedOpcodeMessage(instruction.OpCode), MethodName);
         }
@@ -1357,6 +1395,7 @@ partial class IL2NESWriter
                 }
                 break;
             case ILOpCode.Ldloc_s:
+                if (TryHandleLdlocForLdlen(operand)) break;
                 WriteLdloc(Locals[operand]);
                 _lastLoadedLocalIndex = operand;
                 break;
@@ -3389,6 +3428,12 @@ partial class IL2NESWriter
                     Emit(Opcode.LDA, AddressMode.ZeroPage, (byte)NESConstants.OAM_OFF);
                     _runtimeValueInA = true;
                     _immediateInA = null;
+                }
+                else if (NextIsLdlen() && _staticFieldArrayLocals.TryGetValue(operand, out var arrLocalForLen))
+                {
+                    // ldsfld arr; ldlen → fold to LDA #count at the Ldlen handler.
+                    // Suppress the LDA for ldsfld since the value would be discarded.
+                    _pendingLdlenSource = arrLocalForLen;
                 }
                 else
                 {

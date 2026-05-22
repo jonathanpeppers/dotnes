@@ -325,7 +325,7 @@ public class IL2NESWriterTests
     [InlineData(ILOpCode.Newobj, "new", "byte[]", "ushort[]")]
     [InlineData(ILOpCode.Callvirt, "virtual method", "static methods", "NESLib")]
     [InlineData(ILOpCode.Throw, "throw", "try/catch", "not supported")]
-    [InlineData(ILOpCode.Ldlen, ".Length", "array", "variable")]
+    [InlineData(ILOpCode.Ldlen, ".Length", "array", "transpile")]
     public void GetUnsupportedOpcodeMessage_KnownOpcodes_ContainsHelpfulGuidance(ILOpCode opCode, string expectedTerm1, string expectedTerm2, string expectedTerm3)
     {
         var message = IL2NESWriter.GetUnsupportedOpcodeMessage(opCode);

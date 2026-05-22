@@ -1162,4 +1162,134 @@ public class ArraysTests : RoslynTests
         Assert.True(found,
             "Expected NTADR_A pattern: LDX #0; LDA xarr,X; STA TEMP; LDA #2; JSR nametable_a");
     }
+
+    [Fact]
+    public void ArrayLength_LocalByteArray_LoopBound()
+    {
+        // for (byte i = 0; i < arr.Length; i++) should compile identically to
+        // for (byte i = 0; i < N; i++) for a local byte[] of known size.
+        var helperBytes = GetProgramBytes(
+            """
+            byte[] arr = new byte[16];
+            for (byte i = 0; i < arr.Length; i++)
+            {
+                pal_col(i, arr[i]);
+            }
+            ppu_on_all();
+            while (true) ;
+            """);
+        var manualBytes = GetProgramBytes(
+            """
+            byte[] arr = new byte[16];
+            for (byte i = 0; i < 16; i++)
+            {
+                pal_col(i, arr[i]);
+            }
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(helperBytes);
+        Assert.NotEmpty(helperBytes);
+        Assert.Equal(Convert.ToHexString(manualBytes), Convert.ToHexString(helperBytes));
+    }
+
+    [Fact]
+    public void ArrayLength_StaticRomByteArray_LoopBound()
+    {
+        // Loop using static readonly byte[].Length should fold to constant N.
+        // Use a local copy of the array for indexing to focus the test on
+        // the .Length constant-folding for the static field.
+        var bytes = GetProgramBytes(
+            """
+            for (byte i = 0; i < P.palette_bg.Length; i++)
+            {
+                pal_col(i, i);
+            }
+            ppu_on_all();
+            while (true) ;
+
+            static class P
+            {
+                public static readonly byte[] palette_bg = new byte[]
+                {
+                    0x0f,0x00,0x10,0x30,
+                    0x0f,0x06,0x16,0x26,
+                    0x0f,0x09,0x19,0x29,
+                    0x0f,0x01,0x11,0x21,
+                };
+            }
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+        var hex = Convert.ToHexString(bytes);
+        // CMP #$10 (C910) for i < 16 — folded from palette_bg.Length
+        Assert.Contains("C910", hex);
+    }
+
+    [Fact]
+    public void ArrayLength_StandaloneAssignment_EmitsLdaImmediate()
+    {
+        // byte n = arr.Length; should emit a single LDA #count.
+        var bytes = GetProgramBytes(
+            """
+            byte[] arr = new byte[8];
+            byte n = (byte)arr.Length;
+            pal_col(0, n);
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+        var hex = Convert.ToHexString(bytes);
+        // LDA #$08 should appear for the length load
+        Assert.Contains("A908", hex);
+    }
+
+    [Fact]
+    public void ArrayLength_UshortArray_ReturnsElementCount()
+    {
+        // ushort[] .Length returns element count, not byte count.
+        // notes has 4 ushort elements (8 bytes), so .Length must fold to 4.
+        var bytes = GetProgramBytes(
+            """
+            ushort[] notes = new ushort[4];
+            notes[0] = 0x1ac;
+            notes[1] = 0x17c;
+            notes[2] = 0x150;
+            notes[3] = 0x140;
+            for (byte i = 0; i < notes.Length; i++)
+            {
+                pal_col(i, 1);
+            }
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+        var hex = Convert.ToHexString(bytes);
+        // CMP #$04 (C904) for i < 4 (element count, not byte count of 8)
+        Assert.Contains("C904", hex);
+    }
+
+    [Fact]
+    public void Sizeof_Primitive_IsRoslynFolded()
+    {
+        // sizeof(byte) and sizeof(ushort) are constant-folded by Roslyn at compile time,
+        // so the IL never contains a Sizeof opcode for primitive types. Confirm that
+        // a program using sizeof(byte)/sizeof(ushort) transpiles successfully and the
+        // constants 1 and 2 appear as immediate loads.
+        var bytes = GetProgramBytes(
+            """
+            const int U8_BYTES = sizeof(byte);
+            const int U16_BYTES = sizeof(ushort);
+            pal_col(0, U8_BYTES);
+            pal_col(1, U16_BYTES);
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+        var hex = Convert.ToHexString(bytes);
+        // LDA #$01 (A901) and LDA #$02 (A902) — Roslyn folded the sizeof expressions.
+        Assert.Contains("A901", hex);
+        Assert.Contains("A902", hex);
+    }
 }

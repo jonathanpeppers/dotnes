@@ -170,6 +170,7 @@ partial class Transpiler
                 var il = body.GetILReader();
                 int lastLdc = 0;
                 ILOpCode prevOp = ILOpCode.Nop;
+                bool inArrayInit = false; // True after Newarr until Stsfld/Stloc/etc. consumes the array
 
                 while (il.Offset < il.Length)
                 {
@@ -189,11 +190,12 @@ partial class Transpiler
                         case ILOpCode.Ldc_i4: lastLdc = il.ReadInt32(); break;
                         case ILOpCode.Newarr:
                             il.ReadInt32(); // skip type token
+                            inArrayInit = true; // Track the new array through dup/ldtoken/call InitializeArray
                             break;
                         case ILOpCode.Stsfld:
                         {
                             var token = il.ReadInt32();
-                            if (prevOp is ILOpCode.Newarr or ILOpCode.Dup)
+                            if (inArrayInit)
                             {
                                 var handle = MetadataTokens.EntityHandle(token);
                                 if (handle.Kind == HandleKind.FieldDefinition)
@@ -203,6 +205,7 @@ partial class Transpiler
                                     result[name] = lastLdc;
                                 }
                             }
+                            inArrayInit = false;
                             break;
                         }
                         case ILOpCode.Dup:
