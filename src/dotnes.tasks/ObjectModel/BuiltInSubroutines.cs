@@ -2553,4 +2553,261 @@ internal static class BuiltInSubroutines
     }
 
     #endregion
+
+    #region nesdoug Helpers
+
+    // Based on Doug Fraker's nesdoug library:
+    // https://github.com/mhughson/mbh-firstnes/blob/master/game/LIB/nesdoug.s
+    //
+    // VRAM buffer functions share the dotnes vrambuf module's storage:
+    //   - Buffer at $0100 (same as vrambuf_clear / vrambuf_put)
+    //   - Index in UPDPTR (zero page $1C)
+    // This lets nesdoug and clbr-style names append to the same buffer that the
+    // NMI handler drains via updName.
+
+    /// <summary>
+    /// clear_vram_buffer (nesdoug) — alias for vrambuf_clear.
+    /// </summary>
+    public static Block ClearVramBuffer()
+    {
+        var block = new Block(nameof(NESLib.clear_vram_buffer));
+        // Tail-call into vrambuf_clear: same effect (reset UPDPTR, write EOF, enable updates).
+        block.Emit(JMP(nameof(NESLib.vrambuf_clear)));
+        return block;
+    }
+
+    /// <summary>
+    /// get_pad_new (nesdoug) — alias for pad_trigger.
+    /// </summary>
+    public static Block GetPadNew()
+    {
+        var block = new Block(nameof(NESLib.get_pad_new));
+        // Tail-call into pad_trigger.
+        block.Emit(JMP("pad_trigger"));
+        return block;
+    }
+
+    /// <summary>
+    /// get_frame_count (nesdoug) — alias for nesclock.
+    /// </summary>
+    public static Block GetFrameCount()
+    {
+        var block = new Block(nameof(NESLib.get_frame_count));
+        // Tail-call into nesclock.
+        block.Emit(JMP(nameof(NESLib.nesclock)));
+        return block;
+    }
+
+    /// <summary>
+    /// set_music_speed (nesdoug) — stub. dotnes uses its own music engine and
+    /// does not currently expose a tempo register. This swallows the value so
+    /// straight ports of nesdoug-based code still link.
+    /// </summary>
+    public static Block SetMusicSpeed()
+    {
+        var block = new Block(nameof(NESLib.set_music_speed));
+        block.Emit(RTS());
+        return block;
+    }
+
+    /// <summary>
+    /// set_scroll_x (nesdoug) — set X scroll including high nametable bit.
+    /// Entry: A = x lo, X = x hi.
+    /// </summary>
+    public static Block SetScrollX()
+    {
+        var block = new Block(nameof(NESLib.set_scroll_x));
+        // sta SCROLL_X
+        // txa : and #$01 : sta TEMP
+        // lda PPU_CTRL_VAR1 : and #$fe : ora TEMP : sta PPU_CTRL_VAR1
+        block.Emit(STA_zpg(SCROLL_X))
+             .Emit(TXA())
+             .Emit(AND(0x01))
+             .Emit(STA_zpg(TEMP))
+             .Emit(LDA_zpg(PPU_CTRL_VAR1))
+             .Emit(AND(0xFE))
+             .Emit(ORA_zpg(TEMP))
+             .Emit(STA_zpg(PPU_CTRL_VAR1))
+             .Emit(RTS());
+        return block;
+    }
+
+    /// <summary>
+    /// set_scroll_y (nesdoug) — set Y scroll including high nametable bit.
+    /// Entry: A = y lo, X = y hi.
+    /// </summary>
+    public static Block SetScrollY()
+    {
+        var block = new Block(nameof(NESLib.set_scroll_y));
+        // sta SCROLL_Y
+        // txa : and #$01 : asl a : sta TEMP
+        // lda PPU_CTRL_VAR1 : and #$fd : ora TEMP : sta PPU_CTRL_VAR1
+        block.Emit(STA_zpg(SCROLL_Y))
+             .Emit(TXA())
+             .Emit(AND(0x01))
+             .Emit(ASL_A())
+             .Emit(STA_zpg(TEMP))
+             .Emit(LDA_zpg(PPU_CTRL_VAR1))
+             .Emit(AND(0xFD))
+             .Emit(ORA_zpg(TEMP))
+             .Emit(STA_zpg(PPU_CTRL_VAR1))
+             .Emit(RTS());
+        return block;
+    }
+
+    /// <summary>
+    /// get_ppu_addr (nesdoug) — compute PPU nametable address from pixel coords.
+    /// Entry: A = y (last arg); cc65 stack holds nt and x (popped via popa).
+    /// Returns: A = lo byte, X = hi byte.
+    /// </summary>
+    public static Block GetPpuAddr()
+    {
+        var block = new Block(nameof(NESLib.get_ppu_addr));
+        // and #$f8 (y bits)
+        // ldx #0 : stx TEMP+1
+        // asl a : rol TEMP+1 : asl a : rol TEMP+1 : sta TEMP
+        block.Emit(AND(0xF8))
+             .Emit(LDX(0x00))
+             .Emit(STX_zpg(TEMP_HI))
+             .Emit(ASL_A())
+             .Emit(ROL_zpg(TEMP_HI))
+             .Emit(ASL_A())
+             .Emit(ROL_zpg(TEMP_HI))
+             .Emit(STA_zpg(TEMP))
+             // jsr popa (x bits)
+             // lsr a : lsr a : lsr a : ora TEMP : sta TEMP
+             .Emit(JSR(popa))
+             .Emit(LSR_A())
+             .Emit(LSR_A())
+             .Emit(LSR_A())
+             .Emit(ORA_zpg(TEMP))
+             .Emit(STA_zpg(TEMP))
+             // jsr popa (nt 0-3)
+             // and #3 : asl a : asl a : ora #$20 : ora TEMP+1 : tax
+             // lda TEMP : rts
+             .Emit(JSR(popa))
+             .Emit(AND(0x03))
+             .Emit(ASL_A())
+             .Emit(ASL_A())
+             .Emit(ORA(0x20))
+             .Emit(ORA_zpg(TEMP_HI))
+             .Emit(TAX())
+             .Emit(LDA_zpg(TEMP))
+             .Emit(RTS());
+        return block;
+    }
+
+    /// <summary>
+    /// one_vram_buffer (nesdoug) — append a single byte write to the VRAM buffer.
+    /// Entry: A = ppu_address lo, X = ppu_address hi (last arg). cc65 stack holds
+    /// the data byte (popped via popa).
+    /// Buffer layout written: [hi, lo, data, $FF].
+    /// </summary>
+    public static Block OneVramBuffer()
+    {
+        var block = new Block(nameof(NESLib.one_vram_buffer));
+        // ldy UPDPTR : sta VRAM_BUF+1, y : txa : sta VRAM_BUF, y
+        // iny : iny : sty TEMP
+        // jsr popa : ldy TEMP : sta VRAM_BUF, y
+        // iny : lda #$ff : sta VRAM_BUF, y : sty UPDPTR : rts
+        block.Emit(LDY_zpg(UPDPTR))
+             .Emit(STA_abs_Y(0x0101))
+             .Emit(TXA())
+             .Emit(STA_abs_Y(0x0100))
+             .Emit(INY())
+             .Emit(INY())
+             .Emit(STY_zpg(TEMP))
+             .Emit(JSR(popa))
+             .Emit(LDY_zpg(TEMP))
+             .Emit(STA_abs_Y(0x0100))
+             .Emit(INY())
+             .Emit(LDA(0xFF))
+             .Emit(STA_abs_Y(0x0100))
+             .Emit(STY_zpg(UPDPTR))
+             .Emit(RTS());
+        return block;
+    }
+
+    /// <summary>
+    /// multi_vram_buffer_horz (nesdoug) — append a horizontal sequence to the VRAM buffer.
+    /// Entry: A = ppu_address lo, X = ppu_address hi (last arg). cc65 stack holds
+    /// data pointer (16-bit, via pushax) and len (8-bit, via pusha).
+    /// </summary>
+    public static Block MultiVramBufferHorz()
+    {
+        var block = new Block(nameof(NESLib.multi_vram_buffer_horz));
+        // ldy UPDPTR : sta VRAM_BUF+1, y
+        // txa : clc : adc #$40 (NT_UPD_HORZ) : sta VRAM_BUF, y
+        // jmp multi_vram_buffer_common
+        block.Emit(LDY_zpg(UPDPTR))
+             .Emit(STA_abs_Y(0x0101))
+             .Emit(TXA())
+             .Emit(CLC())
+             .Emit(ADC(0x40))
+             .Emit(STA_abs_Y(0x0100))
+             .Emit(JMP("multi_vram_buffer_common"));
+        return block;
+    }
+
+    /// <summary>
+    /// multi_vram_buffer_vert (nesdoug) — append a vertical sequence to the VRAM buffer.
+    /// Entry: A = ppu_address lo, X = ppu_address hi (last arg). cc65 stack holds
+    /// data pointer (16-bit, via pushax) and len (8-bit, via pusha).
+    /// </summary>
+    public static Block MultiVramBufferVert()
+    {
+        var block = new Block(nameof(NESLib.multi_vram_buffer_vert));
+        // ldy UPDPTR : sta VRAM_BUF+1, y
+        // txa : clc : adc #$80 (NT_UPD_VERT) : sta VRAM_BUF, y
+        // jmp multi_vram_buffer_common
+        block.Emit(LDY_zpg(UPDPTR))
+             .Emit(STA_abs_Y(0x0101))
+             .Emit(TXA())
+             .Emit(CLC())
+             .Emit(ADC(0x80))
+             .Emit(STA_abs_Y(0x0100))
+             .Emit(JMP("multi_vram_buffer_common"));
+        return block;
+    }
+
+    /// <summary>
+    /// multi_vram_buffer_common — shared tail of multi_vram_buffer_horz/vert.
+    /// Pops len then data pointer from cc65 stack, copies data to VRAM buffer,
+    /// writes EOF marker, and updates UPDPTR.
+    /// </summary>
+    public static Block MultiVramBufferCommon()
+    {
+        var block = new Block("multi_vram_buffer_common");
+        // jsr popa : sta TEMP3 (len) : ldy UPDPTR : sta VRAM_BUF+2, y
+        // jsr popax : sta TEMP : stx TEMP_HI (PTR = data)
+        // ldx UPDPTR : inx : inx : inx
+        // ldy #0
+        // @loop: lda (TEMP), y : sta VRAM_BUF, x : inx : iny : cpy TEMP3 : bne @loop
+        // lda #$ff : sta VRAM_BUF, x : stx UPDPTR : rts
+        block.Emit(JSR(popa))
+             .Emit(STA_zpg(TEMP3))
+             .Emit(LDY_zpg(UPDPTR))
+             .Emit(STA_abs_Y(0x0102))
+             .Emit(JSR(popax))
+             .Emit(STA_zpg(TEMP))
+             .Emit(STX_zpg(TEMP_HI))
+             .Emit(LDX_zpg(UPDPTR))
+             .Emit(INX())
+             .Emit(INX())
+             .Emit(INX())
+             .Emit(LDY(0x00))
+             .Emit(LDA_ind_Y(TEMP), "@loop")
+             .Emit(STA_abs_X(0x0100))
+             .Emit(INX())
+             .Emit(INY())
+             .Emit(CPY_zpg(TEMP3))
+             .Emit(BNE("@loop"))
+             .Emit(LDA(0xFF))
+             .Emit(STA_abs_X(0x0100))
+             .Emit(STX_zpg(UPDPTR))
+             .Emit(RTS());
+        return block;
+    }
+
+    #endregion
 }
