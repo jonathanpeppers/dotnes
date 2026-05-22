@@ -1162,4 +1162,80 @@ public class ArraysTests : RoslynTests
         Assert.True(found,
             "Expected NTADR_A pattern: LDX #0; LDA xarr,X; STA TEMP; LDA #2; JSR nametable_a");
     }
+
+    [Fact]
+    public void StelemI1_PreservesIlOrder_OrThenAdd()
+    {
+        // Regression for stelem.i1 emitting arithmetic in fixed order.
+        // For (v | 0xF0) + 1, IL is: ldloc v, ldc 0xF0, or, ldc.i4.1, add.
+        // The transpiler must emit ORA #$F0 BEFORE CLC; ADC #$01 — not the
+        // legacy fixed and→add→or→sub order which produced ADC then ORA and
+        // computed the wrong result (0xF6 instead of 0xF1 for v=5).
+        var bytes = GetProgramBytes(
+            """
+            byte[] arr = new byte[4];
+            byte i = 0;
+            byte v = 5;
+            arr[i] = (byte)((v | 0xF0) + 1);
+            ppu_on_all();
+            while (true) ;
+            """);
+        var hex = Convert.ToHexString(bytes);
+
+        int oraIdx = hex.IndexOf("09F0", StringComparison.Ordinal);     // ORA #$F0
+        int clcAdcIdx = hex.IndexOf("186901", StringComparison.Ordinal); // CLC; ADC #$01
+        Assert.True(oraIdx >= 0, $"Expected ORA #$F0 (09F0) in hex: {hex}");
+        Assert.True(clcAdcIdx >= 0, $"Expected CLC; ADC #$01 (186901) in hex: {hex}");
+        Assert.True(oraIdx < clcAdcIdx,
+            $"Expected ORA #$F0 to appear before CLC; ADC #$01 (IL order). oraIdx={oraIdx}, clcAdcIdx={clcAdcIdx}, hex={hex}");
+    }
+
+    [Fact]
+    public void StelemI1_PreservesIlOrder_AddThenOr()
+    {
+        // Companion test: for ((v + 1) | 0xF0), IL is ADD then OR, so we
+        // must emit CLC; ADC #$01 before ORA #$F0. This case happened to
+        // work under the legacy fixed order too, but we want to lock it in.
+        var bytes = GetProgramBytes(
+            """
+            byte[] arr = new byte[4];
+            byte i = 0;
+            byte v = 5;
+            arr[i] = (byte)((v + 1) | 0xF0);
+            ppu_on_all();
+            while (true) ;
+            """);
+        var hex = Convert.ToHexString(bytes);
+
+        int clcAdcIdx = hex.IndexOf("186901", StringComparison.Ordinal);
+        int oraIdx = hex.IndexOf("09F0", StringComparison.Ordinal);
+        Assert.True(clcAdcIdx >= 0, $"Expected CLC; ADC #$01 (186901) in hex: {hex}");
+        Assert.True(oraIdx >= 0, $"Expected ORA #$F0 (09F0) in hex: {hex}");
+        Assert.True(clcAdcIdx < oraIdx,
+            $"Expected CLC; ADC #$01 to appear before ORA #$F0 (IL order). clcAdcIdx={clcAdcIdx}, oraIdx={oraIdx}, hex={hex}");
+    }
+
+    [Fact]
+    public void StelemI1_PreservesIlOrder_SelfReferencing_OrThenAnd()
+    {
+        // Self-referencing update: arr[i] = (byte)((arr[i] | 0xF0) & 0xF1)
+        // IL order: OR then AND. The legacy fixed order was AND→ADD→OR→SUB
+        // which would have emitted AND before ORA — wrong for this expression.
+        var bytes = GetProgramBytes(
+            """
+            byte[] arr = new byte[4];
+            byte i = 0;
+            arr[i] = (byte)((arr[i] | 0xF0) & 0xF1);
+            ppu_on_all();
+            while (true) ;
+            """);
+        var hex = Convert.ToHexString(bytes);
+
+        int oraIdx = hex.IndexOf("09F0", StringComparison.Ordinal);  // ORA #$F0
+        int andIdx = hex.IndexOf("29F1", StringComparison.Ordinal);  // AND #$F1
+        Assert.True(oraIdx >= 0, $"Expected ORA #$F0 (09F0) in hex: {hex}");
+        Assert.True(andIdx >= 0, $"Expected AND #$F1 (29F1) in hex: {hex}");
+        Assert.True(oraIdx < andIdx,
+            $"Expected ORA #$F0 to appear before AND #$F1 (IL order). oraIdx={oraIdx}, andIdx={andIdx}, hex={hex}");
+    }
 }

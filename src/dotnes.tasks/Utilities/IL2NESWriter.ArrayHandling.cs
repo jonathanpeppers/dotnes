@@ -1648,20 +1648,11 @@ partial class IL2NESWriter
                     {
                         Emit(Opcode.LDA, AddressMode.Absolute, (ushort)arithLocal.Address.Value);
                     }
-                    if (valueHasAnd)
-                        Emit(Opcode.AND, AddressMode.Immediate, checked((byte)valueAndMask));
-                    if (valueHasAdd)
-                    {
-                        Emit(Opcode.CLC, AddressMode.Implied);
-                        Emit(Opcode.ADC, AddressMode.Immediate, checked((byte)valueAddValue));
-                    }
-                    if (valueHasOr)
-                        Emit(Opcode.ORA, AddressMode.Immediate, checked((byte)valueOrMask));
-                    if (valueHasSub)
-                    {
-                        Emit(Opcode.SEC, AddressMode.Implied);
-                        Emit(Opcode.SBC, AddressMode.Immediate, checked((byte)valueSubValue));
-                    }
+                    // Emit AND/ORA/ADC/SBC in IL evaluation order rather than
+                    // a fixed and→add→or→sub order so that expressions like
+                    // (v | 0xF0) + 1 produce ORA before ADC.
+                    EmitImmediateArithmeticOpsInILOrder(
+                        CollectImmediateArithmeticOpsInILOrder(valueStart, Index));
                 }
                 else if (constValue != null)
                 {
@@ -1938,24 +1929,9 @@ partial class IL2NESWriter
                 for (int s = 0; s < shifts; s++)
                     Emit(Opcode.ASL, AddressMode.Accumulator);
             }
-            if (hasAnd)
-            {
-                Emit(Opcode.AND, AddressMode.Immediate, checked((byte)andMask));
-            }
-            if (hasSub)
-            {
-                Emit(Opcode.SEC, AddressMode.Implied);
-                Emit(Opcode.SBC, AddressMode.Immediate, checked((byte)subValue));
-            }
-            if (hasAdd)
-            {
-                Emit(Opcode.CLC, AddressMode.Implied);
-                Emit(Opcode.ADC, AddressMode.Immediate, checked((byte)addValue));
-            }
-            if (hasOr)
-            {
-                Emit(Opcode.ORA, AddressMode.Immediate, checked((byte)orMask));
-            }
+            // Emit remaining AND/ORA/ADC/SBC in IL evaluation order.
+            EmitImmediateArithmeticOpsInILOrder(
+                CollectImmediateArithmeticOpsInILOrder(valueStart, Index));
         }
         else if (hasMul && mulLocalIdx >= 0)
         {
@@ -1967,13 +1943,11 @@ partial class IL2NESWriter
             for (int v = mulValue; v > 1; v >>= 1) shifts++;
             for (int s = 0; s < shifts; s++)
                 Emit(Opcode.ASL, AddressMode.Accumulator);
-            if (addValue != 0)
-            {
-                Emit(Opcode.CLC, AddressMode.Implied);
-                Emit(Opcode.ADC, AddressMode.Immediate, checked((byte)addValue));
-            }
-            if (hasOr)
-                Emit(Opcode.ORA, AddressMode.Immediate, checked((byte)orMask));
+            // Emit AND/ORA/ADC/SBC in IL order; skip non-immediate operands
+            // (matches legacy behaviour of suppressing add when the operand
+            // is not a ldc constant, e.g. local * N + otherLocal).
+            EmitImmediateArithmeticOpsInILOrder(
+                CollectImmediateArithmeticOpsInILOrder(valueStart, Index, onlyImmediateOperand: true));
         }
         else if (sourceArray1Idx >= 0 && !hasTwoLdelems && sourceArray1Idx == targetArrayLocalIdx
             && (hasSub || hasAdd || hasAnd || hasOr))
@@ -1983,20 +1957,9 @@ partial class IL2NESWriter
             // ldloc arr, ldloc idx, ldloc arr, ldloc idx, ldelem_u1, [ldc N, op]*, conv_u1, stelem_i1
             Emit(Opcode.LDX, AddressMode.Absolute, targetIndexAddr);
             Emit(Opcode.LDA, AddressMode.AbsoluteX, (ushort)targetArray.Address!);
-            if (hasAnd)
-                Emit(Opcode.AND, AddressMode.Immediate, checked((byte)andMask));
-            if (hasAdd)
-            {
-                Emit(Opcode.CLC, AddressMode.Implied);
-                Emit(Opcode.ADC, AddressMode.Immediate, checked((byte)addValue));
-            }
-            if (hasOr)
-                Emit(Opcode.ORA, AddressMode.Immediate, checked((byte)orMask));
-            if (hasSub)
-            {
-                Emit(Opcode.SEC, AddressMode.Implied);
-                Emit(Opcode.SBC, AddressMode.Immediate, checked((byte)subValue));
-            }
+            // Emit AND/ORA/ADC/SBC in IL evaluation order.
+            EmitImmediateArithmeticOpsInILOrder(
+                CollectImmediateArithmeticOpsInILOrder(valueStart, Index));
             Emit(Opcode.STA, AddressMode.AbsoluteX, (ushort)targetArray.Address!);
 
             _immediateInA = null;
@@ -2026,20 +1989,9 @@ partial class IL2NESWriter
                 Emit(Opcode.LDX, AddressMode.Absolute, (ushort)srcIndex.Address!);
                 Emit(Opcode.LDA, AddressMode.AbsoluteX, (ushort)srcArray.Address!);
             }
-            if (hasAnd)
-                Emit(Opcode.AND, AddressMode.Immediate, checked((byte)andMask));
-            if (hasAdd)
-            {
-                Emit(Opcode.CLC, AddressMode.Implied);
-                Emit(Opcode.ADC, AddressMode.Immediate, checked((byte)addValue));
-            }
-            if (hasOr)
-                Emit(Opcode.ORA, AddressMode.Immediate, checked((byte)orMask));
-            if (hasSub)
-            {
-                Emit(Opcode.SEC, AddressMode.Implied);
-                Emit(Opcode.SBC, AddressMode.Immediate, checked((byte)subValue));
-            }
+            // Emit AND/ORA/ADC/SBC in IL evaluation order.
+            EmitImmediateArithmeticOpsInILOrder(
+                CollectImmediateArithmeticOpsInILOrder(valueStart, Index));
         }
         else if (valueLocalIdx >= 0 && valueLocalIdx2 >= 0 && (hasAdd != hasSub))
         {
@@ -2057,8 +2009,11 @@ partial class IL2NESWriter
                 Emit(Opcode.SEC, AddressMode.Implied);
                 Emit(Opcode.SBC, AddressMode.Absolute, (ushort)loc2.Address!);
             }
-            if (hasOr)
-                Emit(Opcode.ORA, AddressMode.Immediate, checked((byte)orMask));
+            // Emit any remaining immediate AND/ORA/ADC/SBC in IL order.
+            // Use strict mode so the local-local add/sub already emitted
+            // above (its operand is a ldloc, not a ldc) is not duplicated.
+            EmitImmediateArithmeticOpsInILOrder(
+                CollectImmediateArithmeticOpsInILOrder(valueStart, Index, onlyImmediateOperand: true));
         }
         else if (valueLocalIdx >= 0)
         {
@@ -2082,20 +2037,9 @@ partial class IL2NESWriter
                 Emit(Opcode.LDA, AddressMode.Absolute, (ushort)valueLoc.Address!);
             }
 
-            if (hasAnd)
-                Emit(Opcode.AND, AddressMode.Immediate, checked((byte)andMask));
-            if (hasAdd)
-            {
-                Emit(Opcode.CLC, AddressMode.Implied);
-                Emit(Opcode.ADC, AddressMode.Immediate, checked((byte)addValue));
-            }
-            if (hasOr)
-                Emit(Opcode.ORA, AddressMode.Immediate, checked((byte)orMask));
-            if (hasSub)
-            {
-                Emit(Opcode.SEC, AddressMode.Implied);
-                Emit(Opcode.SBC, AddressMode.Immediate, checked((byte)subValue));
-            }
+            // Emit AND/ORA/ADC/SBC in IL evaluation order.
+            EmitImmediateArithmeticOpsInILOrder(
+                CollectImmediateArithmeticOpsInILOrder(valueStart, Index));
         }
         else
         {
@@ -2149,6 +2093,73 @@ partial class IL2NESWriter
         _lastLoadedLocalIndex = null;
         _runtimeValueInA = false;
         _savedRuntimeToTemp = false;
+    }
+
+    /// <summary>
+    /// Represents an immediate arithmetic operation (AND/ORA/ADC/SBC) to emit
+    /// after the accumulator has been loaded with the working value.
+    /// </summary>
+    readonly struct StelemArithOp
+    {
+        public readonly ILOpCode Op;
+        public readonly int Value;
+        public StelemArithOp(ILOpCode op, int value) { Op = op; Value = value; }
+    }
+
+    /// <summary>
+    /// Scans <see cref="Instructions"/> in the range [start, end) and returns
+    /// the sequence of AND/OR/ADD/SUB operations in IL evaluation order.
+    /// Each operation is paired with the constant from the immediately
+    /// preceding <c>ldc</c> instruction; if there is no immediate (e.g. the
+    /// operand was computed at runtime) the value is 0, which preserves the
+    /// legacy behaviour of emitting <c>OP #0</c> for those operands.
+    /// When <paramref name="onlyImmediateOperand"/> is true, ops whose
+    /// operand is not an immediate constant are skipped — appropriate for
+    /// call sites that intentionally suppress non-immediate operations
+    /// (e.g. the multiply pattern, or the two-locals pattern where the
+    /// add/sub is between two locals and emitted separately).
+    /// </summary>
+    List<StelemArithOp> CollectImmediateArithmeticOpsInILOrder(int start, int end, bool onlyImmediateOperand = false)
+    {
+        var ops = new List<StelemArithOp>();
+        if (Instructions == null) return ops;
+        for (int i = start; i < end; i++)
+        {
+            var op = Instructions[i].OpCode;
+            if (op is not (ILOpCode.And or ILOpCode.Or or ILOpCode.Add or ILOpCode.Sub))
+                continue;
+            int? immediate = i > start ? Instructions[i - 1].GetLdcValue() : null;
+            if (onlyImmediateOperand && immediate == null) continue;
+            ops.Add(new StelemArithOp(op, immediate ?? 0));
+        }
+        return ops;
+    }
+
+    /// <summary>
+    /// Emits AND/ORA/ADC/SBC immediate operations in the supplied IL order.
+    /// </summary>
+    void EmitImmediateArithmeticOpsInILOrder(List<StelemArithOp> ops)
+    {
+        foreach (var arith in ops)
+        {
+            switch (arith.Op)
+            {
+                case ILOpCode.And:
+                    Emit(Opcode.AND, AddressMode.Immediate, checked((byte)arith.Value));
+                    break;
+                case ILOpCode.Or:
+                    Emit(Opcode.ORA, AddressMode.Immediate, checked((byte)arith.Value));
+                    break;
+                case ILOpCode.Add:
+                    Emit(Opcode.CLC, AddressMode.Implied);
+                    Emit(Opcode.ADC, AddressMode.Immediate, checked((byte)arith.Value));
+                    break;
+                case ILOpCode.Sub:
+                    Emit(Opcode.SEC, AddressMode.Implied);
+                    Emit(Opcode.SBC, AddressMode.Immediate, checked((byte)arith.Value));
+                    break;
+            }
+        }
     }
 
     // ── Ushort array handling ───────────────────────────────────────────
