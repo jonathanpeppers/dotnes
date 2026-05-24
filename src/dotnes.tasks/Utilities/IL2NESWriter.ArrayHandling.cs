@@ -2117,7 +2117,10 @@ partial class IL2NESWriter
     /// operand is not an immediate constant are skipped — appropriate for
     /// call sites that intentionally suppress non-immediate operations
     /// (e.g. the multiply pattern, or the two-locals pattern where the
-    /// add/sub is between two locals and emitted separately).
+    /// add/sub is between two locals and emitted separately). In that
+    /// mode, immediate <c>ADD</c>/<c>SUB</c> ops with value 0 are also
+    /// skipped to preserve the legacy <c>addValue != 0</c> guard and
+    /// avoid emitting a no-op <c>CLC; ADC #$00</c> (or <c>SEC; SBC #$00</c>).
     /// </summary>
     List<StelemArithOp> CollectImmediateArithmeticOpsInILOrder(int start, int end, bool onlyImmediateOperand = false)
     {
@@ -2130,6 +2133,8 @@ partial class IL2NESWriter
                 continue;
             int? immediate = i > start ? Instructions[i - 1].GetLdcValue() : null;
             if (onlyImmediateOperand && immediate == null) continue;
+            // Preserve legacy "addValue != 0" guard: skip ADD/SUB #0 no-ops.
+            if (onlyImmediateOperand && (op == ILOpCode.Add || op == ILOpCode.Sub) && immediate == 0) continue;
             ops.Add(new StelemArithOp(op, immediate ?? 0));
         }
         return ops;

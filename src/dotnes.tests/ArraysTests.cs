@@ -1171,7 +1171,7 @@ public class ArraysTests : RoslynTests
         // The transpiler must emit ORA #$F0 BEFORE CLC; ADC #$01 — not the
         // legacy fixed and→add→or→sub order which produced ADC then ORA and
         // computed the wrong result (0xF6 instead of 0xF1 for v=5).
-        var bytes = GetProgramBytes(
+        using var transpiler = BuildProgram(
             """
             byte[] arr = new byte[4];
             byte i = 0;
@@ -1179,15 +1179,25 @@ public class ArraysTests : RoslynTests
             arr[i] = (byte)((v | 0xF0) + 1);
             ppu_on_all();
             while (true) ;
-            """);
-        var hex = Convert.ToHexString(bytes);
+            """, out var program);
 
-        int oraIdx = hex.IndexOf("09F0", StringComparison.Ordinal);     // ORA #$F0
-        int clcAdcIdx = hex.IndexOf("186901", StringComparison.Ordinal); // CLC; ADC #$01
-        Assert.True(oraIdx >= 0, $"Expected ORA #$F0 (09F0) in hex: {hex}");
-        Assert.True(clcAdcIdx >= 0, $"Expected CLC; ADC #$01 (186901) in hex: {hex}");
-        Assert.True(oraIdx < clcAdcIdx,
-            $"Expected ORA #$F0 to appear before CLC; ADC #$01 (IL order). oraIdx={oraIdx}, clcAdcIdx={clcAdcIdx}, hex={hex}");
+        var mainBlock = program.Blocks.Single(b => b.Label == "main");
+        var instructions = mainBlock.InstructionsWithLabels.ToList();
+
+        int oraIdx = instructions.FindIndex(il =>
+            il.Instruction.Opcode == Opcode.ORA &&
+            il.Instruction.Operand is ImmediateOperand op && op.Value == 0xF0);
+        int clcIdx = instructions.FindIndex(il => il.Instruction.Opcode == Opcode.CLC);
+        Assert.True(oraIdx >= 0, "Expected ORA #$F0 in main block");
+        Assert.True(clcIdx >= 0, "Expected CLC (for ADC #$01) in main block");
+        Assert.True(oraIdx < clcIdx,
+            $"Expected ORA #$F0 to appear before CLC; ADC #$01 (IL order). oraIdx={oraIdx}, clcIdx={clcIdx}");
+
+        // Confirm the CLC is followed by ADC #$01
+        Assert.True(clcIdx + 1 < instructions.Count);
+        var adcInstr = instructions[clcIdx + 1].Instruction;
+        Assert.Equal(Opcode.ADC, adcInstr.Opcode);
+        Assert.Equal(1, ((ImmediateOperand)adcInstr.Operand!).Value);
     }
 
     [Fact]
@@ -1196,7 +1206,7 @@ public class ArraysTests : RoslynTests
         // Companion test: for ((v + 1) | 0xF0), IL is ADD then OR, so we
         // must emit CLC; ADC #$01 before ORA #$F0. This case happened to
         // work under the legacy fixed order too, but we want to lock it in.
-        var bytes = GetProgramBytes(
+        using var transpiler = BuildProgram(
             """
             byte[] arr = new byte[4];
             byte i = 0;
@@ -1204,15 +1214,24 @@ public class ArraysTests : RoslynTests
             arr[i] = (byte)((v + 1) | 0xF0);
             ppu_on_all();
             while (true) ;
-            """);
-        var hex = Convert.ToHexString(bytes);
+            """, out var program);
 
-        int clcAdcIdx = hex.IndexOf("186901", StringComparison.Ordinal);
-        int oraIdx = hex.IndexOf("09F0", StringComparison.Ordinal);
-        Assert.True(clcAdcIdx >= 0, $"Expected CLC; ADC #$01 (186901) in hex: {hex}");
-        Assert.True(oraIdx >= 0, $"Expected ORA #$F0 (09F0) in hex: {hex}");
-        Assert.True(clcAdcIdx < oraIdx,
-            $"Expected CLC; ADC #$01 to appear before ORA #$F0 (IL order). clcAdcIdx={clcAdcIdx}, oraIdx={oraIdx}, hex={hex}");
+        var mainBlock = program.Blocks.Single(b => b.Label == "main");
+        var instructions = mainBlock.InstructionsWithLabels.ToList();
+
+        int clcIdx = instructions.FindIndex(il => il.Instruction.Opcode == Opcode.CLC);
+        int oraIdx = instructions.FindIndex(il =>
+            il.Instruction.Opcode == Opcode.ORA &&
+            il.Instruction.Operand is ImmediateOperand op && op.Value == 0xF0);
+        Assert.True(clcIdx >= 0, "Expected CLC (for ADC #$01) in main block");
+        Assert.True(oraIdx >= 0, "Expected ORA #$F0 in main block");
+        Assert.True(clcIdx < oraIdx,
+            $"Expected CLC; ADC #$01 to appear before ORA #$F0 (IL order). clcIdx={clcIdx}, oraIdx={oraIdx}");
+
+        Assert.True(clcIdx + 1 < instructions.Count);
+        var adcInstr = instructions[clcIdx + 1].Instruction;
+        Assert.Equal(Opcode.ADC, adcInstr.Opcode);
+        Assert.Equal(1, ((ImmediateOperand)adcInstr.Operand!).Value);
     }
 
     [Fact]
@@ -1221,21 +1240,27 @@ public class ArraysTests : RoslynTests
         // Self-referencing update: arr[i] = (byte)((arr[i] | 0xF0) & 0xF1)
         // IL order: OR then AND. The legacy fixed order was AND→ADD→OR→SUB
         // which would have emitted AND before ORA — wrong for this expression.
-        var bytes = GetProgramBytes(
+        using var transpiler = BuildProgram(
             """
             byte[] arr = new byte[4];
             byte i = 0;
             arr[i] = (byte)((arr[i] | 0xF0) & 0xF1);
             ppu_on_all();
             while (true) ;
-            """);
-        var hex = Convert.ToHexString(bytes);
+            """, out var program);
 
-        int oraIdx = hex.IndexOf("09F0", StringComparison.Ordinal);  // ORA #$F0
-        int andIdx = hex.IndexOf("29F1", StringComparison.Ordinal);  // AND #$F1
-        Assert.True(oraIdx >= 0, $"Expected ORA #$F0 (09F0) in hex: {hex}");
-        Assert.True(andIdx >= 0, $"Expected AND #$F1 (29F1) in hex: {hex}");
+        var mainBlock = program.Blocks.Single(b => b.Label == "main");
+        var instructions = mainBlock.InstructionsWithLabels.ToList();
+
+        int oraIdx = instructions.FindIndex(il =>
+            il.Instruction.Opcode == Opcode.ORA &&
+            il.Instruction.Operand is ImmediateOperand op && op.Value == 0xF0);
+        int andIdx = instructions.FindIndex(il =>
+            il.Instruction.Opcode == Opcode.AND &&
+            il.Instruction.Operand is ImmediateOperand op && op.Value == 0xF1);
+        Assert.True(oraIdx >= 0, "Expected ORA #$F0 in main block");
+        Assert.True(andIdx >= 0, "Expected AND #$F1 in main block");
         Assert.True(oraIdx < andIdx,
-            $"Expected ORA #$F0 to appear before AND #$F1 (IL order). oraIdx={oraIdx}, andIdx={andIdx}, hex={hex}");
+            $"Expected ORA #$F0 to appear before AND #$F1 (IL order). oraIdx={oraIdx}, andIdx={andIdx}");
     }
 }
