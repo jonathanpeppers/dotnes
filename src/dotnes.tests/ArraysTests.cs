@@ -1225,15 +1225,6 @@ public class ArraysTests : RoslynTests
         //   ADC slot_addr       (6D lo hi)
         //   TAX                 (AA)
         //   LDA bytearray_0,X   (BD lo hi)
-        // Power-of-two stride must use ASL not a multiplication subroutine.
-        // Expected sequence somewhere in the body:
-        //   LDA rotation_addr   (AD lo hi)
-        //   ASL A               (0A)
-        //   ASL A               (0A)
-        //   CLC                 (18)
-        //   ADC slot_addr       (6D lo hi)
-        //   TAX                 (AA)
-        //   LDA bytearray_0,X   (BD lo hi)
         // The two ASLs must immediately precede CLC + ADC + TAX + LDA,X — no STA TEMP
         // (the marker of the non-power-of-two fallback path) or JSR in between.
         Assert.Contains("0A0A18", hex);
@@ -1280,6 +1271,48 @@ public class ArraysTests : RoslynTests
         Assert.Contains("85170A1865", hex);
         // The result is then combined with the column and used to index the array.
         Assert.Contains("AABD", hex); // TAX; LDA abs,X
+    }
+
+    [Fact]
+    public void Array2D_Stride1_RuntimeIndex()
+    {
+        // Edge case: stride=1 hits the early-return in EmitMultiplyAByStride
+        // (no ASL chain, no shift-and-add). The lowering should be just
+        //   LDA row_addr; CLC; ADC col_addr; TAX; LDA bytearray_0,X
+        // with NO ASL (0A) and NO STA TEMP (8517) between LDA-row and TAX.
+        // Use 6 rows so Roslyn emits the data via <PrivateImplementationDetails>
+        // + InitializeArray rather than as explicit Set calls (which are not
+        // supported because the ROM-backed table is read-only).
+        var bytes = GetProgramBytes(
+            """
+            byte[,] tbl = new byte[6, 1]
+            {
+                { 10 },
+                { 20 },
+                { 30 },
+                { 40 },
+                { 50 },
+                { 60 },
+            };
+            byte r = 3;
+            byte c = 0;
+            byte v = tbl[r, c];
+            pal_col(0, v);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"Array2D_Stride1_RuntimeIndex hex: {hex}");
+
+        // The TAX;LDA abs,X marker must still appear (runtime index path).
+        Assert.Contains("AABD", hex);
+        // For stride=1, EmitMultiplyAByStride returns immediately, so neither the
+        // ASL-chain (`0A0A`) nor the shift-and-add (`85170A1865`) signature appears.
+        Assert.DoesNotContain("0A0A", hex);     // No two-ASL chain.
+        Assert.DoesNotContain("85170A1865", hex); // No shift-and-add fallback.
     }
 
     [Fact]

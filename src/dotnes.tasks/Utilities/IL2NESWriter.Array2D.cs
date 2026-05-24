@@ -224,63 +224,30 @@ partial class IL2NESWriter
 
     /// <summary>
     /// Handles <c>call byte[,]::Set(int row, int col, byte value)</c>.
-    /// Computes the target address (compile-time when all three operands are
-    /// constants) and emits a store.
+    ///
+    /// <para>
+    /// <b>Currently unsupported.</b> ROM-initialised <c>byte[,]</c> tables
+    /// (the only form this PR wires up) live in PRG-ROM, so a <c>STA</c>
+    /// against the table label is silently dropped by the NES hardware —
+    /// the code would compile but the write would not take effect. Until
+    /// RAM-backed rectangular arrays are implemented, this throws a
+    /// <see cref="TranspileException"/> with a descriptive message rather
+    /// than emit code that quietly does nothing.
+    /// </para>
     /// </summary>
     internal void HandleArray2DByteSet()
     {
-        if (_active2DArrayLabel == null)
-            throw new TranspileException(
-                "byte[,] indexing requires the array to be initialized in the same method.",
-                MethodName);
-        if (Instructions == null || Index < 3)
-            throw new TranspileException(
-                "byte[,] Set requires at least 3 preceding instructions (row, col, value).",
-                MethodName);
-
-        var rowInstr = Instructions[Index - 3];
-        var colInstr = Instructions[Index - 2];
-        var valInstr = Instructions[Index - 1];
-
+        // Pop the three call args + array-ref marker so the eval-stack
+        // tracker stays balanced for any future diagnostics, then throw.
         if (Stack.Count > 0) Stack.Pop(); // value
         if (Stack.Count > 0) Stack.Pop(); // col
         if (Stack.Count > 0) Stack.Pop(); // row
         if (Stack.Count > 0) Stack.Pop(); // array ref marker
 
-        int? rowConst = rowInstr.GetLdcValue();
-        int? colConst = colInstr.GetLdcValue();
-        int? valConst = valInstr.GetLdcValue();
-        int stride = _active2DArrayStride;
-        string label = _active2DArrayLabel;
-
-        // Constant row/col/value → direct STA at the computed absolute address.
-        if (rowConst != null && colConst != null && valConst != null)
-        {
-            int idx = rowConst.Value * stride + colConst.Value;
-            if (idx >= 256)
-                throw new TranspileException(
-                    $"byte[,] Set index ({idx}) exceeds the 8-bit Absolute,X range. " +
-                    "Only byte[,] tables of <= 256 bytes are supported.",
-                    MethodName);
-            RemoveEmissionsFromIL(rowInstr.Offset);
-            Emit(Opcode.LDA, AddressMode.Immediate, (byte)(valConst.Value & 0xFF));
-            // STA label+idx, using label,X with X=0 or absolute via index 0.
-            if (idx == 0)
-            {
-                EmitWithLabel(Opcode.STA, AddressMode.Absolute, label);
-            }
-            else
-            {
-                Emit(Opcode.LDX, AddressMode.Immediate, (byte)idx);
-                EmitWithLabel(Opcode.STA, AddressMode.AbsoluteX, label);
-            }
-            _immediateInA = (byte)(valConst.Value & 0xFF);
-            _runtimeValueInA = false;
-            return;
-        }
-
         throw new TranspileException(
-            "byte[,] Set with runtime row/col/value is not supported yet.",
+            "byte[,] Set is not supported: the rectangular array is stored in PRG-ROM " +
+            "(via InitializeArray) and writes to ROM addresses are silently dropped by " +
+            "the NES hardware. RAM-backed byte[,] arrays are not implemented yet.",
             MethodName);
     }
 
