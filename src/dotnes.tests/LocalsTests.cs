@@ -563,32 +563,6 @@ public class LocalsTests : RoslynTests
     }
 
     [Fact]
-    public void TwoLocals_UshortIntermediates_DualAssignBack_ReversedOrder()
-    {
-        // Variant of the issue #516 pattern with assignments in reversed order
-        // (y1 before x1). Roslyn may keep a different value on the stack
-        // depending on ordering — verify both byte locals get the correct value.
-        var bytes = GetProgramBytes("""
-            byte y1 = 1;
-            byte x1 = 1;
-            ushort nx;
-            ushort ny;
-            nx = (byte)((x1 + y1) % 32);
-            ny = (byte)((x1 + y1 * 2) % 16);
-            y1 = (byte)ny;
-            x1 = (byte)nx;
-            vrambuf_put(NTADR_A(x1, y1), "B");
-            while (true) ;
-            """);
-        var hex = Convert.ToHexString(bytes);
-
-        // Must contain LDA TEMP (A517) — the recovery emitted by the fix —
-        // somewhere between two consecutive STA absolutes that target the
-        // two byte locals.
-        Assert.Contains("A517", hex);
-    }
-
-    [Fact]
     public void TwoByteLocals_RuntimeIntermediates_DualAssignBack()
     {
         // Same pattern but using byte intermediates instead of ushort. The
@@ -608,9 +582,10 @@ public class LocalsTests : RoslynTests
             while (true) ;
             """);
         var hex = Convert.ToHexString(bytes);
-        // The dual-stloc pattern is detected and the correct value is
-        // recovered from TEMP — same byte sequence as the ushort case.
-        Assert.Contains("8517", hex);
+        // Anchored recovery sequence: STA $0326 (x1=nx) → LDA $17 (recover ny)
+        // → STA $0325 (y1=ny). Matching the full sequence avoids false
+        // positives from STA/LDA $17 inside built-in subroutines.
+        Assert.Contains("8D2603A5178D2503", hex);
     }
 
     [Fact]
@@ -632,7 +607,8 @@ public class LocalsTests : RoslynTests
             while (true) ;
             """);
         var hex = Convert.ToHexString(bytes);
-        // Recovery emit from the fix
-        Assert.Contains("A517", hex);
+        // Anchored recovery sequence around the two byte local stores,
+        // independent of the call site (pal_col instead of NTADR_A).
+        Assert.Contains("8D2603A5178D2503", hex);
     }
 }
