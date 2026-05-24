@@ -425,6 +425,71 @@ public static class NESLib
     /// </summary>
     public static void fade_out(byte delay) => throw null!;
 
+    #region nesdoug helpers
+
+    // Based on Doug Fraker's nesdoug library:
+    // https://github.com/mhughson/mbh-firstnes/blob/master/game/LIB/nesdoug.h
+    // https://github.com/mhughson/mbh-firstnes/blob/master/game/LIB/nesdoug.s
+
+    /// <summary>
+    /// nesdoug: Append a single byte write to the VRAM update buffer.
+    /// Schedules <paramref name="data"/> to be written to <paramref name="ppuAddress"/>
+    /// during the next NMI.
+    /// </summary>
+    public static void one_vram_buffer(byte data, ushort ppuAddress) => throw null!;
+
+    /// <summary>
+    /// nesdoug: Append a horizontal sequence of <paramref name="len"/> bytes from
+    /// <paramref name="data"/> to the VRAM update buffer, starting at <paramref name="ppuAddress"/>.
+    /// </summary>
+    public static void multi_vram_buffer_horz(byte[] data, byte len, ushort ppuAddress) => throw null!;
+
+    /// <summary>
+    /// nesdoug: Append a vertical sequence of <paramref name="len"/> bytes from
+    /// <paramref name="data"/> to the VRAM update buffer, starting at <paramref name="ppuAddress"/>.
+    /// </summary>
+    public static void multi_vram_buffer_vert(byte[] data, byte len, ushort ppuAddress) => throw null!;
+
+    /// <summary>
+    /// nesdoug: Reset the VRAM update buffer to empty and write the EOF marker.
+    /// </summary>
+    public static void clear_vram_buffer() => throw null!;
+
+    /// <summary>
+    /// nesdoug: Returns buttons newly pressed this frame (same as <see cref="pad_trigger"/>).
+    /// </summary>
+    public static PAD get_pad_new(byte pad) => throw null!;
+
+    /// <summary>
+    /// nesdoug: Returns the 8-bit frame counter (same as <see cref="nesclock"/>).
+    /// </summary>
+    public static byte get_frame_count() => throw null!;
+
+    /// <summary>
+    /// nesdoug: Set music playback speed/tempo.
+    /// Note: dotnes uses its own music engine; this is currently a stub.
+    /// </summary>
+    public static void set_music_speed(byte tempo) => throw null!;
+
+    /// <summary>
+    /// nesdoug: Set horizontal scroll, including the high nametable bit.
+    /// </summary>
+    public static void set_scroll_x(ushort x) => throw null!;
+
+    /// <summary>
+    /// nesdoug: Set vertical scroll, including the high nametable bit.
+    /// </summary>
+    public static void set_scroll_y(ushort y) => throw null!;
+
+    /// <summary>
+    /// nesdoug: Convert pixel coordinates to a PPU nametable address.
+    /// <paramref name="nt"/> is the nametable (0..3), <paramref name="x"/>/<paramref name="y"/>
+    /// are pixel coordinates (0..255).
+    /// </summary>
+    public static ushort get_ppu_addr(byte nt, byte x, byte y) => throw null!;
+
+    #endregion
+
     /// <summary>
     /// set scroll, including rhe top bits
     /// it is always applied at beginning of a TV frame, not at the function call

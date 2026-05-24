@@ -120,6 +120,208 @@ public class ControlFlowTests : RoslynTests
     }
 
     [Fact]
+    public void SwitchWithDefault()
+    {
+        // switch on byte with 4+ cases and a default clause.
+        // The default must run when the discriminator does not match any case.
+        var bytes = GetProgramBytes(
+            """
+            byte op = 4;
+            byte r = 0;
+            switch (op) {
+                case 0: r = 0x10; break;
+                case 1: r = 0x20; break;
+                case 2: r = 0x30; break;
+                case 3: r = 0x16; break;
+                default: r = 0x26; break;
+            }
+            pal_col(0, r);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        // Each non-zero case must emit the BNE+JMP trampoline:
+        //   CMP #imm (C9 imm), BNE +3 (D0 03), JMP target (4C lo hi)
+        // Assert the 5-byte prefix C9 imm D0 03 4C is present for cases 1..3.
+        Assert.Contains("C901D0034C", hex);
+        Assert.Contains("C902D0034C", hex);
+        Assert.Contains("C903D0034C", hex);
+        // Case 0 uses BEQ-style trampoline (no CMP): BNE +3, JMP target.
+        Assert.Contains("D0034C", hex);
+        // The default value 0x26 must appear (LDA #$26 = A926) — this is the
+        // distinctive side effect of the default arm and proves fall-through dispatch.
+        Assert.Contains("A926", hex);
+    }
+
+    [Fact]
+    public void SwitchStateMachine()
+    {
+        // The state-machine pattern from the issue: title / playing / over with a default.
+        // Roslyn lowers a dense byte switch with default into IL `switch` + br to default.
+        // The default arm sets `lives` to a distinctive sentinel value (0xAB) so the
+        // assertions can prove the default arm's body is actually emitted, separate
+        // from the normal state transitions.
+        var bytes = GetProgramBytes(
+            """
+            const byte STATE_TITLE   = 0;
+            const byte STATE_PLAYING = 1;
+            const byte STATE_OVER    = 2;
+
+            byte state = STATE_TITLE;
+            byte lives = 3;
+
+            while (true)
+            {
+                pad_poll(0);
+                switch (state)
+                {
+                    case STATE_TITLE:
+                        if ((pad_trigger(0) & PAD.START) != 0)
+                            state = STATE_PLAYING;
+                        break;
+                    case STATE_PLAYING:
+                        if (lives == 0)
+                            state = STATE_OVER;
+                        break;
+                    case STATE_OVER:
+                        if ((pad_trigger(0) & PAD.START) != 0)
+                            state = STATE_TITLE;
+                        break;
+                    default:
+                        lives = 0xAB;
+                        state = STATE_TITLE;
+                        break;
+                }
+                ppu_wait_nmi();
+            }
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        // Each non-zero case must emit the BNE+JMP trampoline signature:
+        //   CMP #imm (C9 imm), BNE +3 (D0 03), JMP target (4C lo hi).
+        // Asserting the 5-byte prefix proves the dispatch is CMP/BNE+JMP, not
+        // unrelated CMP/BNE/JMP from surrounding control flow.
+        Assert.Contains("C901D0034C", hex);
+        Assert.Contains("C902D0034C", hex);
+        // Case 0 uses BEQ-style trampoline (value already in A): BNE +3, JMP target.
+        Assert.Contains("D0034C", hex);
+        // The default arm's distinctive sentinel value 0xAB must appear
+        // (LDA #$AB = A9AB), proving the default body is reachable/emitted.
+        Assert.Contains("A9AB", hex);
+    }
+
+    [Fact]
+    public void SwitchStateMachineWithRendering()
+    {
+        // Full game-style state machine: nametable text setup + per-state background
+        // color via pal_col, driven by START on controller 1. Each case body has a
+        // distinctive pal_col immediate so we can assert the dispatch lands in each arm.
+        var bytes = GetProgramBytes(
+            """
+            const byte STATE_TITLE   = 0;
+            const byte STATE_PLAYING = 1;
+            const byte STATE_OVER    = 2;
+
+            pal_col(0, 0x02);
+            pal_col(1, 0x14);
+            pal_col(2, 0x20);
+            pal_col(3, 0x30);
+
+            vram_adr(NTADR_A(8, 14));
+            vram_write("PRESS START");
+            ppu_on_all();
+
+            byte state = STATE_TITLE;
+
+            while (true)
+            {
+                ppu_wait_nmi();
+                pad_poll(0);
+
+                switch (state)
+                {
+                    case STATE_TITLE:
+                        pal_col(0, 0x12);
+                        if ((pad_trigger(0) & PAD.START) != 0)
+                            state = STATE_PLAYING;
+                        break;
+                    case STATE_PLAYING:
+                        pal_col(0, 0x0A);
+                        if ((pad_trigger(0) & PAD.START) != 0)
+                            state = STATE_OVER;
+                        break;
+                    case STATE_OVER:
+                        pal_col(0, 0x06);
+                        if ((pad_trigger(0) & PAD.START) != 0)
+                            state = STATE_TITLE;
+                        break;
+                    default:
+                        state = STATE_TITLE;
+                        break;
+                }
+            }
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        // CMP/BNE+JMP trampolines for cases 1 and 2 (case 0 uses BEQ-style).
+        Assert.Contains("C901D0034C", hex);
+        Assert.Contains("C902D0034C", hex);
+        Assert.Contains("D0034C", hex);
+        // Distinctive per-case pal_col immediates prove each arm's body is emitted.
+        // Each value is chosen to NOT appear in the setup pal_col calls above,
+        // so the assertion can only be satisfied by the switch arm itself.
+        // LDA #imm = A9 imm.
+        Assert.Contains("A912", hex); // STATE_TITLE arm
+        Assert.Contains("A90A", hex); // STATE_PLAYING arm
+        Assert.Contains("A906", hex); // STATE_OVER arm
+    }
+
+    [Fact]
+    public void SwitchLarge()
+    {
+        // Build a dense 32-case switch programmatically. Roslyn lowers a dense
+        // integral switch to the IL `switch` opcode (jump table), which dotnes
+        // expands into a linear chain of CMP/BNE+JMP trampolines. This just
+        // verifies the transpiler doesn't choke on a large case count and that
+        // the dispatch chain is actually emitted.
+        const int caseCount = 32;
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("byte op = 17;");
+        sb.AppendLine("byte r = 0;");
+        sb.AppendLine("switch (op) {");
+        for (int i = 0; i < caseCount; i++)
+        {
+            // Distinctive value per case: 0x40 + i (avoids collision with case index).
+            sb.AppendLine($"    case {i}: r = 0x{0x40 + i:X2}; break;");
+        }
+        sb.AppendLine("    default: r = 0xFF; break;");
+        sb.AppendLine("}");
+        sb.AppendLine("pal_col(0, r);");
+        sb.AppendLine("ppu_on_all();");
+        sb.AppendLine("while (true) ;");
+
+        var bytes = GetProgramBytes(sb.ToString());
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        // Spot-check the BNE+JMP trampoline signature at several case indices.
+        // CMP #i, BNE +3, JMP target = C9 ii D0 03 4C.
+        Assert.Contains("C901D0034C", hex);   // case 1
+        Assert.Contains("C90FD0034C", hex);   // case 15
+        Assert.Contains("C91FD0034C", hex);   // case 31 (last)
+        // Default sentinel 0xFF must appear (LDA #$FF = A9FF).
+        Assert.Contains("A9FF", hex);
+    }
+
+    [Fact]
     public void DoWhileLoop()
     {
         // do { } while (cond) — body executes at least once

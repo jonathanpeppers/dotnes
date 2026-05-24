@@ -1164,6 +1164,259 @@ public class ArraysTests : RoslynTests
     }
 
     [Fact]
+    public void Array2D_ConstantIndex()
+    {
+        // Rectangular byte[2,3] literal indexed with two constants.
+        // Expected: a[1,2] resolves to ROM byte at offset 1*3 + 2 = 5, value 6.
+        var bytes = GetProgramBytes(
+            """
+            byte[,] a = new byte[2, 3]
+            {
+                { 1, 2, 3 },
+                { 4, 5, 6 }
+            };
+            byte v = a[1, 2];
+            pal_col(0, v);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"Array2D_ConstantIndex hex: {hex}");
+
+        // Constant index 5 → LDX #$05 (A2 05); LDA bytearray_0,X (BD lo hi)
+        Assert.Contains("A205BD", hex);
+    }
+
+    [Fact]
+    public void Array2D_PowerOfTwoStride_RuntimeIndex()
+    {
+        // 4-wide rectangular array — stride of 4 is a power of two, so the
+        // index should be computed with ASL A, ASL A (no multiplication).
+        var bytes = GetProgramBytes(
+            """
+            byte[,] def_L = new byte[4, 4]
+            {
+                { 0, 1, 2, 6 },
+                { 1, 5, 9, 8 },
+                { 0, 4, 5, 6 },
+                { 1, 0, 4, 8 },
+            };
+            byte rotation = 2;
+            byte slot     = 1;
+            byte offset   = def_L[rotation, slot];
+            pal_col(0, offset);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"Array2D_PowerOfTwoStride_RuntimeIndex hex: {hex}");
+
+        // Expected sequence somewhere in the body:
+        //   LDA rotation_addr   (AD lo hi)
+        //   ASL A               (0A)
+        //   ASL A               (0A)
+        //   CLC                 (18)
+        //   ADC slot_addr       (6D lo hi)
+        //   TAX                 (AA)
+        //   LDA bytearray_0,X   (BD lo hi)
+        // The two ASLs must immediately precede CLC + ADC + TAX + LDA,X — no STA TEMP
+        // (the marker of the non-power-of-two fallback path) or JSR in between.
+        Assert.Contains("0A0A18", hex);
+        Assert.Contains("AABD", hex);
+        int aslIdx = hex.IndexOf("0A0A18", StringComparison.Ordinal);
+        int loadIdx = hex.IndexOf("AABD", aslIdx, StringComparison.Ordinal);
+        Assert.True(loadIdx > aslIdx, "TAX;LDA abs,X must follow the ASL chain.");
+        // The ASL chain → ADC → TAX must be contiguous: ASL+ASL+CLC+ADC(3) = 6 bytes (12 hex chars).
+        Assert.Equal(aslIdx + 12, loadIdx);
+        // The shift-and-add fallback (`STA TEMP` = `8517`) must not appear in this region.
+        Assert.DoesNotContain("8517", hex.Substring(aslIdx, loadIdx - aslIdx));
+    }
+
+    [Fact]
+    public void Array2D_NonPowerOfTwoStride_RuntimeIndex()
+    {
+        // Stride of 3 is NOT a power of two. The fallback shift-and-add path
+        // (STA TEMP; ASL; CLC; ADC TEMP) should be emitted instead of ASLs.
+        var bytes = GetProgramBytes(
+            """
+            byte[,] tbl = new byte[2, 3]
+            {
+                { 10, 20, 30 },
+                { 40, 50, 60 }
+            };
+            byte r = 1;
+            byte c = 2;
+            byte v = tbl[r, c];
+            pal_col(0, v);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"Array2D_NonPowerOfTwoStride_RuntimeIndex hex: {hex}");
+
+        // For stride 3 (binary 11), the multiplier emits:
+        //   STA $17 (TEMP)     ; 85 17
+        //   ASL A              ; 0A
+        //   CLC                ; 18
+        //   ADC $17 (TEMP)     ; 65 17
+        Assert.Contains("85170A1865", hex);
+        // The result is then combined with the column and used to index the array.
+        Assert.Contains("AABD", hex); // TAX; LDA abs,X
+    }
+
+    [Fact]
+    public void Array2D_Stride1_RuntimeIndex()
+    {
+        // Edge case: stride=1 hits the early-return in EmitMultiplyAByStride
+        // (no ASL chain, no shift-and-add). The lowering should be just
+        //   LDA row_addr; CLC; ADC col_addr; TAX; LDA bytearray_0,X
+        // with NO ASL (0A) and NO STA TEMP (8517) between LDA-row and TAX.
+        // Use 6 rows so Roslyn emits the data via <PrivateImplementationDetails>
+        // + InitializeArray rather than as explicit Set calls (which are not
+        // supported because the ROM-backed table is read-only).
+        var bytes = GetProgramBytes(
+            """
+            byte[,] tbl = new byte[6, 1]
+            {
+                { 10 },
+                { 20 },
+                { 30 },
+                { 40 },
+                { 50 },
+                { 60 },
+            };
+            byte r = 3;
+            byte c = 0;
+            byte v = tbl[r, c];
+            pal_col(0, v);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"Array2D_Stride1_RuntimeIndex hex: {hex}");
+
+        // The TAX;LDA abs,X marker must still appear (runtime index path).
+        Assert.Contains("AABD", hex);
+        // For stride=1, EmitMultiplyAByStride returns immediately, so neither the
+        // ASL-chain (`0A0A`) nor the shift-and-add (`85170A1865`) signature appears.
+        Assert.DoesNotContain("0A0A", hex);     // No two-ASL chain.
+        Assert.DoesNotContain("85170A1865", hex); // No shift-and-add fallback.
+    }
+
+    [Fact]
+    public void StelemI1_PreservesIlOrder_OrThenAdd()
+    {
+        // Regression for stelem.i1 emitting arithmetic in fixed order.
+        // For (v | 0xF0) + 1, IL is: ldloc v, ldc 0xF0, or, ldc.i4.1, add.
+        // The transpiler must emit ORA #$F0 BEFORE CLC; ADC #$01 — not the
+        // legacy fixed and→add→or→sub order which produced ADC then ORA and
+        // computed the wrong result (0xF6 instead of 0xF1 for v=5).
+        using var transpiler = BuildProgram(
+            """
+            byte[] arr = new byte[4];
+            byte i = 0;
+            byte v = 5;
+            arr[i] = (byte)((v | 0xF0) + 1);
+            ppu_on_all();
+            while (true) ;
+            """, out var program);
+
+        var mainBlock = program.Blocks.Single(b => b.Label == "main");
+        var instructions = mainBlock.InstructionsWithLabels.ToList();
+
+        int oraIdx = instructions.FindIndex(il =>
+            il.Instruction.Opcode == Opcode.ORA &&
+            il.Instruction.Operand is ImmediateOperand op && op.Value == 0xF0);
+        int clcIdx = instructions.FindIndex(il => il.Instruction.Opcode == Opcode.CLC);
+        Assert.True(oraIdx >= 0, "Expected ORA #$F0 in main block");
+        Assert.True(clcIdx >= 0, "Expected CLC (for ADC #$01) in main block");
+        Assert.True(oraIdx < clcIdx,
+            $"Expected ORA #$F0 to appear before CLC; ADC #$01 (IL order). oraIdx={oraIdx}, clcIdx={clcIdx}");
+
+        // Confirm the CLC is followed by ADC #$01
+        Assert.True(clcIdx + 1 < instructions.Count);
+        var adcInstr = instructions[clcIdx + 1].Instruction;
+        Assert.Equal(Opcode.ADC, adcInstr.Opcode);
+        Assert.Equal(1, ((ImmediateOperand)adcInstr.Operand!).Value);
+    }
+
+    [Fact]
+    public void StelemI1_PreservesIlOrder_AddThenOr()
+    {
+        // Companion test: for ((v + 1) | 0xF0), IL is ADD then OR, so we
+        // must emit CLC; ADC #$01 before ORA #$F0. This case happened to
+        // work under the legacy fixed order too, but we want to lock it in.
+        using var transpiler = BuildProgram(
+            """
+            byte[] arr = new byte[4];
+            byte i = 0;
+            byte v = 5;
+            arr[i] = (byte)((v + 1) | 0xF0);
+            ppu_on_all();
+            while (true) ;
+            """, out var program);
+
+        var mainBlock = program.Blocks.Single(b => b.Label == "main");
+        var instructions = mainBlock.InstructionsWithLabels.ToList();
+
+        int clcIdx = instructions.FindIndex(il => il.Instruction.Opcode == Opcode.CLC);
+        int oraIdx = instructions.FindIndex(il =>
+            il.Instruction.Opcode == Opcode.ORA &&
+            il.Instruction.Operand is ImmediateOperand op && op.Value == 0xF0);
+        Assert.True(clcIdx >= 0, "Expected CLC (for ADC #$01) in main block");
+        Assert.True(oraIdx >= 0, "Expected ORA #$F0 in main block");
+        Assert.True(clcIdx < oraIdx,
+            $"Expected CLC; ADC #$01 to appear before ORA #$F0 (IL order). clcIdx={clcIdx}, oraIdx={oraIdx}");
+
+        Assert.True(clcIdx + 1 < instructions.Count);
+        var adcInstr = instructions[clcIdx + 1].Instruction;
+        Assert.Equal(Opcode.ADC, adcInstr.Opcode);
+        Assert.Equal(1, ((ImmediateOperand)adcInstr.Operand!).Value);
+    }
+
+    [Fact]
+    public void StelemI1_PreservesIlOrder_SelfReferencing_OrThenAnd()
+    {
+        // Self-referencing update: arr[i] = (byte)((arr[i] | 0xF0) & 0xF1)
+        // IL order: OR then AND. The legacy fixed order was AND→ADD→OR→SUB
+        // which would have emitted AND before ORA — wrong for this expression.
+        using var transpiler = BuildProgram(
+            """
+            byte[] arr = new byte[4];
+            byte i = 0;
+            arr[i] = (byte)((arr[i] | 0xF0) & 0xF1);
+            ppu_on_all();
+            while (true) ;
+            """, out var program);
+
+        var mainBlock = program.Blocks.Single(b => b.Label == "main");
+        var instructions = mainBlock.InstructionsWithLabels.ToList();
+
+        int oraIdx = instructions.FindIndex(il =>
+            il.Instruction.Opcode == Opcode.ORA &&
+            il.Instruction.Operand is ImmediateOperand op && op.Value == 0xF0);
+        int andIdx = instructions.FindIndex(il =>
+            il.Instruction.Opcode == Opcode.AND &&
+            il.Instruction.Operand is ImmediateOperand op && op.Value == 0xF1);
+        Assert.True(oraIdx >= 0, "Expected ORA #$F0 in main block");
+        Assert.True(andIdx >= 0, "Expected AND #$F1 in main block");
+        Assert.True(oraIdx < andIdx,
+            $"Expected ORA #$F0 to appear before AND #$F1 (IL order). oraIdx={oraIdx}, andIdx={andIdx}");
+    }
+
+    [Fact]
     public void ArrayLength_LocalByteArray_LoopBound()
     {
         // for (byte i = 0; i < arr.Length; i++) should compile identically to

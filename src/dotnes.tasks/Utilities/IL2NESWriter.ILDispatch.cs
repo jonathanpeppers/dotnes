@@ -1863,6 +1863,14 @@ partial class IL2NESWriter
                 bool argsAlreadyPopped = false;
                 switch (operand)
                 {
+                    case "Array2D.Byte.Get":
+                        HandleArray2DByteGet();
+                        argsAlreadyPopped = true;
+                        break;
+                    case "Array2D.Byte.Set":
+                        HandleArray2DByteSet();
+                        argsAlreadyPopped = true;
+                        break;
                     case nameof(NTADR_A):
                     case nameof(NTADR_B):
                     case nameof(NTADR_C):
@@ -3447,6 +3455,13 @@ partial class IL2NESWriter
             case ILOpCode.Ldfld:
                 HandleLdfld(operand);
                 break;
+            case ILOpCode.Newobj:
+                if (operand == "Array2D.Byte.Ctor")
+                {
+                    HandleNewobjArray2DByte(instruction);
+                    break;
+                }
+                throw new TranspileException(GetUnsupportedOpcodeMessage(instruction.OpCode), MethodName);
             default:
                 throw new TranspileException(GetUnsupportedOpcodeMessage(instruction.OpCode), MethodName);
         }
@@ -3470,7 +3485,18 @@ partial class IL2NESWriter
                 // Use labels for byte arrays (resolved during address resolution)
                 string byteArrayLabel = $"bytearray_{_byteArrayLabelIndex}";
                 _byteArrayLabelIndex++;
-                
+
+                // 2D byte array initialization: record the label and data, but
+                // suppress the LDA/LDX address load and the eval-stack marker —
+                // the data is referenced via byte[,]::Get/Set calls instead.
+                if (ConsumePending2DByteArrayLdtoken(byteArrayLabel, operand.Length))
+                {
+                    _byteArrays.Add(operand);
+                    _lastByteArrayLabel = byteArrayLabel;
+                    _lastByteArraySize = operand.Length;
+                    break;
+                }
+
                 // HACK: write these if next instruction is a Call that consumes this array
                 // Don't emit if the next Call is a 0-arg function (e.g., ppu_off)
                 // that just happens to follow the ldtoken — the address would get clobbered.

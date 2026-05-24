@@ -306,6 +306,9 @@ partial class Transpiler
     /// Gets the method name from a MemberReference, qualified with the declaring type
     /// for BCL methods (e.g., "Array.Fill") to avoid collisions with user functions.
     /// NESLib methods remain unqualified (e.g., "pal_col").
+    /// Member references whose parent is a multi-dimensional byte array TypeSpec
+    /// (e.g. <c>byte[,]::Get</c>) are mapped to synthetic names that
+    /// <see cref="IL2NESWriter"/> recognises (<c>Array2D.Byte.Ctor/Get/Set</c>).
     /// </summary>
     string GetQualifiedMemberName(MemberReference member)
     {
@@ -316,9 +319,50 @@ partial class Transpiler
             typeName = _reader.GetString(_reader.GetTypeReference((TypeReferenceHandle)parent).Name);
         else if (parent.Kind == HandleKind.TypeDefinition)
             typeName = _reader.GetString(_reader.GetTypeDefinition((TypeDefinitionHandle)parent).Name);
+        else if (parent.Kind == HandleKind.TypeSpecification)
+        {
+            // Multi-dimensional array method references (rectangular arrays use a
+            // TypeSpecification parent because the type isn't a SZARRAY vector).
+            if (TryGetMultiDimByteArrayRank((TypeSpecificationHandle)parent, out int rank))
+            {
+                if (rank != 2)
+                    throw new TranspileException(
+                        $"Multi-dimensional arrays of rank {rank} are not supported on the NES. " +
+                        "Only rank-2 (byte[,]) rectangular arrays are supported.", null);
+                return name switch
+                {
+                    ".ctor" => "Array2D.Byte.Ctor",
+                    "Get" => "Array2D.Byte.Get",
+                    "Set" => "Array2D.Byte.Set",
+                    "Address" => "Array2D.Byte.Address",
+                    _ => $"Array2D.Byte.{name}",
+                };
+            }
+        }
         if (typeName != null && typeName != "NESLib")
             return $"{typeName}.{name}";
         return name;
+    }
+
+    /// <summary>
+    /// Decodes a TypeSpecification signature and returns true if it represents a
+    /// rectangular array of <c>byte</c> (ELEMENT_TYPE_ARRAY of ELEMENT_TYPE_U1).
+    /// </summary>
+    bool TryGetMultiDimByteArrayRank(TypeSpecificationHandle handle, out int rank)
+    {
+        rank = 0;
+        var typeSpec = _reader.GetTypeSpecification(handle);
+        var sig = _reader.GetBlobReader(typeSpec.Signature);
+        if (sig.RemainingBytes < 3)
+            return false;
+        // ELEMENT_TYPE_ARRAY = 0x14
+        if (sig.ReadByte() != 0x14)
+            return false;
+        // Element type: ELEMENT_TYPE_U1 (byte) = 0x05
+        if (sig.ReadByte() != 0x05)
+            return false;
+        rank = sig.ReadCompressedInteger();
+        return rank >= 1;
     }
 
     void GetUsedMethods(MetadataReader reader)
