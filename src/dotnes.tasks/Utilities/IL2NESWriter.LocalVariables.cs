@@ -76,6 +76,40 @@ partial class IL2NESWriter
         _firstAndAfterPadPoll = false;
         _ushortInAX = false;
 
+        // Detect the "two pending IL stack values" pattern produced when
+        // Roslyn keeps the second computed value on the IL stack across a
+        // stloc, e.g.:
+        //   x1 = (byte)nx;
+        //   y1 = (byte)ny;   // ny was computed earlier, never stored
+        // becomes IL:
+        //   ldloc nx; conv.u1; stloc x1; conv.u1; stloc y1
+        // with ny already on the evaluation stack BELOW nx. WriteLdloc saves
+        // the runtime ny to TEMP ($17) before loading nx into A, but the
+        // subsequent stloc would otherwise reuse A (still nx) for both stores.
+        // When we see the buffer pattern [STA $TEMP, LDA absolute, STA absolute],
+        // this stloc must consume the saved TEMP value instead of A.
+        if (!local.IsWord && local.Value <= byte.MaxValue
+            && local.LabelName is null && CurrentBlock is { } block
+            && block.Count >= 3)
+        {
+            var last = block[block.Count - 1];
+            var prev = block[block.Count - 2];
+            var prev2 = block[block.Count - 3];
+            if (last.Opcode == Opcode.STA && last.Mode == AddressMode.Absolute
+                && prev.Opcode == Opcode.LDA && prev.Mode == AddressMode.Absolute
+                && prev2.Opcode == Opcode.STA && prev2.Mode == AddressMode.ZeroPage
+                && prev2.Operand is ImmediateOperand tempOp && tempOp.Value == (byte)NESConstants.TEMP)
+            {
+                if (isNewAllocation) LocalCount += 1;
+                Emit(Opcode.LDA, AddressMode.ZeroPage, (byte)NESConstants.TEMP);
+                Emit(Opcode.STA, AddressMode.Absolute, (ushort)local.Address);
+                _runtimeValueInA = false;
+                _savedRuntimeToTemp = false;
+                _immediateInA = null;
+                return;
+            }
+        }
+
         if (_ntadrRuntimeResult)
         {
             // NTADR result is in TEMP ($17 = hi) and TEMP2 ($19 = lo)
