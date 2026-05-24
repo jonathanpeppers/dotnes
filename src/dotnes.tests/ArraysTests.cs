@@ -1226,11 +1226,25 @@ public class ArraysTests : RoslynTests
         //   TAX                 (AA)
         //   LDA bytearray_0,X   (BD lo hi)
         // Power-of-two stride must use ASL not a multiplication subroutine.
-        Assert.Contains("0A0A18", hex); // ASL; ASL; CLC
-        Assert.Contains("AABD", hex);   // TAX; LDA abs,X
-        // Make sure no multiplication helper (umul/smul) was emitted.
-        Assert.DoesNotContain("umul", hex.ToLower());
-        Assert.DoesNotContain("smul", hex.ToLower());
+        // Expected sequence somewhere in the body:
+        //   LDA rotation_addr   (AD lo hi)
+        //   ASL A               (0A)
+        //   ASL A               (0A)
+        //   CLC                 (18)
+        //   ADC slot_addr       (6D lo hi)
+        //   TAX                 (AA)
+        //   LDA bytearray_0,X   (BD lo hi)
+        // The two ASLs must immediately precede CLC + ADC + TAX + LDA,X — no STA TEMP
+        // (the marker of the non-power-of-two fallback path) or JSR in between.
+        Assert.Contains("0A0A18", hex);
+        Assert.Contains("AABD", hex);
+        int aslIdx = hex.IndexOf("0A0A18", StringComparison.Ordinal);
+        int loadIdx = hex.IndexOf("AABD", aslIdx, StringComparison.Ordinal);
+        Assert.True(loadIdx > aslIdx, "TAX;LDA abs,X must follow the ASL chain.");
+        // The ASL chain → ADC → TAX must be contiguous: ASL+ASL+CLC+ADC(3) = 6 bytes (12 hex chars).
+        Assert.Equal(aslIdx + 12, loadIdx);
+        // The shift-and-add fallback (`STA TEMP` = `8517`) must not appear in this region.
+        Assert.DoesNotContain("8517", hex.Substring(aslIdx, loadIdx - aslIdx));
     }
 
     [Fact]

@@ -308,7 +308,7 @@ partial class Transpiler
     /// NESLib methods remain unqualified (e.g., "pal_col").
     /// Member references whose parent is a multi-dimensional byte array TypeSpec
     /// (e.g. <c>byte[,]::Get</c>) are mapped to synthetic names that
-    /// <see cref="IL2NESWriter"/> recognises (<c>Array2D_Byte_Ctor/Get/Set</c>).
+    /// <see cref="IL2NESWriter"/> recognises (<c>Array2D.Byte.Ctor/Get/Set</c>).
     /// </summary>
     string GetQualifiedMemberName(MemberReference member)
     {

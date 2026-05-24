@@ -1,4 +1,3 @@
-using System.Reflection.Metadata;
 using dotnes.ObjectModel;
 using static dotnes.NESConstants;
 
@@ -66,6 +65,15 @@ partial class IL2NESWriter
                 $"byte[,] dimensions must be positive (got [{rows},{stride}]).",
                 MethodName);
 
+        // The 6502 can only offset Absolute,X by 0..255 in a single instruction,
+        // so a byte[,] backed by a ROM table must fit in 256 bytes total.
+        int totalSize = rows * stride;
+        if (totalSize > 256)
+            throw new TranspileException(
+                $"byte[,] total size must be <= 256 bytes (got [{rows},{stride}] = {totalSize} bytes). " +
+                "Use multiple smaller arrays or a 1D array with manual indexing.",
+                MethodName);
+
         // Remove the LDA emissions from the two preceding ldc instructions.
         int rowsOffset = rowsInstr.Offset;
         if (_blockCountAtILOffset.TryGetValue(rowsOffset, out int blockCountBeforeRows))
@@ -81,7 +89,7 @@ partial class IL2NESWriter
 
         _pending2DByteArrayCtor = true;
         _pending2DStride = stride;
-        _pending2DSize = rows * stride;
+        _pending2DSize = totalSize;
         _pendingArrayType = "Byte";
         // Push a marker representing the array reference that newobj produces.
         // Subsequent dup instructions will duplicate this marker; Get/Set will
@@ -97,10 +105,15 @@ partial class IL2NESWriter
     /// but must <b>not</b> emit any LDA/LDX address loads or push a stloc
     /// marker — the data is referenced only via Get/Set calls.
     /// </summary>
-    internal bool ConsumePending2DByteArrayLdtoken(string label)
+    internal bool ConsumePending2DByteArrayLdtoken(string label, int operandLength)
     {
         if (!_pending2DByteArrayCtor)
             return false;
+        if (operandLength != _pending2DSize)
+            throw new TranspileException(
+                $"byte[,] initializer size mismatch: expected {_pending2DSize} bytes for the declared dimensions, " +
+                $"but the <PrivateImplementationDetails> data is {operandLength} bytes.",
+                MethodName);
         _active2DArrayLabel = label;
         _active2DArrayStride = _pending2DStride;
         _pending2DByteArrayCtor = false;
@@ -127,8 +140,13 @@ partial class IL2NESWriter
                 "byte[,] Get requires at least 2 preceding instructions (row, col).",
                 MethodName);
 
-        var colInstr = Instructions[Index - 1];
+        // IL for `arr[r,c]` pushes arrayref, then row, then col onto the eval stack
+        // before calling Get. Under Optimize=true (dotnes mandates this) Roslyn elides
+        // the arrayref ldloc whenever the array local is used exactly once, so we only
+        // strip from rowInstr onward. The eval-stack pop loop still pops the marker
+        // that newobj parked there.
         var rowInstr = Instructions[Index - 2];
+        var colInstr = Instructions[Index - 1];
 
         // Pop the args + array ref from our approximate evaluation stack.
         if (Stack.Count > 0) Stack.Pop(); // col
@@ -220,9 +238,9 @@ partial class IL2NESWriter
                 "byte[,] Set requires at least 3 preceding instructions (row, col, value).",
                 MethodName);
 
-        var valInstr = Instructions[Index - 1];
-        var colInstr = Instructions[Index - 2];
         var rowInstr = Instructions[Index - 3];
+        var colInstr = Instructions[Index - 2];
+        var valInstr = Instructions[Index - 1];
 
         if (Stack.Count > 0) Stack.Pop(); // value
         if (Stack.Count > 0) Stack.Pop(); // col
@@ -239,6 +257,11 @@ partial class IL2NESWriter
         if (rowConst != null && colConst != null && valConst != null)
         {
             int idx = rowConst.Value * stride + colConst.Value;
+            if (idx >= 256)
+                throw new TranspileException(
+                    $"byte[,] Set index ({idx}) exceeds the 8-bit Absolute,X range. " +
+                    "Only byte[,] tables of <= 256 bytes are supported.",
+                    MethodName);
             RemoveEmissionsFromIL(rowInstr.Offset);
             Emit(Opcode.LDA, AddressMode.Immediate, (byte)(valConst.Value & 0xFF));
             // STA label+idx, using label,X with X=0 or absolute via index 0.
@@ -276,23 +299,23 @@ partial class IL2NESWriter
 
     /// <summary>
     /// Emits the 6502 load for <c>label + idx</c>. Uses absolute mode for idx=0,
-    /// otherwise <c>LDX #idx; LDA label,X</c>.
+    /// otherwise <c>LDX #idx; LDA label,X</c>. Throws if <paramref name="idx"/>
+    /// exceeds the 8-bit Absolute,X offset range.
     /// </summary>
     void EmitAbsoluteByteLoad(string label, int idx)
     {
+        if (idx >= 256)
+            throw new TranspileException(
+                $"byte[,] index ({idx}) exceeds the 8-bit Absolute,X range. " +
+                "Only byte[,] tables of <= 256 bytes are supported.",
+                MethodName);
         if (idx == 0)
         {
             EmitWithLabel(Opcode.LDA, AddressMode.Absolute, label);
         }
-        else if (idx < 256)
-        {
-            Emit(Opcode.LDX, AddressMode.Immediate, (byte)idx);
-            EmitWithLabel(Opcode.LDA, AddressMode.AbsoluteX, label);
-        }
         else
         {
-            // Large array index (rare on NES). Use Y to extend the index range.
-            Emit(Opcode.LDX, AddressMode.Immediate, (byte)(idx & 0xFF));
+            Emit(Opcode.LDX, AddressMode.Immediate, (byte)idx);
             EmitWithLabel(Opcode.LDA, AddressMode.AbsoluteX, label);
         }
     }

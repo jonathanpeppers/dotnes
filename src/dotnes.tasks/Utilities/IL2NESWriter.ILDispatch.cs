@@ -3443,7 +3443,7 @@ partial class IL2NESWriter
                 // 2D byte array initialization: record the label and data, but
                 // suppress the LDA/LDX address load and the eval-stack marker —
                 // the data is referenced via byte[,]::Get/Set calls instead.
-                if (ConsumePending2DByteArrayLdtoken(byteArrayLabel))
+                if (ConsumePending2DByteArrayLdtoken(byteArrayLabel, operand.Length))
                 {
                     _byteArrays.Add(operand);
                     _lastByteArrayLabel = byteArrayLabel;
