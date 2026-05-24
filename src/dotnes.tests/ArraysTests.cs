@@ -1197,8 +1197,8 @@ public class ArraysTests : RoslynTests
     public void ArrayLength_StaticRomByteArray_LoopBound()
     {
         // Loop using static readonly byte[].Length should fold to constant N.
-        // Use a local copy of the array for indexing to focus the test on
-        // the .Length constant-folding for the static field.
+        // The loop body doesn't index the array — this test focuses on
+        // .Length constant-folding for the static field bound.
         var bytes = GetProgramBytes(
             """
             for (byte i = 0; i < P.palette_bg.Length; i++)

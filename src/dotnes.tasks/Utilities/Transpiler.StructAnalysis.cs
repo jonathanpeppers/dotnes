@@ -169,7 +169,6 @@ partial class Transpiler
                 var body = _pe.GetMethodBody(method.RelativeVirtualAddress);
                 var il = body.GetILReader();
                 int lastLdc = 0;
-                ILOpCode prevOp = ILOpCode.Nop;
                 bool inArrayInit = false; // True after Newarr until Stsfld/Stloc/etc. consumes the array
 
                 while (il.Offset < il.Length)
@@ -252,7 +251,6 @@ partial class Transpiler
                             break;
                         }
                     }
-                    prevOp = opCode;
                 }
             }
         }

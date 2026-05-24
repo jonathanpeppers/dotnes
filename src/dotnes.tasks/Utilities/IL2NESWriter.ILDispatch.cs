@@ -1165,13 +1165,21 @@ partial class IL2NESWriter
                         _pendingLdlenSource = null;
                         count = src.Value;
                     }
-                    else if (previous == ILOpCode.Newarr && Stack.Count > 0)
+                    else if (previous == ILOpCode.Newarr && Stack.Count > 0
+                        && Instructions is { } instrs && Index >= 2
+                        && instrs[Index - 2].OpCode is ILOpCode.Ldc_i4 or ILOpCode.Ldc_i4_s
+                            or ILOpCode.Ldc_i4_0 or ILOpCode.Ldc_i4_1 or ILOpCode.Ldc_i4_2
+                            or ILOpCode.Ldc_i4_3 or ILOpCode.Ldc_i4_4 or ILOpCode.Ldc_i4_5
+                            or ILOpCode.Ldc_i4_6 or ILOpCode.Ldc_i4_7 or ILOpCode.Ldc_i4_8)
                     {
                         // Roslyn (Release) elides the local for `new T[N].Length`, emitting
                         // ldc; newarr; ldlen directly. The element count is on the Stack
                         // (the Newarr handler left it there after removing the size LDA).
                         // For byte[] the count IS the length; for ushort[] it was already
                         // popped during newarr processing, so this path only handles byte[].
+                        // Gated on the previous-previous instruction being a constant ldc to
+                        // avoid folding runtime sizes (e.g., `new byte[n].Length`) to a stale
+                        // stack value.
                         count = Stack.Pop();
                     }
                     if (count is null)
@@ -1183,13 +1191,6 @@ partial class IL2NESWriter
                     else
                         WriteLdc((ushort)count.Value);
                 }
-                break;
-            case ILOpCode.Sizeof:
-                // Native integer size (nint/IntPtr) on the 6502 is 1 byte (8-bit CPU).
-                // Fixed-size primitive types (byte, ushort, int, etc.) are folded by Roslyn at compile time
-                // and typically never reach this opcode; this implementation only handles platform-dependent
-                // native integer sizeof values and will always push 1 here.
-                WriteLdc(1);
                 break;
             default:
                 throw new TranspileException(GetUnsupportedOpcodeMessage(instruction.OpCode), MethodName);
