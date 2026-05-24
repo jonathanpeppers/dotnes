@@ -724,6 +724,24 @@ public class Program6502
         if (usedMethods.Contains("rect_overlap") || usedMethods.Contains("sprite_overlap"))
             usedMethods.Add("addysp");
 
+        // nesdoug aliases: pull in their underlying subroutines too.
+        // These must be expanded BEFORE any action(...) calls so that both
+        // CalculateFinalBuiltInsSize and AddFinalBuiltIns see the same set
+        // of used methods. Otherwise size calc would undercount blocks that
+        // emission ends up writing on the second pass.
+        // get_pad_new wraps pad_trigger (which itself depends on pad_poll).
+        if (usedMethods.Contains("get_pad_new"))
+        {
+            usedMethods.Add("pad_trigger");
+            usedMethods.Add("pad_poll");
+        }
+        // clear_vram_buffer tail-calls vrambuf_clear.
+        if (usedMethods.Contains("clear_vram_buffer"))
+            usedMethods.Add("vrambuf_clear");
+        // multi_vram_buffer_horz/vert share multi_vram_buffer_common and use popa/popax.
+        bool needsMultiVramCommon =
+            usedMethods.Contains("multi_vram_buffer_horz") || usedMethods.Contains("multi_vram_buffer_vert");
+
         // pad_poll is needed directly or as a dependency of pad_trigger/pad_state
         if (usedMethods.Contains("pad_poll") || usedMethods.Contains("pad_trigger") || usedMethods.Contains("pad_state"))
             action(BuiltInSubroutines.PadPoll());
@@ -786,11 +804,41 @@ public class Program6502
             action(BuiltInSubroutines.FadeIn());
         if (usedMethods.Contains("fade_out"))
             action(BuiltInSubroutines.FadeOut());
+        // nesdoug aliases: pull in their underlying subroutines too.
+        // get_pad_new wraps pad_trigger (which itself depends on pad_poll).
+        // clear_vram_buffer tail-calls vrambuf_clear.
+        // multi_vram_buffer_horz/vert share multi_vram_buffer_common and use popa/popax.
+        // (Dependency expansion happens at the top of this method so size calc and emission agree.)
+
         if (usedMethods.Contains("irq_set_callback"))
         {
             action(BuiltInSubroutines.IrqSetCallback());
             action(BuiltInSubroutines.IrqWithCallback());
         }
+
+        // nesdoug helpers
+        if (usedMethods.Contains("one_vram_buffer"))
+            action(BuiltInSubroutines.OneVramBuffer());
+        if (usedMethods.Contains("multi_vram_buffer_horz"))
+            action(BuiltInSubroutines.MultiVramBufferHorz());
+        if (usedMethods.Contains("multi_vram_buffer_vert"))
+            action(BuiltInSubroutines.MultiVramBufferVert());
+        if (needsMultiVramCommon)
+            action(BuiltInSubroutines.MultiVramBufferCommon());
+        if (usedMethods.Contains("clear_vram_buffer"))
+            action(BuiltInSubroutines.ClearVramBuffer());
+        if (usedMethods.Contains("get_pad_new"))
+            action(BuiltInSubroutines.GetPadNew());
+        if (usedMethods.Contains("get_frame_count"))
+            action(BuiltInSubroutines.GetFrameCount());
+        if (usedMethods.Contains("set_music_speed"))
+            action(BuiltInSubroutines.SetMusicSpeed());
+        if (usedMethods.Contains("set_scroll_x"))
+            action(BuiltInSubroutines.SetScrollX());
+        if (usedMethods.Contains("set_scroll_y"))
+            action(BuiltInSubroutines.SetScrollY());
+        if (usedMethods.Contains("get_ppu_addr"))
+            action(BuiltInSubroutines.GetPpuAddr());
     }
 
     /// <summary>
