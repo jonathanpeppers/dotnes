@@ -246,7 +246,7 @@ public class ControlFlowTests : RoslynTests
                 switch (state)
                 {
                     case STATE_TITLE:
-                        pal_col(0, 0x02);
+                        pal_col(0, 0x12);
                         if ((pad_trigger(0) & PAD.START) != 0)
                             state = STATE_PLAYING;
                         break;
@@ -274,12 +274,13 @@ public class ControlFlowTests : RoslynTests
         Assert.Contains("C901D0034C", hex);
         Assert.Contains("C902D0034C", hex);
         Assert.Contains("D0034C", hex);
-        // Distinctive per-case pal_col immediates prove each arm's body is emitted:
-        //   DarkBlue = 0x02, DarkGreen = 0x0A, DarkRed = 0x06
+        // Distinctive per-case pal_col immediates prove each arm's body is emitted.
+        // Each value is chosen to NOT appear in the setup pal_col calls above,
+        // so the assertion can only be satisfied by the switch arm itself.
         // LDA #imm = A9 imm.
-        Assert.Contains("A902", hex);
-        Assert.Contains("A90A", hex);
-        Assert.Contains("A906", hex);
+        Assert.Contains("A912", hex); // STATE_TITLE arm
+        Assert.Contains("A90A", hex); // STATE_PLAYING arm
+        Assert.Contains("A906", hex); // STATE_OVER arm
     }
 
     [Fact]
