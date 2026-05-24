@@ -216,7 +216,6 @@
   - Extensive use of pointers, arrays of structs, bitfields
   - `static` variables, `const` arrays
   - Multiple user-defined functions with complex control flow
-  - `switch/case` statements
   - Far exceeds dotnes's current single-top-level-statement model
 
 ### climber.c
@@ -340,7 +339,7 @@
 Prioritized TODO list of features needed to port climber.c, ordered by dependency and impact:
 
 - [x] **User functions with return values** — byte return values work: the last computed value stays in A through `incsp` parameter cleanup and RTS. The caller's `HasReturnValue` check sets `_runtimeValueInA = true`. Verified with RoslynTests: constant return, parameterized return, return value stored to local.
-- [x] **switch/case** — small switches use branch chains (beq.s, already supported). Larger sequential switches use the IL `switch` opcode (0x45) which emits CMP/BNE+JMP trampolines. Tested with SwitchSmall (3 cases) and SwitchEnum (7 cases with enum).
+- [x] **switch/case** — small switches use branch chains (beq.s, already supported). Larger sequential switches use the IL `switch` opcode (0x45) which emits CMP/BNE+JMP trampolines. `default:` clauses fall through correctly. Tested with SwitchSmall (3 cases), SwitchEnum (7 cases with enum), SwitchWithDefault (5-way byte with default), SwitchStateMachine (title/playing/over game-state pattern), and SwitchStateMachineWithRendering (full pal_col + vram_write rendering loop).
 - [x] **BCD arithmetic** — `bcd_add(ushort, ushort)` built-in NESLib function backed by 6502 subroutine. Software BCD since NES CPU disabled hardware BCD mode. Also fixed: 16-bit return values from built-in functions now correctly store both bytes (STA+STX) to word locals.
 - [x] **Global/static variables** — `stsfld`/`ldsfld` for user-defined static class fields. Allocated at `$0325+` (same region as locals). Both `static class State { public static byte x; }` and local variables work for the same patterns. Tested with store, load, and loop increment.
 - [x] **sbyte (signed char)** — `Ldc_i4_m1`, negative constants via two's complement, `conv.i1`/`conv.i2`/`conv.i4` as no-ops on 8-bit 6502. Signed comparisons work via `Blt_s` (BMI).
