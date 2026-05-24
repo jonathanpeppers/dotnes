@@ -143,15 +143,16 @@ public class ControlFlowTests : RoslynTests
         Assert.NotEmpty(bytes);
 
         var hex = Convert.ToHexString(bytes);
-        // CMP #$01, #$02, #$03 for cases 1..3
-        Assert.Contains("C901", hex);
-        Assert.Contains("C902", hex);
-        Assert.Contains("C903", hex);
-        // BNE (D0) for skipping JMP on mismatch
-        Assert.Contains("D0", hex);
-        // JMP (4C) for jumping to case/default targets
-        Assert.Contains("4C", hex);
-        // The default value 0x26 must appear (LDA #$26 = A926)
+        // Each non-zero case must emit the BNE+JMP trampoline:
+        //   CMP #imm (C9 imm), BNE +3 (D0 03), JMP target (4C lo hi)
+        // Assert the 5-byte prefix C9 imm D0 03 4C is present for cases 1..3.
+        Assert.Contains("C901D0034C", hex);
+        Assert.Contains("C902D0034C", hex);
+        Assert.Contains("C903D0034C", hex);
+        // Case 0 uses BEQ-style trampoline (no CMP): BNE +3, JMP target.
+        Assert.Contains("D0034C", hex);
+        // The default value 0x26 must appear (LDA #$26 = A926) — this is the
+        // distinctive side effect of the default arm and proves fall-through dispatch.
         Assert.Contains("A926", hex);
     }
 
@@ -160,6 +161,9 @@ public class ControlFlowTests : RoslynTests
     {
         // The state-machine pattern from the issue: title / playing / over with a default.
         // Roslyn lowers a dense byte switch with default into IL `switch` + br to default.
+        // The default arm sets `lives` to a distinctive sentinel value (0xAB) so the
+        // assertions can prove the default arm's body is actually emitted, separate
+        // from the normal state transitions.
         var bytes = GetProgramBytes(
             """
             const byte STATE_TITLE   = 0;
@@ -187,6 +191,7 @@ public class ControlFlowTests : RoslynTests
                             state = STATE_TITLE;
                         break;
                     default:
+                        lives = 0xAB;
                         state = STATE_TITLE;
                         break;
                 }
@@ -197,11 +202,17 @@ public class ControlFlowTests : RoslynTests
         Assert.NotEmpty(bytes);
 
         var hex = Convert.ToHexString(bytes);
-        // CMP #$01 and CMP #$02 for case 1 and case 2 of the dense switch
-        Assert.Contains("C901", hex);
-        Assert.Contains("C902", hex);
-        // JMP (4C) trampolines from the switch dispatch
-        Assert.Contains("4C", hex);
+        // Each non-zero case must emit the BNE+JMP trampoline signature:
+        //   CMP #imm (C9 imm), BNE +3 (D0 03), JMP target (4C lo hi).
+        // Asserting the 5-byte prefix proves the dispatch is CMP/BNE+JMP, not
+        // unrelated CMP/BNE/JMP from surrounding control flow.
+        Assert.Contains("C901D0034C", hex);
+        Assert.Contains("C902D0034C", hex);
+        // Case 0 uses BEQ-style trampoline (value already in A): BNE +3, JMP target.
+        Assert.Contains("D0034C", hex);
+        // The default arm's distinctive sentinel value 0xAB must appear
+        // (LDA #$AB = A9AB), proving the default body is reachable/emitted.
+        Assert.Contains("A9AB", hex);
     }
 
     [Fact]
