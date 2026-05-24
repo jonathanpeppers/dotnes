@@ -404,6 +404,12 @@ partial class IL2NESWriter : NESWriter
     /// </summary>
     public Dictionary<string, List<(string Name, int Size)>> StructLayouts { get => Variables.StructLayouts; init => Variables.StructLayouts = value; }
 
+    /// <summary>
+    /// Maps struct field names that hold a fixed-size buffer (C# <c>fixed byte buf[N]</c>)
+    /// or an <c>[InlineArray(N)]</c> element field to their total byte count.
+    /// </summary>
+    public Dictionary<string, int> BufferFieldSizes { get; init; } = new(StringComparer.Ordinal);
+
     // ── Pending struct state ─────────────────────────────────────────
     // _pendingStructLocal is set by ldloca.s for simple struct locals.
     // _pendingStructElement consolidates the former _pendingStructElementType,
@@ -415,6 +421,13 @@ partial class IL2NESWriter : NESWriter
     /// Used by stfld/ldfld to know which struct local to access.
     /// </summary>
     int? _pendingStructLocal;
+
+    /// <summary>
+    /// When set, the dispatch loop should skip all IL instructions whose <see cref="Index"/>
+    /// is &lt; this value. Used by handlers that consume a multi-instruction IL pattern
+    /// (e.g. buffer-field access via <c>ldflda</c> + <c>stind.i1</c>) in a single step.
+    /// </summary>
+    internal int? SkipUntilIndex { get; set; }
 
     /// <summary>
     /// The IL offset where execution should resume after the current finally handler.

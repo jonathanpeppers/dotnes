@@ -140,4 +140,142 @@ public class StructsTests : RoslynTests
         Assert.Contains("A903", hex); // LDA #3
         Assert.Contains("A928", hex); // LDA #40
     }
+
+    [Fact]
+    public void FixedBufferConstantIndex()
+    {
+        // Option A: C# fixed buffer with constant indexes.
+        var bytes = GetProgramBytes(
+            """
+            unsafe {
+                Cluster cur;
+                cur.sprite = 0x10;
+                cur.id = 1;
+                cur.layout[0] = 5;
+                cur.layout[1] = 6;
+                cur.layout[2] = 7;
+                cur.layout[3] = 8;
+                pal_col(0, cur.layout[2]);
+            }
+            ppu_on_all();
+            while (true) ;
+
+            unsafe struct Cluster {
+                public byte sprite;
+                public byte id;
+                public fixed byte layout[4];
+            }
+            """, additionalAssemblyFiles: null, allowUnsafe: true);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        // Stores of the four constant values into successive zero-page absolute addresses.
+        Assert.Contains("A910", hex); // LDA #$10 (sprite)
+        Assert.Contains("A905", hex); // LDA #$05
+        Assert.Contains("A906", hex); // LDA #$06
+        Assert.Contains("A907", hex); // LDA #$07
+        Assert.Contains("A908", hex); // LDA #$08
+        // Absolute store byte (8D = STA abs)
+        Assert.Contains("8D", hex);
+        // Absolute load byte (AD = LDA abs) for the read
+        Assert.Contains("AD", hex);
+    }
+
+    [Fact]
+    public void FixedBufferRuntimeIndex()
+    {
+        // Option A: runtime byte index uses LDX + AbsoluteX addressing.
+        var bytes = GetProgramBytes(
+            """
+            byte i = 2;
+            unsafe {
+                Cluster cur;
+                cur.layout[i] = 99;
+            }
+            ppu_on_all();
+            while (true) ;
+
+            unsafe struct Cluster {
+                public byte sprite;
+                public byte id;
+                public fixed byte layout[4];
+            }
+            """, additionalAssemblyFiles: null, allowUnsafe: true);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+        var hex = Convert.ToHexString(bytes);
+        Assert.Contains("A963", hex); // LDA #$63 (99)
+        // STA absolute,X (9D) for AbsoluteX store
+        Assert.Contains("9D", hex);
+        // LDX absolute (AE) to load the runtime index
+        Assert.Contains("AE", hex);
+    }
+
+    [Fact]
+    public void InlineArrayConstantIndex()
+    {
+        // Option B: [InlineArray(N)] field, constant indexes.
+        var bytes = GetProgramBytes(
+            """
+            Cluster cur = default;
+            cur.sprite = 0x10;
+            cur.id = 1;
+            cur.layout[0] = 5;
+            cur.layout[1] = 6;
+            cur.layout[2] = 7;
+            cur.layout[3] = 8;
+            pal_col(0, cur.layout[2]);
+            ppu_on_all();
+            while (true) ;
+
+            [System.Runtime.CompilerServices.InlineArray(4)]
+            struct Bytes4 { private byte _element0; }
+
+            struct Cluster {
+                public byte sprite;
+                public byte id;
+                public Bytes4 layout;
+            }
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+        var hex = Convert.ToHexString(bytes);
+        Assert.Contains("A910", hex);
+        Assert.Contains("A905", hex);
+        Assert.Contains("A906", hex);
+        Assert.Contains("A907", hex);
+        Assert.Contains("A908", hex);
+        Assert.Contains("8D", hex);
+        Assert.Contains("AD", hex);
+    }
+
+    [Fact]
+    public void InlineArrayRuntimeIndex()
+    {
+        // Option B: runtime index into [InlineArray].
+        var bytes = GetProgramBytes(
+            """
+            byte i = 1;
+            Cluster cur = default;
+            cur.layout[i] = 99;
+            ppu_on_all();
+            while (true) ;
+
+            [System.Runtime.CompilerServices.InlineArray(4)]
+            struct Bytes4 { private byte _element0; }
+
+            struct Cluster {
+                public byte sprite;
+                public byte id;
+                public Bytes4 layout;
+            }
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+        var hex = Convert.ToHexString(bytes);
+        Assert.Contains("A963", hex); // LDA #$63 (99)
+        Assert.Contains("9D", hex);   // STA abs,X
+        Assert.Contains("AE", hex);   // LDX abs (runtime index)
+    }
 }

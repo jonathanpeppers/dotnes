@@ -171,9 +171,9 @@
 - **Missing Features:**
   - Direct APU register macros (`APU_PULSE_DECAY`, `APU_PULSE_SWEEP`, `APU_TRIANGLE_LENGTH`, `APU_NOISE_DECAY`, `APU_ENABLE`)
   - `APU.status` — direct hardware register reading
-  - `typedef struct` — no struct support
   - `sprintf()` — no string formatting
   - Global arrays of structs, `const` struct arrays
+- **Implemented:** `typedef struct` now maps to C# `struct` with `byte`/`ushort` fields, fixed-size arrays via `fixed byte buf[N]` (Option A, requires `unsafe`) or `[InlineArray(N)]` (Option B). See `StructsTests` for examples.
 
 ### ppuhello.c
 - **Description:** Directly programs PPU registers (`PPU.control`, `PPU.mask`, `PPU.vram.address`, `PPU.vram.data`) to display text — no neslib used.
@@ -212,7 +212,7 @@
 - **Status:** 🔴 Complex
 - **Missing Features:**
   - Extremely large codebase (100+ KB) with dozens of functions
-  - `typedef struct` and struct instances — no struct support
+  - `typedef struct` and struct instances — basic struct field access works (including `fixed`-buffer and `[InlineArray(N)]` fields), but pointers to structs are not yet supported
   - Extensive use of pointers, arrays of structs, bitfields
   - `static` variables, `const` arrays
   - Multiple user-defined functions with complex control flow
@@ -294,7 +294,7 @@
 |-----------------|-----------------|
 | User-defined functions with parameters | 25+ samples (byte params and return values now supported; ushort/string params pending) |
 | Global/static arrays | 15+ samples |
-| `typedef struct` / struct support | 8 samples (basic field access now supported; arrays of structs, pointers to structs pending) |
+| `typedef struct` / struct support | 8 samples (basic field access, `fixed`-buffer and `[InlineArray(N)]` fields supported; pointers to structs pending) |
 | Direct APU/PPU register access | 5 samples (apu.c already covered by built-in `apu_init()`) |
 | Mapper support (MMC3, UxROM) | 3 samples |
 | CC65-specific libraries (conio, joystick) | 2 samples |
@@ -329,6 +329,7 @@
 | Global/static variables (`stsfld`/`ldsfld`) — user-defined static fields at $0325+ | climber, shoot2, siegegame (game state) |
 | `sbyte` (signed char) — negative constants, `conv.i1`/`conv.i2` as no-ops | climber, shoot2, siegegame |
 | Arrays of structs — `newarr` struct, `ldelema`, `stfld`/`ldfld` with AbsoluteX | climber, shoot2, siegegame |
+| `fixed`-buffer (`fixed byte buf[N]`) and `[InlineArray(N)]` fields in structs — buffer-indexed reads/writes via `ldflda` + `stind.i1`/`ldind.u1` | StructsTests (`FixedBufferConstantIndex`, `FixedBufferRuntimeIndex`, `InlineArrayConstantIndex`, `InlineArrayRuntimeIndex`) |
 | `Array.Fill` / `Array.Copy` — inline 6502 fill/copy loops | climber, siegegame |
 | ca65 assembler — full expression evaluator (&&, \|\|, !), conditional assembly, all addressing modes | fami (FamiTone2 linking) |
 | Extern assembly linking — `static extern` → `JSR _func`, `.s` files assembled and linked | fami (FamiTone2, music data, SFX data) |
