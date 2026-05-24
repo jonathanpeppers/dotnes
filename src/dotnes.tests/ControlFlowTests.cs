@@ -283,6 +283,44 @@ public class ControlFlowTests : RoslynTests
     }
 
     [Fact]
+    public void SwitchLarge()
+    {
+        // Build a dense 32-case switch programmatically. Roslyn lowers a dense
+        // integral switch to the IL `switch` opcode (jump table), which dotnes
+        // expands into a linear chain of CMP/BNE+JMP trampolines. This just
+        // verifies the transpiler doesn't choke on a large case count and that
+        // the dispatch chain is actually emitted.
+        const int caseCount = 32;
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("byte op = 17;");
+        sb.AppendLine("byte r = 0;");
+        sb.AppendLine("switch (op) {");
+        for (int i = 0; i < caseCount; i++)
+        {
+            // Distinctive value per case: 0x40 + i (avoids collision with case index).
+            sb.AppendLine($"    case {i}: r = 0x{0x40 + i:X2}; break;");
+        }
+        sb.AppendLine("    default: r = 0xFF; break;");
+        sb.AppendLine("}");
+        sb.AppendLine("pal_col(0, r);");
+        sb.AppendLine("ppu_on_all();");
+        sb.AppendLine("while (true) ;");
+
+        var bytes = GetProgramBytes(sb.ToString());
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        // Spot-check the BNE+JMP trampoline signature at several case indices.
+        // CMP #i, BNE +3, JMP target = C9 ii D0 03 4C.
+        Assert.Contains("C901D0034C", hex);   // case 1
+        Assert.Contains("C90FD0034C", hex);   // case 15
+        Assert.Contains("C91FD0034C", hex);   // case 31 (last)
+        // Default sentinel 0xFF must appear (LDA #$FF = A9FF).
+        Assert.Contains("A9FF", hex);
+    }
+
+    [Fact]
     public void DoWhileLoop()
     {
         // do { } while (cond) — body executes at least once
