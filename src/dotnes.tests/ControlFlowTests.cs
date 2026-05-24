@@ -216,6 +216,73 @@ public class ControlFlowTests : RoslynTests
     }
 
     [Fact]
+    public void SwitchStateMachineWithRendering()
+    {
+        // Full game-style state machine: nametable text setup + per-state background
+        // color via pal_col, driven by START on controller 1. Each case body has a
+        // distinctive pal_col immediate so we can assert the dispatch lands in each arm.
+        var bytes = GetProgramBytes(
+            """
+            const byte STATE_TITLE   = 0;
+            const byte STATE_PLAYING = 1;
+            const byte STATE_OVER    = 2;
+
+            pal_col(0, 0x02);
+            pal_col(1, 0x14);
+            pal_col(2, 0x20);
+            pal_col(3, 0x30);
+
+            vram_adr(NTADR_A(8, 14));
+            vram_write("PRESS START");
+            ppu_on_all();
+
+            byte state = STATE_TITLE;
+
+            while (true)
+            {
+                ppu_wait_nmi();
+                pad_poll(0);
+
+                switch (state)
+                {
+                    case STATE_TITLE:
+                        pal_col(0, 0x02);
+                        if ((pad_trigger(0) & PAD.START) != 0)
+                            state = STATE_PLAYING;
+                        break;
+                    case STATE_PLAYING:
+                        pal_col(0, 0x0A);
+                        if ((pad_trigger(0) & PAD.START) != 0)
+                            state = STATE_OVER;
+                        break;
+                    case STATE_OVER:
+                        pal_col(0, 0x06);
+                        if ((pad_trigger(0) & PAD.START) != 0)
+                            state = STATE_TITLE;
+                        break;
+                    default:
+                        state = STATE_TITLE;
+                        break;
+                }
+            }
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        // CMP/BNE+JMP trampolines for cases 1 and 2 (case 0 uses BEQ-style).
+        Assert.Contains("C901D0034C", hex);
+        Assert.Contains("C902D0034C", hex);
+        Assert.Contains("D0034C", hex);
+        // Distinctive per-case pal_col immediates prove each arm's body is emitted:
+        //   DarkBlue = 0x02, DarkGreen = 0x0A, DarkRed = 0x06
+        // LDA #imm = A9 imm.
+        Assert.Contains("A902", hex);
+        Assert.Contains("A90A", hex);
+        Assert.Contains("A906", hex);
+    }
+
+    [Fact]
     public void DoWhileLoop()
     {
         // do { } while (cond) — body executes at least once
