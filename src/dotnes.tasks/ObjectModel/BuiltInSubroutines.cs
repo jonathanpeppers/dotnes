@@ -2737,13 +2737,12 @@ internal static class BuiltInSubroutines
     {
         var block = new Block(nameof(NESLib.multi_vram_buffer_horz));
         // ldy UPDPTR : sta VRAM_BUF+1, y
-        // txa : clc : adc #$40 (NT_UPD_HORZ) : sta VRAM_BUF, y
+        // txa : ora #$40 (NT_UPD_HORZ) : sta VRAM_BUF, y
         // jmp multi_vram_buffer_common
         block.Emit(LDY_zpg(UPDPTR))
              .Emit(STA_abs_Y(0x0101))
              .Emit(TXA())
-             .Emit(CLC())
-             .Emit(ADC(0x40))
+             .Emit(ORA(0x40))
              .Emit(STA_abs_Y(0x0100))
              .Emit(JMP("multi_vram_buffer_common"));
         return block;
@@ -2758,13 +2757,12 @@ internal static class BuiltInSubroutines
     {
         var block = new Block(nameof(NESLib.multi_vram_buffer_vert));
         // ldy UPDPTR : sta VRAM_BUF+1, y
-        // txa : clc : adc #$80 (NT_UPD_VERT) : sta VRAM_BUF, y
+        // txa : ora #$80 (NT_UPD_VERT) : sta VRAM_BUF, y
         // jmp multi_vram_buffer_common
         block.Emit(LDY_zpg(UPDPTR))
              .Emit(STA_abs_Y(0x0101))
              .Emit(TXA())
-             .Emit(CLC())
-             .Emit(ADC(0x80))
+             .Emit(ORA(0x80))
              .Emit(STA_abs_Y(0x0100))
              .Emit(JMP("multi_vram_buffer_common"));
         return block;

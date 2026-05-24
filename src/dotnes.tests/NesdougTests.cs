@@ -30,8 +30,7 @@ public class NesdougTests : RoslynTests
 
         var sub = program.GetBlock("set_scroll_x");
         Assert.NotNull(sub);
-        // 10 instructions: sta, txa, and, sta, lda, and, ora, sta, rts (+ asl absent)
-        // 9 instructions total
+        // 9 instructions: sta, txa, and, sta, lda, and, ora, sta, rts (no asl_a in this variant)
         Assert.Equal(9, sub.Count);
     }
 
