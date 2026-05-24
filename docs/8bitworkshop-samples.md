@@ -234,7 +234,6 @@
   - `#pragma data-name` — CC65 segment directives
   - Large `const byte[]` tileset data (768 bytes) loaded via `vram_write`
   - `strlen()` standard library function
-  - `sizeof()` operator
   - User-defined function (`put_str`)
 
 ### irq.c

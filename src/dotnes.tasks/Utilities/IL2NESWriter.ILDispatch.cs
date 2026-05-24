@@ -249,18 +249,22 @@ partial class IL2NESWriter
                 }
                 break;
             case ILOpCode.Ldloc_0:
+                if (TryHandleLdlocForLdlen(0)) break;
                 WriteLdloc(Locals[0]);
                 _lastLoadedLocalIndex = 0;
                 break;
             case ILOpCode.Ldloc_1:
+                if (TryHandleLdlocForLdlen(1)) break;
                 WriteLdloc(Locals[1]);
                 _lastLoadedLocalIndex = 1;
                 break;
             case ILOpCode.Ldloc_2:
+                if (TryHandleLdlocForLdlen(2)) break;
                 WriteLdloc(Locals[2]);
                 _lastLoadedLocalIndex = 2;
                 break;
             case ILOpCode.Ldloc_3:
+                if (TryHandleLdlocForLdlen(3)) break;
                 WriteLdloc(Locals[3]);
                 _lastLoadedLocalIndex = 3;
                 break;
@@ -1153,6 +1157,41 @@ partial class IL2NESWriter
                     _accState = AccumulatorState.Empty;
                 }
                 break;
+            case ILOpCode.Ldlen:
+                {
+                    int? count = null;
+                    if (_pendingLdlenSource is { } src)
+                    {
+                        _pendingLdlenSource = null;
+                        count = src.Value;
+                    }
+                    else if (previous == ILOpCode.Newarr && Stack.Count > 0
+                        && Instructions is { } instrs && Index >= 2
+                        && instrs[Index - 2].OpCode is ILOpCode.Ldc_i4 or ILOpCode.Ldc_i4_s
+                            or ILOpCode.Ldc_i4_0 or ILOpCode.Ldc_i4_1 or ILOpCode.Ldc_i4_2
+                            or ILOpCode.Ldc_i4_3 or ILOpCode.Ldc_i4_4 or ILOpCode.Ldc_i4_5
+                            or ILOpCode.Ldc_i4_6 or ILOpCode.Ldc_i4_7 or ILOpCode.Ldc_i4_8)
+                    {
+                        // Roslyn (Release) elides the local for `new T[N].Length`, emitting
+                        // ldc; newarr; ldlen directly. The element count is on the Stack
+                        // (the Newarr handler left it there after removing the size LDA).
+                        // For byte[] the count IS the length; for ushort[] it was already
+                        // popped during newarr processing, so this path only handles byte[].
+                        // Gated on the previous-previous instruction being a constant ldc to
+                        // avoid folding runtime sizes (e.g., `new byte[n].Length`) to a stale
+                        // stack value.
+                        count = Stack.Pop();
+                    }
+                    if (count is null)
+                    {
+                        throw new TranspileException(GetUnsupportedOpcodeMessage(instruction.OpCode), MethodName);
+                    }
+                    if (count.Value <= byte.MaxValue)
+                        WriteLdc((byte)count.Value);
+                    else
+                        WriteLdc((ushort)count.Value);
+                }
+                break;
             default:
                 throw new TranspileException(GetUnsupportedOpcodeMessage(instruction.OpCode), MethodName);
         }
@@ -1357,6 +1396,7 @@ partial class IL2NESWriter
                 }
                 break;
             case ILOpCode.Ldloc_s:
+                if (TryHandleLdlocForLdlen(operand)) break;
                 WriteLdloc(Locals[operand]);
                 _lastLoadedLocalIndex = operand;
                 break;
@@ -3397,6 +3437,12 @@ partial class IL2NESWriter
                     Emit(Opcode.LDA, AddressMode.ZeroPage, (byte)NESConstants.OAM_OFF);
                     _runtimeValueInA = true;
                     _immediateInA = null;
+                }
+                else if (NextIsLdlen() && _staticFieldArrayLocals.TryGetValue(operand, out var arrLocalForLen))
+                {
+                    // ldsfld arr; ldlen → fold to LDA #count at the Ldlen handler.
+                    // Suppress the LDA for ldsfld since the value would be discarded.
+                    _pendingLdlenSource = arrLocalForLen;
                 }
                 else
                 {

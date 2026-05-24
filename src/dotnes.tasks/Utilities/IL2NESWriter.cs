@@ -75,6 +75,9 @@ partial class IL2NESWriter : NESWriter
     ushort? _pendingUshortArrayBase; // Pre-allocated base address from newarr for ushort arrays
     readonly Dictionary<string, Local> _staticFieldArrayLocals = new(); // Maps static field names to their array Local entries
     ImmutableArray<byte>? _pendingUShortArray;
+    // Set by Ldsfld/Ldloc when the next IL opcode is Ldlen and the array's element count is known
+    // at transpile time. Ldlen consumes this to emit an immediate LDA #count.
+    Local? _pendingLdlenSource;
 
     /// <summary>
     /// Static field arrays pre-allocated by the Transpiler from .cctor scanning.
