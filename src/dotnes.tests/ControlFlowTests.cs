@@ -512,4 +512,111 @@ public class ControlFlowTests : RoslynTests
             "User method with early 'return 1' must JMP to epilogue. " +
             "Without it, A is overwritten by 'return 0' and the function always returns 0.");
     }
+
+    [Fact]
+    public void GotoBreakOutOfNestedLoops()
+    {
+        // Issue: support `goto label;` to break out of nested loops (From Below pattern).
+        // Roslyn lowers this to Br/Br_s IL targeting the label offset.
+        var bytes = GetProgramBytes(
+            """
+            const byte BOARD_W = 10;
+            const byte BOARD_H = 4;
+
+            byte[] board = new byte[BOARD_W * BOARD_H];
+            board[(byte)(2 * BOARD_W + 3)] = 1;
+            byte foundX = 0, foundY = 0;
+            bool found = false;
+
+            for (byte y = 0; y < BOARD_H; y++)
+            {
+                for (byte x = 0; x < BOARD_W; x++)
+                {
+                    if (board[(byte)(y * BOARD_W + x)] != 0)
+                    {
+                        foundX = x;
+                        foundY = y;
+                        found = true;
+                        goto done;
+                    }
+                }
+            }
+            done:
+
+            if (found)
+                pal_col(0, foundX);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"GotoBreakOutOfNestedLoops hex: {hex}");
+        // BOARD_W=10 (0x0A) and BOARD_H=4 are loop bounds → CMP #$0A, CMP #$04
+        Assert.Contains("C90A", hex);
+        Assert.Contains("C904", hex);
+        // The body must execute (LDA #$01 stores 'true' to found)
+        Assert.Contains("A901", hex);
+    }
+
+    [Fact]
+    public void GotoCaseFallthrough()
+    {
+        // Issue: support `goto case X;` as explicit switch fall-through.
+        // Roslyn lowers this to a Br targeting the case label.
+        var bytes = GetProgramBytes(
+            """
+            byte state = 0;
+            switch (state)
+            {
+                case 0:
+                    pal_col(0, 0x0F);
+                    goto case 1;
+                case 1:
+                    pal_col(1, 0x30);
+                    break;
+                default:
+                    break;
+            }
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"GotoCaseFallthrough hex: {hex}");
+        // Both pal_col bodies should be present: LDA #$0F (#15) and LDA #$30 (#48)
+        Assert.Contains("A90F", hex);
+        Assert.Contains("A930", hex);
+        // JMP (4C) for the goto case 1 fall-through
+        Assert.Contains("4C", hex);
+    }
+
+    [Fact]
+    public void GotoBackwardLabel()
+    {
+        // Issue: `top: ... goto top;` should not produce a stack underflow.
+        // Roslyn emits Br_s with a negative offset; the transpiler must resolve to
+        // the label declared earlier in the method.
+        var bytes = GetProgramBytes(
+            """
+            byte i = 0;
+            top:
+            i++;
+            if (i < 5)
+                goto top;
+            pal_col(0, i);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"GotoBackwardLabel hex: {hex}");
+        // CMP #$05 for the i < 5 test
+        Assert.Contains("C905", hex);
+    }
 }
