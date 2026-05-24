@@ -1164,6 +1164,158 @@ public class ArraysTests : RoslynTests
     }
 
     [Fact]
+    public void Array2D_ConstantIndex()
+    {
+        // Rectangular byte[2,3] literal indexed with two constants.
+        // Expected: a[1,2] resolves to ROM byte at offset 1*3 + 2 = 5, value 6.
+        var bytes = GetProgramBytes(
+            """
+            byte[,] a = new byte[2, 3]
+            {
+                { 1, 2, 3 },
+                { 4, 5, 6 }
+            };
+            byte v = a[1, 2];
+            pal_col(0, v);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"Array2D_ConstantIndex hex: {hex}");
+
+        // Constant index 5 → LDX #$05 (A2 05); LDA bytearray_0,X (BD lo hi)
+        Assert.Contains("A205BD", hex);
+    }
+
+    [Fact]
+    public void Array2D_PowerOfTwoStride_RuntimeIndex()
+    {
+        // 4-wide rectangular array — stride of 4 is a power of two, so the
+        // index should be computed with ASL A, ASL A (no multiplication).
+        var bytes = GetProgramBytes(
+            """
+            byte[,] def_L = new byte[4, 4]
+            {
+                { 0, 1, 2, 6 },
+                { 1, 5, 9, 8 },
+                { 0, 4, 5, 6 },
+                { 1, 0, 4, 8 },
+            };
+            byte rotation = 2;
+            byte slot     = 1;
+            byte offset   = def_L[rotation, slot];
+            pal_col(0, offset);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"Array2D_PowerOfTwoStride_RuntimeIndex hex: {hex}");
+
+        // Expected sequence somewhere in the body:
+        //   LDA rotation_addr   (AD lo hi)
+        //   ASL A               (0A)
+        //   ASL A               (0A)
+        //   CLC                 (18)
+        //   ADC slot_addr       (6D lo hi)
+        //   TAX                 (AA)
+        //   LDA bytearray_0,X   (BD lo hi)
+        // The two ASLs must immediately precede CLC + ADC + TAX + LDA,X — no STA TEMP
+        // (the marker of the non-power-of-two fallback path) or JSR in between.
+        Assert.Contains("0A0A18", hex);
+        Assert.Contains("AABD", hex);
+        int aslIdx = hex.IndexOf("0A0A18", StringComparison.Ordinal);
+        int loadIdx = hex.IndexOf("AABD", aslIdx, StringComparison.Ordinal);
+        Assert.True(loadIdx > aslIdx, "TAX;LDA abs,X must follow the ASL chain.");
+        // The ASL chain → ADC → TAX must be contiguous: ASL+ASL+CLC+ADC(3) = 6 bytes (12 hex chars).
+        Assert.Equal(aslIdx + 12, loadIdx);
+        // The shift-and-add fallback (`STA TEMP` = `8517`) must not appear in this region.
+        Assert.DoesNotContain("8517", hex.Substring(aslIdx, loadIdx - aslIdx));
+    }
+
+    [Fact]
+    public void Array2D_NonPowerOfTwoStride_RuntimeIndex()
+    {
+        // Stride of 3 is NOT a power of two. The fallback shift-and-add path
+        // (STA TEMP; ASL; CLC; ADC TEMP) should be emitted instead of ASLs.
+        var bytes = GetProgramBytes(
+            """
+            byte[,] tbl = new byte[2, 3]
+            {
+                { 10, 20, 30 },
+                { 40, 50, 60 }
+            };
+            byte r = 1;
+            byte c = 2;
+            byte v = tbl[r, c];
+            pal_col(0, v);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"Array2D_NonPowerOfTwoStride_RuntimeIndex hex: {hex}");
+
+        // For stride 3 (binary 11), the multiplier emits:
+        //   STA $17 (TEMP)     ; 85 17
+        //   ASL A              ; 0A
+        //   CLC                ; 18
+        //   ADC $17 (TEMP)     ; 65 17
+        Assert.Contains("85170A1865", hex);
+        // The result is then combined with the column and used to index the array.
+        Assert.Contains("AABD", hex); // TAX; LDA abs,X
+    }
+
+    [Fact]
+    public void Array2D_Stride1_RuntimeIndex()
+    {
+        // Edge case: stride=1 hits the early-return in EmitMultiplyAByStride
+        // (no ASL chain, no shift-and-add). The lowering should be just
+        //   LDA row_addr; CLC; ADC col_addr; TAX; LDA bytearray_0,X
+        // with NO ASL (0A) and NO STA TEMP (8517) between LDA-row and TAX.
+        // Use 6 rows so Roslyn emits the data via <PrivateImplementationDetails>
+        // + InitializeArray rather than as explicit Set calls (which are not
+        // supported because the ROM-backed table is read-only).
+        var bytes = GetProgramBytes(
+            """
+            byte[,] tbl = new byte[6, 1]
+            {
+                { 10 },
+                { 20 },
+                { 30 },
+                { 40 },
+                { 50 },
+                { 60 },
+            };
+            byte r = 3;
+            byte c = 0;
+            byte v = tbl[r, c];
+            pal_col(0, v);
+            ppu_on_all();
+            while (true) ;
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        _logger.WriteLine($"Array2D_Stride1_RuntimeIndex hex: {hex}");
+
+        // The TAX;LDA abs,X marker must still appear (runtime index path).
+        Assert.Contains("AABD", hex);
+        // For stride=1, EmitMultiplyAByStride returns immediately, so neither the
+        // ASL-chain (`0A0A`) nor the shift-and-add (`85170A1865`) signature appears.
+        Assert.DoesNotContain("0A0A", hex);     // No two-ASL chain.
+        Assert.DoesNotContain("85170A1865", hex); // No shift-and-add fallback.
+    }
+
+    [Fact]
     public void StelemI1_PreservesIlOrder_OrThenAdd()
     {
         // Regression for stelem.i1 emitting arithmetic in fixed order.
@@ -1264,3 +1416,4 @@ public class ArraysTests : RoslynTests
             $"Expected ORA #$F0 to appear before AND #$F1 (IL order). oraIdx={oraIdx}, andIdx={andIdx}");
     }
 }
+
