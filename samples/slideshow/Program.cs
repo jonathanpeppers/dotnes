@@ -3,6 +3,7 @@ Demonstrates CNROM (mapper 3) CHR bank switching.
 Sets the iNES header to mapper 3 with 2 CHR banks (16 KB total).
 Pressing A on the controller toggles between CHR bank 0 and CHR bank 1,
 showing different tile graphics on screen.
+Also uses fade_in() to smoothly fade in the title screen.
 */
 
 // set palette colors
@@ -35,8 +36,10 @@ while (i < 56)
     i = (byte)(i + 1);
 }
 
-// enable PPU rendering
+// start dark, then fade in once rendering is enabled
+pal_bright(0);
 ppu_on_all();
+fade_in(4);
 
 byte bank = 0;
 

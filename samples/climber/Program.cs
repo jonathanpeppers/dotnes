@@ -83,6 +83,8 @@ static void setup_graphics()
     bank_bg(0);
     vrambuf_clear();
     set_vram_update(updbuf);
+    // Start dark; the main flow calls fade_in() once the world is drawn.
+    pal_bright(0);
     ppu_on_all();
 }
 
@@ -366,6 +368,7 @@ while (true)
     }
 
     ppu_on_all();
+    fade_in(4);
 
     // --- Main game loop ---
     while (actor_floor[0] != MAX_FLOORS - 1)
@@ -1089,4 +1092,5 @@ while (true)
     // Player reached top floor
     music_stop();
     delay(100);
+    fade_out(4);
 }

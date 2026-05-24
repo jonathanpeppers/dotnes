@@ -1,13 +1,14 @@
 /*
 Scoreboard - press A to increment BCD score.
-Demonstrates vrambuf_put(), pad_trigger(), ppu_wait_nmi().
+Demonstrates vrambuf_put(), pad_trigger(), ppu_wait_nmi(), and fade_in().
 Based on: https://github.com/jonathanpeppers/dotnes/issues/121
 */
 
 // palette: dark blue background, white text
 pal_col(0, DarkBlue);
 pal_col(1, White);
-pal_bright(4);
+// start dark; fade in once rendering is enabled below
+pal_bright(0);
 
 bank_spr(0);
 bank_bg(0);
@@ -22,6 +23,7 @@ vram_write("PRESS A TO ADD SCORE");
 vrambuf_clear();
 set_vram_update(updbuf);
 ppu_on_all();
+fade_in(4);
 
 // Track digits as tile indices directly (0x30='0' .. 0x39='9')
 // to avoid local+constant arithmetic which the transpiler constant-folds
