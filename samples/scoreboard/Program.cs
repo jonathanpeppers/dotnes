@@ -1,6 +1,6 @@
 /*
 Scoreboard - press A to increment BCD score.
-Demonstrates vrambuf_put(), pad_trigger(), ppu_wait_nmi(), and fade_in().
+Demonstrates vrambuf_put(), pad_trigger(), ppu_wait_nmi(), and fade_in(4).
 Based on: https://github.com/jonathanpeppers/dotnes/issues/121
 */
 

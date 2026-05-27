@@ -83,7 +83,7 @@ static void setup_graphics()
     bank_bg(0);
     vrambuf_clear();
     set_vram_update(updbuf);
-    // Start dark; the main flow calls fade_in() once the world is drawn.
+    // Start dark; the main flow calls fade_in(4) once the world is drawn.
     pal_bright(0);
     ppu_on_all();
 }
