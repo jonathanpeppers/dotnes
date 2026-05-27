@@ -86,7 +86,7 @@ partial class Transpiler
                 if (inlineArrayLength is int nWrap && fieldSize >= 1)
                 {
                     fieldSize = nWrap * fieldSize;
-                    _bufferFieldSizes[fieldName] = fieldSize;
+                    _bufferFieldSizes[(typeName, fieldName)] = fieldSize;
                 }
                 else
                 {
@@ -94,7 +94,7 @@ partial class Transpiler
                     if (bufLen is int n)
                     {
                         fieldSize = n;
-                        _bufferFieldSizes[fieldName] = n;
+                        _bufferFieldSizes[(typeName, fieldName)] = n;
                     }
                 }
                 fields.Add((fieldName, fieldSize));
@@ -108,12 +108,13 @@ partial class Transpiler
     }
 
     /// <summary>
-    /// Maps struct field names that hold a fixed-size buffer (C# <c>fixed byte buf[N]</c>)
+    /// Maps <c>(structType, fieldName)</c> pairs that hold a fixed-size buffer (C# <c>fixed byte buf[N]</c>)
     /// or an <c>[InlineArray(N)]</c> element field to their total byte count. Used by
-    /// <see cref="IL2NESWriter"/> to lower buffer-indexed reads/writes.
+    /// <see cref="IL2NESWriter"/> to lower buffer-indexed reads/writes. Keyed by struct type
+    /// so that distinct structs with same-named buffer fields don't collide.
     /// </summary>
-    internal Dictionary<string, int> BufferFieldSizes => _bufferFieldSizes;
-    readonly Dictionary<string, int> _bufferFieldSizes = new(StringComparer.Ordinal);
+    internal Dictionary<(string StructType, string FieldName), int> BufferFieldSizes => _bufferFieldSizes;
+    readonly Dictionary<(string StructType, string FieldName), int> _bufferFieldSizes = new();
 
     /// <summary>
     /// If the field is a fixed-size buffer (C# <c>fixed byte buf[N]</c>) or its value type
@@ -133,10 +134,25 @@ partial class Transpiler
                 var blob = _reader.GetBlobReader(attr.Value);
                 blob.ReadUInt16(); // prolog 0x0001
                 // First arg: SerString — the type-name as a length-prefixed UTF-8 string.
-                blob.ReadSerializedString();
+                string? elementTypeName = blob.ReadSerializedString();
                 int length = blob.ReadInt32();
+                // We only support `fixed byte buf[N]`. Other element types (e.g.
+                // `fixed ushort buf[N]`) would need the length multiplied by element size and
+                // additional addressing work in IL2NESWriter — reject explicitly to avoid
+                // silently producing wrong layouts. The serialized type name is
+                // assembly-qualified, e.g. "System.Byte, System.Private.CoreLib, ...".
+                bool isByte = elementTypeName != null &&
+                    (elementTypeName == "System.Byte" ||
+                     elementTypeName.StartsWith("System.Byte,", StringComparison.Ordinal));
+                if (!isByte)
+                {
+                    throw new TranspileException(
+                        $"Fixed buffer element type '{elementTypeName}' is not supported. " +
+                        "Only `fixed byte` buffers are currently supported.");
+                }
                 return length;
             }
+            catch (TranspileException) { throw; }
             catch { /* fall through */ }
         }
 

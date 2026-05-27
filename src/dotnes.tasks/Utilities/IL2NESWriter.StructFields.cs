@@ -412,15 +412,15 @@ partial class IL2NESWriter
             throw new TranspileException(
                 $"ldflda '{fieldName}' without a preceding ldloca.s is not supported.", MethodName);
 
-        if (!BufferFieldSizes.TryGetValue(fieldName, out int bufferSize) || bufferSize <= 0)
-            throw new TranspileException(
-                $"ldflda '{fieldName}' is only supported for fixed-size buffer or [InlineArray] fields. " +
-                "Passing a struct field by reference is not yet supported.", MethodName);
-
         int localIndex = _pendingStructLocal.Value;
         _pendingStructLocal = null;
 
         string structType = ResolveStructType(localIndex, fieldName);
+        if (!BufferFieldSizes.TryGetValue((structType, fieldName), out int bufferSize) || bufferSize <= 0)
+            throw new TranspileException(
+                $"ldflda '{structType}.{fieldName}' is only supported for fixed-size buffer or [InlineArray] fields. " +
+                "Passing a struct field by reference is not yet supported.", MethodName);
+
         ushort baseAddr = GetOrAllocateStructLocal(localIndex, structType);
         int fieldOffset = GetFieldOffset(structType, fieldName);
         ushort bufferBase = (ushort)(baseAddr + fieldOffset);
@@ -441,10 +441,10 @@ partial class IL2NESWriter
         int? indexArgIdx = null;
         string? indexStaticField = null;
         int? storeValueConst = null;
-        bool storeValueRuntime = false; // true when value comes from arg/local/etc., not yet supported here
         bool isStore = false;
         bool isLoad = false;
         bool spanPath = false;
+        int addCount = 0;
         int endIndex = -1;
 
         for (int j = Index + 1; j < Instructions.Length; j++)
@@ -480,7 +480,14 @@ partial class IL2NESWriter
                     if (spanPath) continue;
                     throw new TranspileException($"Unexpected ldloca while lowering buffer field '{fieldName}' access.", MethodName);
                 case ILOpCode.Add:
-                    // Fixed-buffer pointer + index. Just ignore — we already track base separately.
+                    // Fixed-buffer lowering produces exactly one `add` for `base + index`.
+                    // Inline-array helpers produce zero. Anything beyond one would imply
+                    // additional arithmetic in the index expression (e.g. `buf[i + 1]`),
+                    // which we don't yet recognise — reject explicitly to avoid silent
+                    // miscompilation.
+                    if (++addCount > 1)
+                        throw new TranspileException(
+                            $"Arithmetic in the index expression for buffer field '{fieldName}' is not supported.", MethodName);
                     continue;
                 case ILOpCode.Ldc_i4_0: indexConst ??= 0; break;
                 case ILOpCode.Ldc_i4_1: indexConst ??= 1; break;
@@ -554,7 +561,7 @@ partial class IL2NESWriter
         //   InlineArray runtime:   ldc.i4 N call InlineArrayAsSpan stloc.M
         //                          ldloca.s M <index> call get_Item <value?> stind.i1/ldind.u1
         indexConst = null; indexLocalIdx = null; indexArgIdx = null; indexStaticField = null;
-        storeValueConst = null; storeValueRuntime = false;
+        storeValueConst = null;
 
         // For the Span path, the index is between ldloca.s (temp span local) and the call to get_Item.
         // For other paths, the index is before "add"/call.
@@ -578,18 +585,24 @@ partial class IL2NESWriter
             // Scan range for index: [ldlocaIdx+1, callItemIdx)
             ScanForIndexAndValue(ldlocaIdx + 1, indexBoundaryEnd, isStore ? valueScanStart : -1,
                 out indexConst, out indexLocalIdx, out indexArgIdx, out indexStaticField,
-                out storeValueConst, out storeValueRuntime);
+                out storeValueConst);
         }
         else
         {
             indexBoundaryEnd = endIndex; // up to but not including stind/ldind
             ScanForIndexAndValue(Index + 1, indexBoundaryEnd, isStore ? valueScanStart : -1,
                 out indexConst, out indexLocalIdx, out indexArgIdx, out indexStaticField,
-                out storeValueConst, out storeValueRuntime);
+                out storeValueConst);
         }
 
         // Determine addressing
         bool runtimeIdx = indexLocalIdx != null || indexArgIdx != null || indexStaticField != null;
+
+        // Validate that we actually recognised the index expression. Falling back to "index 0"
+        // would silently miscompile if the IL pattern changes or an unsupported form appears.
+        if (!runtimeIdx && indexConst is null)
+            throw new TranspileException(
+                $"Could not determine index expression for buffer field '{fieldName}'.", MethodName);
 
         // Pop IL evaluation stack entries that the consumed instructions pushed.
         // For store: the stind.i1 pops <address> and <value>. The address was conceptually
@@ -601,20 +614,20 @@ partial class IL2NESWriter
         if (isStore)
         {
             // Value to store
-            if (storeValueConst is null && !storeValueRuntime)
+            if (storeValueConst is null)
                 throw new TranspileException(
                     $"Could not determine value being stored to buffer field '{fieldName}'.", MethodName);
 
             if (!runtimeIdx)
             {
-                ushort target = (ushort)(bufferBase + (indexConst ?? 0));
-                Emit(Opcode.LDA, AddressMode.Immediate, (byte)(storeValueConst!.Value & 0xFF));
+                ushort target = (ushort)(bufferBase + indexConst!.Value);
+                Emit(Opcode.LDA, AddressMode.Immediate, (byte)(storeValueConst.Value & 0xFF));
                 Emit(Opcode.STA, AddressMode.Absolute, target);
             }
             else
             {
                 EmitLoadIndexIntoX(indexLocalIdx, indexArgIdx, indexStaticField);
-                Emit(Opcode.LDA, AddressMode.Immediate, (byte)(storeValueConst!.Value & 0xFF));
+                Emit(Opcode.LDA, AddressMode.Immediate, (byte)(storeValueConst.Value & 0xFF));
                 Emit(Opcode.STA, AddressMode.AbsoluteX, bufferBase);
             }
             _runtimeValueInA = false;
@@ -624,7 +637,7 @@ partial class IL2NESWriter
         {
             if (!runtimeIdx)
             {
-                ushort target = (ushort)(bufferBase + (indexConst ?? 0));
+                ushort target = (ushort)(bufferBase + indexConst!.Value);
                 Emit(Opcode.LDA, AddressMode.Absolute, target);
             }
             else
@@ -645,10 +658,10 @@ partial class IL2NESWriter
 
     void ScanForIndexAndValue(int scanStart, int scanEndExclusive, int valueScanFrom,
         out int? indexConst, out int? indexLocalIdx, out int? indexArgIdx, out string? indexStaticField,
-        out int? storeValueConst, out bool storeValueRuntime)
+        out int? storeValueConst)
     {
         indexConst = null; indexLocalIdx = null; indexArgIdx = null; indexStaticField = null;
-        storeValueConst = null; storeValueRuntime = false;
+        storeValueConst = null;
 
         if (Instructions is null) return;
 
@@ -701,7 +714,7 @@ partial class IL2NESWriter
                     _ => (int?)null,
                 };
                 if (c != null) { storeValueConst = c; return; }
-                // Allow runtime expressions for the value in the future
+                // Skip pass-through conversions that don't change the value
                 if (op is ILOpCode.Conv_u1 or ILOpCode.Conv_i1 or ILOpCode.Nop) continue;
                 // Stop search at first non-skip instruction
                 break;
@@ -718,24 +731,12 @@ partial class IL2NESWriter
         }
         if (argIdx != null)
         {
-            // Arguments for the main entry method are not addressable; only user methods
-            // have ldarg with usable addressing. For main, ldarg is rare. We support it for
-            // user methods by reading from the cc65 stack/parameter slot if available — but
-            // the existing transpiler models args as zero-page slots in some scenarios.
-            // For now, emit a clear error to surface unsupported edge cases early.
-            // The simplest supported case is a user method with one byte arg → arg is in A
-            // on entry, but by the time we reach this code A has been clobbered. So we use
-            // the parameter zero-page slot if the writer tracks one.
-            // Fall back to LDX from the same zero-page address allocated for arg-0.
-            // In dotnes, user-method args are pushed by the caller and accessed by the callee
-            // via specific patterns. For now, try local-address lookup; if missing, throw.
-            if (Locals.TryGetValue(argIdx.Value, out var argLocal) && argLocal.Address is int aa)
-            {
-                Emit(Opcode.LDX, AddressMode.Absolute, (ushort)aa);
-                return;
-            }
+            // Method arguments are loaded from the cc65 stack by `WriteLdarg` and are not
+            // tracked in `Locals`. Falling back to `Locals[argIdx]` here would silently
+            // load an unrelated same-numbered local. Until proper argument-to-X loading is
+            // implemented (mirroring WriteLdarg into X), reject this case explicitly.
             throw new TranspileException(
-                $"Runtime index from arg {argIdx} into a buffer field is not supported at this position.", MethodName);
+                $"Runtime index from method argument {argIdx} into a buffer field is not yet supported.", MethodName);
         }
         if (staticField != null && Variables.StaticFieldAddresses.TryGetValue(staticField, out var sfa))
         {

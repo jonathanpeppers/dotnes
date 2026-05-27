@@ -405,10 +405,12 @@ partial class IL2NESWriter : NESWriter
     public Dictionary<string, List<(string Name, int Size)>> StructLayouts { get => Variables.StructLayouts; init => Variables.StructLayouts = value; }
 
     /// <summary>
-    /// Maps struct field names that hold a fixed-size buffer (C# <c>fixed byte buf[N]</c>)
-    /// or an <c>[InlineArray(N)]</c> element field to their total byte count.
+    /// Maps <c>(structType, fieldName)</c> pairs that hold a fixed-size buffer
+    /// (C# <c>fixed byte buf[N]</c>) or an <c>[InlineArray(N)]</c> element field to their
+    /// total byte count. Keyed by struct type so distinct structs with same-named buffer
+    /// fields don't collide.
     /// </summary>
-    public Dictionary<string, int> BufferFieldSizes { get; init; } = new(StringComparer.Ordinal);
+    public Dictionary<(string StructType, string FieldName), int> BufferFieldSizes { get; init; } = new();
 
     // ── Pending struct state ─────────────────────────────────────────
     // _pendingStructLocal is set by ldloca.s for simple struct locals.

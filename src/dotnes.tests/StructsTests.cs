@@ -170,13 +170,14 @@ public class StructsTests : RoslynTests
         Assert.NotEmpty(bytes);
 
         var hex = Convert.ToHexString(bytes);
-        // Stores of the four constant values into successive zero-page absolute addresses.
+        // Stores of the four constant values, written to successive absolute RAM addresses
+        // (struct buffer base + 0..3). These are absolute addressing in RAM, not zero-page.
         Assert.Contains("A910", hex); // LDA #$10 (sprite)
         Assert.Contains("A905", hex); // LDA #$05
         Assert.Contains("A906", hex); // LDA #$06
         Assert.Contains("A907", hex); // LDA #$07
         Assert.Contains("A908", hex); // LDA #$08
-        // Absolute store byte (8D = STA abs)
+        // Absolute store byte (8D = STA abs) writing into the struct's allocated RAM (e.g. $0325+).
         Assert.Contains("8D", hex);
         // Absolute load byte (AD = LDA abs) for the read
         Assert.Contains("AD", hex);

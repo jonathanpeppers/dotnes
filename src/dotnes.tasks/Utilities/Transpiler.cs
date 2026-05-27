@@ -407,7 +407,8 @@ partial class Transpiler : IDisposable
                     methodWriter.SkipUntilIndex = null;
                 var instruction = methodWriter.Instructions[i];
 
-                var labelName = $"{methodName}_instruction_{instruction.Offset:X2}";                if (methodWriter.CurrentBlock != null)
+                var labelName = $"{methodName}_instruction_{instruction.Offset:X2}";
+                if (methodWriter.CurrentBlock != null)
                     methodWriter.CurrentBlock.SetNextLabel(labelName);
                 methodWriter.RecordBlockCount(instruction.Offset);
 
