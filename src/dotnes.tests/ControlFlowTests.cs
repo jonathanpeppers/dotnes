@@ -558,6 +558,11 @@ public class ControlFlowTests : RoslynTests
         Assert.Contains("C904", hex);
         // The body must execute (LDA #$01 stores 'true' to found)
         Assert.Contains("A901", hex);
+        // The `goto done;` must lower to at least one JMP (0x4C) beyond the
+        // final `while (true) ;` infinite-loop JMP. Without this, the test
+        // would pass even if the branch target was wrong or omitted.
+        Assert.True(CountOpcode(bytes, 0x4C) >= 2,
+            $"Expected at least 2 JMP (0x4C) opcodes (goto done + while(true)), got {CountOpcode(bytes, 0x4C)}");
     }
 
     [Fact]
@@ -590,8 +595,11 @@ public class ControlFlowTests : RoslynTests
         // Both pal_col bodies should be present: LDA #$0F (#15) and LDA #$30 (#48)
         Assert.Contains("A90F", hex);
         Assert.Contains("A930", hex);
-        // JMP (4C) for the goto case 1 fall-through
-        Assert.Contains("4C", hex);
+        // The `goto case 1;` must lower to an additional JMP (0x4C) beyond the
+        // final `while (true) ;` JMP — otherwise this assertion would be
+        // trivially satisfied by the infinite-loop JMP alone.
+        Assert.True(CountOpcode(bytes, 0x4C) >= 2,
+            $"Expected at least 2 JMP (0x4C) opcodes (goto case + while(true)), got {CountOpcode(bytes, 0x4C)}");
     }
 
     [Fact]
@@ -618,5 +626,43 @@ public class ControlFlowTests : RoslynTests
         _logger.WriteLine($"GotoBackwardLabel hex: {hex}");
         // CMP #$05 for the i < 5 test
         Assert.Contains("C905", hex);
+        // The backward `goto top;` fuses with the `if (i < 5)` into a single
+        // conditional branch with a negative relative offset (e.g. BCC $F6).
+        // Verify a backward conditional branch is actually present — without
+        // it, the loop would fall through and never repeat.
+        Assert.True(HasBackwardBranch(bytes),
+            $"Expected a backward conditional branch (negative relative offset) for `goto top;`. Hex: {hex}");
+    }
+
+    /// <summary>
+    /// Counts occurrences of a single-byte opcode at byte boundaries in the ROM.
+    /// Avoids false positives from hex-string substring matches that straddle
+    /// two adjacent bytes (e.g. "4C" appearing inside "X4 CY").
+    /// </summary>
+    static int CountOpcode(byte[] bytes, byte opcode)
+    {
+        int count = 0;
+        for (int i = 0; i < bytes.Length; i++)
+            if (bytes[i] == opcode) count++;
+        return count;
+    }
+
+    /// <summary>
+    /// Returns true if the ROM contains any 6502 conditional branch opcode
+    /// (BPL/BMI/BVC/BVS/BCC/BCS/BNE/BEQ) followed by a negative relative
+    /// offset (high bit set). Used to verify backward branches without
+    /// hard-coding a specific offset.
+    /// </summary>
+    static bool HasBackwardBranch(byte[] bytes)
+    {
+        for (int i = 0; i < bytes.Length - 1; i++)
+        {
+            byte op = bytes[i];
+            bool isBranch = op == 0x10 || op == 0x30 || op == 0x50 || op == 0x70
+                         || op == 0x90 || op == 0xB0 || op == 0xD0 || op == 0xF0;
+            if (isBranch && (bytes[i + 1] & 0x80) != 0)
+                return true;
+        }
+        return false;
     }
 }
