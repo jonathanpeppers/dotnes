@@ -282,6 +282,7 @@ partial class Transpiler : IDisposable
             ExternMethodNames = externNames,
             WordLocals = DetectWordLocals(instructions, reflectionCache),
             StructLayouts = structLayouts,
+            BufferFieldSizes = _bufferFieldSizes,
             StaticFieldAddresses = staticFields,
             WordStaticFields = wordStaticFields,
             LocalCount = staticFieldBytes,
@@ -299,6 +300,8 @@ partial class Transpiler : IDisposable
         for (int i = 0; i < writer.Instructions.Length; i++)
         {
             writer.Index = i;
+            if (writer.ConsumeSkip(i))
+                continue;
             var instruction = writer.Instructions[i];
             
             // Record IL instruction labels for branch targets
@@ -369,6 +372,7 @@ partial class Transpiler : IDisposable
                 MethodName = methodName,
                 WordLocals = DetectWordLocals(methodIL, reflectionCache),
                 StructLayouts = structLayouts,
+                BufferFieldSizes = _bufferFieldSizes,
                 ByteArrayLabelStartIndex = writer.ByteArrays.Count,
                 StringLabelStartIndex = writer.StringTable.Count,
                 LocalCount = methodFrameOffsets[methodName],
@@ -395,9 +399,12 @@ partial class Transpiler : IDisposable
             for (int i = 0; i < methodWriter.Instructions.Length; i++)
             {
                 methodWriter.Index = i;
+                if (methodWriter.ConsumeSkip(i))
+                    continue;
                 var instruction = methodWriter.Instructions[i];
 
-                var labelName = $"{methodName}_instruction_{instruction.Offset:X2}";                if (methodWriter.CurrentBlock != null)
+                var labelName = $"{methodName}_instruction_{instruction.Offset:X2}";
+                if (methodWriter.CurrentBlock != null)
                     methodWriter.CurrentBlock.SetNextLabel(labelName);
                 methodWriter.RecordBlockCount(instruction.Offset);
 

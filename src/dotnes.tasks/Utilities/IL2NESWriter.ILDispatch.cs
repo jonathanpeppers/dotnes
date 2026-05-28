@@ -1771,6 +1771,12 @@ partial class IL2NESWriter
                 // native integer sizeof values and will always push 1 here.
                 WriteLdc(1);
                 break;
+            case ILOpCode.Initobj:
+                // initobj on a struct local: pop the ldloca.s address. The transpiler
+                // does not zero-initialise the underlying zero-page bytes because user
+                // code is expected to write all fields before reading them.
+                _pendingStructLocal = null;
+                break;
             default:
                 throw new TranspileException(GetUnsupportedOpcodeMessage(instruction.OpCode), MethodName);
         }
@@ -3454,6 +3460,16 @@ partial class IL2NESWriter
                 break;
             case ILOpCode.Ldfld:
                 HandleLdfld(operand);
+                break;
+            case ILOpCode.Ldflda:
+                HandleLdflda(operand);
+                break;
+            case ILOpCode.Initobj:
+                // initobj on a struct local: pop the ldloca.s address. The transpiler
+                // does not zero-initialise the underlying zero-page bytes because user
+                // code is expected to write all fields before reading them (matching the
+                // existing behaviour for `Point p;` without an explicit `= default`).
+                _pendingStructLocal = null;
                 break;
             case ILOpCode.Newobj:
                 if (operand == "Array2D.Byte.Ctor")

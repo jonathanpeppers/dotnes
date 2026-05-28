@@ -140,4 +140,143 @@ public class StructsTests : RoslynTests
         Assert.Contains("A903", hex); // LDA #3
         Assert.Contains("A928", hex); // LDA #40
     }
+
+    [Fact]
+    public void FixedBufferConstantIndex()
+    {
+        // Option A: C# fixed buffer with constant indexes.
+        var bytes = GetProgramBytes(
+            """
+            unsafe {
+                Cluster cur;
+                cur.sprite = 0x10;
+                cur.id = 1;
+                cur.layout[0] = 5;
+                cur.layout[1] = 6;
+                cur.layout[2] = 7;
+                cur.layout[3] = 8;
+                pal_col(0, cur.layout[2]);
+            }
+            ppu_on_all();
+            while (true) ;
+
+            unsafe struct Cluster {
+                public byte sprite;
+                public byte id;
+                public fixed byte layout[4];
+            }
+            """, additionalAssemblyFiles: null, allowUnsafe: true);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        // Cluster: sprite@$0325, id@$0326, layout[0..3]@$0327..$032A
+        // Each store is LDA #imm (A9 imm) + STA absolute (8D lo hi).
+        Assert.Contains("A9108D2503", hex); // sprite = 0x10 -> $0325
+        Assert.Contains("A9018D2603", hex); // id = 1 -> $0326
+        Assert.Contains("A9058D2703", hex); // layout[0] = 5 -> $0327
+        Assert.Contains("A9068D2803", hex); // layout[1] = 6 -> $0328
+        Assert.Contains("A9078D2903", hex); // layout[2] = 7 -> $0329
+        Assert.Contains("A9088D2A03", hex); // layout[3] = 8 -> $032A
+        // Read of cur.layout[2] for the pal_col call: LDA $0329
+        Assert.Contains("AD2903", hex);
+    }
+
+    [Fact]
+    public void FixedBufferRuntimeIndex()
+    {
+        // Option A: runtime byte index uses LDX + AbsoluteX addressing.
+        var bytes = GetProgramBytes(
+            """
+            byte i = 2;
+            unsafe {
+                Cluster cur;
+                cur.layout[i] = 99;
+            }
+            ppu_on_all();
+            while (true) ;
+
+            unsafe struct Cluster {
+                public byte sprite;
+                public byte id;
+                public fixed byte layout[4];
+            }
+            """, additionalAssemblyFiles: null, allowUnsafe: true);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+        var hex = Convert.ToHexString(bytes);
+        // Layout: i@$0325, cur.sprite@$0326, cur.id@$0327, cur.layout[0..3]@$0328..$032B
+        Assert.Contains("A9028D2503", hex); // i = 2 -> $0325
+        Assert.Contains("AE2503", hex);     // LDX $0325 (load index i)
+        Assert.Contains("A9639D2803", hex); // LDA #99; STA $0328,X (layout[i] = 99)
+    }
+
+    [Fact]
+    public void InlineArrayConstantIndex()
+    {
+        // Option B: [InlineArray(N)] field, constant indexes.
+        var bytes = GetProgramBytes(
+            """
+            Cluster cur = default;
+            cur.sprite = 0x10;
+            cur.id = 1;
+            cur.layout[0] = 5;
+            cur.layout[1] = 6;
+            cur.layout[2] = 7;
+            cur.layout[3] = 8;
+            pal_col(0, cur.layout[2]);
+            ppu_on_all();
+            while (true) ;
+
+            [System.Runtime.CompilerServices.InlineArray(4)]
+            struct Bytes4 { private byte _element0; }
+
+            struct Cluster {
+                public byte sprite;
+                public byte id;
+                public Bytes4 layout;
+            }
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+        var hex = Convert.ToHexString(bytes);
+        // Same layout as the fixed-buffer variant: sprite@$0325, id@$0326, layout[0..3]@$0327..$032A
+        Assert.Contains("A9108D2503", hex); // sprite = 0x10
+        Assert.Contains("A9018D2603", hex); // id = 1
+        Assert.Contains("A9058D2703", hex); // layout[0] = 5
+        Assert.Contains("A9068D2803", hex); // layout[1] = 6
+        Assert.Contains("A9078D2903", hex); // layout[2] = 7
+        Assert.Contains("A9088D2A03", hex); // layout[3] = 8
+        Assert.Contains("AD2903", hex);     // LDA $0329 (read layout[2])
+    }
+
+    [Fact]
+    public void InlineArrayRuntimeIndex()
+    {
+        // Option B: runtime index into [InlineArray].
+        var bytes = GetProgramBytes(
+            """
+            byte i = 1;
+            Cluster cur = default;
+            cur.layout[i] = 99;
+            ppu_on_all();
+            while (true) ;
+
+            [System.Runtime.CompilerServices.InlineArray(4)]
+            struct Bytes4 { private byte _element0; }
+
+            struct Cluster {
+                public byte sprite;
+                public byte id;
+                public Bytes4 layout;
+            }
+            """);
+        Assert.NotNull(bytes);
+        Assert.NotEmpty(bytes);
+        var hex = Convert.ToHexString(bytes);
+        // Layout: i@$0325, cur.sprite@$0326, cur.id@$0327, cur.layout[0..3]@$0328..$032B
+        Assert.Contains("A9018D2503", hex); // i = 1 -> $0325
+        Assert.Contains("AE2503", hex);     // LDX $0325 (load index i)
+        Assert.Contains("A9639D2803", hex); // LDA #99; STA $0328,X (layout[i] = 99)
+    }
 }

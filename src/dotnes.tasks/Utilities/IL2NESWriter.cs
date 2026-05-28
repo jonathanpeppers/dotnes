@@ -407,6 +407,14 @@ partial class IL2NESWriter : NESWriter
     /// </summary>
     public Dictionary<string, List<(string Name, int Size)>> StructLayouts { get => Variables.StructLayouts; init => Variables.StructLayouts = value; }
 
+    /// <summary>
+    /// Maps <c>(structType, fieldName)</c> pairs that hold a fixed-size buffer
+    /// (C# <c>fixed byte buf[N]</c>) or an <c>[InlineArray(N)]</c> element field to their
+    /// total byte count. Keyed by struct type so distinct structs with same-named buffer
+    /// fields don't collide.
+    /// </summary>
+    public Dictionary<(string StructType, string FieldName), int> BufferFieldSizes { get; init; } = new();
+
     // ── Pending struct state ─────────────────────────────────────────
     // _pendingStructLocal is set by ldloca.s for simple struct locals.
     // _pendingStructElement consolidates the former _pendingStructElementType,
@@ -418,6 +426,29 @@ partial class IL2NESWriter : NESWriter
     /// Used by stfld/ldfld to know which struct local to access.
     /// </summary>
     int? _pendingStructLocal;
+
+    /// <summary>
+    /// When set, the dispatch loop should skip all IL instructions whose <see cref="Index"/>
+    /// is &lt; this value. Used by handlers that consume a multi-instruction IL pattern
+    /// (e.g. buffer-field access via <c>ldflda</c> + <c>stind.i1</c>) in a single step.
+    /// </summary>
+    internal int? SkipUntilIndex { get; set; }
+
+    /// <summary>
+    /// Returns true if the current dispatch iteration at <paramref name="instructionIndex"/>
+    /// should be skipped due to a multi-instruction handler having claimed it. Side effect:
+    /// clears <see cref="SkipUntilIndex"/> once the skip window is past. Centralises the
+    /// skip-loop logic so the main and user-method dispatch loops can't drift apart.
+    /// </summary>
+    internal bool ConsumeSkip(int instructionIndex)
+    {
+        if (SkipUntilIndex is not int sk)
+            return false;
+        if (instructionIndex < sk)
+            return true;
+        SkipUntilIndex = null;
+        return false;
+    }
 
     /// <summary>
     /// The IL offset where execution should resume after the current finally handler.

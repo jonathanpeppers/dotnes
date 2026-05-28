@@ -27,6 +27,14 @@ partial class Transpiler
 
             var methodName = _reader.GetString(methodDef.Name);
 
+            // Skip compiler-emitted helper methods in <PrivateImplementationDetails> and similar
+            // synthesized types (e.g. C# 12 inline-array helpers: InlineArrayAsSpan,
+            // InlineArrayElementRef, InlineArrayFirstElementRef).
+            var declType = _reader.GetTypeDefinition(methodDef.GetDeclaringType());
+            var declTypeName = _reader.GetString(declType.Name);
+            if (declTypeName.StartsWith("<"))
+                continue;
+
             if (methodName == "Main" || methodName == "<Main>$")
             {
                 // Parse exception regions (try/finally) before yielding instructions
@@ -208,6 +216,8 @@ partial class Transpiler
                             var methodSpec = _reader.GetMethodSpecification((MethodSpecificationHandle)entity);
                             if (methodSpec.Method.Kind == HandleKind.MemberReference)
                                 stringValue = GetQualifiedMemberName(_reader.GetMemberReference((MemberReferenceHandle)methodSpec.Method));
+                            else if (methodSpec.Method.Kind == HandleKind.MethodDefinition)
+                                stringValue = _reader.GetString(_reader.GetMethodDefinition((MethodDefinitionHandle)methodSpec.Method).Name);
                             break;
                         case HandleKind.FieldDefinition:
                             var field = _reader.GetFieldDefinition((FieldDefinitionHandle)entity);

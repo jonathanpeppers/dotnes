@@ -72,12 +72,31 @@ partial class Transpiler
             if (typeName.StartsWith("<") || typeName.Contains("__"))
                 continue;
 
+            // Detect [InlineArray(N)] on the struct itself
+            int? inlineArrayLength = GetInlineArrayLength(type);
+
             var fields = new List<(string Name, int Size)>();
             foreach (var f in type.GetFields())
             {
                 var field = _reader.GetFieldDefinition(f);
                 var fieldName = _reader.GetString(field.Name);
                 int fieldSize = DecodeFieldSize(field);
+                // If the containing type is itself an [InlineArray(N)], its single instance
+                // field represents N copies of the element type.
+                if (inlineArrayLength is int nWrap && fieldSize >= 1)
+                {
+                    fieldSize = nWrap * fieldSize;
+                    _bufferFieldSizes[(typeName, fieldName)] = fieldSize;
+                }
+                else
+                {
+                    int? bufLen = TryGetBufferFieldSize(field);
+                    if (bufLen is int n)
+                    {
+                        fieldSize = n;
+                        _bufferFieldSizes[(typeName, fieldName)] = n;
+                    }
+                }
                 fields.Add((fieldName, fieldSize));
             }
 
@@ -86,6 +105,140 @@ partial class Transpiler
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Maps <c>(structType, fieldName)</c> pairs that hold a fixed-size buffer (C# <c>fixed byte buf[N]</c>)
+    /// or an <c>[InlineArray(N)]</c> element field to their total byte count. Used by
+    /// <see cref="IL2NESWriter"/> to lower buffer-indexed reads/writes. Keyed by struct type
+    /// so that distinct structs with same-named buffer fields don't collide.
+    /// </summary>
+    internal Dictionary<(string StructType, string FieldName), int> BufferFieldSizes => _bufferFieldSizes;
+    readonly Dictionary<(string StructType, string FieldName), int> _bufferFieldSizes = new();
+
+    /// <summary>
+    /// If the field is a fixed-size buffer (C# <c>fixed byte buf[N]</c>) or its value type
+    /// is decorated with <c>[InlineArray(N)]</c>, returns the total byte size. Otherwise null.
+    /// </summary>
+    int? TryGetBufferFieldSize(FieldDefinition field)
+    {
+        // 1. Check for [FixedBuffer(typeof(T), N)] on the field itself.
+        foreach (var attrHandle in field.GetCustomAttributes())
+        {
+            var attr = _reader.GetCustomAttribute(attrHandle);
+            if (GetAttributeTypeName(attr) != "FixedBufferAttribute")
+                continue;
+            // Constructor signature: (Type, Int32). Value blob: 01 00 [type-name encoded] [int32 length] 00 00
+            try
+            {
+                var blob = _reader.GetBlobReader(attr.Value);
+                blob.ReadUInt16(); // prolog 0x0001
+                // First arg: SerString — the type-name as a length-prefixed UTF-8 string.
+                string? elementTypeName = blob.ReadSerializedString();
+                int length = blob.ReadInt32();
+                // We only support `fixed byte buf[N]`. Other element types (e.g.
+                // `fixed ushort buf[N]`) would need the length multiplied by element size and
+                // additional addressing work in IL2NESWriter — reject explicitly to avoid
+                // silently producing wrong layouts. The serialized type name is
+                // assembly-qualified, e.g. "System.Byte, System.Private.CoreLib, ...".
+                bool isByte = elementTypeName != null &&
+                    (elementTypeName == "System.Byte" ||
+                     elementTypeName.StartsWith("System.Byte,", StringComparison.Ordinal));
+                if (!isByte)
+                {
+                    throw new TranspileException(
+                        $"Fixed buffer element type '{elementTypeName}' is not supported. " +
+                        "Only `fixed byte` buffers are currently supported.");
+                }
+                return length;
+            }
+            catch (TranspileException) { throw; }
+            catch (BadImageFormatException) { /* malformed attribute blob; ignore */ }
+        }
+
+        // 2. Inspect the field's signature: if it is a VALUETYPE referencing a TypeDef
+        // that has [InlineArray(N)] applied, or that has explicit ClassLayout (fixed buffer
+        // helper struct), treat as a buffer.
+        var sig = _reader.GetBlobReader(field.Signature);
+        sig.ReadByte(); // calling convention (0x06)
+        byte et = sig.ReadByte();
+        if (et != 0x11) // ELEMENT_TYPE_VALUETYPE
+            return null;
+
+        int token = sig.ReadCompressedInteger();
+        int tableIndex = token & 0x3;
+        int rowId = token >> 2;
+        if (tableIndex != 0 /* TypeDef */)
+            return null;
+        var typeDefHandle = MetadataTokens.TypeDefinitionHandle(rowId);
+        var valueTypeDef = _reader.GetTypeDefinition(typeDefHandle);
+
+        // 2a. [InlineArray(N)] on the type.
+        int? inlineLen = GetInlineArrayLength(valueTypeDef);
+        if (inlineLen is int n && n > 0)
+        {
+            // Element size is the size of the type's single instance field
+            int elementSize = 1;
+            foreach (var ef in valueTypeDef.GetFields())
+            {
+                elementSize = DecodeFieldSize(_reader.GetFieldDefinition(ef));
+                break;
+            }
+            if (elementSize < 1) elementSize = 1;
+            return n * elementSize;
+        }
+
+        // 2b. Compiler-generated fixed-buffer helper struct (name pattern <name>e__FixedBuffer)
+        // has explicit ClassLayout.Size set to the buffer's total byte count.
+        var layout = valueTypeDef.GetLayout();
+        if (!layout.IsDefault && layout.Size > 0)
+            return layout.Size;
+        return null;
+    }
+
+    /// <summary>
+    /// Returns the length argument of an <c>[InlineArray(N)]</c> attribute on the type,
+    /// or null if not present.
+    /// </summary>
+    int? GetInlineArrayLength(TypeDefinition typeDef)
+    {
+        foreach (var attrHandle in typeDef.GetCustomAttributes())
+        {
+            var attr = _reader.GetCustomAttribute(attrHandle);
+            if (GetAttributeTypeName(attr) != "InlineArrayAttribute")
+                continue;
+            try
+            {
+                var blob = _reader.GetBlobReader(attr.Value);
+                blob.ReadUInt16(); // prolog 0x0001
+                int length = blob.ReadInt32();
+                return length;
+            }
+            catch (BadImageFormatException) { /* malformed attribute blob; ignore */ }
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Returns the simple name of an attribute's type (e.g. "InlineArrayAttribute").
+    /// </summary>
+    string GetAttributeTypeName(CustomAttribute attr)
+    {
+        switch (attr.Constructor.Kind)
+        {
+            case HandleKind.MemberReference:
+                var memberRef = _reader.GetMemberReference((MemberReferenceHandle)attr.Constructor);
+                if (memberRef.Parent.Kind == HandleKind.TypeReference)
+                    return _reader.GetString(_reader.GetTypeReference((TypeReferenceHandle)memberRef.Parent).Name);
+                if (memberRef.Parent.Kind == HandleKind.TypeDefinition)
+                    return _reader.GetString(_reader.GetTypeDefinition((TypeDefinitionHandle)memberRef.Parent).Name);
+                break;
+            case HandleKind.MethodDefinition:
+                var methodDef = _reader.GetMethodDefinition((MethodDefinitionHandle)attr.Constructor);
+                var declaringType = _reader.GetTypeDefinition(methodDef.GetDeclaringType());
+                return _reader.GetString(declaringType.Name);
+        }
+        return string.Empty;
     }
 
     /// <summary>
