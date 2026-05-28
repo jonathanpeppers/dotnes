@@ -432,6 +432,22 @@ partial class IL2NESWriter : NESWriter
     internal int? SkipUntilIndex { get; set; }
 
     /// <summary>
+    /// Returns true if the current dispatch iteration at <paramref name="instructionIndex"/>
+    /// should be skipped due to a multi-instruction handler having claimed it. Side effect:
+    /// clears <see cref="SkipUntilIndex"/> once the skip window is past. Centralises the
+    /// skip-loop logic so the main and user-method dispatch loops can't drift apart.
+    /// </summary>
+    internal bool ConsumeSkip(int instructionIndex)
+    {
+        if (SkipUntilIndex is not int sk)
+            return false;
+        if (instructionIndex < sk)
+            return true;
+        SkipUntilIndex = null;
+        return false;
+    }
+
+    /// <summary>
     /// The IL offset where execution should resume after the current finally handler.
     /// Set by Leave/Leave_s, consumed by Endfinally.
     /// </summary>

@@ -153,7 +153,7 @@ partial class Transpiler
                 return length;
             }
             catch (TranspileException) { throw; }
-            catch { /* fall through */ }
+            catch (BadImageFormatException) { /* malformed attribute blob; ignore */ }
         }
 
         // 2. Inspect the field's signature: if it is a VALUETYPE referencing a TypeDef
@@ -214,7 +214,7 @@ partial class Transpiler
                 int length = blob.ReadInt32();
                 return length;
             }
-            catch { /* fall through */ }
+            catch (BadImageFormatException) { /* malformed attribute blob; ignore */ }
         }
         return null;
     }

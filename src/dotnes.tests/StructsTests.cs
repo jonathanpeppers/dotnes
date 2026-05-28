@@ -170,17 +170,16 @@ public class StructsTests : RoslynTests
         Assert.NotEmpty(bytes);
 
         var hex = Convert.ToHexString(bytes);
-        // Stores of the four constant values, written to successive absolute RAM addresses
-        // (struct buffer base + 0..3). These are absolute addressing in RAM, not zero-page.
-        Assert.Contains("A910", hex); // LDA #$10 (sprite)
-        Assert.Contains("A905", hex); // LDA #$05
-        Assert.Contains("A906", hex); // LDA #$06
-        Assert.Contains("A907", hex); // LDA #$07
-        Assert.Contains("A908", hex); // LDA #$08
-        // Absolute store byte (8D = STA abs) writing into the struct's allocated RAM (e.g. $0325+).
-        Assert.Contains("8D", hex);
-        // Absolute load byte (AD = LDA abs) for the read
-        Assert.Contains("AD", hex);
+        // Cluster: sprite@$0325, id@$0326, layout[0..3]@$0327..$032A
+        // Each store is LDA #imm (A9 imm) + STA absolute (8D lo hi).
+        Assert.Contains("A9108D2503", hex); // sprite = 0x10 -> $0325
+        Assert.Contains("A9018D2603", hex); // id = 1 -> $0326
+        Assert.Contains("A9058D2703", hex); // layout[0] = 5 -> $0327
+        Assert.Contains("A9068D2803", hex); // layout[1] = 6 -> $0328
+        Assert.Contains("A9078D2903", hex); // layout[2] = 7 -> $0329
+        Assert.Contains("A9088D2A03", hex); // layout[3] = 8 -> $032A
+        // Read of cur.layout[2] for the pal_col call: LDA $0329
+        Assert.Contains("AD2903", hex);
     }
 
     [Fact]
@@ -206,11 +205,10 @@ public class StructsTests : RoslynTests
         Assert.NotNull(bytes);
         Assert.NotEmpty(bytes);
         var hex = Convert.ToHexString(bytes);
-        Assert.Contains("A963", hex); // LDA #$63 (99)
-        // STA absolute,X (9D) for AbsoluteX store
-        Assert.Contains("9D", hex);
-        // LDX absolute (AE) to load the runtime index
-        Assert.Contains("AE", hex);
+        // Layout: i@$0325, cur.sprite@$0326, cur.id@$0327, cur.layout[0..3]@$0328..$032B
+        Assert.Contains("A9028D2503", hex); // i = 2 -> $0325
+        Assert.Contains("AE2503", hex);     // LDX $0325 (load index i)
+        Assert.Contains("A9639D2803", hex); // LDA #99; STA $0328,X (layout[i] = 99)
     }
 
     [Fact]
@@ -242,13 +240,14 @@ public class StructsTests : RoslynTests
         Assert.NotNull(bytes);
         Assert.NotEmpty(bytes);
         var hex = Convert.ToHexString(bytes);
-        Assert.Contains("A910", hex);
-        Assert.Contains("A905", hex);
-        Assert.Contains("A906", hex);
-        Assert.Contains("A907", hex);
-        Assert.Contains("A908", hex);
-        Assert.Contains("8D", hex);
-        Assert.Contains("AD", hex);
+        // Same layout as the fixed-buffer variant: sprite@$0325, id@$0326, layout[0..3]@$0327..$032A
+        Assert.Contains("A9108D2503", hex); // sprite = 0x10
+        Assert.Contains("A9018D2603", hex); // id = 1
+        Assert.Contains("A9058D2703", hex); // layout[0] = 5
+        Assert.Contains("A9068D2803", hex); // layout[1] = 6
+        Assert.Contains("A9078D2903", hex); // layout[2] = 7
+        Assert.Contains("A9088D2A03", hex); // layout[3] = 8
+        Assert.Contains("AD2903", hex);     // LDA $0329 (read layout[2])
     }
 
     [Fact]
@@ -275,8 +274,9 @@ public class StructsTests : RoslynTests
         Assert.NotNull(bytes);
         Assert.NotEmpty(bytes);
         var hex = Convert.ToHexString(bytes);
-        Assert.Contains("A963", hex); // LDA #$63 (99)
-        Assert.Contains("9D", hex);   // STA abs,X
-        Assert.Contains("AE", hex);   // LDX abs (runtime index)
+        // Layout: i@$0325, cur.sprite@$0326, cur.id@$0327, cur.layout[0..3]@$0328..$032B
+        Assert.Contains("A9018D2503", hex); // i = 1 -> $0325
+        Assert.Contains("AE2503", hex);     // LDX $0325 (load index i)
+        Assert.Contains("A9639D2803", hex); // LDA #99; STA $0328,X (layout[i] = 99)
     }
 }

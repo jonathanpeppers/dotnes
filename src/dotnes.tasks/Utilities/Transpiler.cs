@@ -300,10 +300,8 @@ partial class Transpiler : IDisposable
         for (int i = 0; i < writer.Instructions.Length; i++)
         {
             writer.Index = i;
-            if (writer.SkipUntilIndex is int sk && i < sk)
+            if (writer.ConsumeSkip(i))
                 continue;
-            if (writer.SkipUntilIndex is int sk2 && i >= sk2)
-                writer.SkipUntilIndex = null;
             var instruction = writer.Instructions[i];
             
             // Record IL instruction labels for branch targets
@@ -401,10 +399,8 @@ partial class Transpiler : IDisposable
             for (int i = 0; i < methodWriter.Instructions.Length; i++)
             {
                 methodWriter.Index = i;
-                if (methodWriter.SkipUntilIndex is int sk && i < sk)
+                if (methodWriter.ConsumeSkip(i))
                     continue;
-                if (methodWriter.SkipUntilIndex is int sk2 && i >= sk2)
-                    methodWriter.SkipUntilIndex = null;
                 var instruction = methodWriter.Instructions[i];
 
                 var labelName = $"{methodName}_instruction_{instruction.Offset:X2}";

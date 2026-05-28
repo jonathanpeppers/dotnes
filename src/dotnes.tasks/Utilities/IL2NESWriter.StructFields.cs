@@ -401,6 +401,7 @@ partial class IL2NESWriter
     /// the matching <c>stind.i1</c> or <c>ldind.u1</c> and emits a single LDA/STA
     /// (Absolute or AbsoluteX) at <c>base+offset+index</c>.
     /// Supported indices: constant, ldarg, ldloc, ldsfld.
+    /// Supported store values: constant, ldloc, ldsfld.
     /// </summary>
     void HandleLdflda(string fieldName)
     {
@@ -428,23 +429,17 @@ partial class IL2NESWriter
         if (Instructions is null)
             throw new InvalidOperationException("HandleLdflda requires Instructions to be set");
 
-        // Walk forward and classify each instruction until we reach stind.i1 / ldind.u1.
-        // Recognize:
-        //   - second ldflda (FixedElementField) — ignore (fixed buffer)
-        //   - call to InlineArrayElementRef / InlineArrayFirstElementRef — ignore (inline array)
-        //   - call to InlineArrayAsSpan + stloc + ldloca.s + ... + call get_Item — Span path
-        //   - ldc.i4.* / ldarg.* / ldloc.* / ldsfld — index expression
-        //   - add — pointer + index (fixed buffer); ignore
-        //   - ldc.i4.* immediately before stind.i1 — the VALUE being stored
-        int? indexConst = null;
-        int? indexLocalIdx = null;
-        int? indexArgIdx = null;
-        string? indexStaticField = null;
-        int? storeValueConst = null;
+        // First pass: locate boundary opcodes (add / inline-array call / span call) and the
+        // terminal stind.i1 / ldind.u1. This classifies which lowering pattern we're in and
+        // where the index vs value live in the IL stream.
+        int? addIdx = null;             // `add` for fixed-buffer (base + index)
+        int? inlineCallIdx = null;      // InlineArrayElementRef / InlineArrayFirstElementRef
+        bool inlineArrayHasIndex = false; // false = FirstElementRef (no explicit index)
+        int? spanLdlocaIdx = null;      // ldloca.s for the Span<byte> temp local
+        int? spanGetItemIdx = null;     // call Span<>.get_Item
+        bool spanPath = false;
         bool isStore = false;
         bool isLoad = false;
-        bool spanPath = false;
-        int addCount = 0;
         int endIndex = -1;
 
         for (int j = Index + 1; j < Instructions.Length; j++)
@@ -458,16 +453,14 @@ partial class IL2NESWriter
                 case ILOpCode.Call:
                 {
                     string? mname = Instructions[j].String;
-                    if (mname is "InlineArrayElementRef" or "InlineArrayFirstElementRef")
-                        continue;
+                    if (mname is "InlineArrayElementRef")
+                    { inlineCallIdx = j; inlineArrayHasIndex = true; continue; }
+                    if (mname is "InlineArrayFirstElementRef")
+                    { inlineCallIdx = j; inlineArrayHasIndex = false; continue; }
                     if (mname is "InlineArrayAsSpan")
-                    {
-                        spanPath = true;
-                        continue;
-                    }
+                    { spanPath = true; continue; }
                     if (mname is "get_Item" && spanPath)
-                        continue;
-                    // Any other call inside this sequence is unexpected
+                    { spanGetItemIdx = j; continue; }
                     throw new TranspileException(
                         $"Unexpected call '{mname}' while lowering buffer field '{fieldName}' access.", MethodName);
                 }
@@ -477,71 +470,30 @@ partial class IL2NESWriter
                     if (spanPath) continue;
                     throw new TranspileException($"Unexpected stloc while lowering buffer field '{fieldName}' access.", MethodName);
                 case ILOpCode.Ldloca_s: case ILOpCode.Ldloca:
-                    if (spanPath) continue;
+                    if (spanPath) { spanLdlocaIdx = j; continue; }
                     throw new TranspileException($"Unexpected ldloca while lowering buffer field '{fieldName}' access.", MethodName);
                 case ILOpCode.Add:
                     // Fixed-buffer lowering produces exactly one `add` for `base + index`.
-                    // Inline-array helpers produce zero. Anything beyond one would imply
-                    // additional arithmetic in the index expression (e.g. `buf[i + 1]`),
-                    // which we don't yet recognise — reject explicitly to avoid silent
-                    // miscompilation.
-                    if (++addCount > 1)
+                    // Anything beyond one would imply additional arithmetic in the index
+                    // expression (e.g. `buf[i + 1]`), which we don't yet recognise — reject
+                    // explicitly to avoid silent miscompilation.
+                    if (addIdx != null)
                         throw new TranspileException(
                             $"Arithmetic in the index expression for buffer field '{fieldName}' is not supported.", MethodName);
-                    continue;
-                case ILOpCode.Ldc_i4_0: indexConst ??= 0; break;
-                case ILOpCode.Ldc_i4_1: indexConst ??= 1; break;
-                case ILOpCode.Ldc_i4_2: indexConst ??= 2; break;
-                case ILOpCode.Ldc_i4_3: indexConst ??= 3; break;
-                case ILOpCode.Ldc_i4_4: indexConst ??= 4; break;
-                case ILOpCode.Ldc_i4_5: indexConst ??= 5; break;
-                case ILOpCode.Ldc_i4_6: indexConst ??= 6; break;
-                case ILOpCode.Ldc_i4_7: indexConst ??= 7; break;
-                case ILOpCode.Ldc_i4_8: indexConst ??= 8; break;
-                case ILOpCode.Ldc_i4_s:
-                case ILOpCode.Ldc_i4:
-                    indexConst ??= Instructions[j].Integer ?? 0;
-                    break;
-                case ILOpCode.Ldarg_0: indexArgIdx ??= 0; break;
-                case ILOpCode.Ldarg_1: indexArgIdx ??= 1; break;
-                case ILOpCode.Ldarg_2: indexArgIdx ??= 2; break;
-                case ILOpCode.Ldarg_3: indexArgIdx ??= 3; break;
-                case ILOpCode.Ldarg_s: case ILOpCode.Ldarg:
-                    indexArgIdx ??= Instructions[j].Integer ?? 0;
-                    break;
-                case ILOpCode.Ldloc_0: indexLocalIdx ??= 0; break;
-                case ILOpCode.Ldloc_1: indexLocalIdx ??= 1; break;
-                case ILOpCode.Ldloc_2: indexLocalIdx ??= 2; break;
-                case ILOpCode.Ldloc_3: indexLocalIdx ??= 3; break;
-                case ILOpCode.Ldloc_s: case ILOpCode.Ldloc:
-                    indexLocalIdx ??= Instructions[j].Integer ?? 0;
-                    break;
-                case ILOpCode.Ldsfld:
-                    indexStaticField ??= Instructions[j].String;
-                    break;
-                case ILOpCode.Conv_u: case ILOpCode.Conv_i: case ILOpCode.Conv_u1:
-                case ILOpCode.Conv_i1: case ILOpCode.Conv_u2: case ILOpCode.Conv_i2:
-                case ILOpCode.Conv_u4: case ILOpCode.Conv_i4:
-                case ILOpCode.Nop:
+                    addIdx = j;
                     continue;
                 case ILOpCode.Stind_i1:
-                    // The instruction immediately before stind.i1 is the VALUE.
                     isStore = true;
                     endIndex = j;
-                    // The value should already be the most recently seen ldc.i4 (and we
-                    // tracked it in indexConst because of the ??=). But we need to disambiguate:
-                    // for stind.i1 with constant index, the order is:
-                    //   <index> [add] <value> stind.i1
-                    // So the LAST ldc.i4 seen is actually the value, and the FIRST ldc.i4 was
-                    // the index. We re-scan to extract these correctly.
                     break;
                 case ILOpCode.Ldind_u1:
                     isLoad = true;
                     endIndex = j;
                     break;
+                // Everything else (ldc, ldarg, ldloc, ldsfld, conv, nop) is value/index data —
+                // we extract it precisely in the second pass below.
                 default:
-                    throw new TranspileException(
-                        $"Unsupported opcode '{op}' while lowering buffer field '{fieldName}' access.", MethodName);
+                    continue;
             }
             if (endIndex >= 0) break;
         }
@@ -550,84 +502,98 @@ partial class IL2NESWriter
             throw new TranspileException(
                 $"Could not find matching stind.i1/ldind.u1 for buffer field '{fieldName}'.", MethodName);
 
-        // Re-scan precisely to separate index from value for the store case.
-        // Pattern shapes we accept:
-        //   Fixed buffer store:    [ldflda inner] <index> [add] <value:ldc> stind.i1
-        //   InlineArray store:     <index> call InlineArrayElementRef  <value:ldc> stind.i1
-        //   InlineArray store 0:   call InlineArrayFirstElementRef     <value:ldc> stind.i1
-        //   Fixed buffer load:     [ldflda inner] <index> [add] ldind.u1
-        //   InlineArray load:      <index> call InlineArrayElementRef  ldind.u1
-        //   InlineArray load 0:    call InlineArrayFirstElementRef     ldind.u1
-        //   InlineArray runtime:   ldc.i4 N call InlineArrayAsSpan stloc.M
-        //                          ldloca.s M <index> call get_Item <value?> stind.i1/ldind.u1
-        indexConst = null; indexLocalIdx = null; indexArgIdx = null; indexStaticField = null;
-        storeValueConst = null;
-
-        // For the Span path, the index is between ldloca.s (temp span local) and the call to get_Item.
-        // For other paths, the index is before "add"/call.
-        int valueScanStart = isStore ? endIndex - 1 : -1;
-        int indexBoundaryEnd; // exclusive index for the index expression scan
+        // Determine the index-expression range and whether an explicit index exists.
+        // Pattern shapes:
+        //   Fixed buffer + index:   [ldflda inner] <index> add <value> stind.i1
+        //   Fixed buffer no index:  [ldflda inner] <value> stind.i1              (implicit 0)
+        //   InlineArray + index:    <index> call InlineArrayElementRef <value> stind.i1
+        //   InlineArray no index:   call InlineArrayFirstElementRef <value> stind.i1  (implicit 0)
+        //   Span path (runtime):    ldc.i4 N call InlineArrayAsSpan stloc M
+        //                           ldloca.s M <index> call get_Item <value?> stind/ldind
+        bool hasExplicitIndex;
+        int indexScanStart = -1, indexScanEnd = -1;
+        int valueScanFrom;
         if (spanPath)
         {
-            // Find the call to get_Item; index is between the previous ldloca.s and that call.
-            int callItemIdx = -1, ldlocaIdx = -1;
-            for (int k = Index + 1; k < endIndex; k++)
-            {
-                if (Instructions[k].OpCode == ILOpCode.Call && Instructions[k].String == "get_Item")
-                { callItemIdx = k; break; }
-                if (Instructions[k].OpCode is ILOpCode.Ldloca_s or ILOpCode.Ldloca)
-                    ldlocaIdx = k;
-            }
-            if (callItemIdx < 0 || ldlocaIdx < 0)
+            if (spanGetItemIdx is null || spanLdlocaIdx is null)
                 throw new TranspileException(
                     $"InlineArray runtime-index pattern for '{fieldName}' was not recognised.", MethodName);
-            indexBoundaryEnd = callItemIdx;
-            // Scan range for index: [ldlocaIdx+1, callItemIdx)
-            ScanForIndexAndValue(ldlocaIdx + 1, indexBoundaryEnd, isStore ? valueScanStart : -1,
-                out indexConst, out indexLocalIdx, out indexArgIdx, out indexStaticField,
-                out storeValueConst);
+            hasExplicitIndex = true;
+            indexScanStart = spanLdlocaIdx.Value + 1;
+            indexScanEnd = spanGetItemIdx.Value;
+            valueScanFrom = endIndex - 1;
+        }
+        else if (inlineCallIdx != null)
+        {
+            hasExplicitIndex = inlineArrayHasIndex;
+            if (hasExplicitIndex)
+            {
+                indexScanStart = Index + 1;
+                indexScanEnd = inlineCallIdx.Value;
+            }
+            valueScanFrom = endIndex - 1;
         }
         else
         {
-            indexBoundaryEnd = endIndex; // up to but not including stind/ldind
-            ScanForIndexAndValue(Index + 1, indexBoundaryEnd, isStore ? valueScanStart : -1,
-                out indexConst, out indexLocalIdx, out indexArgIdx, out indexStaticField,
-                out storeValueConst);
+            // Fixed-buffer path
+            hasExplicitIndex = addIdx != null;
+            if (hasExplicitIndex)
+            {
+                indexScanStart = Index + 1;
+                indexScanEnd = addIdx!.Value;
+            }
+            valueScanFrom = endIndex - 1;
         }
 
-        // Determine addressing
+        // Resolve the index expression.
+        int? indexConst = null;
+        int? indexLocalIdx = null;
+        int? indexArgIdx = null;
+        string? indexStaticField = null;
+        if (hasExplicitIndex)
+        {
+            ScanForIndexExpr(indexScanStart, indexScanEnd,
+                out indexConst, out indexLocalIdx, out indexArgIdx, out indexStaticField);
+            bool foundIdx = indexConst != null || indexLocalIdx != null || indexArgIdx != null || indexStaticField != null;
+            if (!foundIdx)
+                throw new TranspileException(
+                    $"Could not determine index expression for buffer field '{fieldName}'.", MethodName);
+        }
+        else
+        {
+            indexConst = 0;
+        }
+
         bool runtimeIdx = indexLocalIdx != null || indexArgIdx != null || indexStaticField != null;
 
-        // Validate that we actually recognised the index expression. Falling back to "index 0"
-        // would silently miscompile if the IL pattern changes or an unsupported form appears.
-        if (!runtimeIdx && indexConst is null)
-            throw new TranspileException(
-                $"Could not determine index expression for buffer field '{fieldName}'.", MethodName);
-
-        // Pop IL evaluation stack entries that the consumed instructions pushed.
-        // For store: the stind.i1 pops <address> and <value>. The address was conceptually
-        // pushed by the outer ldflda. Our existing dispatch hasn't actually pushed anything
-        // for ldflda (we're handling it right now), and we haven't dispatched any of the
-        // skipped instructions, so we don't need to touch the IL stack — neither the index
-        // nor the value was visibly pushed.
+        // Resolve the value (for stores).
+        int? storeValueConst = null;
+        int? storeValueLocalIdx = null;
+        string? storeValueStaticField = null;
+        if (isStore)
+        {
+            ScanForValueExpr(valueScanFrom,
+                out storeValueConst, out storeValueLocalIdx, out storeValueStaticField);
+            if (storeValueConst is null && storeValueLocalIdx is null && storeValueStaticField is null)
+                throw new TranspileException(
+                    $"Could not determine value being stored to buffer field '{fieldName}'. " +
+                    "Only constants, locals, and static fields are supported as buffer store values; " +
+                    "method arguments and expression results are not yet implemented.", MethodName);
+        }
 
         if (isStore)
         {
-            // Value to store
-            if (storeValueConst is null)
-                throw new TranspileException(
-                    $"Could not determine value being stored to buffer field '{fieldName}'.", MethodName);
-
             if (!runtimeIdx)
             {
                 ushort target = (ushort)(bufferBase + indexConst!.Value);
-                Emit(Opcode.LDA, AddressMode.Immediate, (byte)(storeValueConst.Value & 0xFF));
+                EmitLoadValueIntoA(storeValueConst, storeValueLocalIdx, storeValueStaticField);
                 Emit(Opcode.STA, AddressMode.Absolute, target);
             }
             else
             {
+                // Order matters: load X (index) first, then A (value), so the LDA doesn't clobber X.
                 EmitLoadIndexIntoX(indexLocalIdx, indexArgIdx, indexStaticField);
-                Emit(Opcode.LDA, AddressMode.Immediate, (byte)(storeValueConst.Value & 0xFF));
+                EmitLoadValueIntoA(storeValueConst, storeValueLocalIdx, storeValueStaticField);
                 Emit(Opcode.STA, AddressMode.AbsoluteX, bufferBase);
             }
             _runtimeValueInA = false;
@@ -656,16 +622,16 @@ partial class IL2NESWriter
         previous = isStore ? ILOpCode.Stind_i1 : ILOpCode.Ldind_u1;
     }
 
-    void ScanForIndexAndValue(int scanStart, int scanEndExclusive, int valueScanFrom,
-        out int? indexConst, out int? indexLocalIdx, out int? indexArgIdx, out string? indexStaticField,
-        out int? storeValueConst)
+    /// <summary>
+    /// Scans an IL window for the first instruction that produces an index value
+    /// (constant, local, argument, or static field).
+    /// </summary>
+    void ScanForIndexExpr(int scanStart, int scanEndExclusive,
+        out int? indexConst, out int? indexLocalIdx, out int? indexArgIdx, out string? indexStaticField)
     {
         indexConst = null; indexLocalIdx = null; indexArgIdx = null; indexStaticField = null;
-        storeValueConst = null;
-
         if (Instructions is null) return;
 
-        // Scan for the index: first integer-producing instruction in [scanStart, scanEndExclusive).
         for (int k = scanStart; k < scanEndExclusive; k++)
         {
             var op = Instructions[k].OpCode;
@@ -677,49 +643,88 @@ partial class IL2NESWriter
                 ILOpCode.Ldc_i4 or ILOpCode.Ldc_i4_s => Instructions[k].Integer ?? 0,
                 _ => (int?)null,
             };
-            if (c != null) { indexConst = c; break; }
+            if (c != null) { indexConst = c; return; }
             switch (op)
             {
-                case ILOpCode.Ldarg_0: indexArgIdx = 0; break;
-                case ILOpCode.Ldarg_1: indexArgIdx = 1; break;
-                case ILOpCode.Ldarg_2: indexArgIdx = 2; break;
-                case ILOpCode.Ldarg_3: indexArgIdx = 3; break;
+                case ILOpCode.Ldarg_0: indexArgIdx = 0; return;
+                case ILOpCode.Ldarg_1: indexArgIdx = 1; return;
+                case ILOpCode.Ldarg_2: indexArgIdx = 2; return;
+                case ILOpCode.Ldarg_3: indexArgIdx = 3; return;
                 case ILOpCode.Ldarg_s: case ILOpCode.Ldarg:
-                    indexArgIdx = Instructions[k].Integer ?? 0; break;
-                case ILOpCode.Ldloc_0: indexLocalIdx = 0; break;
-                case ILOpCode.Ldloc_1: indexLocalIdx = 1; break;
-                case ILOpCode.Ldloc_2: indexLocalIdx = 2; break;
-                case ILOpCode.Ldloc_3: indexLocalIdx = 3; break;
+                    indexArgIdx = Instructions[k].Integer ?? 0; return;
+                case ILOpCode.Ldloc_0: indexLocalIdx = 0; return;
+                case ILOpCode.Ldloc_1: indexLocalIdx = 1; return;
+                case ILOpCode.Ldloc_2: indexLocalIdx = 2; return;
+                case ILOpCode.Ldloc_3: indexLocalIdx = 3; return;
                 case ILOpCode.Ldloc_s: case ILOpCode.Ldloc:
-                    indexLocalIdx = Instructions[k].Integer ?? 0; break;
+                    indexLocalIdx = Instructions[k].Integer ?? 0; return;
                 case ILOpCode.Ldsfld:
-                    indexStaticField = Instructions[k].String; break;
-                default: continue;
+                    indexStaticField = Instructions[k].String; return;
             }
-            break;
         }
+    }
 
-        // Scan for the value (last constant immediately before stind.i1).
-        if (valueScanFrom >= 0)
+    /// <summary>
+    /// Scans backwards from <paramref name="valueScanFrom"/> for the value being stored:
+    /// constant, local, or static field. Skips pass-through conversions.
+    /// </summary>
+    void ScanForValueExpr(int valueScanFrom,
+        out int? storeValueConst, out int? storeValueLocalIdx, out string? storeValueStaticField)
+    {
+        storeValueConst = null; storeValueLocalIdx = null; storeValueStaticField = null;
+        if (Instructions is null || valueScanFrom < 0) return;
+
+        for (int k = valueScanFrom; k >= 0; k--)
         {
-            for (int k = valueScanFrom; k > 0; k--)
+            var op = Instructions[k].OpCode;
+            int? c = op switch
             {
-                var op = Instructions[k].OpCode;
-                int? c = op switch
-                {
-                    ILOpCode.Ldc_i4_0 => 0, ILOpCode.Ldc_i4_1 => 1, ILOpCode.Ldc_i4_2 => 2,
-                    ILOpCode.Ldc_i4_3 => 3, ILOpCode.Ldc_i4_4 => 4, ILOpCode.Ldc_i4_5 => 5,
-                    ILOpCode.Ldc_i4_6 => 6, ILOpCode.Ldc_i4_7 => 7, ILOpCode.Ldc_i4_8 => 8,
-                    ILOpCode.Ldc_i4 or ILOpCode.Ldc_i4_s => Instructions[k].Integer ?? 0,
-                    _ => (int?)null,
-                };
-                if (c != null) { storeValueConst = c; return; }
-                // Skip pass-through conversions that don't change the value
-                if (op is ILOpCode.Conv_u1 or ILOpCode.Conv_i1 or ILOpCode.Nop) continue;
-                // Stop search at first non-skip instruction
-                break;
+                ILOpCode.Ldc_i4_0 => 0, ILOpCode.Ldc_i4_1 => 1, ILOpCode.Ldc_i4_2 => 2,
+                ILOpCode.Ldc_i4_3 => 3, ILOpCode.Ldc_i4_4 => 4, ILOpCode.Ldc_i4_5 => 5,
+                ILOpCode.Ldc_i4_6 => 6, ILOpCode.Ldc_i4_7 => 7, ILOpCode.Ldc_i4_8 => 8,
+                ILOpCode.Ldc_i4 or ILOpCode.Ldc_i4_s => Instructions[k].Integer ?? 0,
+                _ => (int?)null,
+            };
+            if (c != null) { storeValueConst = c; return; }
+            switch (op)
+            {
+                case ILOpCode.Ldloc_0: storeValueLocalIdx = 0; return;
+                case ILOpCode.Ldloc_1: storeValueLocalIdx = 1; return;
+                case ILOpCode.Ldloc_2: storeValueLocalIdx = 2; return;
+                case ILOpCode.Ldloc_3: storeValueLocalIdx = 3; return;
+                case ILOpCode.Ldloc_s: case ILOpCode.Ldloc:
+                    storeValueLocalIdx = Instructions[k].Integer ?? 0; return;
+                case ILOpCode.Ldsfld:
+                    storeValueStaticField = Instructions[k].String; return;
+                case ILOpCode.Conv_u1: case ILOpCode.Conv_i1: case ILOpCode.Nop:
+                    continue;
+                default:
+                    return;
             }
         }
+    }
+
+    /// <summary>
+    /// Emits the LDA that loads the value (constant or runtime) into A for a buffer store.
+    /// </summary>
+    void EmitLoadValueIntoA(int? constVal, int? localIdx, string? staticField)
+    {
+        if (constVal != null)
+        {
+            Emit(Opcode.LDA, AddressMode.Immediate, (byte)(constVal.Value & 0xFF));
+            return;
+        }
+        if (localIdx != null && Locals.TryGetValue(localIdx.Value, out var lcl) && lcl.Address is int la)
+        {
+            Emit(Opcode.LDA, AddressMode.Absolute, (ushort)la);
+            return;
+        }
+        if (staticField != null && Variables.StaticFieldAddresses.TryGetValue(staticField, out var sfa))
+        {
+            Emit(Opcode.LDA, AddressMode.Absolute, sfa);
+            return;
+        }
+        throw new TranspileException("Could not resolve buffer store value to an addressable value.", MethodName);
     }
 
     void EmitLoadIndexIntoX(int? localIdx, int? argIdx, string? staticField)
