@@ -13,7 +13,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7
     - name: check for junk files
       shell: bash
       run: |
@@ -90,7 +90,7 @@ jobs:
         # headless Linux even with SDL2 installed (upstream Mesen issue)
     runs-on: ${{ matrix.os }}
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7
       with:
         sparse-checkout: |
           .github/workflows/cache-mesen
