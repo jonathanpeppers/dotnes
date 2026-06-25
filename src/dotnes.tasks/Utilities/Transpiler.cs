@@ -120,6 +120,7 @@ partial class Transpiler : IDisposable
                 {
                     if (segment.Name == "CHARS")
                     {
+                        _logger.WriteLine($"  CHR segment: {segment.Bytes.Length} bytes from assembly file");
                         chrBytes.AddRange(segment.Bytes);
 
                         // Pad this segment to the next 8 KB boundary
@@ -128,10 +129,12 @@ partial class Transpiler : IDisposable
                         {
                             int bankPadding = NESWriter.CHR_ROM_BLOCK_SIZE - remainder;
                             chrBytes.AddRange(new byte[bankPadding]);
+                            _logger.WriteLine($"  Padded by {bankPadding} bytes to {chrBytes.Count} total");
                         }
                     }
                 }
             }
+            _logger.WriteLine($"  Total CHR: {chrBytes.Count} bytes, declared {_chrBanks} banks = {_chrBanks * NESWriter.CHR_ROM_BLOCK_SIZE} bytes");
 
             if (chrBytes.Count == 0)
                 throw new InvalidOperationException("At least one 'CHARS' segment must be present in the assembly files!");
