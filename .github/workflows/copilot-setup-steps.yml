@@ -9,7 +9,7 @@ jobs:
       with:
         submodules: recursive
     - name: Install gh-aw extension
-      uses: github/gh-aw-actions/setup-cli@b07cf98ac5874e8f51c34ba52099d8a6fac2ef93 # v0.74.1
+      uses: github/gh-aw-actions/setup-cli@cec6394202d7db187b02310d928812194988eb20 # v0.82.6
       with:
         version: v0.68.3
     - name: Setup .NET
