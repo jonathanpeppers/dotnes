@@ -1,8 +1,10 @@
 /*
 Based on: https://8bitworkshop.com/v3.10.0/?platform=nes&file=bankswitch.c
 
-Demonstrates MMC3 mapper bank switching via poke().
-Sets the iNES header to mapper 4 (MMC3) with 4 PRG banks and 8 CHR banks.
+Demonstrates MMC3 mapper bank switching via poke() and physical bank assets.
+Sets the iNES header to mapper 4 (MMC3) with 4 PRG banks and 8 CHR banks,
+places prg_bank0.s in physical PRG bank 0 at the $8000 window, and places
+chr_bank8.s in physical 1 KiB CHR bank 8.
 Uses poke() to write MMC3 bank select ($8000) and bank data ($8001)
 registers, switching CHR and PRG banks at runtime.
 */

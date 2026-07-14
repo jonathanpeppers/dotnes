@@ -110,6 +110,33 @@ CHR RAM (pattern data uploaded at runtime instead of stored on the cartridge).
 </PropertyGroup>
 ```
 
+### `NESMmc3BankedLayout`
+
+Enable deterministic mapper-4 physical bank placement. This mode requires
+`NESMapper=4` and at least two 16 KiB `NESPrgBanks`.
+
+| | |
+|---|---|
+| **Type** | `bool` |
+| **Default** | `false` |
+
+When enabled, dotnes links the transpiled C# program at `$C000` across the
+final two physical 8 KiB PRG banks. The second-last bank is fixed at `$C000`,
+the last bank is fixed at `$E000`, and the NMI/RESET/IRQ vectors are written
+at `$FFFA-$FFFF` in the last bank. Other PRG assets can be assigned to the
+switchable `$8000` or `$A000` windows with `NESPrgBank` items.
+
+```xml
+<PropertyGroup>
+  <NESMapper>4</NESMapper>
+  <NESPrgBanks>4</NESPrgBanks>
+  <NESChrBanks>2</NESChrBanks>
+  <NESMmc3BankedLayout>true</NESMmc3BankedLayout>
+</PropertyGroup>
+```
+
+See `samples/bankswitch` and [MMC3 bank layout](mmc3-bank-layout.md).
+
 ### `NESBattery`
 
 Indicates that the cartridge has battery-backed SRAM at $6000-$7FFF.
@@ -184,6 +211,43 @@ dotnet run -p:MesenTestRunner=true -p:MesenTimeout=10 -p:MesenLuaScript=smoke-te
 
 ## Item Groups
 
+### `NESPrgBank`
+
+Place a `.bin` or ca65-compatible `.s` asset in one physical 8 KiB MMC3 PRG
+bank. `Bank` is the zero-based physical bank number, `CpuAddress` is the CPU
+window used to link the asset (`0x8000` or `0xA000`), and `Offset` is an
+optional byte offset within the bank.
+
+```xml
+<ItemGroup>
+  <NESPrgBank Include="level1.s"
+              Bank="0"
+              CpuAddress="0x8000"
+              Offset="0" />
+</ItemGroup>
+```
+
+The final two physical PRG banks are reserved for the fixed transpiled program.
+Assembly assets support the existing label relocations for absolute
+instructions, low/high-byte immediates, and `.word`/`.addr` data. A bank must
+be selected at runtime before code accesses it; dotnes does not insert mapper
+writes automatically.
+
+### `NESChrBank`
+
+Place a `.bin` or `.s` asset in one physical 1 KiB MMC3 CHR bank. `Bank` is
+the zero-based physical bank number and `Offset` is an optional byte offset
+within that bank. Assembly assets must contain a `CHARS` segment.
+
+```xml
+<ItemGroup>
+  <NESChrBank Include="background-2.s" Bank="8" Offset="0" />
+</ItemGroup>
+```
+
+Legacy `CHARS` segments from `NESAssembly` continue to populate the start of
+CHR ROM. Explicit `NESChrBank` items cannot overlap those bytes.
+
 ### `NESAssembly`
 
 Include pattern for 6502 assembly (`.s`) files that provide CHR ROM data or
@@ -220,11 +284,14 @@ logging:
     <NESPrgBanks>4</NESPrgBanks>
     <NESChrBanks>8</NESChrBanks>
     <NESMirroring>Vertical</NESMirroring>
+    <NESMmc3BankedLayout>true</NESMmc3BankedLayout>
     <NESDiagnosticLogging>true</NESDiagnosticLogging>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="dotnes" Version="*" />
+    <NESPrgBank Include="level1.s" Bank="0" CpuAddress="0x8000" />
+    <NESChrBank Include="level1-tiles.bin" Bank="8" />
   </ItemGroup>
 </Project>
 ```
@@ -248,7 +315,8 @@ to avoid re-transpiling when nothing has changed. The inputs include:
 - `$(TargetPath)` — the compiled `.dll`
 - `@(NESAssembly)` — the `.s` assembly files
 - A **properties stamp file** — tracks changes to `NESMirroring`, `NESMapper`,
-  `NESPrgBanks`, `NESChrBanks`, and `NESBattery`
+  `NESPrgBanks`, `NESChrBanks`, `NESBattery`, `NESMmc3BankedLayout`, and bank
+  item metadata
 
 A `_WriteNESPropertiesStamp` target automatically runs before each transpilation
 and writes the current property values to

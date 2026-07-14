@@ -15,7 +15,7 @@
   <Target Name="_WriteNESPropertiesStamp">
     <WriteLinesToFile
         File="$(_NESPropertiesStampFile)"
-        Lines="NESMirroring=$(NESMirroring);NESMapper=$(NESMapper);NESPrgBanks=$(NESPrgBanks);NESChrBanks=$(NESChrBanks);NESBattery=$(NESBattery)"
+        Lines="NESMirroring=$(NESMirroring);NESMapper=$(NESMapper);NESPrgBanks=$(NESPrgBanks);NESChrBanks=$(NESChrBanks);NESBattery=$(NESBattery);NESMmc3BankedLayout=$(NESMmc3BankedLayout);@(NESPrgBank->'%(FullPath)|%(Bank)|%(CpuAddress)|%(Offset)');@(NESChrBank->'%(FullPath)|%(Bank)|%(Offset)')"
         Overwrite="true"
         WriteOnlyWhenDifferent="true" />
     <ItemGroup>
@@ -24,10 +24,14 @@
   </Target>
   <Target Name="Transpile" AfterTargets="Build"
       DependsOnTargets="$(TranspileDependsOn)"
-      Inputs="$(TargetPath);@(NESAssembly);$(_NESPropertiesStampFile);$(_NESTasksAssembly)" Outputs="$(NESTargetPath)">
+      Inputs="$(TargetPath);@(NESAssembly);@(NESPrgBank);@(NESChrBank);$(_NESPropertiesStampFile);$(_NESTasksAssembly)" Outputs="$(NESTargetPath)">
+    <ItemGroup>
+      <_NESAssembly Include="@(NESAssembly)" />
+      <_NESAssembly Remove="@(NESPrgBank);@(NESChrBank)" />
+    </ItemGroup>
     <TranspileToNES
         TargetPath="$(TargetPath)"
-        AssemblyFiles="@(NESAssembly)"
+        AssemblyFiles="@(_NESAssembly)"
         OutputPath="$(NESTargetPath)"
         DiagnosticLogging="$(NESDiagnosticLogging)"
         NESMirroring="$(NESMirroring)"
@@ -35,6 +39,9 @@
         NESPrgBanks="$(NESPrgBanks)"
         NESChrBanks="$(NESChrBanks)"
         NESBattery="$(NESBattery)"
+        NESMmc3BankedLayout="$(NESMmc3BankedLayout)"
+        NESPrgBank="@(NESPrgBank)"
+        NESChrBank="@(NESChrBank)"
     />
     <ItemGroup>
       <FileWrites Include="$(NESTargetPath)" />
