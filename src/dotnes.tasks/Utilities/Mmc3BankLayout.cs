@@ -20,25 +20,11 @@ static class Mmc3BankLayout
         0x4C, 0x00, 0xC0, // JMP $C000
     ];
 
-    sealed class PreparedPrgAsset
-    {
-        public PreparedPrgAsset(
-            BankedRomAsset asset,
-            Program6502? program,
-            byte[]? rawBytes,
-            Dictionary<string, ushort> labels)
-        {
-            Asset = asset;
-            Program = program;
-            RawBytes = rawBytes;
-            Labels = labels;
-        }
-
-        public BankedRomAsset Asset { get; }
-        public Program6502? Program { get; }
-        public byte[]? RawBytes { get; }
-        public Dictionary<string, ushort> Labels { get; }
-    }
+    sealed record PreparedPrgAsset(
+        BankedRomAsset Asset,
+        Program6502? Program,
+        byte[]? RawBytes,
+        Dictionary<string, ushort> Labels);
 
     public static byte[] BuildPrgImage(
         Program6502 program,
@@ -208,7 +194,7 @@ static class Mmc3BankLayout
             {
                 prepared.Add(new PreparedPrgAsset(
                     asset,
-                    program: null,
+                    Program: null,
                     File.ReadAllBytes(asset.Path),
                     new Dictionary<string, ushort>(StringComparer.Ordinal)));
                 continue;
@@ -231,7 +217,7 @@ static class Mmc3BankLayout
             prepared.Add(new PreparedPrgAsset(
                 asset,
                 assetProgram,
-                rawBytes: null,
+                RawBytes: null,
                 assetProgram.GetLabels()));
         }
 
