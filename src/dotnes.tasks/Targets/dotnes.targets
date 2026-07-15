@@ -27,7 +27,9 @@
       Inputs="$(TargetPath);@(NESAssembly);@(NESPrgBank);@(NESChrBank);$(_NESPropertiesStampFile);$(_NESTasksAssembly)" Outputs="$(NESTargetPath)">
     <ItemGroup>
       <_NESAssembly Include="@(NESAssembly)" />
-      <_NESAssembly Remove="@(NESPrgBank);@(NESChrBank)" />
+      <_NESAssembly Remove="@(NESPrgBank);@(NESChrBank)"
+                    MatchOnMetadata="FullPath"
+                    MatchOnMetadataOptions="PathLike" />
     </ItemGroup>
     <TranspileToNES
         TargetPath="$(TargetPath)"

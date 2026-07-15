@@ -17,8 +17,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <NESPrgBank Include="prg_bank0.s" Bank="0" CpuAddress="0x8000" />
-    <NESChrBank Include="chr_bank8.s" Bank="8" />
+    <NESPrgBank Include="$(MSBuildProjectDirectory)/prg_bank0.s" Bank="0" CpuAddress="0x8000" />
+    <NESChrBank Include="$(MSBuildProjectDirectory)/chr_bank8.s" Bank="8" />
   </ItemGroup>
 
 </Project>
