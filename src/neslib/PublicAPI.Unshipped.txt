@@ -1,11 +1,1 @@
 #nullable enable
-static NES.NESLib.clear_vram_buffer() -> void
-static NES.NESLib.get_frame_count() -> byte
-static NES.NESLib.get_pad_new(byte pad) -> NES.PAD
-static NES.NESLib.get_ppu_addr(byte nt, byte x, byte y) -> ushort
-static NES.NESLib.multi_vram_buffer_horz(byte[]! data, byte len, ushort ppuAddress) -> void
-static NES.NESLib.multi_vram_buffer_vert(byte[]! data, byte len, ushort ppuAddress) -> void
-static NES.NESLib.one_vram_buffer(byte data, ushort ppuAddress) -> void
-static NES.NESLib.set_music_speed(byte tempo) -> void
-static NES.NESLib.set_scroll_x(ushort x) -> void
-static NES.NESLib.set_scroll_y(ushort y) -> void
