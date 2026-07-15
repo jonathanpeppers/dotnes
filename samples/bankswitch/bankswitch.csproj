@@ -8,11 +8,17 @@
     <NESMapper>4</NESMapper>
     <NESPrgBanks>4</NESPrgBanks>
     <NESChrBanks>8</NESChrBanks>
+    <NESMmc3BankedLayout>true</NESMmc3BankedLayout>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="dotnes" Version="$(PackageVersion)" />
     <PackageReference Include="dotnes.mesen" Version="2.1.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <NESPrgBank Include="$(MSBuildProjectDirectory)/prg_bank0.s" Bank="0" CpuAddress="0x8000" />
+    <NESChrBank Include="$(MSBuildProjectDirectory)/chr_bank8.s" Bank="8" />
   </ItemGroup>
 
 </Project>

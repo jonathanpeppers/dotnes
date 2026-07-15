@@ -21,6 +21,9 @@ partial class Transpiler : IDisposable
     readonly int _mapper;
     readonly int _prgBanks;
     readonly int _chrBanks;
+    readonly bool _mmc3BankedLayout;
+    readonly IReadOnlyList<BankedRomAsset> _prgBankAssets;
+    readonly IReadOnlyList<BankedRomAsset> _chrBankAssets;
 
     /// <summary>
     /// A list of methods that were found to be used in the IL code
@@ -86,7 +89,18 @@ partial class Transpiler : IDisposable
     /// </summary>
     int _closureStructLocalIndex = -1;
 
-    public Transpiler(Stream stream, IList<AssemblyReader> assemblyFiles, ILogger? logger = null, string mirroring = "Horizontal", int mapper = 0, int prgBanks = 2, int chrBanks = 1, bool battery = false)
+    public Transpiler(
+        Stream stream,
+        IList<AssemblyReader> assemblyFiles,
+        ILogger? logger = null,
+        string mirroring = "Horizontal",
+        int mapper = 0,
+        int prgBanks = 2,
+        int chrBanks = 1,
+        bool battery = false,
+        bool mmc3BankedLayout = false,
+        IReadOnlyList<BankedRomAsset>? prgBankAssets = null,
+        IReadOnlyList<BankedRomAsset>? chrBankAssets = null)
     {
         _pe = new PEReader(stream, PEStreamOptions.LeaveOpen);
         _reader = _pe.GetMetadataReader();
@@ -97,15 +111,20 @@ partial class Transpiler : IDisposable
         _mapper = mapper;
         _prgBanks = prgBanks;
         _chrBanks = chrBanks;
+        _mmc3BankedLayout = mmc3BankedLayout;
+        _prgBankAssets = prgBankAssets ?? Array.Empty<BankedRomAsset>();
+        _chrBankAssets = chrBankAssets ?? Array.Empty<BankedRomAsset>();
     }
 
     public void Write(Stream stream)
     {
+        ValidateRomConfiguration();
+
         byte[]? chrData = null;
 
         if (_chrBanks > 0)
         {
-            if (_assemblyFiles.Count == 0)
+            if (_assemblyFiles.Count == 0 && (!_mmc3BankedLayout || _chrBankAssets.Count == 0))
                 throw new InvalidOperationException("At least one assembly file with a 'CHARS' segment must be present!");
 
             // Collect CHARS segments from all assembly files and concatenate them.
@@ -133,7 +152,7 @@ partial class Transpiler : IDisposable
                 }
             }
 
-            if (chrBytes.Count == 0)
+            if (chrBytes.Count == 0 && (!_mmc3BankedLayout || _chrBankAssets.Count == 0))
                 throw new InvalidOperationException("At least one 'CHARS' segment must be present in the assembly files!");
 
             chrData = chrBytes.ToArray();
@@ -142,45 +161,13 @@ partial class Transpiler : IDisposable
         _logger.WriteLine($"Building program...");
 
         // Build the complete program using single-pass transpilation
-        var program = BuildProgram6502(out ushort sizeOfMain, out ushort locals);
-        var programBytes = program.ToBytes();
+        ushort programAddress = _mmc3BankedLayout
+            ? Mmc3BankLayout.FixedProgramAddress
+            : NESConstants.PrgRomStart;
+        var program = BuildProgram6502(out ushort sizeOfMain, out ushort locals, programAddress);
+        program.ResolveAndRelaxBranches();
 
         _logger.WriteLine($"Size of main: {sizeOfMain}, locals: {locals}");
-
-        // Write the NES ROM
-        using var writer = new BinaryWriter(stream, Encoding.ASCII, leaveOpen: true);
-        
-        // Write NES header (16 bytes)
-        _logger.WriteLine($"Writing header (mapper={_mapper}, PRG={_prgBanks}, CHR={_chrBanks})...");
-        writer.Write('N');
-        writer.Write('E');
-        writer.Write('S');
-        writer.Write((byte)0x1A);
-        writer.Write((byte)_prgBanks); // PRG_ROM_SIZE (in 16KB units)
-        writer.Write((byte)_chrBanks); // CHR_ROM_SIZE (in 8KB units, 0 = CHR RAM)
-        // Flags6: bit 0 = mirroring, bit 1 = battery-backed SRAM, bits 4-7 = mapper lower nibble
-        byte flags6 = (byte)((string.Equals(_mirroring, "Vertical", StringComparison.OrdinalIgnoreCase) ? 1 : 0) | (_battery ? 0x02 : 0) | ((_mapper & 0x0F) << 4));
-        writer.Write(flags6);
-        // Flags7: bits 4-7 = mapper upper nibble
-        byte flags7 = (byte)((_mapper & 0xF0));
-        writer.Write(flags7);
-        writer.Write((byte)0); // Flags8
-        writer.Write((byte)0); // Flags9
-        writer.Write((byte)0); // Flags10
-        // Pad header to 16 bytes
-        for (int i = 0; i < 5; i++)
-            writer.Write((byte)0);
-
-        // Write PRG ROM
-        _logger.WriteLine($"Writing PRG ROM ({programBytes.Length} bytes)...");
-        writer.Write(programBytes);
-
-        // Total PRG ROM size = _prgBanks * 16KB
-        int totalPrgSize = _prgBanks * NESWriter.PRG_ROM_BLOCK_SIZE;
-        const int VECTOR_ADDRESSES_SIZE = 6;
-        int prgPadding = totalPrgSize - programBytes.Length - VECTOR_ADDRESSES_SIZE;
-        for (int i = 0; i < prgPadding; i++)
-            writer.Write((byte)0);
 
         // Write vectors: NMI, RESET, IRQ (little-endian) at end of last PRG bank
         // Resolve vector addresses from program labels (always present as built-in blocks)
@@ -188,7 +175,6 @@ partial class Transpiler : IDisposable
         if (!labels.TryGetValue(NESConstants._nmi, out var nmiAddr))
             throw new InvalidOperationException($"Required label '{NESConstants._nmi}' not found in resolved program labels.");
         ushort nmi_data = nmiAddr;
-        ushort reset_data = NESConstants.PrgRomStart;
         // Use irq_with_callback handler when irq_set_callback is used, otherwise default _irq handler
         bool hasIrqCb = labels.TryGetValue(NESConstants.irq_with_callback, out var irqCbAddr);
         bool hasIrq = labels.TryGetValue(NESConstants._irq, out var irqAddr);
@@ -199,27 +185,82 @@ partial class Transpiler : IDisposable
             irq_data = irqAddr;
         else
             throw new InvalidOperationException($"Required label '{NESConstants._irq}' not found in resolved program labels.");
-        writer.Write((byte)(nmi_data & 0xFF));
-        writer.Write((byte)(nmi_data >> 8));
-        writer.Write((byte)(reset_data & 0xFF));
-        writer.Write((byte)(reset_data >> 8));
-        writer.Write((byte)(irq_data & 0xFF));
-        writer.Write((byte)(irq_data >> 8));
-
-        // Write CHR ROM (skip when chrBanks=0, which means CHR RAM mode)
-        if (_chrBanks > 0 && chrData != null)
+        byte[] prgImage;
+        if (_mmc3BankedLayout)
         {
-            int totalChrSize = _chrBanks * NESWriter.CHR_ROM_BLOCK_SIZE;
-            if (chrData.Length > totalChrSize)
-                throw new InvalidOperationException($"CHR data ({chrData.Length} bytes) exceeds declared CHR ROM size ({totalChrSize} bytes for {_chrBanks} bank(s)). Check NESChrBanks or CHR assembly files.");
+            prgImage = Mmc3BankLayout.BuildPrgImage(
+                program, _prgBanks, _prgBankAssets, nmi_data, irq_data);
+        }
+        else
+        {
+            ushort reset_data = program.BaseAddress;
+            var programBytes = program.ToBytes();
+            int totalPrgSize = checked(_prgBanks * NESWriter.PRG_ROM_BLOCK_SIZE);
+            const int vectorAddressesSize = 6;
+            if (programBytes.Length > totalPrgSize - vectorAddressesSize)
+            {
+                throw new InvalidOperationException(
+                    $"Program ({programBytes.Length} bytes) exceeds declared PRG ROM capacity " +
+                    $"({totalPrgSize - vectorAddressesSize} bytes plus vectors for {_prgBanks} bank(s)).");
+            }
 
-            _logger.WriteLine($"Writing CHR ROM ({chrData.Length} bytes)...");
-            writer.Write(chrData);
-            
-            // Pad CHR ROM to total CHR size (_chrBanks * 8KB)
-            int chrPadding = totalChrSize - chrData.Length;
-            for (int i = 0; i < chrPadding; i++)
-                writer.Write((byte)0);
+            prgImage = new byte[totalPrgSize];
+            Array.Copy(programBytes, prgImage, programBytes.Length);
+            int vectorOffset = prgImage.Length - vectorAddressesSize;
+            prgImage[vectorOffset] = (byte)nmi_data;
+            prgImage[vectorOffset + 1] = (byte)(nmi_data >> 8);
+            prgImage[vectorOffset + 2] = (byte)reset_data;
+            prgImage[vectorOffset + 3] = (byte)(reset_data >> 8);
+            prgImage[vectorOffset + 4] = (byte)irq_data;
+            prgImage[vectorOffset + 5] = (byte)(irq_data >> 8);
+        }
+
+        byte[] chrImage = Array.Empty<byte>();
+        if (_chrBanks > 0)
+        {
+            if (_mmc3BankedLayout)
+            {
+                chrImage = Mmc3BankLayout.BuildChrImage(
+                    chrData ?? Array.Empty<byte>(), _chrBanks, _chrBankAssets);
+            }
+            else
+            {
+                int totalChrSize = checked(_chrBanks * NESWriter.CHR_ROM_BLOCK_SIZE);
+                if (chrData!.Length > totalChrSize)
+                {
+                    throw new InvalidOperationException(
+                        $"CHR data ({chrData.Length} bytes) exceeds declared CHR ROM size " +
+                        $"({totalChrSize} bytes for {_chrBanks} bank(s)). Check NESChrBanks or CHR assembly files.");
+                }
+                chrImage = new byte[totalChrSize];
+                Array.Copy(chrData, chrImage, chrData.Length);
+            }
+        }
+
+        using var writer = new BinaryWriter(stream, Encoding.ASCII, leaveOpen: true);
+        _logger.WriteLine($"Writing header (mapper={_mapper}, PRG={_prgBanks}, CHR={_chrBanks})...");
+        writer.Write('N');
+        writer.Write('E');
+        writer.Write('S');
+        writer.Write((byte)0x1A);
+        writer.Write((byte)_prgBanks);
+        writer.Write((byte)_chrBanks);
+        byte flags6 = (byte)((string.Equals(_mirroring, "Vertical", StringComparison.OrdinalIgnoreCase) ? 1 : 0) | (_battery ? 0x02 : 0) | ((_mapper & 0x0F) << 4));
+        writer.Write(flags6);
+        byte flags7 = (byte)(_mapper & 0xF0);
+        writer.Write(flags7);
+        writer.Write((byte)0);
+        writer.Write((byte)0);
+        writer.Write((byte)0);
+        for (int i = 0; i < 5; i++)
+            writer.Write((byte)0);
+
+        _logger.WriteLine($"Writing PRG ROM ({prgImage.Length} bytes)...");
+        writer.Write(prgImage);
+        if (chrImage.Length > 0)
+        {
+            _logger.WriteLine($"Writing CHR ROM ({chrImage.Length} bytes)...");
+            writer.Write(chrImage);
         }
         else
         {
@@ -230,6 +271,31 @@ partial class Transpiler : IDisposable
         _logger.WriteLine($"ROM complete. Total size: {stream.Length} bytes");
     }
 
+    void ValidateRomConfiguration()
+    {
+        if (_mapper < 0 || _mapper > byte.MaxValue)
+            throw new InvalidOperationException($"NESMapper must be between 0 and {byte.MaxValue}.");
+        if (_prgBanks < 1 || _prgBanks > byte.MaxValue)
+            throw new InvalidOperationException($"NESPrgBanks must be between 1 and {byte.MaxValue}.");
+        if (_chrBanks < 0 || _chrBanks > byte.MaxValue)
+            throw new InvalidOperationException($"NESChrBanks must be between 0 and {byte.MaxValue}.");
+
+        if (!_mmc3BankedLayout && (_prgBankAssets.Count > 0 || _chrBankAssets.Count > 0))
+            throw new InvalidOperationException("NESPrgBank and NESChrBank items require NESMmc3BankedLayout=true.");
+        if (!_mmc3BankedLayout)
+            return;
+        if (_mapper != 4)
+            throw new InvalidOperationException("NESMmc3BankedLayout requires NESMapper=4.");
+        if (_prgBanks < 2)
+            throw new InvalidOperationException("NESMmc3BankedLayout requires at least 2 NESPrgBanks.");
+        if (_prgBanks > 32)
+            throw new InvalidOperationException("NESMmc3BankedLayout supports at most 32 NESPrgBanks (64 physical 8 KiB PRG banks).");
+        if (_chrBanks > 32)
+            throw new InvalidOperationException("NESMmc3BankedLayout supports at most 32 NESChrBanks (256 physical 1 KiB CHR banks).");
+        if (_chrBanks == 0 && _chrBankAssets.Count > 0)
+            throw new InvalidOperationException("NESChrBank items cannot be used when NESChrBanks=0 (CHR RAM mode).");
+    }
+
     /// <summary>
     /// Builds a full Program6502 object model representation of the transpiled program.
     /// Uses single-pass transpilation with label references, resolves addresses once,
@@ -238,7 +304,10 @@ partial class Transpiler : IDisposable
     /// <param name="sizeOfMain">Output: size of the main program in bytes</param>
     /// <param name="locals">Output: number of local variable bytes</param>
     /// <returns>A Program6502 containing built-ins, main program, and final built-ins</returns>
-    public Program6502 BuildProgram6502(out ushort sizeOfMain, out ushort locals)
+    public Program6502 BuildProgram6502(
+        out ushort sizeOfMain,
+        out ushort locals,
+        ushort baseAddress = NESConstants.PrgRomStart)
     {
         _logger.WriteLine($"Single-pass transpilation...");
         
@@ -246,6 +315,7 @@ partial class Transpiler : IDisposable
 
         // Create the base program with built-ins
         var program = Program6502.CreateWithBuiltIns();
+        program.BaseAddress = baseAddress;
 
         // Register user methods with the reflection cache so Call handler knows about them
         var reflectionCache = new ReflectionCache();
@@ -547,7 +617,7 @@ partial class Transpiler : IDisposable
         // if subroutines change.
         int preMainSize = Program6502.GetBuiltInSize();
         int finalBuiltInsSize = Program6502.CalculateFinalBuiltInsSize(locals, UsedMethods);
-        ushort totalSize = (ushort)(NESConstants.PrgRomStart + preMainSize + sizeOfMain + finalBuiltInsSize + musicSubroutinesSize + userMethodsTotalSize + externBlocksTotalSize + byteArrayTableSize + stringTableSize);
+        ushort totalSize = (ushort)(program.BaseAddress + preMainSize + sizeOfMain + finalBuiltInsSize + musicSubroutinesSize + userMethodsTotalSize + externBlocksTotalSize + byteArrayTableSize + stringTableSize);
         
         program.AddFinalBuiltIns(totalSize, locals, UsedMethods);
 

@@ -319,31 +319,7 @@ public class Program6502
     /// </summary>
     public byte[] ToBytes()
     {
-        if (!_addressesValid)
-            ResolveAddresses();
-
-        // Branch relaxation: replace out-of-range relative branches with trampolines
-        for (int pass = 0; pass < 10; pass++)
-        {
-            bool anyRelaxed = false;
-            ushort addr = BaseAddress;
-            foreach (var block in _blocks)
-            {
-                if (!block.IsDataBlock)
-                {
-                    _labels.CurrentScope = block.Label;
-                    if (block.RelaxBranches(addr, _labels))
-                        anyRelaxed = true;
-                }
-                addr += (ushort)block.Size;
-            }
-            _labels.CurrentScope = null;
-            if (!anyRelaxed)
-                break;
-            // Re-resolve addresses since block sizes changed
-            _addressesValid = false;
-            ResolveAddresses();
-        }
+        ResolveAndRelaxBranches();
 
         var ms = new MemoryStream(TotalSize);
         ushort currentAddress = BaseAddress;
@@ -388,6 +364,36 @@ public class Program6502
         _labels.CurrentScope = null;
 
         return ms.ToArray();
+    }
+
+    /// <summary>
+    /// Resolves labels and finalizes all branch trampolines without emitting bytes.
+    /// </summary>
+    internal void ResolveAndRelaxBranches()
+    {
+        if (!_addressesValid)
+            ResolveAddresses();
+
+        while (true)
+        {
+            bool anyRelaxed = false;
+            ushort addr = BaseAddress;
+            foreach (var block in _blocks)
+            {
+                if (!block.IsDataBlock)
+                {
+                    _labels.CurrentScope = block.Label;
+                    if (block.RelaxBranches(addr, _labels))
+                        anyRelaxed = true;
+                }
+                addr += (ushort)block.Size;
+            }
+            _labels.CurrentScope = null;
+            if (!anyRelaxed)
+                break;
+            _addressesValid = false;
+            ResolveAddresses();
+        }
     }
 
     /// <summary>
