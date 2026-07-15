@@ -175,7 +175,6 @@ partial class Transpiler : IDisposable
         if (!labels.TryGetValue(NESConstants._nmi, out var nmiAddr))
             throw new InvalidOperationException($"Required label '{NESConstants._nmi}' not found in resolved program labels.");
         ushort nmi_data = nmiAddr;
-        ushort reset_data = program.BaseAddress;
         // Use irq_with_callback handler when irq_set_callback is used, otherwise default _irq handler
         bool hasIrqCb = labels.TryGetValue(NESConstants.irq_with_callback, out var irqCbAddr);
         bool hasIrq = labels.TryGetValue(NESConstants._irq, out var irqAddr);
@@ -190,10 +189,11 @@ partial class Transpiler : IDisposable
         if (_mmc3BankedLayout)
         {
             prgImage = Mmc3BankLayout.BuildPrgImage(
-                program, _prgBanks, _prgBankAssets, nmi_data, reset_data, irq_data);
+                program, _prgBanks, _prgBankAssets, nmi_data, irq_data);
         }
         else
         {
+            ushort reset_data = program.BaseAddress;
             var programBytes = program.ToBytes();
             int totalPrgSize = checked(_prgBanks * NESWriter.PRG_ROM_BLOCK_SIZE);
             const int vectorAddressesSize = 6;
@@ -288,6 +288,10 @@ partial class Transpiler : IDisposable
             throw new InvalidOperationException("NESMmc3BankedLayout requires NESMapper=4.");
         if (_prgBanks < 2)
             throw new InvalidOperationException("NESMmc3BankedLayout requires at least 2 NESPrgBanks.");
+        if (_prgBanks > 32)
+            throw new InvalidOperationException("NESMmc3BankedLayout supports at most 32 NESPrgBanks (64 physical 8 KiB PRG banks).");
+        if (_chrBanks > 32)
+            throw new InvalidOperationException("NESMmc3BankedLayout supports at most 32 NESChrBanks (256 physical 1 KiB CHR banks).");
         if (_chrBanks == 0 && _chrBankAssets.Count > 0)
             throw new InvalidOperationException("NESChrBank items cannot be used when NESChrBanks=0 (CHR RAM mode).");
     }

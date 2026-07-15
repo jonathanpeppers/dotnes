@@ -121,10 +121,13 @@ Enable deterministic mapper-4 physical bank placement. This mode requires
 | **Default** | `false` |
 
 When enabled, dotnes links the transpiled C# program at `$C000` across the
-final two physical 8 KiB PRG banks. The second-last bank is fixed at `$C000`,
-the last bank is fixed at `$E000`, and the NMI/RESET/IRQ vectors are written
-at `$FFFA-$FFFF` in the last bank. Other PRG assets can be assigned to the
-switchable `$8000` or `$A000` windows with `NESPrgBank` items.
+final two physical 8 KiB PRG banks. The second-last bank is mapped at `$C000`
+only in PRG mode 0; the last bank is always fixed at `$E000`. A reset stub in
+the last bank selects PRG mode 0 before jumping to `$C000`, and the NMI/RESET/IRQ
+vectors are written at `$FFFA-$FFFF`. Runtime code must keep MMC3 bank-select
+bit 6 clear so it does not unmap the program at `$C000`. Other PRG assets can
+be assigned to the switchable `$8000` or `$A000` windows with `NESPrgBank`
+items. Banked layout supports at most 32 `NESPrgBanks` and 32 `NESChrBanks`.
 
 ```xml
 <PropertyGroup>

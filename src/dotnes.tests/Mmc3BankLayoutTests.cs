@@ -58,7 +58,7 @@ public sealed class Mmc3BankLayoutTests : IDisposable
 
         const int prgStart = 16;
         ushort fixedTarget = ReadWord(first, prgStart + 1);
-        Assert.InRange(fixedTarget, 0xC000, 0xFFF9);
+        Assert.InRange(fixedTarget, 0xC000, 0xFFF1);
         Assert.Equal(
             new byte[] { 0xA9, 0x08, 0xA2, 0x80, 0x60, 0x42, 0x08, 0x80 },
             first.Skip(prgStart + 3).Take(8));
@@ -69,12 +69,15 @@ public sealed class Mmc3BankLayoutTests : IDisposable
         int fixedProgramOffset = prgStart + (2 * Mmc3BankLayout.PrgBankSize);
         Assert.NotEqual(0, first[fixedProgramOffset]);
         int vectorsOffset = prgStart + (2 * NESWriter.PRG_ROM_BLOCK_SIZE) - 6;
+        Assert.Equal(
+            new byte[] { 0xA9, 0x00, 0x8D, 0x00, 0x80, 0x4C, 0x00, 0xC0 },
+            first.Skip(vectorsOffset - 8).Take(8));
         ushort nmi = ReadWord(first, vectorsOffset);
         ushort reset = ReadWord(first, vectorsOffset + 2);
         ushort irq = ReadWord(first, vectorsOffset + 4);
-        Assert.InRange(nmi, 0xC000, 0xFFF9);
-        Assert.Equal(0xC000, reset);
-        Assert.InRange(irq, 0xC000, 0xFFF9);
+        Assert.InRange(nmi, 0xC000, 0xFFF1);
+        Assert.Equal(Mmc3BankLayout.ResetStubAddress, reset);
+        Assert.InRange(irq, 0xC000, 0xFFF1);
 
         int chrStart = prgStart + (2 * NESWriter.PRG_ROM_BLOCK_SIZE);
         Assert.Equal(
@@ -217,6 +220,35 @@ public sealed class Mmc3BankLayoutTests : IDisposable
     }
 
     [Fact]
+    public void AllowsAnonymousCodeInMultipleAssets()
+    {
+        string first = WriteText(
+            "anonymous-first.s",
+            """
+            .segment "CODE"
+                nop
+                rts
+            """);
+        string second = WriteText(
+            "anonymous-second.s",
+            """
+            .segment "CODE"
+                inx
+                rts
+            """);
+        var assets = new[]
+        {
+            new BankedRomAsset(first, Bank: 0, Offset: 0, CpuAddress: 0x8000),
+            new BankedRomAsset(second, Bank: 1, Offset: 0, CpuAddress: 0xA000),
+        };
+
+        byte[] image = BuildPrgImage(assets);
+
+        Assert.Equal(new byte[] { 0xEA, 0x60 }, image.Take(2));
+        Assert.Equal(new byte[] { 0xE8, 0x60 }, image.Skip(Mmc3BankLayout.PrgBankSize).Take(2));
+    }
+
+    [Fact]
     public void RejectsChrRangeOverflowAndOverlap()
     {
         string outOfRange = WriteBytes("range.bin", [1]);
@@ -264,9 +296,33 @@ public sealed class Mmc3BankLayoutTests : IDisposable
         Assert.Contains("NESMapper=4", exception.Message);
     }
 
+    [Fact]
+    public void SupportsMaximumMmc3BankCounts()
+    {
+        byte[] rom = WriteRom([], [], prgBanks: 32, chrBanks: 32);
+
+        Assert.Equal(32, rom[4]);
+        Assert.Equal(32, rom[5]);
+        Assert.Equal(16 + (32 * NESWriter.PRG_ROM_BLOCK_SIZE) + (32 * NESWriter.CHR_ROM_BLOCK_SIZE), rom.Length);
+    }
+
+    [Theory]
+    [InlineData(33, 1, "NESPrgBanks")]
+    [InlineData(2, 33, "NESChrBanks")]
+    public void RejectsMmc3BankCountsAboveHardwareLimits(int prgBanks, int chrBanks, string property)
+    {
+        var exception = Assert.Throws<InvalidOperationException>(
+            () => WriteRom([], [], prgBanks, chrBanks));
+
+        Assert.Contains(property, exception.Message);
+        Assert.Contains("at most 32", exception.Message);
+    }
+
     byte[] WriteRom(
         IReadOnlyList<BankedRomAsset> prgAssets,
-        IReadOnlyList<BankedRomAsset> chrAssets)
+        IReadOnlyList<BankedRomAsset> chrAssets,
+        int prgBanks = 2,
+        int chrBanks = 2)
     {
         using var dll = Utilities.GetResource("bankswitch.release.dll");
         using var chr = new AssemblyReader(new StreamReader(Utilities.GetResource("chr_generic.s")));
@@ -275,8 +331,8 @@ public sealed class Mmc3BankLayoutTests : IDisposable
             [chr],
             _logger,
             mapper: 4,
-            prgBanks: 2,
-            chrBanks: 2,
+            prgBanks: prgBanks,
+            chrBanks: chrBanks,
             mmc3BankedLayout: true,
             prgBankAssets: prgAssets,
             chrBankAssets: chrAssets);
@@ -297,7 +353,6 @@ public sealed class Mmc3BankLayoutTests : IDisposable
             prgBanks: 2,
             assets,
             labels["_nmi"],
-            Mmc3BankLayout.FixedProgramAddress,
             labels["_irq"]);
     }
 

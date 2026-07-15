@@ -12,12 +12,17 @@ are 8 KiB, so a project with `NESPrgBanks=4` has physical banks 0-7.
 | Physical bank | CPU window | Contents |
 |---|---|---|
 | 0 through N-3 | `$8000` or `$A000` | Explicit `NESPrgBank` assets |
-| N-2 | `$C000-$DFFF` | Start of the fixed transpiled C# program |
-| N-1 | `$E000-$FFFF` | End of the fixed program and vectors |
+| N-2 | `$C000-$DFFF` in PRG mode 0 | Start of the transpiled C# program |
+| N-1 | `$E000-$FFFF` | Always-fixed end of the program, reset stub, and vectors |
 
-The transpiled program must fit in `$C000-$FFF9`. NMI, RESET, and IRQ vectors
-are always written to `$FFFA-$FFFF` in physical bank N-1, and RESET points to
-`$C000`.
+The transpiled program must fit in `$C000-$FFF1`. NMI, RESET, and IRQ vectors
+are always written to `$FFFA-$FFFF` in physical bank N-1. RESET points to an
+eight-byte stub at `$FFF2` that selects PRG mode 0 and jumps to `$C000`.
+
+The program and interrupt handlers rely on physical bank N-2 remaining mapped
+at `$C000`. Runtime code must therefore keep MMC3 bank-select bit 6 clear after
+the reset stub initializes it. PRG mode 1 moves N-2 to `$8000` and makes
+`$C000` switchable, which unmaps part of the executing program.
 
 ```xml
 <PropertyGroup>
@@ -37,7 +42,8 @@ are always written to `$FFFA-$FFFF` in physical bank N-1, and RESET points to
 All placements are sorted deterministically and zero-filled. The build fails
 for missing files, invalid or reserved banks, invalid CPU windows, conflicting
 windows for one physical bank, overlaps, out-of-range offsets, or bank
-overflow.
+overflow. MMC3 hardware limits banked layouts to at most 32 `NESPrgBanks`
+(64 physical 8 KiB banks) and 32 `NESChrBanks` (256 physical 1 KiB banks).
 
 ## PRG assembly relocations
 

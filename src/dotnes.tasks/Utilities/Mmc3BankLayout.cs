@@ -11,6 +11,14 @@ static class Mmc3BankLayout
     public const ushort FirstSwitchableWindow = 0x8000;
     public const ushort SecondSwitchableWindow = 0xA000;
     public const ushort FixedProgramAddress = 0xC000;
+    public const ushort ResetStubAddress = 0xFFF2;
+
+    static readonly byte[] ResetStub =
+    [
+        0xA9, 0x00,       // LDA #$00: select register 0 with PRG mode 0
+        0x8D, 0x00, 0x80, // STA $8000
+        0x4C, 0x00, 0xC0, // JMP $C000
+    ];
 
     sealed class PreparedPrgAsset
     {
@@ -37,7 +45,6 @@ static class Mmc3BankLayout
         int prgBanks,
         IReadOnlyList<BankedRomAsset> assets,
         ushort nmiAddress,
-        ushort resetAddress,
         ushort irqAddress)
     {
         int physicalBankCount = checked(prgBanks * 2);
@@ -47,12 +54,12 @@ static class Mmc3BankLayout
             throw new InvalidOperationException($"MMC3 fixed program must be linked at ${FixedProgramAddress:X4}, not ${program.BaseAddress:X4}.");
 
         var programBytes = program.ToBytes();
-        int fixedProgramCapacity = (PrgBankSize * 2) - 6;
+        int fixedProgramCapacity = (PrgBankSize * 2) - ResetStub.Length - 6;
         if (programBytes.Length > fixedProgramCapacity)
         {
             throw new InvalidOperationException(
                 $"Transpiled program ({programBytes.Length} bytes) exceeds the MMC3 fixed-bank capacity " +
-                $"({fixedProgramCapacity} bytes at $C000-$FFF9).");
+                $"({fixedProgramCapacity} bytes at $C000-$FFF1).");
         }
 
         var image = new byte[checked(physicalBankCount * PrgBankSize)];
@@ -62,10 +69,12 @@ static class Mmc3BankLayout
         PlaceBytes(image, occupied, owners, fixedProgramOffset, programBytes, "transpiled program");
 
         int vectorsOffset = image.Length - 6;
+        int resetStubOffset = vectorsOffset - ResetStub.Length;
+        PlaceBytes(image, occupied, owners, resetStubOffset, ResetStub, "MMC3 reset stub");
         var vectors = new byte[]
         {
             (byte)nmiAddress, (byte)(nmiAddress >> 8),
-            (byte)resetAddress, (byte)(resetAddress >> 8),
+            (byte)(ResetStubAddress & 0xFF), (byte)(ResetStubAddress >> 8),
             (byte)irqAddress, (byte)(irqAddress >> 8),
         };
         PlaceBytes(image, occupied, owners, vectorsOffset, vectors, "interrupt vectors");
@@ -233,6 +242,8 @@ static class Mmc3BankLayout
         {
             foreach (var label in item.Labels.Keys)
             {
+                if (IsSyntheticAnonymousLabel(label))
+                    continue;
                 if (labelOwners.ContainsKey(label))
                     throw new InvalidOperationException($"PRG bank asset '{item.Asset.Path}' defines duplicate label '{label}'.");
                 labelOwners[label] = item;
@@ -289,6 +300,9 @@ static class Mmc3BankLayout
 
         return prepared;
     }
+
+    static bool IsSyntheticAnonymousLabel(string label)
+        => label.StartsWith("_anonymous_code_", StringComparison.Ordinal);
 
     static byte[] ReadChrAsset(string path)
     {

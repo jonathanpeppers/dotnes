@@ -57,9 +57,9 @@ public class TranspileToNES : Task
     public override bool Execute()
     {
         Logger ??= DiagnosticLogging ? new MSBuildLogger(Log) : null;
-        var assemblies = AssemblyFiles.Select(a => new AssemblyReader(a)).ToList();
         var prgBankAssets = NESPrgBank.Select(ParsePrgBankAsset).ToArray();
         var chrBankAssets = NESChrBank.Select(ParseChrBankAsset).ToArray();
+        var assemblies = AssemblyFiles.Select(a => new AssemblyReader(a)).ToList();
         using var input = File.OpenRead(TargetPath);
         using var output = File.Create(OutputPath);
         using var transpiler = new Transpiler(
