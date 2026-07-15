@@ -11,7 +11,7 @@ static class Mmc3BankLayout
     public const ushort FirstSwitchableWindow = 0x8000;
     public const ushort SecondSwitchableWindow = 0xA000;
     public const ushort FixedProgramAddress = 0xC000;
-    public const ushort ResetStubAddress = 0xFFF2;
+    const int InterruptVectorSize = 6;
 
     static readonly byte[] ResetStub =
     [
@@ -19,6 +19,8 @@ static class Mmc3BankLayout
         0x8D, 0x00, 0x80, // STA $8000
         0x4C, 0x00, 0xC0, // JMP $C000
     ];
+
+    public static ushort ResetStubAddress => checked((ushort)(0x10000 - InterruptVectorSize - ResetStub.Length));
 
     sealed record PreparedPrgAsset(
         BankedRomAsset Asset,
@@ -40,7 +42,7 @@ static class Mmc3BankLayout
             throw new InvalidOperationException($"MMC3 fixed program must be linked at ${FixedProgramAddress:X4}, not ${program.BaseAddress:X4}.");
 
         var programBytes = program.ToBytes();
-        int fixedProgramCapacity = (PrgBankSize * 2) - ResetStub.Length - 6;
+        int fixedProgramCapacity = (PrgBankSize * 2) - ResetStub.Length - InterruptVectorSize;
         if (programBytes.Length > fixedProgramCapacity)
         {
             throw new InvalidOperationException(
@@ -54,7 +56,7 @@ static class Mmc3BankLayout
         int fixedProgramOffset = (physicalBankCount - 2) * PrgBankSize;
         PlaceBytes(image, occupied, owners, fixedProgramOffset, programBytes, "transpiled program");
 
-        int vectorsOffset = image.Length - 6;
+        int vectorsOffset = image.Length - InterruptVectorSize;
         int resetStubOffset = vectorsOffset - ResetStub.Length;
         PlaceBytes(image, occupied, owners, resetStubOffset, ResetStub, "MMC3 reset stub");
         var vectors = new byte[]
