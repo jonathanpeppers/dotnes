@@ -24,6 +24,7 @@ static class Mmc3BankLayout
 
     sealed record PreparedPrgAsset(
         BankedRomAsset Asset,
+        ushort CpuAddress,
         Program6502? Program,
         byte[]? RawBytes,
         Dictionary<string, ushort> Labels);
@@ -72,7 +73,7 @@ static class Mmc3BankLayout
         foreach (var item in prepared)
         {
             var asset = item.Asset;
-            ushort cpuAddress = asset.CpuAddress!.Value;
+            ushort cpuAddress = item.CpuAddress;
             if (windowByBank.TryGetValue(asset.Bank, out ushort existingWindow) && existingWindow != cpuAddress)
             {
                 throw new InvalidOperationException(
@@ -185,17 +186,20 @@ static class Mmc3BankLayout
             }
             if (asset.Offset < 0 || asset.Offset >= PrgBankSize)
                 throw new InvalidOperationException($"PRG bank asset '{asset.Path}' offset must be between 0 and {PrgBankSize - 1}.");
-            if (asset.CpuAddress is not FirstSwitchableWindow and not SecondSwitchableWindow)
+            ushort cpuAddress = asset.CpuAddress switch
             {
-                throw new InvalidOperationException(
-                    $"PRG bank asset '{asset.Path}' CpuAddress must be $8000 or $A000 for a switchable MMC3 window.");
-            }
+                FirstSwitchableWindow => FirstSwitchableWindow,
+                SecondSwitchableWindow => SecondSwitchableWindow,
+                _ => throw new InvalidOperationException(
+                    $"PRG bank asset '{asset.Path}' CpuAddress must be $8000 or $A000 for a switchable MMC3 window."),
+            };
 
             string extension = System.IO.Path.GetExtension(asset.Path);
             if (string.Equals(extension, ".bin", StringComparison.OrdinalIgnoreCase))
             {
                 prepared.Add(new PreparedPrgAsset(
                     asset,
+                    cpuAddress,
                     Program: null,
                     File.ReadAllBytes(asset.Path),
                     new Dictionary<string, ushort>(StringComparer.Ordinal)));
@@ -218,6 +222,7 @@ static class Mmc3BankLayout
 
             prepared.Add(new PreparedPrgAsset(
                 asset,
+                cpuAddress,
                 assetProgram,
                 RawBytes: null,
                 assetProgram.GetLabels()));
