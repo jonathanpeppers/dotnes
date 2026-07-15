@@ -351,6 +351,20 @@ public sealed class Mmc3BankLayoutTests : IDisposable
         Assert.Equal(16 + (32 * NESWriter.PRG_ROM_BLOCK_SIZE) + (32 * NESWriter.CHR_ROM_BLOCK_SIZE), rom.Length);
     }
 
+    [Fact]
+    public void RelocatesDefaultNmiCallbackIntoFixedProgram()
+    {
+        byte[] rom = WriteRom([], []);
+        int fixedProgramOffset = 16 + (2 * NESWriter.PRG_ROM_BLOCK_SIZE) - (2 * Mmc3BankLayout.PrgBankSize);
+        ReadOnlySpan<byte> fixedProgram = rom.AsSpan(fixedProgramOffset, 2 * Mmc3BankLayout.PrgBankSize);
+        int callbackSetup = fixedProgram.IndexOf(new byte[] { 0xA9, 0x4C, 0x85, 0x14, 0xA9 });
+
+        Assert.True(callbackSetup >= 0);
+        ushort callback = (ushort)(fixedProgram[callbackSetup + 5] | (fixedProgram[callbackSetup + 9] << 8));
+        Assert.InRange(callback, Mmc3BankLayout.FixedProgramAddress, Mmc3BankLayout.ResetStubAddress);
+        Assert.Equal(0x60, fixedProgram[callback - Mmc3BankLayout.FixedProgramAddress]);
+    }
+
     [Theory]
     [InlineData(33, 1, "NESPrgBanks")]
     [InlineData(2, 33, "NESChrBanks")]

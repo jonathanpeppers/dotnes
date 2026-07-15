@@ -11,6 +11,8 @@ namespace dotnes.ObjectModel;
 /// </summary>
 internal static class BuiltInSubroutines
 {
+    const string DefaultNmiCallback = "default_nmi_callback";
+
     #region Core System Subroutines
 
     /// <summary>
@@ -1703,7 +1705,7 @@ internal static class BuiltInSubroutines
         var block = new Block(nameof(nmi_set_callback));
         block.Emit(STA_zpg(NMI_CALLBACK + 1))  // Low byte of callback address
              .Emit(STX_zpg(NMI_CALLBACK + 2))  // High byte of callback address
-             .Emit(RTS());
+             .Emit(RTS(), DefaultNmiCallback);
         return block;
     }
 
@@ -2255,9 +2257,15 @@ internal static class BuiltInSubroutines
              .Emit(JSR(nameof(initlib)))    // initlib
              .Emit(LDA(0x4C))      // JMP opcode
              .Emit(STA_zpg(NMI_CALLBACK))
-             .Emit(LDA(0x10))      // low byte of callback
+             .Emit(new Instruction(
+                 Opcode.LDA,
+                 AddressMode.Immediate_LowByte,
+                 new LowByteOperand(DefaultNmiCallback)))
              .Emit(STA_zpg(NMI_CALLBACK + 1))
-             .Emit(LDA(0x82))      // high byte of callback
+             .Emit(new Instruction(
+                 Opcode.LDA,
+                 AddressMode.Immediate_HighByte,
+                 new HighByteOperand(DefaultNmiCallback)))
              .Emit(STA_zpg(NMI_CALLBACK + 2))
              .Emit(LDA(0x80))      // PPU_CTRL setting
              .Emit(STA_zpg(PRG_FILEOFFS))
