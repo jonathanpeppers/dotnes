@@ -374,7 +374,7 @@ public class Program6502
         if (!_addressesValid)
             ResolveAddresses();
 
-        for (int pass = 0; pass < 10; pass++)
+        while (true)
         {
             bool anyRelaxed = false;
             ushort addr = BaseAddress;
@@ -391,7 +391,6 @@ public class Program6502
             _labels.CurrentScope = null;
             if (!anyRelaxed)
                 break;
-            // Re-resolve addresses since block sizes changed
             _addressesValid = false;
             ResolveAddresses();
         }

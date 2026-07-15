@@ -204,6 +204,49 @@ public sealed class Mmc3BankLayoutTests : IDisposable
     }
 
     [Fact]
+    public void ConvergesBranchRelaxationBeforeCrossAssetRelocation()
+    {
+        string branches = string.Join(
+            Environment.NewLine,
+            Enumerable.Range(0, 11).Select(index => $"    bne target{index}"));
+        string initialPadding = string.Join(Environment.NewLine, Enumerable.Repeat("    nop", 75));
+        string targets = string.Join(
+            Environment.NewLine,
+            Enumerable.Range(0, 11).Select(index =>
+                $"target{index}:{Environment.NewLine}" +
+                string.Join(Environment.NewLine, Enumerable.Repeat("    nop", index == 10 ? 3 : 5))));
+        string target = WriteText(
+            "relaxation-waves.s",
+            $"""
+            .segment "CODE"
+            {branches}
+                bne seed_target
+            {initialPadding}
+            {targets}
+            seed_target:
+                rts
+            """);
+        string pointer = WriteText(
+            "relaxed-pointer.s",
+            """
+            .segment "RODATA"
+            seed_pointer:
+                .word seed_target
+            """);
+        var assets = new[]
+        {
+            new BankedRomAsset(target, Bank: 0, Offset: 0, CpuAddress: 0x8000),
+            new BankedRomAsset(pointer, Bank: 1, Offset: 0, CpuAddress: 0xA000),
+        };
+
+        byte[] image = BuildPrgImage(assets);
+
+        // The seed branch triggers eleven successive relaxation waves, moving seed_target to $80BC.
+        Assert.Equal(0x60, image[0xBC]);
+        Assert.Equal(new byte[] { 0xBC, 0x80 }, image.Skip(Mmc3BankLayout.PrgBankSize).Take(2));
+    }
+
+    [Fact]
     public void RejectsUnresolvedDataRelocation()
     {
         string path = WriteText(
