@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using System.Xml.Linq;
 using dotnes.ObjectModel;
 using static dotnes.ObjectModel.Asm;
 using Xunit.Abstractions;
@@ -316,6 +318,111 @@ public sealed class Mmc3BankLayoutTests : IDisposable
 
         Assert.Contains(property, exception.Message);
         Assert.Contains("at most 32", exception.Message);
+    }
+
+    [Fact]
+    public async Task MSBuildTargetsPlaceAbsoluteBankItems()
+    {
+        string taskDirectory = Path.GetDirectoryName(typeof(TranspileToNES).Assembly.Location)!;
+        string targetPath = Path.Combine(_tempDirectory, "bankswitch.dll");
+        using (var source = Utilities.GetResource("bankswitch.release.dll"))
+        using (var destination = File.Create(targetPath))
+            source.CopyTo(destination);
+
+        string chrGenericPath = Path.Combine(_tempDirectory, "chr_generic.s");
+        using (var source = Utilities.GetResource("chr_generic.s"))
+        using (var destination = File.Create(chrGenericPath))
+            source.CopyTo(destination);
+
+        string prgPath = WriteText(
+            "bank0.s",
+            """
+            .segment "CODE"
+            bank_entry:
+                rts
+            """);
+        string chrPath = WriteText(
+            "bank8.s",
+            """
+            .segment "CHARS"
+            .byte $DE,$AD,$BE,$EF
+            """);
+        string outputDirectory = Path.Combine(_tempDirectory, "out");
+        string intermediateDirectory = Path.Combine(_tempDirectory, "obj");
+        Directory.CreateDirectory(outputDirectory);
+        Directory.CreateDirectory(intermediateDirectory);
+
+        string projectPath = Path.Combine(_tempDirectory, "banked-layout.proj");
+        var project = new XDocument(
+            new XElement("Project",
+                new XElement("PropertyGroup",
+                    new XElement("TargetPath", targetPath),
+                    new XElement("OutputPath", outputDirectory + Path.DirectorySeparatorChar),
+                    new XElement("TargetName", "bankswitch"),
+                    new XElement("IntermediateOutputPath", intermediateDirectory + Path.DirectorySeparatorChar),
+                    new XElement("NESMapper", "4"),
+                    new XElement("NESPrgBanks", "2"),
+                    new XElement("NESChrBanks", "2"),
+                    new XElement("NESMmc3BankedLayout", "true")),
+                new XElement("ItemGroup",
+                    new XElement("NESAssembly", new XAttribute("Include", "*.s")),
+                    new XElement("NESPrgBank",
+                        new XAttribute("Include", prgPath),
+                        new XAttribute("Bank", "0"),
+                        new XAttribute("CpuAddress", "0x8000")),
+                    new XElement("NESChrBank",
+                        new XAttribute("Include", chrPath),
+                        new XAttribute("Bank", "8"))),
+                new XElement("Import",
+                    new XAttribute("Project", Path.Combine(taskDirectory, "dotnes.targets")))));
+        project.Save(projectPath);
+
+        var startInfo = new ProcessStartInfo("dotnet")
+        {
+            WorkingDirectory = _tempDirectory,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+        };
+        startInfo.ArgumentList.Add("msbuild");
+        startInfo.ArgumentList.Add(projectPath);
+        startInfo.ArgumentList.Add("-t:Transpile");
+        startInfo.ArgumentList.Add("-nologo");
+        startInfo.ArgumentList.Add("-v:minimal");
+
+        using var process = Process.Start(startInfo);
+        Assert.NotNull(process);
+        Task<string> standardOutputTask = process.StandardOutput.ReadToEndAsync();
+        Task<string> standardErrorTask = process.StandardError.ReadToEndAsync();
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(60));
+        try
+        {
+            await process.WaitForExitAsync(timeout.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            process.Kill(entireProcessTree: true);
+            throw new TimeoutException("dotnet msbuild timed out.");
+        }
+        string[] output = await Task.WhenAll(standardOutputTask, standardErrorTask);
+        string standardOutput = output[0];
+        string standardError = output[1];
+        Assert.True(
+            process.ExitCode == 0,
+            $"dotnet msbuild failed with exit code {process.ExitCode}:{Environment.NewLine}{standardOutput}{Environment.NewLine}{standardError}");
+
+        byte[] rom = File.ReadAllBytes(Path.Combine(outputDirectory, "bankswitch.nes"));
+        Assert.Equal(2, rom[4]);
+        Assert.Equal(2, rom[5]);
+        Assert.Equal(0x60, rom[16]);
+
+        int chrStart = 16 + (2 * NESWriter.PRG_ROM_BLOCK_SIZE);
+        Assert.Equal(
+            new byte[] { 0xDE, 0xAD, 0xBE, 0xEF },
+            rom.Skip(chrStart + (8 * Mmc3BankLayout.ChrBankSize)).Take(4));
+
+        int vectorsOffset = chrStart - 6;
+        Assert.Equal(Mmc3BankLayout.ResetStubAddress, ReadWord(rom, vectorsOffset + 2));
     }
 
     byte[] WriteRom(
