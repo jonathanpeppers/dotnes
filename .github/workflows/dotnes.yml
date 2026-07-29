@@ -39,7 +39,7 @@ jobs:
           exit 1
         fi
     - name: install .NET
-      uses: actions/setup-dotnet@v5
+      uses: actions/setup-dotnet@v6
       with:
         dotnet-version: 10.x
     - name: cache Mesen downloads
@@ -98,7 +98,7 @@ jobs:
           src/dotnes.mesen/build/dotnes.mesen.targets
         sparse-checkout-cone-mode: false
     - name: install .NET
-      uses: actions/setup-dotnet@v5
+      uses: actions/setup-dotnet@v6
       with:
         dotnet-version: 10.x
     - name: install SDL2 (macOS)
