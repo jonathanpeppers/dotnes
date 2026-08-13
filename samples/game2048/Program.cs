@@ -322,12 +322,13 @@ while (true)
             if (keys != keys_changed)
             {
                 has_changed = 0;
+                byte dpadX = 0;
+                byte dpadY = 0;
+                dpadX = (byte)(dpadX + pad_dpad_x((PAD)keys_changed));
+                dpadY = (byte)(dpadY + pad_dpad_y((PAD)keys_changed));
 
                 // Copy map to prev_map before any move
-                if ((keys_changed & (byte)PAD.LEFT) != 0 ||
-                    (keys_changed & (byte)PAD.RIGHT) != 0 ||
-                    (keys_changed & (byte)PAD.UP) != 0 ||
-                    (keys_changed & (byte)PAD.DOWN) != 0)
+                if (dpadX != 0 || dpadY != 0)
                 {
                     for (k = 0; k < 16; k = (byte)(k + 1))
                     {
@@ -335,7 +336,7 @@ while (true)
                     }
                 }
 
-                if ((keys_changed & (byte)PAD.LEFT) != 0)
+                if (dpadX == 0xff)
                 {
                     // ===== MOVE LEFT =====
                     for (i = 0; i < 4; i = (byte)(i + 1))
@@ -398,7 +399,7 @@ while (true)
                         }
                     }
                 }
-                else if ((keys_changed & (byte)PAD.RIGHT) != 0)
+                else if (dpadX == 1)
                 {
                     // ===== MOVE RIGHT =====
                     for (i = 0; i < 4; i = (byte)(i + 1))
@@ -457,7 +458,7 @@ while (true)
                         }
                     }
                 }
-                else if ((keys_changed & (byte)PAD.UP) != 0)
+                else if (dpadY == 0xff)
                 {
                     // ===== MOVE UP =====
                     for (j = 0; j < 4; j = (byte)(j + 1))
@@ -516,7 +517,7 @@ while (true)
                         }
                     }
                 }
-                else if ((keys_changed & (byte)PAD.DOWN) != 0)
+                else if (dpadY == 1)
                 {
                     // ===== MOVE DOWN =====
                     for (j = 0; j < 4; j = (byte)(j + 1))

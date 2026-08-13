@@ -479,6 +479,11 @@ while (true)
 
         // --- Player movement ---
         PAD joy = pad_poll(0);
+        byte jump = (byte)(joy & PAD.A);
+        byte dpadX = 0;
+        byte dpadY = 0;
+        dpadX = (byte)(dpadX + pad_dpad_x(joy));
+        dpadY = (byte)(dpadY + pad_dpad_y(joy));
         {
             byte pi = 0;
             byte pf = actor_floor[pi];
@@ -494,28 +499,23 @@ while (true)
 
             if (ps == STANDING || ps == WALKING)
             {
-                if ((joy & PAD.A) != 0)
+                if (jump != 0)
                 {
                     actor_state[pi] = JUMPING;
-                    actor_xvel[pi] = 0;
+                    actor_xvel[pi] = dpadX;
                     actor_yvel[pi] = JUMP_VELOCITY;
-                    if ((joy & PAD.LEFT) != 0) actor_xvel[pi] = 0xff;
-                    if ((joy & PAD.RIGHT) != 0) actor_xvel[pi] = 1;
                     sfx_play(SND_JUMP, 0);
                 }
-                else if ((joy & PAD.LEFT) != 0)
+                else if (dpadX != 0)
                 {
-                    actor_x[pi] = (byte)(actor_x[pi] - 1);
-                    actor_dir[pi] = 1;
+                    byte px = actor_x[pi];
+                    px = (byte)(px + dpadX);
+                    actor_x[pi] = px;
+                    if (dpadX == 0xff) actor_dir[pi] = 1;
+                    else actor_dir[pi] = 0;
                     actor_state[pi] = WALKING;
                 }
-                else if ((joy & PAD.RIGHT) != 0)
-                {
-                    actor_x[pi] = (byte)(actor_x[pi] + 1);
-                    actor_dir[pi] = 0;
-                    actor_state[pi] = WALKING;
-                }
-                else if ((joy & PAD.UP) != 0)
+                else if (dpadY == 0xff)
                 {
                     byte lx = 0;
                     if (floor_ladder1[pf] != 0)
@@ -534,7 +534,7 @@ while (true)
                         actor_state[pi] = CLIMBING;
                     }
                 }
-                else if ((joy & PAD.DOWN) != 0)
+                else if (dpadY == 1)
                 {
                     if (pf > 0)
                     {
@@ -566,7 +566,7 @@ while (true)
 
             if (ps == CLIMBING)
             {
-                if ((joy & PAD.UP) != 0)
+                if (dpadY == 0xff)
                 {
                     if (actor_yy_hi[pi] > cyy_hi || (actor_yy_hi[pi] == cyy_hi && actor_yy_lo[pi] >= cyy_lo))
                     {
@@ -579,7 +579,7 @@ while (true)
                         if (actor_yy_lo[pi] == 0) actor_yy_hi[pi] = (byte)(actor_yy_hi[pi] + 1);
                     }
                 }
-                else if ((joy & PAD.DOWN) != 0)
+                else if (dpadY == 1)
                 {
                     if (actor_yy_hi[pi] < fyy_hi || (actor_yy_hi[pi] == fyy_hi && actor_yy_lo[pi] <= fyy_lo))
                     {

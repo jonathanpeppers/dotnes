@@ -130,7 +130,7 @@ partial class IL2NESWriter
         if (block.Count > 0)
         {
             var last = block[block.Count - 1];
-            if (last.Opcode == Opcode.LDA && last.Mode == AddressMode.Immediate)
+            if (!_runtimeValueInA && last.Opcode == Opcode.LDA && last.Mode == AddressMode.Immediate)
                 RemoveLastInstructions(1);
         }
         Emit(Opcode.CMP, AddressMode.Immediate, (byte)compareValue);
