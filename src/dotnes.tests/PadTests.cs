@@ -325,6 +325,32 @@ public class PadTests : RoslynTests
     }
 
     [Fact]
+    public void DpadY_ResultComparedToBothDirections()
+    {
+        var bytes = GetProgramBytes(
+            """
+            byte y = 128;
+            ppu_on_all();
+            while (true)
+            {
+                ppu_wait_nmi();
+                PAD pad = pad_poll(0);
+                byte dpadY = (byte)pad_dpad_y(pad);
+                if (dpadY == 0xff) y--;
+                if (dpadY == 1) y++;
+            }
+            """);
+        Assert.NotNull(bytes);
+
+        var hex = Convert.ToHexString(bytes);
+        Assert.Contains("2910", hex); // PAD.UP
+        Assert.Contains("A9FF", hex); // -1
+        // AND #PAD.DOWN; BEQ; LDA #1; CMP #-1. The LDA must remain adjacent to
+        // the comparison instead of being mistaken for its constant operand.
+        Assert.Contains("2920F002A901C9FF", hex);
+    }
+
+    [Fact]
     public void DpadXAndY()
     {
         // Both pad_dpad_x and pad_dpad_y used together
