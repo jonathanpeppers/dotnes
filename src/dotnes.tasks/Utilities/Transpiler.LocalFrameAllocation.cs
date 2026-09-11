@@ -46,7 +46,8 @@ partial class Transpiler
         HashSet<int> wordLocals,
         Dictionary<string, List<(string Name, int Size)>>? structLayouts,
         int closureStructLocalIndex = -1,
-        Dictionary<string, int>? closureFieldTypes = null)
+        Dictionary<string, int>? closureFieldTypes = null,
+        ISet<int>? fixedArrayOffsets = null)
     {
         int totalBytes = 0;
 
@@ -73,7 +74,7 @@ partial class Transpiler
                 foreach (var f in fields) structSize += f.Size;
                 totalBytes += count.Value * structSize;
             }
-            else
+            else if (fixedArrayOffsets?.Contains(instructions[i].Offset) != true)
             {
                 totalBytes += count.Value; // byte/primitive array
             }
@@ -167,7 +168,8 @@ partial class Transpiler
         int baseOffset,
         Dictionary<string, List<(string Name, int Size)>>? structLayouts,
         int closureStructLocalIndex = -1,
-        Dictionary<string, int>? closureFieldTypes = null)
+        Dictionary<string, int>? closureFieldTypes = null,
+        IReadOnlyDictionary<string, HashSet<int>>? fixedArrayOffsets = null)
     {
         // Step 1: Estimate local byte counts for each method
         var localByteCounts = new Dictionary<string, int>(StringComparer.Ordinal);
@@ -175,7 +177,8 @@ partial class Transpiler
         {
             var wordLocals = DetectWordLocals(kvp.Value, reflectionCache);
             localByteCounts[kvp.Key] = EstimateMethodLocalBytes(kvp.Value, wordLocals, structLayouts,
-                closureStructLocalIndex, closureFieldTypes);
+                closureStructLocalIndex, closureFieldTypes,
+                fixedArrayOffsets != null && fixedArrayOffsets.TryGetValue(kvp.Key, out var reservedOffsets) ? reservedOffsets : null);
         }
 
         // Step 2: Build call graph — which user methods does each method call?

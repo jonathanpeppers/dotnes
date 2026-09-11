@@ -18,6 +18,8 @@ partial class IL2NESWriter
     /// </summary>
     Local? TryResolveArrayLocal(ILInstruction instr)
     {
+        if (instr.OpCode == ILOpCode.Newarr && FixedArrayAllocations.TryGetValue(instr.Offset, out var allocation))
+            return allocation;
         // Try local variable first
         var localIdx = instr.GetLdlocIndex();
         if (localIdx != null && Locals.TryGetValue(localIdx.Value, out var loc))

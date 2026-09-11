@@ -386,7 +386,8 @@ partial class Transpiler : IDisposable
             PreAllocateClosureFields(ref staticFieldBytes);
         }
 
-        var staticArrayAliases = new Dictionary<string, LocalVariableManager.Local>(StringComparer.Ordinal);
+        var (staticArrayAliases, fixedArrayAllocations, provenStaticArrayStores) = PreAllocateArrayAliases(
+            UserMethods.Values.Prepend(instructions), reflectionCache, ref staticFieldBytes, staticArrayFields);
         using var writer = new IL2NESWriter(new MemoryStream(), logger: _logger, reflectionCache: reflectionCache)
         {
             Instructions = instructions,
@@ -404,6 +405,8 @@ partial class Transpiler : IDisposable
             LocalCount = staticFieldBytes,
             StaticArrayFields = staticArrayFields,
             StaticArrayAliases = staticArrayAliases,
+            FixedArrayAllocations = fixedArrayAllocations.TryGetValue(instructions, out var mainAllocations) ? mainAllocations : new(),
+            ProvenStaticArrayStores = provenStaticArrayStores.TryGetValue(instructions, out var mainStores) ? mainStores : new(),
             ClosureFieldTypes = _closureFieldTypes.Count > 0 ? _closureFieldTypes : null,
             ClosureFieldLabels = _closureFieldLabels,
             ClosureFieldAddresses = _closureFieldAddresses,
@@ -471,7 +474,9 @@ partial class Transpiler : IDisposable
         // Each method's locals must use unique addresses to prevent collisions in nested calls
         int mainLocalCount = writer.LocalCount;
         var methodFrameOffsets = ComputeMethodFrameOffsets(UserMethods, reflectionCache, mainLocalCount, structLayouts,
-            _closureStructLocalIndex, _closureFieldTypes.Count > 0 ? _closureFieldTypes : null);
+            _closureStructLocalIndex, _closureFieldTypes.Count > 0 ? _closureFieldTypes : null,
+            UserMethods.ToDictionary(pair => pair.Key, pair => fixedArrayAllocations.TryGetValue(pair.Value, out var allocations)
+                ? new HashSet<int>(allocations.Keys) : new HashSet<int>(), StringComparer.Ordinal));
         int userMethodsTotalSize = 0;
         foreach (var kvp in UserMethods.OrderBy(x => x.Key, StringComparer.Ordinal))
         {
@@ -502,6 +507,8 @@ partial class Transpiler : IDisposable
                 WordStaticFields = wordStaticFields,
                 StaticArrayFields = staticArrayFields,
                 StaticArrayAliases = staticArrayAliases,
+                FixedArrayAllocations = fixedArrayAllocations.TryGetValue(methodIL, out var methodAllocations) ? methodAllocations : new(),
+                ProvenStaticArrayStores = provenStaticArrayStores.TryGetValue(methodIL, out var methodStores) ? methodStores : new(),
                 ClosureFieldTypes = _closureFieldTypes.Count > 0 ? _closureFieldTypes : null,
                 ClosureFieldLabels = _closureFieldLabels,
                 ClosureFieldAddresses = _closureFieldAddresses,

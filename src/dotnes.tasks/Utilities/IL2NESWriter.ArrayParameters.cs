@@ -8,6 +8,8 @@ namespace dotnes;
 partial class IL2NESWriter
 {
     internal Dictionary<string, Local> StaticArrayAliases { get; init; } = new(StringComparer.Ordinal);
+    internal IReadOnlyDictionary<int, Local> FixedArrayAllocations { get; init; } = new Dictionary<int, Local>();
+    internal ISet<int> ProvenStaticArrayStores { get; init; } = new HashSet<int>();
 
     bool ArrayIndexNeedsPreservation(int index) =>
         Instructions is not null && ArrayOperandLowering.IndexNeedsPreservation(Instructions, index);
@@ -190,6 +192,17 @@ partial class IL2NESWriter
         string? field = instruction.OpCode == ILOpCode.Stsfld ? instruction.String : null;
         if ((destination is null && field is null) || Instructions is null || Index == 0)
             return false;
+        if (field is not null)
+        {
+            _byteCallValues ??= new ILValueAnalysis(Instructions, _reflectionCache);
+            var inputs = _byteCallValues.Inputs[Index];
+            if (inputs.Length == 1 && inputs[0] < 0 && StaticArrayAliases.ContainsKey(field) &&
+                !ProvenStaticArrayStores.Contains(instruction.Offset))
+                throw new TranspileException("A static array alias cannot change identity across unsupported control flow.", MethodName);
+            if (inputs.Length == 1 && inputs[0] >= 0 &&
+                TryResolveArrayLocal(Instructions[inputs[0]])?.ArrayParameterIndex is not null)
+                throw new TranspileException("A static array alias must reference a fixed allocation, not a helper parameter.", MethodName);
+        }
         var source = Instructions[Index - 1];
         var array = TryResolveArrayLocal(source);
         if (array is null || (array.ArraySize == 0 && array.LabelName is null && array.ArrayParameterIndex is null))

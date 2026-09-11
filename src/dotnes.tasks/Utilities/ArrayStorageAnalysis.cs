@@ -37,7 +37,8 @@ sealed class ArrayStorageAnalysis
         }
     }
 
-    public ArrayStorage GetStorage(ILInstruction[] instructions, int producer)
+    public ArrayStorage GetStorage(ILInstruction[] instructions, int producer,
+        ISet<(ILInstruction[] Method, int Producer)>? allocations = null)
     {
         var visited = new HashSet<(ILInstruction[], int)>();
         ArrayStorage result = Resolve(instructions, producer);
@@ -55,7 +56,10 @@ sealed class ArrayStorageAnalysis
                 il[p].String is nameof(NESLib.meta_spr_2x2) or nameof(NESLib.meta_spr_2x2_flip))
                 return ArrayStorage.Rom;
             if (il[p].OpCode == ILOpCode.Newarr)
+            {
+                allocations?.Add((il, p));
                 return ArrayStorage.Ram;
+            }
             if (il[p].OpCode == ILOpCode.Ldsfld && il[p].String is string field)
                 return fields.TryGetValue(field, out var sources)
                     ? sources.Aggregate((ArrayStorage)0, (storage, source) => storage | Resolve(source.Method, source.Producer))
@@ -80,6 +84,40 @@ sealed class ArrayStorageAnalysis
                     foreach (int predecessor in analysis.Predecessors[i])
                         pending.Push(predecessor);
             }
+            return found;
+        }
+
+    }
+
+    public ArrayStorage GetInputStorage(ILInstruction[] instructions, int consumer, int argument,
+        ISet<(ILInstruction[] Method, int Producer)> allocations)
+    {
+        var analysis = methods[instructions];
+        int producer = analysis.Inputs[consumer][argument];
+        if (producer >= 0)
+            return GetStorage(instructions, producer, allocations);
+        var visited = new HashSet<(int Instruction, int Slot)>();
+        ArrayStorage result = 0;
+        foreach (int predecessor in analysis.Predecessors[consumer])
+            result |= Resolve(predecessor, analysis.Outputs[predecessor].Length - analysis.Inputs[consumer].Length + argument);
+        return result == 0 ? ArrayStorage.Unknown : result;
+
+        ArrayStorage Resolve(int index, int slot)
+        {
+            if (slot < 0 || slot >= analysis.Outputs[index].Length)
+                return ArrayStorage.Unknown;
+            if (!visited.Add((index, slot)))
+                return 0;
+            int value = analysis.Outputs[index][slot];
+            if (value >= 0)
+                return GetStorage(instructions, value, allocations);
+            // Unknown identities are inherited stack slots at a join. A dup's
+            // extra slot refers to the preceding top slot, not a new allocation.
+            if (instructions[index].OpCode == ILOpCode.Dup && slot == analysis.Outputs[index].Length - 1)
+                slot--;
+            ArrayStorage found = 0;
+            foreach (int predecessor in analysis.Predecessors[index])
+                found |= Resolve(predecessor, slot);
             return found;
         }
     }
