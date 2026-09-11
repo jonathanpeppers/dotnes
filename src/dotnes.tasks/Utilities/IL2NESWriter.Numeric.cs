@@ -51,7 +51,7 @@ partial class IL2NESWriter
         };
     }
 
-    static int? NumericArgIndex(ILInstruction instruction) => instruction.OpCode switch
+    internal static int? NumericArgIndex(ILInstruction instruction) => instruction.OpCode switch
     {
         ILOpCode.Ldarg_0 => 0,
         ILOpCode.Ldarg_1 => 1,
