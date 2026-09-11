@@ -2620,6 +2620,12 @@ partial class IL2NESWriter
                         break;
                     case nameof(NESLib.poke):
                         {
+                            if (_runtimeMemoryCalls.Contains(Index))
+                            {
+                                EmitRuntimePoke();
+                                argsAlreadyPopped = true;
+                                break;
+                            }
                             // poke(ushort addr, byte value) -> LDA #value, STA abs addr
                             if (Stack.Count >= 2)
                             {
@@ -2743,15 +2749,17 @@ partial class IL2NESWriter
                         break;
                     case nameof(NESLib.peek):
                         {
+                            if (_runtimeMemoryCalls.Contains(Index))
+                            {
+                                EmitRuntimePeek();
+                                argsAlreadyPopped = true;
+                                break;
+                            }
                             // peek(ushort addr) -> LDA abs addr
                             if (Stack.Count >= 1)
                             {
                                 int addr = Stack.Pop();
-                                // Remove previously emitted instructions:
-                                // ushort addr: LDX #hi, LDA #lo = 2 instructions
-                                // byte addr:   LDA #lo = 1 instruction
-                                RemoveLastInstructions(addr > byte.MaxValue ? 2 : 1);
-                                Emit(Opcode.LDA, AddressMode.Absolute, (ushort)addr);
+                                EmitConstantPeek(addr);
                                 _runtimeValueInA = true;
                                 _immediateInA = null;
                                 _pokeLastValue = null;

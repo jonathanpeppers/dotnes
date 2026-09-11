@@ -329,6 +329,10 @@ partial class Transpiler : IDisposable
             reflectionCache.RegisterExternMethod(kvp.Key, kvp.Value.argCount, kvp.Value.hasReturnValue);
         }
 
+        instructions = MaterializeSharedMemoryAddresses(instructions, reflectionCache, "main");
+        foreach (string methodName in UserMethods.Keys.ToArray())
+            UserMethods[methodName] = MaterializeSharedMemoryAddresses(UserMethods[methodName], reflectionCache, methodName);
+
         // Build main program block using label references (addresses resolved later)
         var externNames = new HashSet<string>(ExternMethods.Keys, StringComparer.Ordinal);
         var structLayouts = DetectStructLayouts();
