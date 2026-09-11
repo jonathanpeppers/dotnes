@@ -5,6 +5,25 @@ namespace dotnes.tests;
 public class ILValueAnalysisTests
 {
     [Fact]
+    public void NativeOverloadConsumesItsDecodedSourceSignature()
+    {
+        using var dll = Utilities.GetResource("horizmask.release.dll");
+        using var transpiler = new Transpiler(dll, Array.Empty<AssemblyReader>());
+        _ = transpiler.ReadStaticVoidMain().ToArray();
+        var il = transpiler.UserMethods["scroll_demo"];
+        var analysis = new ILValueAnalysis(il, new ReflectionCache());
+        var calls = il.Select((instruction, index) => (instruction, index))
+            .Where(pair => pair.instruction.String is nameof(NESLib.vrambuf_put_vert) or nameof(NESLib.vrambuf_put)).ToArray();
+        Assert.Equal(2, calls.Length);
+        foreach (var (instruction, index) in calls)
+        {
+            Assert.Equal((3, false), instruction.CallSignature);
+            Assert.Equal(3, analysis.Inputs[index].Length);
+            Assert.Empty(analysis.Outputs[index]);
+        }
+    }
+
+    [Fact]
     public void EmptyTypedSpillPlanDoesNotRequireAMethodSignature()
     {
         using var dll = Utilities.GetResource("hello.release.dll");
