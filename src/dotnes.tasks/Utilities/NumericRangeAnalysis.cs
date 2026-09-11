@@ -15,6 +15,7 @@ sealed class NumericRangeAnalysis
     readonly IReadOnlyDictionary<string, MethodNumericTypes> methods;
     readonly ReflectionCache reflection;
     readonly IReadOnlyDictionary<string, PrimitiveTypeCode?>? fields;
+    readonly IReadOnlyDictionary<string, PrimitiveTypeCode?>? closureFields;
     readonly Dictionary<int, Range?> locals = new();
     readonly HashSet<int> visiting = new();
 
@@ -22,13 +23,15 @@ sealed class NumericRangeAnalysis
 
     public NumericRangeAnalysis(ILInstruction[] instructions, MethodNumericTypes types,
         IReadOnlyDictionary<string, MethodNumericTypes> methods, ReflectionCache reflection,
-        IReadOnlyDictionary<string, PrimitiveTypeCode?>? fields = null)
+        IReadOnlyDictionary<string, PrimitiveTypeCode?>? fields = null,
+        IReadOnlyDictionary<string, PrimitiveTypeCode?>? closureFields = null)
     {
         this.instructions = instructions;
         this.types = types;
         this.methods = methods;
         this.reflection = reflection;
         this.fields = fields;
+        this.closureFields = closureFields;
         values = new(instructions, reflection);
     }
 
@@ -184,6 +187,9 @@ sealed class NumericRangeAnalysis
             case ILOpCode.Ldsfld when instruction.String is string field
                 && fields != null && fields.TryGetValue(field, out var fieldType):
                 return TypeRange(fieldType);
+            case ILOpCode.Ldfld when instruction.String is string closureField
+                && closureFields != null && closureFields.TryGetValue(closureField, out var closureType):
+                return TypeRange(closureType);
             case ILOpCode.Conv_u1: case ILOpCode.Ldelem_u1: case ILOpCode.Ldind_u1:
                 return new(0, byte.MaxValue);
             case ILOpCode.Conv_i1: case ILOpCode.Ldelem_i1: case ILOpCode.Ldind_i1:

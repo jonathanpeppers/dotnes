@@ -50,6 +50,9 @@ partial class Transpiler
             else if (instruction.OpCode == ILOpCode.Ldsfld && instruction.String is string field
                 && fieldTypes.TryGetValue(field, out var fieldType))
                 type = fieldType;
+            else if (instruction.OpCode == ILOpCode.Ldfld && instruction.String is string closureField
+                && _closureNumericFieldTypes.TryGetValue(closureField, out var closureType))
+                type = closureType;
             else if (instruction.OpCode is ILOpCode.Ceq or ILOpCode.Clt or ILOpCode.Clt_un
                 or ILOpCode.Cgt or ILOpCode.Cgt_un)
                 type = PrimitiveTypeCode.Boolean;

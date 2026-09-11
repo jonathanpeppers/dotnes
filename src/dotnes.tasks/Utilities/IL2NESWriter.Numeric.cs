@@ -9,15 +9,19 @@ partial class IL2NESWriter
     MethodNumericTypes? _numericTypes;
     IReadOnlyDictionary<string, MethodNumericTypes>? _numericMethods;
     IReadOnlyDictionary<string, PrimitiveTypeCode?>? _numericFields;
+    IReadOnlyDictionary<string, PrimitiveTypeCode?>? _numericClosureFields;
     ILValueAnalysis? _numericValues;
     Dictionary<int, PrimitiveTypeCode> _compactIntLocals = new();
     readonly Dictionary<int, int> _numericArgAdjust = new();
+    readonly Dictionary<int, bool> _numericWordAtILOffset = new();
 
     internal void ConfigureNumericTypes(IReadOnlyDictionary<string, MethodNumericTypes> methods,
-        IReadOnlyDictionary<string, PrimitiveTypeCode?>? fields = null)
+        IReadOnlyDictionary<string, PrimitiveTypeCode?>? fields = null,
+        IReadOnlyDictionary<string, PrimitiveTypeCode?>? closureFields = null)
     {
         _numericMethods = methods;
         _numericFields = fields;
+        _numericClosureFields = closureFields;
         methods.TryGetValue(MethodName ?? "main", out _numericTypes);
         if (MethodName != null && _numericTypes != null)
         {
@@ -32,7 +36,8 @@ partial class IL2NESWriter
         {
             _numericValues = new ILValueAnalysis(Instructions, _reflectionCache);
             if (_numericTypes != null)
-                _compactIntLocals = new NumericRangeAnalysis(Instructions, _numericTypes, methods, _reflectionCache, fields)
+                _compactIntLocals = new NumericRangeAnalysis(Instructions, _numericTypes, methods, _reflectionCache,
+                    fields, closureFields)
                     .GetCompactIntLocals(MethodName ?? "main");
         }
     }
@@ -57,6 +62,8 @@ partial class IL2NESWriter
         {
             ILOpCode.Ldsfld when instruction.String is string field
                 && _numericFields != null && _numericFields.TryGetValue(field, out var fieldType) => fieldType,
+            ILOpCode.Ldfld when instruction.String is string closureField
+                && _numericClosureFields != null && _numericClosureFields.TryGetValue(closureField, out var closureType) => closureType,
             ILOpCode.Conv_i1 => PrimitiveTypeCode.SByte,
             ILOpCode.Conv_u1 => PrimitiveTypeCode.Byte,
             ILOpCode.Conv_i2 => PrimitiveTypeCode.Int16,
@@ -137,6 +144,21 @@ partial class IL2NESWriter
             return StaticFieldAddresses.ContainsKey(field)
                 && NumericType(producer) is PrimitiveTypeCode.Byte or PrimitiveTypeCode.SByte
                     or PrimitiveTypeCode.Int16 or PrimitiveTypeCode.UInt16;
+        if (instruction.OpCode == ILOpCode.Ldfld && instruction.String is string closureField)
+        {
+            if (_numericValues.Inputs[producer].Length == 1
+                && _numericValues.Inputs[producer][0] == producer - 1 && producer > 0)
+            {
+                var receiver = Instructions[producer - 1];
+                if (IsClosureMethod && NumericArgIndex(receiver) == ClosureArgIndex
+                    || receiver.OpCode is ILOpCode.Ldloca or ILOpCode.Ldloca_s
+                        && receiver.Integer == ClosureStructLocalIndex)
+                    first = producer - 1;
+            }
+            return ClosureFieldAddresses.ContainsKey(closureField)
+                && NumericType(producer) is PrimitiveTypeCode.Byte or PrimitiveTypeCode.SByte
+                    or PrimitiveTypeCode.Int16 or PrimitiveTypeCode.UInt16;
+        }
         if (instruction.OpCode is ILOpCode.Conv_i1 or ILOpCode.Conv_u1 or ILOpCode.Conv_i2 or ILOpCode.Conv_u2
             && _numericValues.Inputs[producer].Length == 1 && _numericValues.Inputs[producer][0] == producer - 1)
             return PureNumericOperand(_numericValues.Inputs[producer][0], out first);
@@ -206,6 +228,15 @@ partial class IL2NESWriter
             ushort address = StaticFieldAddresses[field];
             Emit(Opcode.LDA, AddressMode.Absolute, address);
             if (WordStaticFields.Contains(field))
+                Emit(Opcode.LDX, AddressMode.Absolute, (ushort)(address + 1));
+            else
+                EmitNumericExtension(NumericType(producer) == PrimitiveTypeCode.SByte);
+        }
+        else if (instruction.OpCode == ILOpCode.Ldfld && instruction.String is string closureField)
+        {
+            ushort address = ClosureFieldAddresses[closureField];
+            Emit(Opcode.LDA, AddressMode.Absolute, address);
+            if (WordNumericType(NumericType(producer)))
                 Emit(Opcode.LDX, AddressMode.Absolute, (ushort)(address + 1));
             else
                 EmitNumericExtension(NumericType(producer) == PrimitiveTypeCode.SByte);
@@ -382,25 +413,44 @@ partial class IL2NESWriter
         bool signedLeft = SignedNumericType(NumericType(lhs));
         bool signedRight = SignedNumericType(NumericType(rhs));
         if (!signedLeft && !signedRight
-            && !(WordNumericType(NumericType(lhs)) && WordNumericType(NumericType(rhs))
-                && Instructions![lhs].GetLdcValue() == null && Instructions[rhs].GetLdcValue() == null))
+            && !WordNumericType(NumericType(lhs)) && !WordNumericType(NumericType(rhs)))
+            return false;
+        // These branch forms already compare complete A:X against an immediate word.
+        // Keep their compact emission; value-producing and mixed-runtime comparisons need this path.
+        if (!signedLeft && !signedRight && NumericType(lhs) == PrimitiveTypeCode.UInt16
+            && _ushortInAX && Instructions![rhs].GetLdcValue() is >= 0 and <= ushort.MaxValue
+            && _numericWordAtILOffset.TryGetValue(Instructions[rhs].Offset, out bool completeWord) && completeWord
+            && code is ILOpCode.Blt or ILOpCode.Blt_s or ILOpCode.Blt_un or ILOpCode.Blt_un_s
+                or ILOpCode.Bge or ILOpCode.Bge_s or ILOpCode.Bge_un or ILOpCode.Bge_un_s
+                or ILOpCode.Beq or ILOpCode.Beq_s or ILOpCode.Bne_un or ILOpCode.Bne_un_s)
             return false;
         bool operandsReloaded = TryNumericOperands(out int left, out int right);
         if (!operandsReloaded)
         {
             if (NumericType(lhs) is PrimitiveTypeCode.Byte or PrimitiveTypeCode.SByte
+                    or PrimitiveTypeCode.Int16 or PrimitiveTypeCode.UInt16
                 && rhs == lhs + 1 && rhs == Index - 1 && Instructions![rhs].GetLdcValue().HasValue
                 && !ILBranchTargets.HasEntryAfter(Instructions, lhs, Index)
                 && _blockCountAtILOffset.TryGetValue(Instructions[rhs].Offset, out int blockStart))
             {
-                // Keep the original call result; do not re-evaluate it to widen the comparison.
+                // Restore the actual operand before loading the constant, without repeating calls.
                 RemoveLastInstructions(GetBufferedBlockCount() - blockStart);
                 _argStackAdjust = _numericArgAdjust[Instructions[rhs].Offset];
                 CurrentBlock!.SetNextLabel(InstructionLabel(Instructions[rhs].Offset));
-                EmitNumericExtension(signedLeft);
+                if (!WordNumericType(NumericType(lhs)))
+                    EmitNumericExtension(signedLeft);
+                else if (!_numericWordAtILOffset[Instructions[rhs].Offset])
+                {
+                    if (PureNumericOperand(lhs, out _))
+                        EmitNumericOperand(lhs);
+                    else
+                        throw new TranspileException(
+                            $"Word comparison at IL_{instruction.Offset:X4} has no complete word operand. " +
+                            "Store the value in an explicitly typed short or ushort local before comparing.", MethodName);
+                }
                 _savedState = SavedValueState.None;
             }
-            else if (!_ushortInAX || Instructions![rhs].GetLdcValue() == null)
+            else
                 throw new TranspileException(
                     $"Signed/word comparison at IL_{instruction.Offset:X4} needs materialized operands. " +
                     "Store each operand in an explicitly typed byte, sbyte, short or ushort local before comparing.",

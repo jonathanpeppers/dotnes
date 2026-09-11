@@ -11,6 +11,8 @@ namespace dotnes;
 /// </summary>
 partial class Transpiler
 {
+    readonly Dictionary<string, PrimitiveTypeCode?> _closureNumericFieldTypes = new(StringComparer.Ordinal);
+
     /// <summary>
     /// Scans the assembly's TypeDefinitions for user-defined value types (structs)
     /// and returns a dictionary of struct name → field list (name, size in bytes).
@@ -73,6 +75,7 @@ partial class Transpiler
                     }
                     int fieldSize = DecodeFieldSize(field);
                     _closureFieldTypes[fieldName] = fieldSize;
+                    _closureNumericFieldTypes[fieldName] = fieldType;
                 }
                 continue;
             }

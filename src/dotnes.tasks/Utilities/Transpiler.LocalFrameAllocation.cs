@@ -15,7 +15,8 @@ partial class Transpiler
     {
         if (!NumericTypes.TryGetValue(method, out var types))
             return new();
-        var ranges = new NumericRangeAnalysis(instructions, types, NumericTypes, reflection, GetNumericFieldTypes());
+        var ranges = new NumericRangeAnalysis(instructions, types, NumericTypes, reflection,
+            GetNumericFieldTypes(), _closureNumericFieldTypes);
         var compact = ranges.GetCompactIntLocals(method);
         if (validateOperations)
             ranges.ValidatePromotedArithmetic(method);

@@ -175,7 +175,7 @@ partial class IL2NESWriter
                 _immediateInA = null;
                 return;
             }
-            else // scalar field (byte, ushort, short, int captured in closure)
+            else // supported scalar field captured in a closure
             {
                 ushort addr = ClosureFieldAddresses[fieldName];
                 int value = Stack.Count > 0 ? Stack.Pop() : 0;
@@ -196,20 +196,34 @@ partial class IL2NESWriter
                 }
                 else
                 {
-                    // Multi-byte scalar (16-bit word: low/high bytes)
-                    if (_runtimeValueInA && _ushortInAX)
+                    int producer = _numericValues != null && _numericValues.Inputs[Index].Length == 2
+                        ? _numericValues.Inputs[Index][1] : -1;
+                    if (_runtimeValueInA && _ushortInAX && WordNumericType(NumericType(producer)))
                     {
                         Emit(Opcode.STA, AddressMode.Absolute, addr);
                         Emit(Opcode.STX, AddressMode.Absolute, (ushort)(addr + 1));
                     }
+                    else if (producer >= 0 && Instructions![producer].GetLdcValue() is int constant)
+                    {
+                        Emit(Opcode.LDA, AddressMode.Immediate, (byte)constant);
+                        Emit(Opcode.STA, AddressMode.Absolute, addr);
+                        Emit(Opcode.LDA, AddressMode.Immediate, (byte)(constant >> 8));
+                        Emit(Opcode.STA, AddressMode.Absolute, (ushort)(addr + 1));
+                    }
                     else
                     {
-                        byte low = (byte)(value & 0xFF);
-                        byte high = (byte)((value >> 8) & 0xFF);
-                        Emit(Opcode.LDA, AddressMode.Immediate, low);
+                        if (PureNumericOperand(producer, out _))
+                            EmitNumericOperand(producer);
+                        else if (_runtimeValueInA
+                            && NumericType(producer) is PrimitiveTypeCode.Byte or PrimitiveTypeCode.SByte)
+                            EmitNumericExtension(SignedNumericType(NumericType(producer)));
+                        else
+                            throw new TranspileException(
+                                $"Store to captured word '{fieldName}' at IL_{Instructions?[Index].Offset:X4} " +
+                                "needs a materialized scalar value. Store the source in an explicitly typed " +
+                                "byte, sbyte, short or ushort local first.", MethodName);
                         Emit(Opcode.STA, AddressMode.Absolute, addr);
-                        Emit(Opcode.LDA, AddressMode.Immediate, high);
-                        Emit(Opcode.STA, AddressMode.Absolute, (ushort)(addr + 1));
+                        Emit(Opcode.STX, AddressMode.Absolute, (ushort)(addr + 1));
                     }
                     _runtimeValueInA = false;
                     _ushortInAX = false;
@@ -336,8 +350,8 @@ partial class IL2NESWriter
                 if (fieldSize > 1)
                 {
                     Emit(Opcode.LDX, AddressMode.Absolute, (ushort)(addr + 1));
-                    _ushortInAX = true;
                 }
+                _ushortInAX = fieldSize > 1;
             }
             _runtimeValueInA = true;
             _immediateInA = null;

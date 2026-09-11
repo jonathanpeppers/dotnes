@@ -29,6 +29,11 @@ remain word-sized so a narrowed value such as 255 is not later sign-extended
 from its low byte. The software stack and local frame accounting must still
 preserve every byte of a live word across calls.
 
+Supported captured scalar variables retain their declared numeric types through
+closure loads, arithmetic, comparisons and returns. Word stores use the actual
+runtime operand, or the original full literal, rather than a byte-sized tracking
+value. Byte fields do not inherit a previous operand's high-register state.
+
 Conversions to `byte`/`sbyte` retain the low eight bits, and conversions to
 `ushort`/`short` retain the low sixteen bits. Widening a signed byte sign-extends;
 widening an unsigned byte zero-extends. For example, `(ushort)(sbyte)-1` is 65535,
@@ -40,6 +45,12 @@ cannot be implemented as unsigned byte comparisons or by inspecting only the
 6502 subtraction's negative flag. In particular, `-128 < 127` and
 `(short)-1 < (ushort)65535` are both true. Word addition/subtraction must propagate
 carry/borrow before an explicit narrowing conversion.
+
+Unsigned word comparisons, including comparisons against constants or bytes,
+use both bytes when producing a Boolean value. For example, a stored result of
+`value < 256` is false when the `ushort` value is 300. Existing complete-word immediate branch forms keep
+their specialized lowering; materialized Boolean results do not use a byte-only
+comparison as a substitute.
 
 Unary negation and bitwise complement operate on both word bytes and retain signed
 provenance through comparisons and calls. Their original promoted range is also
