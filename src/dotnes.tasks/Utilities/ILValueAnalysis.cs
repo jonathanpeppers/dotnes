@@ -61,12 +61,22 @@ sealed class ILValueAnalysis
             }
             if (old.Length != stack.Count)
             {
-                Escape(old);
-                Escape(stack);
-                // An unknown stack effect cannot manufacture known operands.
-                if (old.Any(p => p >= 0) || old.Length > stack.Count)
+                int length = Math.Min(old.Length, stack.Count);
+                Escape(old.Take(old.Length - length));
+                Escape(stack.Take(stack.Count - length));
+                var merged = new int[length];
+                for (int j = 0; j < length; j++)
                 {
-                    states[successor] = Enumerable.Repeat(-1, Math.Min(old.Length, stack.Count)).ToArray();
+                    int left = old[old.Length - length + j], right = stack[stack.Count - length + j];
+                    merged[j] = left == right ? left : -1;
+                    if (left != right)
+                        Escape(new[] { left, right });
+                }
+                // An unknown deeper stack effect must not erase a known top
+                // operand (e.g. a constant loaded immediately before a call).
+                if (!old.SequenceEqual(merged))
+                {
+                    states[successor] = merged;
                     pending.Enqueue(successor);
                 }
                 return;
