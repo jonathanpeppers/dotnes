@@ -289,6 +289,8 @@ partial class IL2NESWriter
                 }
                 break;
             case ILOpCode.Conv_u1:
+                if (Stack.Count > 0)
+                    Stack.Push(unchecked((byte)Stack.Pop()));
                 // When truncating from ushort to byte, discard high byte
                 if (_ushortInAX)
                     _ushortInAX = false;
@@ -296,12 +298,14 @@ partial class IL2NESWriter
                 _lastStaticFieldAddress = null;
                 break;
             case ILOpCode.Conv_u2:
-            case ILOpCode.Conv_u4:
-            case ILOpCode.Conv_u8:
             case ILOpCode.Conv_i1:
             case ILOpCode.Conv_i2:
+                WriteNumericConversion(instruction.OpCode);
+                break;
+            case ILOpCode.Conv_u4:
+            case ILOpCode.Conv_u8:
             case ILOpCode.Conv_i4:
-                // No-op: sign/zero extension is irrelevant on 8-bit 6502
+                // The evaluation value is unchanged by the 32-bit promotion.
                 _lastStaticFieldAddress = null;
                 break;
             case ILOpCode.Stelem_i1:

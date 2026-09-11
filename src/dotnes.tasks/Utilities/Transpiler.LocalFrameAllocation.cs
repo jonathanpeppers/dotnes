@@ -18,6 +18,11 @@ partial class Transpiler
         var result = new HashSet<int>();
         if (NumericTypes.TryGetValue(methodName, out var types))
         {
+            var compactInts = new NumericRangeAnalysis(instructions, types, NumericTypes,
+                reflectionCache ?? new ReflectionCache()).GetCompactIntLocals(methodName);
+            foreach (var entry in compactInts)
+                if (entry.Value is PrimitiveTypeCode.UInt16 or PrimitiveTypeCode.Int16)
+                    result.Add(entry.Key);
             for (int i = 0; i < types.Locals.Length; i++)
                 if (types.Locals[i] is PrimitiveTypeCode.UInt16 or PrimitiveTypeCode.Int16)
                 {

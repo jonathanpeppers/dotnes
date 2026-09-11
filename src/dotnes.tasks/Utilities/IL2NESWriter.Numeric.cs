@@ -9,14 +9,30 @@ partial class IL2NESWriter
     MethodNumericTypes? _numericTypes;
     IReadOnlyDictionary<string, MethodNumericTypes>? _numericMethods;
     ILValueAnalysis? _numericValues;
+    Dictionary<int, PrimitiveTypeCode> _compactIntLocals = new();
     readonly Dictionary<int, int> _numericArgAdjust = new();
 
     internal void ConfigureNumericTypes(IReadOnlyDictionary<string, MethodNumericTypes> methods)
     {
         _numericMethods = methods;
         methods.TryGetValue(MethodName ?? "main", out _numericTypes);
+        if (MethodName != null && _numericTypes != null)
+        {
+            for (int i = 0; i < _numericTypes.Parameters.Length; i++)
+                if (_numericTypes.Parameters[i] is PrimitiveTypeCode.Int16 or PrimitiveTypeCode.UInt16
+                    or PrimitiveTypeCode.Int32 or PrimitiveTypeCode.UInt32)
+                    throw new TranspileException(
+                        $"Parameter {i} has type {_numericTypes.Parameters[i]}, but user-method scalar arguments " +
+                        "currently support byte and sbyte only. Keep word values in locals or use a supported " +
+                        "native routine with a documented calling convention.", MethodName);
+        }
         if (Instructions != null)
+        {
             _numericValues = new ILValueAnalysis(Instructions, _reflectionCache);
+            if (_numericTypes != null)
+                _compactIntLocals = new NumericRangeAnalysis(Instructions, _numericTypes, methods, _reflectionCache)
+                    .GetCompactIntLocals(MethodName ?? "main");
+        }
     }
 
     PrimitiveTypeCode? NumericType(int producer)
@@ -25,13 +41,15 @@ partial class IL2NESWriter
             return null;
         var instruction = Instructions[producer];
         if (instruction.GetLdlocIndex() is int localIndex)
-            return _numericTypes != null && localIndex < _numericTypes.Locals.Length
+            return _compactIntLocals.TryGetValue(localIndex, out var compact) ? compact
+                : _numericTypes != null && localIndex < _numericTypes.Locals.Length
                 ? _numericTypes.Locals[localIndex] : null;
         if (NumericArgIndex(instruction) is int argIndex)
             return _numericTypes != null && argIndex < _numericTypes.Parameters.Length
                 ? _numericTypes.Parameters[argIndex] : null;
         if (instruction.GetLdcValue() is int constant)
-            return constant < 0 ? PrimitiveTypeCode.Int16
+            return constant < sbyte.MinValue ? PrimitiveTypeCode.Int16
+                : constant < 0 ? PrimitiveTypeCode.SByte
                 : constant <= 255 ? PrimitiveTypeCode.Byte : PrimitiveTypeCode.UInt16;
         return instruction.OpCode switch
         {
@@ -47,6 +65,13 @@ partial class IL2NESWriter
             ILOpCode.Ldelem_i1 or ILOpCode.Ldind_i1 => PrimitiveTypeCode.SByte,
             ILOpCode.Ldelem_u2 or ILOpCode.Ldind_u2 => PrimitiveTypeCode.UInt16,
             ILOpCode.Ldelem_i2 or ILOpCode.Ldind_i2 => PrimitiveTypeCode.Int16,
+            ILOpCode.Add or ILOpCode.Sub when _numericValues.Inputs[producer].Length == 2
+                && NumericType(_numericValues.Inputs[producer][0]) is PrimitiveTypeCode.Byte or PrimitiveTypeCode.SByte
+                && NumericType(_numericValues.Inputs[producer][1]) is PrimitiveTypeCode.Byte or PrimitiveTypeCode.SByte =>
+                    instruction.OpCode == ILOpCode.Sub
+                    || SignedNumericType(NumericType(_numericValues.Inputs[producer][0]))
+                    || SignedNumericType(NumericType(_numericValues.Inputs[producer][1]))
+                        ? PrimitiveTypeCode.Int16 : PrimitiveTypeCode.UInt16,
             _ => null,
         };
     }
@@ -163,6 +188,43 @@ partial class IL2NESWriter
         }
     }
 
+    void WriteNumericConversion(ILOpCode code)
+    {
+        int value = Stack.Count > 0 ? Stack.Pop() : 0;
+        switch (code)
+        {
+            case ILOpCode.Conv_i1:
+                Stack.Push(unchecked((sbyte)value));
+                _ushortInAX = false;
+                break;
+            case ILOpCode.Conv_u2:
+            case ILOpCode.Conv_i2:
+                Stack.Push(code == ILOpCode.Conv_i2 ? unchecked((short)value) : unchecked((ushort)value));
+                if (!_ushortInAX)
+                {
+                    bool signed = _numericValues != null && _numericValues.Inputs[Index].Length == 1
+                        && NumericType(_numericValues.Inputs[Index][0]) == PrimitiveTypeCode.SByte;
+                    EmitNumericExtension(signed);
+                    _ushortInAX = true;
+                }
+                break;
+        }
+        _lastStaticFieldAddress = null;
+    }
+
+    internal void PrepareNumericReturn(ILInstruction instruction)
+    {
+        if (instruction.OpCode != ILOpCode.Ret || _numericTypes == null
+            || !WordNumericType(_numericTypes.ReturnType) || _ushortInAX)
+            return;
+        bool signed = Index > 0 && SignedNumericType(NumericType(Index - 1));
+        if (Index > 0 && Instructions![Index - 1].GetLdcValue() is int constant)
+            Emit(Opcode.LDX, AddressMode.Immediate, (byte)(constant >> 8));
+        else
+            EmitNumericExtension(signed);
+        _ushortInAX = true;
+    }
+
     bool TryNumericAddSub(bool isAdd)
     {
         if (_numericValues == null || Instructions == null || _numericValues.Inputs[Index].Length != 2)
@@ -172,8 +234,19 @@ partial class IL2NESWriter
         var rightType = NumericType(rhs);
         bool signed = SignedNumericType(leftType) || SignedNumericType(rightType);
         bool word = WordNumericType(leftType) || WordNumericType(rightType);
+        if (word && !NumericResultIsNarrowed(Index, new HashSet<int>()))
+            throw new TranspileException(
+                $"Arithmetic at IL_{Instructions[Index].Offset:X4} needs a promoted result wider than the " +
+                "supported word representation. An explicit conversion after a comparison or shift cannot " +
+                "restore a lost carry/sign bit. Narrow before that operation only if word wrapping is intended.",
+                MethodName);
         bool wordResult = Index + 1 < Instructions.Length
-            && Instructions[Index + 1].OpCode is ILOpCode.Conv_u2 or ILOpCode.Conv_i2;
+            && (Instructions[Index + 1].OpCode is ILOpCode.Conv_u2 or ILOpCode.Conv_i2
+                || Instructions[Index + 1].GetStlocIndex() is int store && WordLocals.Contains(store));
+        wordResult |= _numericValues.Consumers[Index].Any(consumer =>
+            ILValueAnalysis.IsBranch(Instructions[consumer].OpCode)
+            || Instructions[consumer].OpCode is ILOpCode.Ceq or ILOpCode.Clt or ILOpCode.Cgt
+                or ILOpCode.Shr or ILOpCode.Shr_un);
         if (!signed && isAdd && leftType == PrimitiveTypeCode.Byte
             && Instructions[rhs].GetLdcValue() is > byte.MaxValue)
             return false;
@@ -182,7 +255,15 @@ partial class IL2NESWriter
             || WordNumericType(leftType) && Instructions[rhs].GetLdcValue().HasValue))
             return false;
         if (!TryNumericOperands(out int left, out int right))
+        {
+            if (wordResult && _runtimeValueInA && !_ushortInAX
+                && Instructions[rhs].GetLdcValue().HasValue)
+            {
+                EmitNumericExtension(SignedNumericType(leftType));
+                _ushortInAX = true;
+            }
             return false;
+        }
 
         EmitNumericOperand(left);
         Emit(Opcode.STA, AddressMode.ZeroPage, TEMP);
@@ -216,6 +297,28 @@ partial class IL2NESWriter
         return true;
     }
 
+    bool NumericResultIsNarrowed(int producer, HashSet<int> visiting)
+    {
+        if (!visiting.Add(producer) || _numericValues!.Escapes[producer])
+            return false;
+        foreach (int consumer in _numericValues.Consumers[producer])
+        {
+            var instruction = Instructions![consumer];
+            if (instruction.OpCode is ILOpCode.Dup or ILOpCode.Conv_u1 or ILOpCode.Conv_i1
+                or ILOpCode.Conv_u2 or ILOpCode.Conv_i2)
+                continue;
+            if (instruction.GetStlocIndex() is int target && _compactIntLocals.ContainsKey(target))
+                continue;
+            if (instruction.OpCode is ILOpCode.Add or ILOpCode.Sub or ILOpCode.Mul
+                or ILOpCode.And or ILOpCode.Or or ILOpCode.Xor or ILOpCode.Shl
+                && NumericResultIsNarrowed(consumer, visiting))
+                continue;
+            return false;
+        }
+        visiting.Remove(producer);
+        return true;
+    }
+
     internal bool TryNumericComparison(ILInstruction instruction)
     {
         var code = instruction.OpCode;
@@ -242,12 +345,19 @@ partial class IL2NESWriter
             && !(WordNumericType(NumericType(lhs)) && WordNumericType(NumericType(rhs))
                 && Instructions![lhs].GetLdcValue() == null && Instructions[rhs].GetLdcValue() == null))
             return false;
-        if (!TryNumericOperands(out int left, out int right))
-            return false;
+        bool operandsReloaded = TryNumericOperands(out int left, out int right);
+        if (!operandsReloaded)
+        {
+            if (!_ushortInAX || Instructions![rhs].GetLdcValue() == null)
+                return false;
+            left = lhs;
+            right = rhs;
+        }
 
         // CLR promotes both operands to int. A third sign byte keeps unsigned
         // ushort values above 32767 ordered correctly against negative shorts.
-        EmitNumericOperand(left);
+        if (operandsReloaded)
+            EmitNumericOperand(left);
         Emit(Opcode.STA, AddressMode.ZeroPage, TEMP);
         Emit(Opcode.STX, AddressMode.ZeroPage, TEMP2);
         EmitNumericSign(signedLeft, unsigned);
@@ -304,5 +414,44 @@ partial class IL2NESWriter
             Emit(Opcode.BCC, AddressMode.Relative, 1);
             Emit(Opcode.DEY, AddressMode.Implied);
         }
+    }
+
+    internal bool TryNumericShift(ILInstruction instruction)
+    {
+        if (instruction.OpCode != ILOpCode.Shr || _numericValues == null
+            || _numericValues.Inputs[Index].Length != 2)
+            return false;
+        int lhs = _numericValues.Inputs[Index][0], rhs = _numericValues.Inputs[Index][1];
+        if (!SignedNumericType(NumericType(lhs)))
+            return false;
+        if (rhs < 0 || Instructions![rhs].GetLdcValue() is not int count)
+            throw new TranspileException(
+                $"Signed right shift at IL_{instruction.Offset:X4} requires a constant count. " +
+                "Runtime signed shift counts are not supported by the NES numeric backend.", MethodName);
+        if (TryNumericOperands(out int left, out _))
+            EmitNumericOperand(left);
+        else if (_runtimeValueInA)
+        {
+            if (!_ushortInAX)
+                EmitNumericExtension(signed: true);
+        }
+        else
+            throw new TranspileException(
+                $"Signed right shift at IL_{instruction.Offset:X4} needs a materialized scalar operand. " +
+                "Store the expression in a short or sbyte local before shifting.", MethodName);
+        for (int i = 0; i < Math.Min(count & 31, 16); i++)
+        {
+            Emit(Opcode.STX, AddressMode.ZeroPage, TEMP);
+            Emit(Opcode.CPX, AddressMode.Immediate, 0x80);
+            Emit(Opcode.ROR, AddressMode.ZeroPage, TEMP);
+            Emit(Opcode.ROR, AddressMode.Accumulator);
+            Emit(Opcode.LDX, AddressMode.ZeroPage, TEMP);
+        }
+        if (Stack.Count > 0) Stack.Pop();
+        if (Stack.Count > 0) Stack.Pop();
+        Stack.Push(0);
+        _accState = AccumulatorState.RuntimeUshort;
+        previous = instruction.OpCode;
+        return true;
     }
 }

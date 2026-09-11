@@ -7,6 +7,9 @@ class ReflectionCache
     readonly Dictionary<string, MethodInfo> _cache = new(StringComparer.Ordinal);
     readonly Dictionary<string, (int argCount, bool hasReturnValue)> _userMethods = new(StringComparer.Ordinal);
     readonly HashSet<string> _externMethods = new(StringComparer.Ordinal);
+    readonly HashSet<string> _wordReturns = new(StringComparer.Ordinal);
+
+    public void RegisterWordReturn(string name) => _wordReturns.Add(name);
 
     public void RegisterUserMethod(string name, int argCount, bool hasReturnValue)
     {
@@ -71,7 +74,7 @@ class ReflectionCache
     public bool Returns16Bit(string name)
     {
         if (_userMethods.ContainsKey(name))
-            return false; // User methods currently only return byte
+            return _wordReturns.Contains(name);
         var returnType = GetMethod(name).ReturnType;
         return returnType == typeof(ushort) || returnType == typeof(short) || returnType == typeof(int);
     }

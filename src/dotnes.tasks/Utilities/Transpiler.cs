@@ -328,6 +328,9 @@ partial class Transpiler : IDisposable
         {
             reflectionCache.RegisterExternMethod(kvp.Key, kvp.Value.argCount, kvp.Value.hasReturnValue);
         }
+        foreach (var kvp in NumericTypes)
+            if (kvp.Value.ReturnType is PrimitiveTypeCode.Int16 or PrimitiveTypeCode.UInt16)
+                reflectionCache.RegisterWordReturn(kvp.Key);
 
         // Build main program block using label references (addresses resolved later)
         var externNames = new HashSet<string>(ExternMethods.Keys, StringComparer.Ordinal);
@@ -386,7 +389,7 @@ partial class Transpiler : IDisposable
             
             // Record block count before processing this instruction
             writer.RecordBlockCount(instruction.Offset);
-            if (writer.TryNumericComparison(instruction))
+            if (writer.TryNumericComparison(instruction) || writer.TryNumericShift(instruction))
                 continue;
             
             if (instruction.Integer != null)
@@ -481,8 +484,9 @@ partial class Transpiler : IDisposable
                 if (methodWriter.CurrentBlock != null)
                     methodWriter.CurrentBlock.SetNextLabel(labelName);
                 methodWriter.RecordBlockCount(instruction.Offset);
-                if (methodWriter.TryNumericComparison(instruction))
+                if (methodWriter.TryNumericComparison(instruction) || methodWriter.TryNumericShift(instruction))
                     continue;
+                methodWriter.PrepareNumericReturn(instruction);
 
                 if (instruction.Integer != null)
                     methodWriter.Write(instruction, instruction.Integer.Value);

@@ -315,6 +315,8 @@ get an idea of what is not available:
 * No objects or GC
 * No debugger
 * Strings are ASCII
+* Integer storage is limited to the [supported byte/word numeric model](docs/numeric-model.md);
+  unrestricted 32-bit local arithmetic is not supported.
 
 What we *do* have is a way to express an NES program in a single `Program.cs`.
 
@@ -327,4 +329,3 @@ To learn more about NES development, I found the following useful:
 * [INES File Format](https://wiki.nesdev.org/w/index.php/INES)
 * [6502 Instruction Set][6502-instructions]
 * [HxD Hex Editor](https://mh-nexus.de/en/hxd/)
-
