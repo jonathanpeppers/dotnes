@@ -164,7 +164,7 @@ public class NesCompilerTests(ITestOutputHelper output) : RoslynTests(output)
     }
 
     [Fact]
-    public void ExternalBindingSurvivesRelocationAndInputDisposal()
+    public void ExternalBindingSurvivesAddressResolutionAndInputDisposal()
     {
         Program6502 program;
         using (var assembly = CompileAssembly(NativeCaller))
@@ -173,10 +173,31 @@ public class NesCompilerTests(ITestOutputHelper output) : RoslynTests(output)
         var exception = Assert.Throws<UnresolvedLabelException>(() => program.ToBytes());
         Assert.Equal("_native_write", exception.Label);
         program.DefineExternalLabel("_native_write", 0x6000);
-        program.BaseAddress = 0xC000;
         program.ResolveAddresses();
         Assert.NotEmpty(program.ToBytes());
         Assert.Equal(new byte[] { 0x20, 0x00, 0x60 }, program.GetMainBlock()[..3]);
+    }
+
+    [Fact]
+    public void NativeDataReferencesCanBeBoundAfterCompilation()
+    {
+        Program6502 program;
+        using (var assembly = CompileAssembly(NativeCaller))
+        using (var native = new AssemblyReader(new StringReader("""
+            .segment "CODE"
+            _native_write:
+                rts
+            .segment "RODATA"
+            _native_table:
+                .word _host_data
+            """)))
+            program = NesCompiler.Compile(assembly, assemblyFiles: [native]);
+
+        program.DefineExternalLabel("_host_data", 0x6000);
+        program.ResolveAddresses();
+        byte[] bytes = program.ToBytes();
+        int tableOffset = program.GetLabels()["_native_table"] - program.BaseAddress;
+        Assert.Equal(new byte[] { 0x00, 0x60 }, bytes.AsSpan(tableOffset, 2).ToArray());
     }
 
     [Theory]

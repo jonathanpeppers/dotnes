@@ -100,11 +100,23 @@ byte[] code = program.ToBytes();
 ```
 
 The host must actually provide executable code at that CPU address.
-`DefineExternalLabel` bindings survive subsequent address resolution. The
-existing `Program6502` APIs also allow adding blocks and changing `BaseAddress`;
-call `ResolveAddresses()` after changing `BaseAddress`, then `ToBytes()` to
-finalize branch relaxation. Missing symbols fail at emission with
-`UnresolvedLabelException`, not with fabricated addresses.
+`DefineExternalLabel` bindings survive subsequent address resolution and also
+resolve native data references such as `.word _native_write` during `ToBytes()`.
+Missing instruction operands (for example, a `JSR` target) throw
+`UnresolvedLabelException` at emission. **This is not a complete linker
+validation:** the existing emitter leaves unresolved native data relocations
+such as `.word`/`.addr` at their placeholder values (normally zero). Callers must
+ensure those data symbols are defined before emission; successful `ToBytes()`
+alone does not prove that every native data reference was bound.
+
+Choose the complete program's placement through `CompilationOptions` before
+compiling. Although `Program6502` exposes `BaseAddress` and block editing, those
+operations are not a supported way to rebase or freely rearrange the complete
+compiled runtime. Startup routines such as `copydata` and `donelib` embed
+addresses calculated during compilation; changing `BaseAddress` and resolving
+labels does not relocate those immediate values. Compile again with the desired
+layout instead. Late external-symbol binding does not change the runtime's
+placement and remains supported.
 
 ## Ownership and diagnostics
 
