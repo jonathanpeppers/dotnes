@@ -30,6 +30,8 @@ public class SignedStorageExecutionTests(ITestOutputHelper output) : ExecutionTe
 
     [Theory]
     [InlineData(-32768)]
+    [InlineData(-128)]
+    [InlineData(-2)]
     [InlineData(-1)]
     [InlineData(0)]
     [InlineData(32767)]
