@@ -1,9 +1,42 @@
+using System.Collections.Immutable;
 using System.Reflection.Metadata;
 
 namespace dotnes.tests;
 
 public class NumericProducerProofTests
 {
+    [Theory]
+    [InlineData(ILOpCode.Br_s, 0, true)]
+    [InlineData(ILOpCode.Br, 0, true)]
+    [InlineData(ILOpCode.Switch, 0, true)]
+    [InlineData(ILOpCode.Br_s, 1, false)]
+    [InlineData(ILOpCode.Br, 2, false)]
+    [InlineData(ILOpCode.Switch, 3, false)]
+    [InlineData(ILOpCode.Br_s, 4, false)]
+    public void ControlFlowCannotBypassTheWordLoad(ILOpCode branch, int target, bool expected)
+    {
+        using var stream = new MemoryStream();
+        using var writer = new IL2NESWriter(stream);
+        var control = branch == ILOpCode.Switch
+            ? new ILInstruction(branch, 10, 1, Bytes: BitConverter.GetBytes(target - 19).ToImmutableArray())
+            : new ILInstruction(branch, 10, target - (branch == ILOpCode.Br_s ? 12 : 15));
+        writer.Instructions =
+        [
+            new(ILOpCode.Ldloc_0, 0),
+            new(ILOpCode.Ldc_i4_1, 1),
+            new(ILOpCode.Add, 2),
+            new(ILOpCode.Conv_u2, 3),
+            new(ILOpCode.Ldloc_1, 4),
+            control,
+        ];
+        writer.Index = 4;
+        writer.Variables.Locals[0] = new(0, 0x325, IsWord: true);
+        writer.StartBlockBuffering();
+        writer.RecordBlockCount(0);
+        writer.RecordBlockCount(2);
+        Assert.Equal(expected, writer.HasVerifiedNumericProducer(2));
+    }
+
     [Theory]
     [InlineData(false, true)]
     [InlineData(false, false)]
