@@ -171,6 +171,7 @@ partial class Transpiler
             string? stringValue = null;
             int? intValue = null;
             ImmutableArray<byte>? byteValue = null;
+            MethodSignature<PrimitiveTypeCode?>? callSignature = null;
 
             switch (operandType)
             {
@@ -192,6 +193,8 @@ partial class Transpiler
                             break;
                         case HandleKind.MethodDefinition:
                             var method = _reader.GetMethodDefinition((MethodDefinitionHandle)entity);
+                            if (opCode == ILOpCode.Call)
+                                callSignature = method.DecodeSignature(new NumericTypeDecoder(), null);
                             stringValue = _reader.GetString(method.Name);
                             // Clean up compiler-generated local function names
                             // Pattern: <<Main>$>g__fade_in|0_0 → fade_in
@@ -207,7 +210,10 @@ partial class Transpiler
                             }
                             break;
                         case HandleKind.MemberReference:
-                            stringValue = GetQualifiedMemberName(_reader.GetMemberReference((MemberReferenceHandle)entity));
+                            var member = _reader.GetMemberReference((MemberReferenceHandle)entity);
+                            stringValue = GetQualifiedMemberName(member);
+                            if (opCode == ILOpCode.Call)
+                                callSignature = member.DecodeMethodSignature(new NumericTypeDecoder(), null);
                             if (stringValue is "InitializeArray" or "RuntimeHelpers.InitializeArray")
                             {
                                 // HACK: skip for now
@@ -218,9 +224,19 @@ partial class Transpiler
                             // Generic method instantiation (e.g., Array.Fill<byte>)
                             var methodSpec = _reader.GetMethodSpecification((MethodSpecificationHandle)entity);
                             if (methodSpec.Method.Kind == HandleKind.MemberReference)
+                            {
                                 stringValue = GetQualifiedMemberName(_reader.GetMemberReference((MemberReferenceHandle)methodSpec.Method));
+                                if (opCode == ILOpCode.Call)
+                                    callSignature = _reader.GetMemberReference((MemberReferenceHandle)methodSpec.Method)
+                                        .DecodeMethodSignature(new NumericTypeDecoder(), null);
+                            }
                             else if (methodSpec.Method.Kind == HandleKind.MethodDefinition)
+                            {
                                 stringValue = _reader.GetString(_reader.GetMethodDefinition((MethodDefinitionHandle)methodSpec.Method).Name);
+                                if (opCode == ILOpCode.Call)
+                                    callSignature = _reader.GetMethodDefinition((MethodDefinitionHandle)methodSpec.Method)
+                                        .DecodeSignature(new NumericTypeDecoder(), null);
+                            }
                             break;
                         case HandleKind.FieldDefinition:
                             var field = _reader.GetFieldDefinition((FieldDefinitionHandle)entity);
@@ -311,7 +327,12 @@ partial class Transpiler
                 stringValue = nameof(NESLib.oam_off);
             }
 
-            yield return new ILInstruction(opCode, offset, intValue, stringValue, byteValue);
+            yield return new ILInstruction(opCode, offset, intValue, stringValue, byteValue)
+            {
+                CallSignature = opCode == ILOpCode.Call && callSignature is { } signature
+                    ? (signature.ParameterTypes.Length + (signature.Header.IsInstance ? 1 : 0),
+                        signature.ReturnType != PrimitiveTypeCode.Void) : null
+            };
         }
     }
 
