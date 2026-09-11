@@ -93,6 +93,9 @@ Check out the video for a full demo:
 PRG/CHR bank counts, diagnostic logging, and more). See
 [docs/msbuild-properties.md](docs/msbuild-properties.md) for the full reference.
 
+Tools that need a 6502 object model without writing a ROM can use the
+[in-memory compilation API](docs/compilation-api.md).
+
 ## Anatomy of an NES application
 
 "Hello World" looks something like:
