@@ -42,7 +42,7 @@ public class ILValueAnalysisTests
     }
 
     [Fact]
-    public void BranchEscapesAreNotInvented()
+    public void BranchRetainsUnchangedProducer()
     {
         ILInstruction[] il =
         [
@@ -50,10 +50,41 @@ public class ILValueAnalysisTests
             new(ILOpCode.Nop, 3), new(ILOpCode.Stloc_1, 4)
         ];
         var analysis = new ILValueAnalysis(il, new ReflectionCache());
-        Assert.True(analysis.Escapes[0]);
-        Assert.Equal(new[] { -1 }, analysis.Inputs[3]);
+        Assert.False(analysis.Escapes[0]);
+        Assert.Equal(new[] { 0 }, analysis.Inputs[3]);
+        var rewritten = ILExpressionSpiller.Rewrite(il, analysis, new HashSet<int> { 0 });
+        Assert.Equal(ILOpCode.Ldloc_s, Assert.Single(rewritten, i => i.Offset == 4).OpCode);
+    }
+
+    [Fact]
+    public void DifferentMergeInputsRemainUnknown()
+    {
+        ILInstruction[] il =
+        [
+            new(ILOpCode.Ldloc_0, 0), new(ILOpCode.Brtrue_s, 1, 3),
+            new(ILOpCode.Ldloc_1, 3), new(ILOpCode.Br_s, 4, 1),
+            new(ILOpCode.Ldloc_2, 6), new(ILOpCode.Stloc_3, 7), new(ILOpCode.Ret, 8)
+        ];
+        var analysis = new ILValueAnalysis(il, new ReflectionCache());
+        Assert.Equal(new[] { -1 }, analysis.Inputs[5]);
+        Assert.True(analysis.Escapes[2]);
+        Assert.True(analysis.Escapes[4]);
         Assert.Throws<InvalidOperationException>(() =>
-            ILExpressionSpiller.Rewrite(il, analysis, new HashSet<int> { 0 }));
+            ILExpressionSpiller.Rewrite(il, analysis, new HashSet<int> { 2 }));
+    }
+
+    [Fact]
+    public void SpilledSwitchRetainsAllTargets()
+    {
+        ILInstruction[] il =
+        [
+            new(ILOpCode.Ldloc_0, 0), new(ILOpCode.Switch, 1, 2, Bytes: [1, 0, 0, 0, 2, 0, 0, 0]),
+            new(ILOpCode.Ret, 14), new(ILOpCode.Ret, 15), new(ILOpCode.Ret, 16)
+        ];
+        var analysis = new ILValueAnalysis(il, new ReflectionCache());
+        var rewritten = ILExpressionSpiller.Rewrite(il, analysis, new HashSet<int> { 0 });
+        Assert.Equal(new[] { 15, 16 }, ILValueAnalysis.GetBranchTargets(
+            Assert.Single(rewritten, i => i.OpCode == ILOpCode.Switch)));
     }
 
     [Fact]
@@ -95,5 +126,21 @@ public class ILValueAnalysisTests
         var analysis = new ILValueAnalysis(il, new ReflectionCache());
         var rewritten = ILExpressionSpiller.Rewrite(il, analysis, new HashSet<int> { 2 });
         Assert.Equal(9, Assert.Single(rewritten, i => i.OpCode == ILOpCode.Stloc_s).Integer);
+    }
+
+    [Theory]
+    [InlineData("InlineArrayAsSpan")]
+    [InlineData("InlineArrayFirstElementRef")]
+    [InlineData("Unsupported.Method")]
+    public void UnknownCallDoesNotInventStackEffects(string name)
+    {
+        ILInstruction[] il =
+        [
+            new(ILOpCode.Ldloc_0, 0), new(ILOpCode.Call, 1, String: name),
+            new(ILOpCode.Stloc_1, 6), new(ILOpCode.Ret, 7)
+        ];
+        var analysis = new ILValueAnalysis(il, new ReflectionCache());
+        Assert.True(analysis.Escapes[0]);
+        Assert.Equal(new[] { -1 }, analysis.Inputs[2]);
     }
 }

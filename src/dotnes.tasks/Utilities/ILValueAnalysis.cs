@@ -4,7 +4,8 @@ using System.Reflection.Metadata;
 namespace dotnes;
 
 /// <summary>
-/// Producer identities for evaluation-stack operands within straight-line IL.
+/// Producer identities for evaluation-stack operands, including unchanged values
+/// carried across control-flow edges. Differing merge inputs remain unknown.
 /// Unknown control-flow inputs are never treated as constants or local values.
 /// </summary>
 sealed class ILValueAnalysis
@@ -13,6 +14,8 @@ sealed class ILValueAnalysis
         .Where(f => f.FieldType == typeof(OpCode))
         .Select(f => (OpCode)f.GetValue(null)!)
         .ToDictionary(op => unchecked((ushort)op.Value));
+    static readonly HashSet<string> nesLibMethods = new(typeof(NESLib).GetMethods()
+        .Select(method => method.Name), StringComparer.Ordinal);
 
     public int[][] Inputs { get; }
     public List<int>[] Consumers { get; }
@@ -21,72 +24,140 @@ sealed class ILValueAnalysis
 
     public ILValueAnalysis(ILInstruction[] instructions, ReflectionCache reflection)
     {
-        Inputs = new int[instructions.Length][];
+        Inputs = Enumerable.Range(0, instructions.Length).Select(_ => Array.Empty<int>()).ToArray();
         Consumers = Enumerable.Range(0, instructions.Length).Select(_ => new List<int>()).ToArray();
         ProducesValue = new bool[instructions.Length];
         Escapes = new bool[instructions.Length];
-        var stack = new List<int>();
-        var targets = new HashSet<int>(instructions.Select(GetBranchTarget).OfType<int>());
-
-        void EndRegion()
+        var offsets = instructions.Select((instruction, index) => (instruction.Offset, index))
+            .ToDictionary(pair => pair.Offset, pair => pair.index);
+        var states = new int[]?[instructions.Length];
+        var pending = new Queue<int>();
+        if (instructions.Length > 0)
         {
-            foreach (int producer in stack)
-                Escapes[producer] = true;
-            stack.Clear();
+            states[0] = Array.Empty<int>();
+            pending.Enqueue(0);
         }
 
-        for (int i = 0; i < instructions.Length; i++)
+        void Escape(IEnumerable<int> values)
         {
+            foreach (int producer in values)
+                if (producer >= 0)
+                    Escapes[producer] = true;
+        }
+
+        void Merge(int successor, List<int> stack)
+        {
+            if (successor >= instructions.Length)
+            {
+                Escape(stack);
+                return;
+            }
+            var old = states[successor];
+            if (old == null)
+            {
+                states[successor] = stack.ToArray();
+                pending.Enqueue(successor);
+                return;
+            }
+            if (old.Length != stack.Count)
+            {
+                Escape(old);
+                Escape(stack);
+                // An unknown stack effect cannot manufacture known operands.
+                if (old.Any(p => p >= 0) || old.Length > stack.Count)
+                {
+                    states[successor] = Enumerable.Repeat(-1, Math.Min(old.Length, stack.Count)).ToArray();
+                    pending.Enqueue(successor);
+                }
+                return;
+            }
+            bool changed = false;
+            for (int j = 0; j < old.Length; j++)
+            {
+                if (old[j] == stack[j])
+                    continue;
+                Escape(new[] { old[j], stack[j] });
+                changed |= old[j] != -1;
+                old[j] = -1;
+            }
+            if (changed)
+                pending.Enqueue(successor);
+        }
+
+        while (pending.Count > 0)
+        {
+            int i = pending.Dequeue();
             var instruction = instructions[i];
-            if (targets.Contains(instruction.Offset))
-                EndRegion();
+            var stack = new List<int>(states[i]!);
             if (instruction.OpCode == ILOpCode.Dup)
             {
                 Inputs[i] = stack.Count > 0 ? new[] { stack[stack.Count - 1] } : new[] { -1 };
-                if (stack.Count > 0)
-                {
-                    Consumers[stack[stack.Count - 1]].Add(i);
-                    stack.Add(stack[stack.Count - 1]);
-                }
-                continue;
+                stack.Add(Inputs[i][0]);
             }
-            if (instruction.OpCode == ILOpCode.Ret)
+            else if (instruction.OpCode == ILOpCode.Ret)
             {
                 Inputs[i] = stack.Count == 1 ? new[] { stack[0] } : Array.Empty<int>();
-                if (stack.Count == 1)
-                {
-                    Consumers[stack[0]].Add(i);
-                    stack.Clear();
-                }
-                EndRegion();
+                if (stack.Count != 1)
+                    Escape(stack);
                 continue;
             }
-            if (!TryGetEffect(instruction, reflection, out int pop, out int push))
+            else if (!TryGetEffect(instruction, reflection, out int pop, out int push))
             {
-                EndRegion();
-                Inputs[i] = Array.Empty<int>();
-                continue;
+                Escape(stack);
+                stack.Clear();
             }
-            var inputs = new int[pop];
-            for (int j = pop - 1; j >= 0; j--)
+            else
             {
-                inputs[j] = stack.Count > 0 ? stack[stack.Count - 1] : -1;
-                if (stack.Count > 0)
+                var inputs = new int[pop];
+                for (int j = pop - 1; j >= 0; j--)
                 {
-                    stack.RemoveAt(stack.Count - 1);
-                    Consumers[inputs[j]].Add(i);
+                    inputs[j] = stack.Count > 0 ? stack[stack.Count - 1] : -1;
+                    if (stack.Count > 0)
+                        stack.RemoveAt(stack.Count - 1);
+                }
+                Inputs[i] = inputs;
+                if (push == 1)
+                {
+                    ProducesValue[i] = true;
+                    stack.Add(i);
                 }
             }
-            Inputs[i] = inputs;
-            if (push == 1)
+            if (instruction.OpCode is ILOpCode.Leave or ILOpCode.Leave_s)
             {
-                ProducesValue[i] = true;
-                stack.Add(i);
+                Escape(stack);
+                stack.Clear();
             }
-            if (IsBranch(instruction.OpCode) || instruction.OpCode is ILOpCode.Ret or ILOpCode.Throw)
-                EndRegion();
+            foreach (int target in GetBranchTargets(instruction))
+            {
+                if (offsets.TryGetValue(target, out int successor))
+                    Merge(successor, stack);
+                else
+                    Escape(stack);
+            }
+            if (!opcodes.TryGetValue((ushort)instruction.OpCode, out var opcode)
+                || opcode.FlowControl is not (FlowControl.Branch or FlowControl.Return or FlowControl.Throw))
+                Merge(i + 1, stack);
+            else if (opcode.FlowControl is FlowControl.Return or FlowControl.Throw)
+                Escape(stack);
         }
-        EndRegion();
+        for (int i = 0; i < Inputs.Length; i++)
+            foreach (int producer in Inputs[i])
+                if (producer >= 0)
+                    Consumers[producer].Add(i);
+    }
+
+    internal static IEnumerable<int> GetBranchTargets(ILInstruction instruction)
+    {
+        if (GetBranchTarget(instruction) is int target)
+            yield return target;
+        else if (instruction.OpCode == ILOpCode.Switch && instruction.Bytes is { } bytes
+            && instruction.Integer is int count)
+        {
+            int start = instruction.Offset + 5 + count * 4;
+            var targets = bytes.ToArray();
+            for (int i = 0; i < count; i++)
+                yield return start + BitConverter.ToInt32(targets, i * 4);
+        }
     }
 
     internal static bool IsBranch(ILOpCode code) =>
@@ -118,7 +189,8 @@ sealed class ILValueAnalysis
             }
             if (method == "Array.Fill") { pop = 2; return true; }
             if (method == "Array.Copy") { pop = 3; return true; }
-            if (method.Contains('.') && !reflection.IsUserMethod(method) && !reflection.IsExternMethod(method))
+            if (!reflection.IsUserMethod(method) && !reflection.IsExternMethod(method)
+                && !nesLibMethods.Contains(method))
                 return false;
             pop = reflection.GetNumberOfArguments(method);
             push = reflection.HasReturnValue(method) ? 1 : 0;
