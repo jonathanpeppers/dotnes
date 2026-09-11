@@ -7,6 +7,27 @@ public class ExpressionValueTests(ITestOutputHelper output) : ExecutionTests(out
     [Theory]
     [InlineData(0, 17)]
     [InlineData(1, 16)]
+    public void ConditionalLiteralCallArgumentKeepsSelectedValue(byte flag, byte expected)
+    {
+        var cpu = ExecuteProgram(
+            """
+            byte flag = peek(0x6010);
+            byte result = Helpers.Pair(flag != 0 ? (byte)7 : (byte)8, 9);
+            poke(0x6000, result);
+            test_stop(); while (true) ;
+            static extern void test_stop();
+            static class Helpers
+            {
+                public static byte Pair(byte first, byte second) => (byte)(first + second);
+            }
+            """, initialize: cpu => cpu.Memory[0x6010] = flag);
+        Assert.Equal(expected, cpu.Memory[0x6000]);
+        Assert.Equal(Cpu6502.SoftwareStackTop, cpu.SoftwareStackPointer);
+    }
+
+    [Theory]
+    [InlineData(0, 17)]
+    [InlineData(1, 16)]
     public void ConditionalCallArgumentKeepsSelectedValue(byte flag, byte expected)
     {
         var cpu = ExecuteProgram(

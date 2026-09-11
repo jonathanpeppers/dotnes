@@ -9,11 +9,8 @@ partial class Transpiler
     {
         instructions = MaterializeConditionalValues(instructions, reflection, method);
         var analysis = new ILValueAnalysis(instructions, reflection);
-        NumericTypes.TryGetValue(method, out var signature);
         var types = GetExpressionValueTypes(instructions, analysis, reflection, method, compactInts);
         var scalar = types.Select((type, i) => type is not null && type != PrimitiveTypeCode.Void && !analysis.Escapes[i]).ToArray();
-        var words = new HashSet<int>(Enumerable.Range(0, types.Length).Where(i =>
-            types[i] is PrimitiveTypeCode.UInt16 or PrimitiveTypeCode.Int16 or PrimitiveTypeCode.Int32 or PrimitiveTypeCode.UInt32));
 
         var arrayOperands = new HashSet<int>();
         void ProtectArrayOperand(int producer)
@@ -123,21 +120,7 @@ partial class Transpiler
             if (compatible)
                 closedSpills.UnionWith(closure);
         }
-        var spillLocals = new Dictionary<int, int>();
-        var rewritten = ILExpressionSpiller.Rewrite(instructions, analysis, closedSpills, words,
-            spillLocals, signature?.Locals.Length ?? 0);
-        if (signature != null && spillLocals.Count > 0)
-        {
-            var locals = signature.Locals.ToBuilder();
-            foreach (var pair in spillLocals)
-            {
-                while (locals.Count <= pair.Value)
-                    locals.Add(null);
-                locals[pair.Value] = types[pair.Key];
-            }
-            NumericTypes[method] = signature with { Locals = locals.ToImmutable() };
-        }
-        return rewritten;
+        return RewriteTypedExpressionValues(instructions, analysis, closedSpills, types, method);
     }
 
     static bool IsScalarBinary(ILOpCode op) => op is ILOpCode.Add or ILOpCode.Sub
