@@ -54,7 +54,7 @@ sealed class ArrayStorageAnalysis
             if (il[p].OpCode == ILOpCode.Call &&
                 il[p].String is nameof(NESLib.meta_spr_2x2) or nameof(NESLib.meta_spr_2x2_flip))
                 return ArrayStorage.Rom;
-            if (il[p].OpCode == ILOpCode.Newarr || il[p].GetLdargIndex() is not null)
+            if (il[p].OpCode == ILOpCode.Newarr)
                 return ArrayStorage.Ram;
             if (il[p].OpCode == ILOpCode.Ldsfld && il[p].String is string field)
                 return fields.TryGetValue(field, out var sources)

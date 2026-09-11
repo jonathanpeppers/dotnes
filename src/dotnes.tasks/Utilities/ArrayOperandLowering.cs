@@ -228,6 +228,9 @@ static class ArrayOperandLowering
         {
             var instruction = instructions[i];
             var inputs = analysis.Inputs[i];
+            if (instruction.OpCode == ILOpCode.Stsfld && inputs.Length == 1 &&
+                inputs[0] != i - 1 && storage.GetStorage(instructions, inputs[0]) == ArrayStorage.Ram)
+                SelectInputs(i);
             if (instruction.OpCode == ILOpCode.Stelem_i1 && inputs.Length == 3)
             {
                 var closure = OperandClosure(inputs);
@@ -250,7 +253,8 @@ static class ArrayOperandLowering
             else if (instruction.OpCode == ILOpCode.Ldelem_u1 && inputs.Length == 2)
             {
                 var closure = OperandClosure(inputs);
-                if (!Simple(Unwrap(inputs[1])) || HasIndependentEffect(i, closure, OperandClosure([inputs[1]]).Min()))
+                if (!Simple(Unwrap(inputs[1])) || HasIndependentEffect(i, closure, OperandClosure([inputs[1]]).Min()) ||
+                    (inputs[0] != i - 2 && instructions[inputs[0]].OpCode == ILOpCode.Newarr))
                 {
                     SelectInputs(i);
                     SelectValueExpression(inputs[1]);

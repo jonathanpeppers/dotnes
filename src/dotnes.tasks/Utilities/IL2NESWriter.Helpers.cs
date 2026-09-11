@@ -25,6 +25,9 @@ partial class IL2NESWriter
 
         // Try static field array
         if (instr.OpCode == ILOpCode.Ldsfld && instr.String != null
+            && StaticArrayAliases.TryGetValue(instr.String, out var alias))
+            return alias;
+        if (instr.OpCode == ILOpCode.Ldsfld && instr.String != null
             && _staticFieldArrayLocals.TryGetValue(instr.String, out var sfLoc))
             return sfLoc;
 

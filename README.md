@@ -255,6 +255,8 @@ writable RAM. Existing ROM-only helper calls keep their previous behavior.
 That legacy path does not gain the new RAM-helper signature or mutability
 validation: writes through ROM parameters and unsupported legacy scalar/captured
 call shapes remain outside this contract.
+Fixed static-field aliases can share an allocation established by the caller;
+capturing a helper's parameter-frame pointer in a static alias is not supported.
 General conditional scalar-expression lowering is separate from this fixed-array
 ABI: unsupported merged scalar operands are diagnosed rather than replaced by
 an adjacent load from the wrong branch.

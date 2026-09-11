@@ -458,10 +458,9 @@ partial class IL2NESWriter : NESWriter
 
     /// <summary>
     /// Pending byte array element access state from ldelema System.Byte.
-    /// Null when no byte array ldelema is pending.
-    /// Used for compound assignments: arr[i]++, arr[i] += expr, etc.
+    /// Nested compound assignments retain each outer reference until its stind.
     /// </summary>
-    PendingByteArrayElement? _pendingByteArrayElement;
+    readonly Stack<PendingByteArrayElement> _pendingByteArrayElements = new();
 
     /// <summary>
     /// Pending ushort array element access state from ldelema System.UInt16.

@@ -359,7 +359,7 @@ partial class IL2NESWriter
         if (arrayLocal.ArrayParameterIndex is not null)
         {
             RemoveArrayArgumentLoads(arrayInstr.Offset);
-            _pendingByteArrayElement = new PendingByteArrayElement(0, null, arrayLocal, indexInstr);
+            _pendingByteArrayElements.Push(new PendingByteArrayElement(0, null, arrayLocal, indexInstr));
             Stack.Push(0);
             return;
         }
@@ -390,18 +390,19 @@ partial class IL2NESWriter
             }
         }
 
+        PendingByteArrayElement pending;
         // Set up X register with the index for AbsoluteX addressing
         if (constantIndex != null)
         {
             if (constantIndex.Value == 0)
             {
                 // Constant index 0: use direct Absolute addressing
-                _pendingByteArrayElement = new PendingByteArrayElement(arrayBase, arrayBase);
+                pending = new PendingByteArrayElement(arrayBase, arrayBase);
             }
             else
             {
                 Emit(Opcode.LDX, AddressMode.Immediate, (byte)constantIndex.Value);
-                _pendingByteArrayElement = new PendingByteArrayElement(arrayBase, ConstantElementAddress: null);
+                pending = new PendingByteArrayElement(arrayBase, ConstantElementAddress: null);
             }
         }
         else
@@ -414,12 +415,13 @@ partial class IL2NESWriter
             else
                 throw new TranspileException("Compound byte array assignment requires the index to be a constant or local variable.", MethodName);
 
-            _pendingByteArrayElement = new PendingByteArrayElement(arrayBase, ConstantElementAddress: null);
+            pending = new PendingByteArrayElement(arrayBase, ConstantElementAddress: null);
         }
 
         // ldelema pushes a managed reference onto the eval stack
         if (ArrayIndexNeedsPreservation(Index))
-            _pendingByteArrayElement = _pendingByteArrayElement!.Value with { SavedIndex = indexInstr };
+            pending = pending with { SavedIndex = indexInstr };
+        _pendingByteArrayElements.Push(pending);
         Stack.Push(0);
         _runtimeValueInA = false;
         _lastLoadedLocalIndex = null;
@@ -431,8 +433,9 @@ partial class IL2NESWriter
     /// </summary>
     void HandleLdindU1()
     {
-        if (_pendingByteArrayElement is not { } pending)
+        if (_pendingByteArrayElements.Count == 0)
             throw new TranspileException("ldind.u1 without preceding ldelema System.Byte is not supported.", MethodName);
+        var pending = _pendingByteArrayElements.Peek();
 
         // Pop the address reference from the eval stack
         if (Stack.Count > 0) Stack.Pop();
@@ -459,8 +462,9 @@ partial class IL2NESWriter
     /// </summary>
     void HandleStindI1()
     {
-        if (_pendingByteArrayElement is not { } pending)
+        if (_pendingByteArrayElements.Count == 0)
             throw new TranspileException("stind.i1 without preceding ldelema System.Byte is not supported.", MethodName);
+        var pending = _pendingByteArrayElements.Pop();
 
         // Pop the value and address reference from the eval stack
         if (Stack.Count > 0) Stack.Pop(); // value
@@ -475,7 +479,6 @@ partial class IL2NESWriter
         else
             Emit(Opcode.STA, AddressMode.AbsoluteX, pending.ArrayBase);
 
-        _pendingByteArrayElement = null;
         _runtimeValueInA = false;
     }
 

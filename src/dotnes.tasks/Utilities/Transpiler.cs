@@ -386,6 +386,7 @@ partial class Transpiler : IDisposable
             PreAllocateClosureFields(ref staticFieldBytes);
         }
 
+        var staticArrayAliases = new Dictionary<string, LocalVariableManager.Local>(StringComparer.Ordinal);
         using var writer = new IL2NESWriter(new MemoryStream(), logger: _logger, reflectionCache: reflectionCache)
         {
             Instructions = instructions,
@@ -402,6 +403,7 @@ partial class Transpiler : IDisposable
             WordStaticFields = wordStaticFields,
             LocalCount = staticFieldBytes,
             StaticArrayFields = staticArrayFields,
+            StaticArrayAliases = staticArrayAliases,
             ClosureFieldTypes = _closureFieldTypes.Count > 0 ? _closureFieldTypes : null,
             ClosureFieldLabels = _closureFieldLabels,
             ClosureFieldAddresses = _closureFieldAddresses,
@@ -499,6 +501,7 @@ partial class Transpiler : IDisposable
                 StaticFieldAddresses = staticFields,
                 WordStaticFields = wordStaticFields,
                 StaticArrayFields = staticArrayFields,
+                StaticArrayAliases = staticArrayAliases,
                 ClosureFieldTypes = _closureFieldTypes.Count > 0 ? _closureFieldTypes : null,
                 ClosureFieldLabels = _closureFieldLabels,
                 ClosureFieldAddresses = _closureFieldAddresses,

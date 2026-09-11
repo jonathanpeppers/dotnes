@@ -1844,6 +1844,8 @@ partial class IL2NESWriter
 
     public void Write(ILInstruction instruction, string operand)
     {
+        if (TryStoreArrayAlias(instruction))
+            return;
         if (TryWriteByteCall(instruction, operand))
             return;
 

@@ -7,6 +7,8 @@ namespace dotnes;
 
 partial class IL2NESWriter
 {
+    internal Dictionary<string, Local> StaticArrayAliases { get; init; } = new(StringComparer.Ordinal);
+
     bool ArrayIndexNeedsPreservation(int index) =>
         Instructions is not null && ArrayOperandLowering.IndexNeedsPreservation(Instructions, index);
 
@@ -184,19 +186,39 @@ partial class IL2NESWriter
 
     bool TryStoreArrayAlias(ILInstruction instruction)
     {
-        if (instruction.GetStlocIndex() is not int destination || Instructions is null || Index == 0)
+        int? destination = instruction.GetStlocIndex();
+        string? field = instruction.OpCode == ILOpCode.Stsfld ? instruction.String : null;
+        if ((destination is null && field is null) || Instructions is null || Index == 0)
             return false;
         var source = Instructions[Index - 1];
         var array = TryResolveArrayLocal(source);
         if (array is null || (array.ArraySize == 0 && array.LabelName is null && array.ArrayParameterIndex is null))
+        {
+            if (field is not null && StaticArrayAliases.ContainsKey(field) &&
+                source.OpCode is ILOpCode.Newarr or ILOpCode.Ldtoken)
+                throw new TranspileException("Reassigning an array alias to a different array is not supported.", MethodName);
             return false;
-        if (Locals.TryGetValue(destination, out var existing) &&
+        }
+        if (field is not null && array.ArrayParameterIndex is not null)
+            throw new TranspileException("A static array alias must reference a fixed allocation, not a helper parameter.", MethodName);
+        Local? existing = null;
+        if (field is not null)
+        {
+            if (!StaticArrayAliases.TryGetValue(field, out existing))
+                _staticFieldArrayLocals.TryGetValue(field, out existing);
+        }
+        else
+            Locals.TryGetValue(destination!.Value, out existing);
+        if (existing is not null &&
             (existing.ArraySize > 0 || existing.LabelName is not null || existing.ArrayParameterIndex is not null) &&
             (existing.Address != array.Address || existing.LabelName != array.LabelName ||
              existing.ArrayParameterIndex != array.ArrayParameterIndex))
             throw new TranspileException("Reassigning an array alias to a different array is not supported.", MethodName);
         RemoveArrayArgumentLoads(source.Offset);
-        Locals[destination] = array;
+        if (field is not null)
+            StaticArrayAliases[field] = array;
+        else
+            Locals[destination!.Value] = array;
         Stack.Pop();
         previous = instruction.OpCode;
         return true;
