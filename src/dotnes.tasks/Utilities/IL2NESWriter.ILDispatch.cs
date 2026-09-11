@@ -40,6 +40,12 @@ partial class IL2NESWriter
 
     public void Write(ILInstruction instruction)
     {
+        if (instruction.OpCode is ILOpCode.Add or ILOpCode.Sub
+            && TryNumericAddSub(instruction.OpCode == ILOpCode.Add))
+        {
+            previous = instruction.OpCode;
+            return;
+        }
         if (TryWriteLocalBinary(instruction.OpCode))
             return;
 
@@ -335,12 +341,10 @@ partial class IL2NESWriter
                 HandleStindI2();
                 break;
             case ILOpCode.Add:
-                if (!TryNumericAddSub(isAdd: true))
-                    HandleAddSub(isAdd: true);
+                HandleAddSub(isAdd: true);
                 break;
             case ILOpCode.Sub:
-                if (!TryNumericAddSub(isAdd: false))
-                    HandleAddSub(isAdd: false);
+                HandleAddSub(isAdd: false);
                 break;
             case ILOpCode.Mul:
                 {
