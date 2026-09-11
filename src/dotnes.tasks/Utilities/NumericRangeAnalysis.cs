@@ -59,6 +59,34 @@ sealed class NumericRangeAnalysis
         return result;
     }
 
+    public bool IsResultNarrowed(int producer, bool byteOnly = false)
+    {
+        var visiting = new HashSet<int>();
+        bool Visit(int node)
+        {
+            if (!visiting.Add(node) || values.Escapes[node])
+                return false;
+            foreach (int consumer in values.Consumers[node])
+            {
+                var instruction = instructions[consumer];
+                if (instruction.OpCode is ILOpCode.Dup or ILOpCode.Conv_u1 or ILOpCode.Conv_i1)
+                    continue;
+                if (!byteOnly && instruction.OpCode is ILOpCode.Conv_u2 or ILOpCode.Conv_i2)
+                    continue;
+                if (instruction.OpCode is ILOpCode.Add or ILOpCode.Sub or ILOpCode.Mul
+                    or ILOpCode.And or ILOpCode.Or or ILOpCode.Xor or ILOpCode.Shl && Visit(consumer))
+                    continue;
+                if (!byteOnly && instruction.GetStlocIndex() is int local
+                    && LocalRange(local) is { Min: >= short.MinValue, Max: <= ushort.MaxValue })
+                    continue;
+                return false;
+            }
+            visiting.Remove(node);
+            return true;
+        }
+        return Visit(producer);
+    }
+
     Range? LocalRange(int index)
     {
         if (index >= types.Locals.Length)

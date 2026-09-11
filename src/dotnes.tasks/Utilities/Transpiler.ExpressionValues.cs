@@ -15,6 +15,9 @@ partial class Transpiler
             .GroupBy(f => _reader.GetString(f.Name))
             .ToDictionary(g => g.Key, g => g.First().DecodeSignature(new NumericTypeDecoder(), null));
         NumericTypes.TryGetValue(method, out var signature);
+        var numericRanges = signature == null ? null
+            : new NumericRangeAnalysis(instructions, signature, NumericTypes, reflection);
+        var compactInts = numericRanges?.GetCompactIntLocals(method) ?? new Dictionary<int, PrimitiveTypeCode>();
         for (int i = 0; i < instructions.Length; i++)
         {
             if (!analysis.ProducesValue[i])
@@ -22,7 +25,7 @@ partial class Transpiler
             var instruction = instructions[i];
             PrimitiveTypeCode? type = null;
             if (instruction.GetLdlocIndex() is int local && signature != null && local < signature.Locals.Length)
-                type = signature.Locals[local];
+                type = compactInts.TryGetValue(local, out var compact) ? compact : signature.Locals[local];
             else if (instruction.OpCode is >= ILOpCode.Ldarg_0 and <= ILOpCode.Ldarg_3
                 && signature != null && instruction.OpCode - ILOpCode.Ldarg_0 < signature.Parameters.Length)
                 type = signature.Parameters[instruction.OpCode - ILOpCode.Ldarg_0];
@@ -37,7 +40,9 @@ partial class Transpiler
                     type = reflection.TryReturns16Bit(name) ? PrimitiveTypeCode.UInt16 : PrimitiveTypeCode.Byte;
             }
             else if (instruction.GetLdcValue() is int value)
-                type = value is >= 0 and <= 255 ? PrimitiveTypeCode.Byte : PrimitiveTypeCode.UInt16;
+                type = value < sbyte.MinValue ? PrimitiveTypeCode.Int16
+                    : value < 0 ? PrimitiveTypeCode.SByte
+                    : value <= byte.MaxValue ? PrimitiveTypeCode.Byte : PrimitiveTypeCode.UInt16;
             else if (instruction.OpCode == ILOpCode.Ldsfld && instruction.String is string field
                 && fieldTypes.TryGetValue(field, out var fieldType))
                 type = fieldType;
@@ -45,6 +50,17 @@ partial class Transpiler
                 type = PrimitiveTypeCode.Byte;
             else if (instruction.OpCode is ILOpCode.Ldelem_u2 or ILOpCode.Ldind_u2 or ILOpCode.Conv_u2)
                 type = PrimitiveTypeCode.UInt16;
+            else if (instruction.OpCode is ILOpCode.Ldelem_i1 or ILOpCode.Ldind_i1 or ILOpCode.Conv_i1)
+                type = PrimitiveTypeCode.SByte;
+            else if (instruction.OpCode is ILOpCode.Ldelem_i2 or ILOpCode.Ldind_i2 or ILOpCode.Conv_i2)
+                type = PrimitiveTypeCode.Int16;
+            else if (instruction.OpCode is ILOpCode.Add or ILOpCode.Sub
+                && analysis.Inputs[i].Length == 2
+                && analysis.Inputs[i].All(p => p >= 0 && types[p] is PrimitiveTypeCode.Byte or PrimitiveTypeCode.SByte))
+                type = numericRanges?.IsResultNarrowed(i, byteOnly: true) == true ? PrimitiveTypeCode.Byte
+                    : instruction.OpCode == ILOpCode.Sub
+                    || analysis.Inputs[i].Any(p => types[p] == PrimitiveTypeCode.SByte)
+                        ? PrimitiveTypeCode.Int16 : PrimitiveTypeCode.UInt16;
             else if (IsScalarExpression(instruction.OpCode) && analysis.Inputs[i].All(p => p >= 0 && scalar[p]))
                 type = analysis.Inputs[i].Any(words.Contains) ? PrimitiveTypeCode.UInt16 : PrimitiveTypeCode.Byte;
             scalar[i] = type is not null && type != PrimitiveTypeCode.Void && !analysis.Escapes[i];
