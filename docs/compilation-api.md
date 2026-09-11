@@ -49,6 +49,7 @@ Program6502 program = NesCompiler.Compile(assembly, options);
 |---|---|---|
 | `Mapper` | `0` | iNES mapper number, in `0..255`. The number alone does not change placement or generate bank-switching code. |
 | `Mmc3BankedLayout` | `false` | Place the program at `$C000` instead of `$8000`; requires mapper 4. |
+| `OptimizeByteHelpers` | `false` | Use private RAM parameter homes for proven non-reentrant small byte helpers. Applies the same eligibility and native-code fallback as [`NESOptimizeByteHelpers`](msbuild-properties.md#nesoptimizebytehelpers). |
 
 Only options that select program construction are exposed. Mirroring, battery
 flags, PRG/CHR bank counts, and bank asset packaging belong to the ROM image
@@ -108,6 +109,19 @@ validation:** the existing emitter leaves unresolved native data relocations
 such as `.word`/`.addr` at their placeholder values (normally zero). Callers must
 ensure those data symbols are defined before emission; successful `ToBytes()`
 alone does not prove that every native data reference was bound.
+
+`OptimizeByteHelpers` also preserves the standard calling convention for this
+late-binding path: any C# extern declaration disables the optimization for the
+compilation, even if no native source is supplied or the declaration is unused.
+`DefineExternalLabel` only binds a symbol; it does not install code, add a call,
+or register an interrupt handler. Binding an unreferenced name therefore creates
+no new entry point. Native callers pass the byte argument in A; the managed
+callee owns its parameter storage in both conventions.
+
+The optimization proof covers the program as compiled. If a host injects extra
+instructions, callbacks, or interrupt entry points after compilation, compile
+with `OptimizeByteHelpers = false`; arbitrary model edits or out-of-band host
+execution are not reanalyzed by `DefineExternalLabel` or `ToBytes()`.
 
 Choose the complete program's placement through `CompilationOptions` before
 compiling. Although `Program6502` exposes `BaseAddress` and block editing, those

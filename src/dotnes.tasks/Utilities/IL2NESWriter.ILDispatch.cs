@@ -40,6 +40,7 @@ partial class IL2NESWriter
 
     public void Write(ILInstruction instruction)
     {
+        BeginVariableShiftCount();
         if (TryNumericLeftShift(instruction))
             return;
         if (instruction.OpCode is ILOpCode.Add or ILOpCode.Sub
@@ -300,6 +301,8 @@ partial class IL2NESWriter
                 }
                 break;
             case ILOpCode.Conv_u1:
+                if (Stack.Count > 0)
+                    Stack.Push(unchecked((byte)Stack.Pop()));
                 // When truncating from ushort to byte, discard high byte
                 if (_ushortInAX)
                     _ushortInAX = false;
@@ -712,8 +715,10 @@ partial class IL2NESWriter
             case ILOpCode.Shr:
             case ILOpCode.Shr_un:
                 {
+                    if (EmitVariableShift(left: false))
+                        break;
                     _lastStaticFieldAddress = null;
-                    int shiftCount = Stack.Pop();
+                    int shiftCount = Stack.Pop() & 31;
                     int value = Stack.Count > 0 ? Stack.Pop() : 0;
 
                     bool shrLocalInA = _lastLoadedLocalIndex.HasValue &&
@@ -766,8 +771,10 @@ partial class IL2NESWriter
                 break;
             case ILOpCode.Shl:
                 {
+                    if (EmitVariableShift(left: true))
+                        break;
                     _lastStaticFieldAddress = null;
-                    int shiftCount = Stack.Pop();
+                    int shiftCount = Stack.Pop() & 31;
                     int value = Stack.Count > 0 ? Stack.Pop() : 0;
 
                     bool shlLocalInA = _lastLoadedLocalIndex.HasValue &&
@@ -799,6 +806,17 @@ partial class IL2NESWriter
                     _lastStaticFieldAddress = null;
                     int mask = Stack.Pop();
                     int value = Stack.Count > 0 ? Stack.Pop() : 0;
+
+                    if (_variableShiftIndex == Index + 1)
+                    {
+                        // Only the count's low five bits matter, even for a word local.
+                        Emit(Opcode.AND, AddressMode.Immediate, 31);
+                        _ushortInAX = false;
+                        _runtimeValueInA = true;
+                        _lastLoadedLocalIndex = null;
+                        Stack.Push(0);
+                        break;
+                    }
 
                     // Check if the value came from a local variable load (runtime value)
                     bool localInA = _lastLoadedLocalIndex.HasValue &&
@@ -1211,6 +1229,7 @@ partial class IL2NESWriter
 
     public void Write(ILInstruction instruction, int operand)
     {
+        BeginVariableShiftCount();
         _ldlocByteArrayLabel = null;
         switch (instruction.OpCode)
         {
@@ -1849,6 +1868,7 @@ partial class IL2NESWriter
 
     public void Write(ILInstruction instruction, string operand)
     {
+        BeginVariableShiftCount();
         if (TryWriteByteCall(instruction, operand))
             return;
 

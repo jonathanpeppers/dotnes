@@ -11,8 +11,10 @@ partial class IL2NESWriter
     ILValueAnalysis? _numericValues;
     readonly Dictionary<int, int> _numericArgAdjust = new();
 
-    internal void ConfigureNumericTypes(IReadOnlyDictionary<string, MethodNumericTypes> methods)
+    internal void ConfigureNumericTypes(IReadOnlyDictionary<string, MethodNumericTypes> methods,
+        IReadOnlyDictionary<string, PrimitiveTypeCode?>? fields = null)
     {
+        _numericFields = fields;
         _numericMethods = methods;
         methods.TryGetValue(MethodName ?? "main", out _numericTypes);
         if (Instructions != null)
@@ -39,6 +41,7 @@ partial class IL2NESWriter
             ILOpCode.Conv_u1 => PrimitiveTypeCode.Byte,
             ILOpCode.Conv_i2 => PrimitiveTypeCode.Int16,
             ILOpCode.Conv_u2 => PrimitiveTypeCode.UInt16,
+            ILOpCode.Ldsfld => DeclaredScalarType(instruction),
             ILOpCode.Call when instruction.String != null
                 && _numericMethods != null && _numericMethods.TryGetValue(instruction.String, out var method) => method.ReturnType,
             ILOpCode.Call when instruction.String != null && _reflectionCache.TryReturns16Bit(instruction.String) => PrimitiveTypeCode.UInt16,
@@ -81,6 +84,10 @@ partial class IL2NESWriter
         if (NumericArgIndex(instruction) is int argIndex)
             return argIndex < ParamIsArray.Length && !ParamIsArray[argIndex]
                 && NumericType(producer) is PrimitiveTypeCode.Byte or PrimitiveTypeCode.SByte;
+        if (instruction.OpCode == ILOpCode.Ldsfld && instruction.String is string field)
+            return StaticFieldAddresses.ContainsKey(field) && !_staticFieldArrayLocals.ContainsKey(field)
+                && NumericType(producer) is PrimitiveTypeCode.Byte or PrimitiveTypeCode.SByte
+                    or PrimitiveTypeCode.Int16 or PrimitiveTypeCode.UInt16;
         if (instruction.OpCode is ILOpCode.Conv_i1 or ILOpCode.Conv_u1 or ILOpCode.Conv_i2 or ILOpCode.Conv_u2
             && _numericValues.Inputs[producer].Length == 1 && _numericValues.Inputs[producer][0] == producer - 1)
             return PureNumericOperand(_numericValues.Inputs[producer][0], out first);
@@ -134,6 +141,15 @@ partial class IL2NESWriter
             Emit(Opcode.LDA, AddressMode.Absolute, (ushort)value.Address!.Value);
             if (value.IsWord)
                 Emit(Opcode.LDX, AddressMode.Absolute, (ushort)(value.Address.Value + 1));
+            else
+                EmitNumericExtension(NumericType(producer) == PrimitiveTypeCode.SByte);
+        }
+        else if (instruction.OpCode == ILOpCode.Ldsfld && instruction.String is string field)
+        {
+            ushort address = StaticFieldAddresses[field];
+            Emit(Opcode.LDA, AddressMode.Absolute, address);
+            if (WordStaticFields.Contains(field))
+                Emit(Opcode.LDX, AddressMode.Absolute, (ushort)(address + 1));
             else
                 EmitNumericExtension(NumericType(producer) == PrimitiveTypeCode.SByte);
         }

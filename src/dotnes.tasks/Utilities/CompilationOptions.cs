@@ -17,4 +17,10 @@ public sealed class CompilationOptions
     /// stub generation remain the responsibility of the ROM build pipeline.
     /// </summary>
     public bool Mmc3BankedLayout { get; set; }
+
+    /// <summary>
+    /// Uses private RAM parameter homes for proven non-reentrant small byte helpers.
+    /// Defaults to false. Unproven helpers and native entry points retain standard storage.
+    /// </summary>
+    public bool OptimizeByteHelpers { get; set; }
 }
