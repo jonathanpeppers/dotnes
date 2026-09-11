@@ -96,6 +96,12 @@ PRG/CHR bank counts, diagnostic logging, and more). See
 Tools that need a 6502 object model without writing a ROM can use the
 [in-memory compilation API](docs/compilation-api.md).
 
+## Native runtime integration
+
+Use native assembly callbacks and opt into exclusive PPU/OAM ownership without
+depending on private runtime addresses. See [docs/native-runtime.md](docs/native-runtime.md)
+for callback registration, extern symbol compatibility, and interrupt responsibilities.
+
 ## Anatomy of an NES application
 
 "Hello World" looks something like:
@@ -330,4 +336,3 @@ To learn more about NES development, I found the following useful:
 * [INES File Format](https://wiki.nesdev.org/w/index.php/INES)
 * [6502 Instruction Set][6502-instructions]
 * [HxD Hex Editor](https://mh-nexus.de/en/hxd/)
-
