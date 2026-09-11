@@ -1,9 +1,96 @@
+using System.Reflection.Metadata;
+using System.Reflection.PortableExecutable;
 using Xunit.Abstractions;
 
 namespace dotnes.tests;
 
 public class ByteCallExecutionTests(ITestOutputHelper output) : ExecutionTests(output)
 {
+    [Fact]
+    public void ClosureParameterMetadataExcludesOrdinaryReferences()
+    {
+        using var assembly = CompileAssembly(
+            """
+            byte captured = 7;
+            State state = default;
+            byte[] array = { 1 };
+            Probe(captured, ref captured, state, ref state, array, ref array);
+            Forward(captured);
+            while (true) ;
+            void Forward(byte value) => Inner(value);
+            void Inner(byte value) => poke(0x6000, (byte)(value + captured));
+            static void Probe(byte value, ref byte reference, State state, ref State stateReference,
+                byte[] array, ref byte[] arrayReference) { }
+            struct State { public byte Value; }
+            """);
+        using var pe = new PEReader(assembly);
+        var reader = pe.GetMetadataReader();
+        var closureType = Assert.Single(reader.TypeDefinitions,
+            handle => reader.GetString(reader.GetTypeDefinition(handle).Name).Contains("DisplayClass"));
+        var decoder = new ClosureParameterDecoder(new HashSet<TypeDefinitionHandle> { closureType });
+        var methods = reader.MethodDefinitions.Select(reader.GetMethodDefinition).ToArray();
+        var forward = Assert.Single(methods, method => reader.GetString(method.Name).Contains(">g__Forward|"));
+        Assert.Equal(new[] { ClosureParameterKind.None, ClosureParameterKind.ByReference },
+            forward.DecodeSignature(decoder, null).ParameterTypes);
+        var probe = Assert.Single(methods, method => reader.GetString(method.Name).Contains(">g__Probe|"));
+        Assert.All(probe.DecodeSignature(decoder, null).ParameterTypes,
+            parameter => Assert.Equal(ClosureParameterKind.None, parameter));
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public void ForwardingOnlyClosureMethodsKeepPhysicalArgumentOffsets(bool multipleHops, bool computedArguments)
+    {
+        var cpu = ExecuteProgram(
+            $$"""
+            byte captured = 7;
+            byte result = {{(multipleHops ? "Outer" : "Forward")}}(43, 88);
+            poke(0x6000, result);
+            test_stop(); while (true) ;
+            static extern void test_stop();
+            static byte Next(byte value) => (byte)(value + 1);
+            {{(multipleHops ? "byte Outer(byte first, byte second) => Forward(first, second);" : "")}}
+            byte Forward(byte first, byte second) =>
+                Inner({{(computedArguments ? "Next(first), Next(second)" : "first, second")}});
+            byte Inner(byte first, byte second)
+            {
+                byte a = first, b = second, c = captured;
+                poke(0x6001, a);
+                poke(0x6002, b);
+                poke(0x6003, c);
+                return (byte)(a + b + c);
+            }
+            """);
+        Assert.Equal(new byte[] { (byte)(computedArguments ? 140 : 138),
+            (byte)(computedArguments ? 44 : 43), (byte)(computedArguments ? 89 : 88), 7 },
+            cpu.Memory[0x6000..0x6004]);
+        Assert.Equal(0xFD, cpu.SP);
+        Assert.Equal(Cpu6502.SoftwareStackTop, cpu.SoftwareStackPointer);
+    }
+
+    [Fact]
+    public void WriteOnlyClosureContextIsNotAPhysicalArgument()
+    {
+        var cpu = ExecuteProgram(
+            """
+            byte captured = 7;
+            Forward(43);
+            byte result = Read();
+            poke(0x6000, result);
+            test_stop(); while (true) ;
+            static extern void test_stop();
+            void Forward(byte value) => Assign(value);
+            void Assign(byte value) { captured = value; }
+            byte Read() => captured;
+            """);
+        Assert.Equal(43, cpu.Memory[0x6000]);
+        Assert.Equal(0xFD, cpu.SP);
+        Assert.Equal(Cpu6502.SoftwareStackTop, cpu.SoftwareStackPointer);
+    }
+
     [Theory]
     [InlineData(false, false)]
     [InlineData(true, false)]

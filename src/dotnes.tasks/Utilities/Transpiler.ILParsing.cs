@@ -97,6 +97,7 @@ partial class Transpiler
                 ReadNumericTypes(methodDef, cleanName);
                 var instructions = ReadMethodBody(methodDef, arrayValues).ToArray();
                 UserMethods[cleanName] = instructions;
+                _userMethodDefinitions[cleanName] = methodDef;
 
                 // Parse exception regions (try/finally) for user methods
                 var userRegions = ParseExceptionRegions(methodDef);
