@@ -16,6 +16,11 @@ internal sealed class Cpu6502
     public bool Zero { get; private set; }
     public bool Negative { get; private set; }
     public bool Overflow { get; private set; }
+    public bool InterruptDisable { get; private set; }
+    public bool Decimal { get; private set; }
+    public byte Status => (byte)(0x20 | (Carry ? 1 : 0) | (Zero ? 2 : 0) |
+        (InterruptDisable ? 4 : 0) | (Decimal ? 8 : 0) | (Overflow ? 0x40 : 0) | (Negative ? 0x80 : 0));
+    public List<ushort> WrittenAddresses { get; } = [];
     public int InstructionCount { get; private set; }
     public int SoftwareStackWrites { get; private set; }
     public int SoftwareStackPointerWrites { get; private set; }
@@ -37,6 +42,26 @@ internal sealed class Cpu6502
             Step();
         }
         throw new InvalidOperationException($"Execution exceeded {instructionLimit} instructions at ${PC:X4}.");
+    }
+
+    // Inject at an instruction boundary; device timing and IRQ polling delays are not modeled.
+    public void Nmi() => EnterInterrupt(0xFFFA);
+
+    public bool Irq()
+    {
+        if (InterruptDisable)
+            return false;
+        EnterInterrupt(0xFFFE);
+        return true;
+    }
+
+    void EnterInterrupt(ushort vector)
+    {
+        Push((byte)(PC >> 8));
+        Push((byte)PC);
+        Push(Status);
+        InterruptDisable = true;
+        PC = ReadWord(vector);
     }
 
     public void Step()
@@ -78,6 +103,8 @@ internal sealed class Cpu6502
             case Opcode.TXS: SP = X; break;
             case Opcode.PHA: Push(A); break;
             case Opcode.PLA: A = Flags(Pop()); break;
+            case Opcode.PHP: Push((byte)(Status | 0x10)); break;
+            case Opcode.PLP: RestoreStatus(Pop()); break;
             case Opcode.ADC: Add(Memory[address]); break;
             case Opcode.SBC: Add((byte)~Memory[address]); break;
             case Opcode.AND: A = Flags((byte)(A & Memory[address])); break;
@@ -114,6 +141,10 @@ internal sealed class Cpu6502
             case Opcode.CLC: Carry = false; break;
             case Opcode.SEC: Carry = true; break;
             case Opcode.CLV: Overflow = false; break;
+            case Opcode.CLI: InterruptDisable = false; break;
+            case Opcode.SEI: InterruptDisable = true; break;
+            case Opcode.CLD: Decimal = false; break;
+            case Opcode.SED: Decimal = true; break;
             case Opcode.JMP: PC = address; break;
             case Opcode.JSR:
                 ushort returnAddress = (ushort)(PC - 1);
@@ -123,6 +154,10 @@ internal sealed class Cpu6502
                 break;
             case Opcode.RTS:
                 PC = (ushort)((Pop() | Pop() << 8) + 1);
+                break;
+            case Opcode.RTI:
+                RestoreStatus(Pop());
+                PC = (ushort)(Pop() | Pop() << 8);
                 break;
             case Opcode.BCC: Branch(!Carry, address); break;
             case Opcode.BCS: Branch(Carry, address); break;
@@ -157,6 +192,16 @@ internal sealed class Cpu6502
         return value;
     }
 
+    void RestoreStatus(byte status)
+    {
+        Carry = (status & 1) != 0;
+        Zero = (status & 2) != 0;
+        InterruptDisable = (status & 4) != 0;
+        Decimal = (status & 8) != 0;
+        Overflow = (status & 0x40) != 0;
+        Negative = (status & 0x80) != 0;
+    }
+
     void Add(byte value)
     {
         int result = A + value + (Carry ? 1 : 0);
@@ -176,11 +221,17 @@ internal sealed class Cpu6502
         if (taken) PC = (ushort)(PC + (sbyte)Memory[address]);
     }
 
-    void Push(byte value) => Memory[0x100 + SP--] = value;
+    void Push(byte value)
+    {
+        ushort address = (ushort)(0x100 + SP--);
+        WrittenAddresses.Add(address);
+        Memory[address] = value;
+    }
     byte Pop() => Memory[0x100 + ++SP];
 
     void Store(ushort address, byte value)
     {
+        WrittenAddresses.Add(address);
         if (address is 0x22 or 0x23)
             SoftwareStackPointerWrites++;
         else if (address >= SoftwareStackPointer && address < SoftwareStackTop)

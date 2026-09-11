@@ -370,6 +370,17 @@ public class ObjectModelTests
     }
 
     [Fact]
+    public void Program6502_GetBuiltInSize_DescribesOnlyTheDefaultStockLayout()
+    {
+        var stock = Program6502.CreateWithBuiltIns();
+        var native = Program6502.CreateWithBuiltIns(nativeRenderer: true);
+
+        Assert.Equal(stock.TotalSize, Program6502.GetBuiltInSize());
+        Assert.NotEqual(stock.TotalSize, native.TotalSize);
+        Assert.Equal(native.Blocks.Sum(block => block.Size), native.TotalSize);
+    }
+
+    [Fact]
     public void Program6502_FindInstructionAt_FindsCorrectInstruction()
     {
         var program = new Program6502 { BaseAddress = 0x8000 };
