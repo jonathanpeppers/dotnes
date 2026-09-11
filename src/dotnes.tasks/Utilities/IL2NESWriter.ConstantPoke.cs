@@ -64,6 +64,9 @@ partial class IL2NESWriter
             _immediateInA = (byte)value;
         }
         Emit(Opcode.STA, AddressMode.Absolute, (ushort)address);
+        // Argument pushes removed above cannot remain live after this consumes the whole IL stack.
+        if (Stack.Count == 0)
+            _savedState = SavedValueState.None;
         _lastLoadedLocalIndex = null;
         _lastStaticFieldAddress = null;
     }
