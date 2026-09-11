@@ -109,8 +109,11 @@ divisor is diagnosed.
 Word multiplication preserves both bytes for
 runtime byte operands (255 times 3 is 765), including values held across calls.
 An explicit final `byte` conversion retains the low eight bits. Conditional
-operands and mixed byte/sbyte multiplication preserve the selected values and
-their source signedness before that conversion.
+operands and mixed byte/word multiplication preserve the selected values and
+their source signedness before that conversion; a runtime `ushort` 300 times a
+`byte` 3 therefore narrows to 132, not zero. Runtime remainder uses the actual
+divisor even when the compiler's value tracking retains an earlier power-of-two
+assignment or loop increment.
 Explicit word conversions can request the low sixteen bits of a larger product;
 otherwise an observable wider product is diagnosed. Word-width demand also
 propagates through bitwise operations, so `(ushort)((value << 4) | 1)` retains

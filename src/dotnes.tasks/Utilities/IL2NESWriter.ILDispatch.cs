@@ -677,9 +677,12 @@ partial class IL2NESWriter
                            RemoveOperandInstructions(Index - 1, 1);
                         }
 
-                        if (divisor > 0 && (divisor & (divisor - 1)) == 0)
+                        var remInputs = _numericValues?.Inputs[Index];
+                        bool capturedDivisor = remInputs?.Length == 2
+                            && CanUseCapturedByteRemainder(remInputs[0], remInputs[1]);
+                        if (!capturedDivisor && divisor > 0 && (divisor & (divisor - 1)) == 0)
                         {
-                            // Power-of-2: x % N == x AND (N-1)
+                            // Power-of-2: x % N == x AND (N-1), only when A holds x.
                             Emit(Opcode.AND, AddressMode.Immediate, (byte)(divisor - 1));
                         }
                         else if (_savedRuntimeToTemp)

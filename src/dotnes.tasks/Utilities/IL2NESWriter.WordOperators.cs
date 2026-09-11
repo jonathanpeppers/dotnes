@@ -58,10 +58,10 @@ partial class IL2NESWriter
             || _numericValues.Inputs[Index].Length != 2)
             return false;
         int lhs = _numericValues.Inputs[Index][0], rhs = _numericValues.Inputs[Index][1];
-        bool runtimeBytes = NumericType(lhs) is PrimitiveTypeCode.Byte or PrimitiveTypeCode.SByte
-            && NumericType(rhs) is PrimitiveTypeCode.Byte or PrimitiveTypeCode.SByte
+        bool runtimeOperands = (WordNumericType(NumericType(lhs)) || NumericType(lhs) is PrimitiveTypeCode.Byte or PrimitiveTypeCode.SByte)
+            && (WordNumericType(NumericType(rhs)) || NumericType(rhs) is PrimitiveTypeCode.Byte or PrimitiveTypeCode.SByte)
             && Instructions![rhs].GetLdcValue() == null;
-        if (!runtimeBytes && !RequiresNumericWord(Index, new HashSet<int>()))
+        if (!runtimeOperands && !RequiresNumericWord(Index, new HashSet<int>()))
             return false;
         if (rhs >= 0 && Instructions![rhs].GetLdcValue() is > 0 and int factor
             && (factor & (factor - 1)) == 0 && NumericType(lhs) == PrimitiveTypeCode.Byte
