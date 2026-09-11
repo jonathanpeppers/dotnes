@@ -5,6 +5,32 @@ namespace dotnes.tests;
 
 public class ArrayStorageAnalysisTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ReferenceIdentityQueriesDoNotChangeAllocationQueries(bool parameter)
+    {
+        ILInstruction[] il =
+        [
+            parameter ? new(ILOpCode.Ldarg_0, 0) :
+                new(ILOpCode.Ldtoken, 0, Bytes: ImmutableArray.Create<byte>(1, 2, 3, 4)),
+            new(ILOpCode.Stloc_0, 1),
+            new(ILOpCode.Ldloc_0, 2),
+            new(ILOpCode.Pop, 3),
+            parameter ? new(ILOpCode.Ldarg_0, 4) : new(ILOpCode.Ldloc_0, 4),
+        ];
+        var storage = new ArrayStorageAnalysis([il], new ReflectionCache(),
+            new Dictionary<ILInstruction[], bool[]> { [il] = [parameter] });
+        var origins = new HashSet<(ILInstruction[] Method, int Producer)>();
+        var expected = parameter ? ArrayStorage.Parameter : ArrayStorage.Rom;
+        Assert.Equal(expected, storage.GetIdentity(il, 2, origins));
+        Assert.Equal(expected, storage.GetIdentity(il, 4, origins));
+        Assert.Equal((il, 0), Assert.Single(origins));
+        origins.Clear();
+        Assert.Equal(expected, storage.GetStorage(il, 4, origins));
+        Assert.Empty(origins);
+    }
+
     [Fact]
     public void LocalAliasChainsResolveTheirReachingBinding()
     {

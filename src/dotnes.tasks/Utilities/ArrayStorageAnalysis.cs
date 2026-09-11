@@ -48,8 +48,16 @@ sealed class ArrayStorageAnalysis
         ISet<(ILInstruction[] Method, int Producer)>? allocations = null) =>
         Query(instructions, consumer, argument, allocations);
 
+    public ArrayStorage GetIdentity(ILInstruction[] instructions, int producer,
+        ISet<(ILInstruction[] Method, int Producer)> identities) =>
+        Query(instructions, producer, null, identities, includeReferenceOrigins: true);
+
+    public ArrayStorage GetInputIdentity(ILInstruction[] instructions, int consumer, int argument,
+        ISet<(ILInstruction[] Method, int Producer)> identities) =>
+        Query(instructions, consumer, argument, identities, includeReferenceOrigins: true);
+
     ArrayStorage Query(ILInstruction[] instructions, int instruction, int? argument,
-        ISet<(ILInstruction[] Method, int Producer)>? allocations)
+        ISet<(ILInstruction[] Method, int Producer)>? allocations, bool includeReferenceOrigins = false)
     {
         var values = new HashSet<(ILInstruction[], int)>();
         var inputs = new HashSet<(ILInstruction[], int, int)>();
@@ -64,10 +72,16 @@ sealed class ArrayStorageAnalysis
             if (!values.Add((il, p)))
                 return 0;
             if (il[p].OpCode == ILOpCode.Ldtoken)
+            {
+                if (includeReferenceOrigins) allocations?.Add((il, p));
                 return ArrayStorage.Rom;
+            }
             if (il[p].OpCode == ILOpCode.Call &&
                 il[p].String is nameof(NESLib.meta_spr_2x2) or nameof(NESLib.meta_spr_2x2_flip))
+            {
+                if (includeReferenceOrigins) allocations?.Add((il, p));
                 return ArrayStorage.Rom;
+            }
             if (il[p].OpCode == ILOpCode.Newarr)
             {
                 allocations?.Add((il, p));
@@ -75,7 +89,12 @@ sealed class ArrayStorageAnalysis
             }
             if (il[p].GetLdargIndex() is int arg && parameters.TryGetValue(il, out var declared) &&
                 arg < declared.Length && declared[arg])
+            {
+                // All loads of one parameter denote the same incoming pointer.
+                if (includeReferenceOrigins)
+                    allocations?.Add((il, Array.FindIndex(il, i => i.GetLdargIndex() == arg)));
                 return ArrayStorage.Parameter;
+            }
             if (il[p].OpCode == ILOpCode.Ldsfld && il[p].String is string field)
                 return fields.TryGetValue(field, out var sources)
                     ? sources.Aggregate((ArrayStorage)0, (storage, source) => storage | Input(source.Method, source.Store, 0))

@@ -229,6 +229,10 @@ static class ArrayOperandLowering
         {
             var instruction = instructions[i];
             var inputs = analysis.Inputs[i];
+            if (instruction.GetStlocIndex() is not null && inputs.Length == 1 &&
+                inputs[0] >= 0 && inputs[0] != i - 1 &&
+                storage.GetStorage(instructions, inputs[0]) is ArrayStorage.Ram or ArrayStorage.Rom or ArrayStorage.Parameter)
+                SelectInputs(i);
             if (instruction.OpCode == ILOpCode.Stsfld && inputs.Length == 1 &&
                 inputs[0] != i - 1 && storage.GetStorage(instructions, inputs[0]) == ArrayStorage.Ram)
                 SelectInputs(i);

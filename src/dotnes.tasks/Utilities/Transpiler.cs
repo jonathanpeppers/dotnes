@@ -388,6 +388,19 @@ partial class Transpiler : IDisposable
         foreach (var name in UserMethods.Keys.ToArray())
             UserMethods[name] = PreserveExpressionValues(UserMethods[name], reflectionCache, name);
 
+        ArrayStorageAnalysis ArrayAliasesFor(ILInstruction[] body, string name)
+        {
+            var parameters = UserMethods.Where(pair => pair.Key != name)
+                .ToDictionary(pair => pair.Value, pair => arrayParameters[pair.Key]);
+            if (name != "main")
+                parameters.Add(body, arrayParameters[name]);
+            return new ArrayStorageAnalysis(parameters.Keys.Prepend(name == "main" ? body : instructions),
+                reflectionCache, parameters);
+        }
+        instructions = MaterializeConditionalValues(instructions, reflectionCache, "main", body => ArrayAliasesFor(body, "main"));
+        foreach (var name in UserMethods.Keys.ToArray())
+            UserMethods[name] = MaterializeConditionalValues(UserMethods[name], reflectionCache, name, body => ArrayAliasesFor(body, name));
+
         var arrayStorage = new ArrayStorageAnalysis(UserMethods.Values.Prepend(instructions), reflectionCache,
             UserMethods.ToDictionary(pair => pair.Value, pair => arrayParameters[pair.Key]));
         ILInstruction[] RewriteArrays(ILInstruction[] body, string name)

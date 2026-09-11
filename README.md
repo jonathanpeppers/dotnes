@@ -248,7 +248,9 @@ arguments in this byte-array path are byte-sized. Scalar parameters and returns
 are limited to primitive `byte`, `sbyte`, and `bool` (or `void` returns), not
 byte-backed enums. Captured/by-reference array-helper contexts are not supported.
 An alias must keep the same
-array identity; assigning a different array to it is diagnosed. Mixing RAM
+array identity, including at conditional joins. Same-identity branches preserve
+their evaluation order; differing or unproven merged identities are diagnosed.
+Mixing RAM
 arrays and read-only ROM tables in one helper call is also diagnosed, including
 through local and static-field aliases, rather than treating a ROM table as
 writable RAM. Existing ROM-only helper calls keep their previous behavior.
