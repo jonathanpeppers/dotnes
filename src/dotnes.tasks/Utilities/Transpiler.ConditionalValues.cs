@@ -80,7 +80,8 @@ partial class Transpiler
                 if (sources.Contains(i))
                 {
                     if (type is PrimitiveTypeCode.Int16 or PrimitiveTypeCode.UInt16)
-                        rewritten.Add(new(type == PrimitiveTypeCode.Int16 ? ILOpCode.Conv_i2 : ILOpCode.Conv_u2, offset--));
+                        rewritten.Add(new(types[i] is PrimitiveTypeCode.SByte or PrimitiveTypeCode.Int16
+                            ? ILOpCode.Conv_i2 : ILOpCode.Conv_u2, offset--));
                     rewritten.Add(new(ILOpCode.Stloc_s, offset--, local));
                 }
             }

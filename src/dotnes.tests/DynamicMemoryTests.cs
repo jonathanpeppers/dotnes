@@ -440,4 +440,52 @@ public class DynamicMemoryTests(ITestOutputHelper output) : ExecutionTests(outpu
         Assert.Equal(0x800, cpu.SoftwareStackPointer);
         Assert.Equal(0xFD, cpu.SP);
     }
+
+    [Theory]
+    [InlineData(0, 128)]
+    [InlineData(1, 128)]
+    [InlineData(0, 255)]
+    [InlineData(1, 255)]
+    [InlineData(0, 256)]
+    [InlineData(1, 256)]
+    public void ConditionalWordPreservesEachConstantArmsSignedness(byte flag, short positive)
+    {
+        var cpu = ExecuteProgram($$"""
+            short value = peek(0x6011) == 0 ? (short)-1 : (short){{positive}};
+            poke(0x6000, (byte)value);
+            poke(0x6001, (byte)(value >> 8));
+            test_stop();
+            while (true) ;
+            static extern void test_stop();
+            """, cpu => cpu.Memory[0x6011] = flag);
+        short expected = flag == 0 ? (short)-1 : positive;
+        Assert.Equal((byte)expected, cpu.Memory[0x6000]);
+        Assert.Equal((byte)(expected >> 8), cpu.Memory[0x6001]);
+        Assert.Equal(0x800, cpu.SoftwareStackPointer);
+        Assert.Equal(0xFD, cpu.SP);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    public void ConditionalWordPreservesEachRuntimeArmsSignedness(byte flag)
+    {
+        var cpu = ExecuteProgram("""
+            short value = peek(0x6011) == 0 ? (short)(sbyte)Get() : (short)Get();
+            poke(0x6000, (byte)value);
+            poke(0x6001, (byte)(value >> 8));
+            test_stop();
+            while (true) ;
+            static extern void test_stop();
+            static byte Get() => peek(0x6012);
+            """, cpu =>
+            {
+                cpu.Memory[0x6011] = flag;
+                cpu.Memory[0x6012] = 255;
+            });
+        Assert.Equal(255, cpu.Memory[0x6000]);
+        Assert.Equal(flag == 0 ? 255 : 0, cpu.Memory[0x6001]);
+        Assert.Equal(0x800, cpu.SoftwareStackPointer);
+        Assert.Equal(0xFD, cpu.SP);
+    }
 }
