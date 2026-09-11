@@ -46,7 +46,7 @@ public class ILValueAnalysisTests
     {
         ILInstruction[] il =
         [
-            new(ILOpCode.Ldloc_0, 0), new(ILOpCode.Br_s, 1, 4),
+            new(ILOpCode.Ldloc_0, 0), new(ILOpCode.Br_s, 1, 1),
             new(ILOpCode.Nop, 3), new(ILOpCode.Stloc_1, 4)
         ];
         var analysis = new ILValueAnalysis(il, new ReflectionCache());
@@ -54,5 +54,21 @@ public class ILValueAnalysisTests
         Assert.Equal(new[] { -1 }, analysis.Inputs[3]);
         Assert.Throws<InvalidOperationException>(() =>
             ILExpressionSpiller.Rewrite(il, analysis, new HashSet<int> { 0 }));
+    }
+
+    [Fact]
+    public void SpilledBranchRetainsOriginalTarget()
+    {
+        ILInstruction[] il =
+        [
+            new(ILOpCode.Ldloc_0, 0), new(ILOpCode.Ldc_i4_1, 1),
+            new(ILOpCode.Beq_s, 2, 1), new(ILOpCode.Nop, 4), new(ILOpCode.Ret, 5)
+        ];
+        var analysis = new ILValueAnalysis(il, new ReflectionCache());
+        var rewritten = ILExpressionSpiller.Rewrite(il, analysis, new HashSet<int> { 0, 1 });
+        var branch = Assert.Single(rewritten, i => i.OpCode == ILOpCode.Beq);
+        Assert.Equal(5, ILValueAnalysis.GetBranchTarget(branch));
+        Assert.Equal(ILOpCode.Ldloc_s, Assert.Single(rewritten, i => i.Offset == 2).OpCode);
+        Assert.Equal(0, ILValueAnalysis.GetBranchTarget(new(ILOpCode.Br_s, 4, 250)));
     }
 }
