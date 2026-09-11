@@ -17,7 +17,8 @@ static class ArrayOperandLowering
         {
             if (instructions[i].OpCode == ILOpCode.Stind_i1)
                 return false;
-            if (instructions[i].OpCode is ILOpCode.Call or ILOpCode.Ldelem_u1 or ILOpCode.Ldelema)
+            if (instructions[i].GetStlocIndex() is not null ||
+                instructions[i].OpCode is ILOpCode.Call or ILOpCode.Ldelem_u1 or ILOpCode.Ldelema)
                 return true;
         }
         return false;
@@ -196,6 +197,8 @@ static class ArrayOperandLowering
             {
                 if (producer < 0 || analysis.Escapes[producer])
                     throw new ObjectModel.TranspileException("Array operands crossing unsupported control flow cannot be materialized.");
+                if (instructions[producer].OpCode == ILOpCode.Ldelema && instructions[producer].String == "Byte")
+                    continue;
                 selected.Add(producer);
                 SelectArgumentOperands(producer);
             }
@@ -254,24 +257,42 @@ static class ArrayOperandLowering
             else if (instruction.OpCode == ILOpCode.Ldelem_u1 && inputs.Length == 2)
             {
                 var closure = OperandClosure(inputs);
-                int index = Unwrap(inputs[1]);
-                bool constantFirst = instructions[index].OpCode == ILOpCode.Add &&
-                    instructions[analysis.Inputs[index][0]].GetLdcValue() is not null;
-                if (constantFirst || HasIndependentEffect(i, closure, OperandClosure([inputs[1]]).Min()))
+                if (!Simple(Unwrap(inputs[1])) || HasIndependentEffect(i, closure, OperandClosure([inputs[1]]).Min()))
+                {
+                    SelectInputs(i);
+                    SelectValueExpression(inputs[1]);
+                    selected.Add(i);
+                }
+            }
+            else if (instruction.OpCode == ILOpCode.Ldelema && instruction.String == "Byte" &&
+                inputs.Length == 2)
+            {
+                var closure = OperandClosure(inputs);
+                if (!Simple(inputs[1]) || IndexNeedsPreservation(instructions, i) ||
+                    HasIndependentEffect(i, closure, OperandClosure([inputs[1]]).Min()))
                 {
                     SelectInputs(i);
                     SelectValueExpression(inputs[1]);
                 }
             }
-            else if (instruction.OpCode == ILOpCode.Ldelema && instruction.String == "Byte" &&
-                inputs.Length == 2 && (!Simple(inputs[1]) || IndexNeedsPreservation(instructions, i)))
-                SelectInputs(i);
             else if (instruction.OpCode == ILOpCode.Stind_i1 && inputs.Length == 2 &&
                 inputs[0] >= 0 && instructions[inputs[0]].OpCode == ILOpCode.Ldelema &&
-                IndexNeedsPreservation(instructions, inputs[0]))
+                instructions[inputs[0]].String == "Byte")
             {
-                selected.Add(inputs[1]);
-                SelectArrayReads(inputs[1]);
+                var closure = OperandClosure(inputs);
+                int value = Unwrap(inputs[1]);
+                var valueInputs = analysis.Inputs[value];
+                bool simpleIncrement = instructions[value].OpCode is ILOpCode.Add or ILOpCode.Sub &&
+                    valueInputs.Length == 2 && instructions[valueInputs[0]].OpCode == ILOpCode.Ldind_u1 &&
+                    instructions[valueInputs[1]].GetLdcValue() is not null;
+                if (!simpleIncrement || IndexNeedsPreservation(instructions, inputs[0]) ||
+                    HasIndependentEffect(i, closure, inputs[0]))
+                {
+                    SelectInputs(inputs[0]);
+                    SelectValueExpression(analysis.Inputs[inputs[0]][1]);
+                    selected.Add(inputs[1]);
+                    SelectValueExpression(inputs[1]);
+                }
             }
             else if (instruction.OpCode == ILOpCode.Call && instruction.String is string method &&
                 arrayParameters.TryGetValue(method, out var parameters) && parameters.Contains(true))
@@ -298,12 +319,28 @@ static class ArrayOperandLowering
         }
 
         // A selected operand must be reloaded with every operand above it.
+        var readValues = new HashSet<int>(selected.Where(p => instructions[p].OpCode == ILOpCode.Ldelem_u1));
         bool changed;
         do
         {
             changed = false;
             for (int i = 0; i < instructions.Length; i++)
             {
+                // A materialized read result can have an earlier live operand
+                // beneath it. Preserve that operand before the array load too.
+                if (analysis.Inputs[i].Any(readValues.Contains))
+                {
+                    int before = selected.Count;
+                    SelectInputs(i);
+                    foreach (int input in analysis.Inputs[i])
+                        SelectValueExpression(input);
+                    if (analysis.ProducesValue[i])
+                    {
+                        selected.Add(i);
+                        changed |= readValues.Add(i);
+                    }
+                    changed |= selected.Count != before;
+                }
                 bool reload = false;
                 foreach (int producer in analysis.Inputs[i])
                 {
@@ -321,23 +358,12 @@ static class ArrayOperandLowering
 
         void SelectValueExpression(int producer)
         {
+            if (instructions[producer].OpCode == ILOpCode.Ldind_u1)
+                return;
             SelectInputs(producer);
             foreach (int input in analysis.Inputs[producer])
                 SelectValueExpression(input);
         }
 
-        void SelectArrayReads(int producer)
-        {
-            if (producer < 0) return;
-            if (instructions[producer].OpCode == ILOpCode.Ldelem_u1)
-            {
-                selected.Add(producer);
-                SelectInputs(producer);
-            }
-            else if (instructions[producer].OpCode is ILOpCode.Ldind_u1 or ILOpCode.Call)
-                selected.Add(producer);
-            foreach (int input in analysis.Inputs[producer])
-                SelectArrayReads(input);
-        }
     }
 }

@@ -6,6 +6,116 @@ namespace dotnes.tests;
 public class ArrayReviewTests(ITestOutputHelper output) : ExecutionTests(output)
 {
     [Theory]
+    [InlineData("data[index] += (byte)(value + 1);", 33, 11, 3)]
+    [InlineData("data[index] += value++;", 32, 12, 3)]
+    [InlineData("data[index] += (byte)(value ^ y);", 50, 11, 3)]
+    [InlineData("data[index++]++;", 22, 11, 4)]
+    public void CompoundUpdatesPreserveCompleteEvaluation(string assignment, byte expected, byte value, byte index)
+    {
+        var cpu = ExecuteProgram(
+            $$"""
+            byte[] data = new byte[8];
+            data[3] = 21;
+            data[4] = 99;
+            byte index = 3;
+            byte value = 11;
+            byte y = 22;
+            byte frame = 0;
+            while (frame < 1)
+            {
+                {{assignment}}
+                frame++;
+            }
+            byte result = data[3];
+            poke(0x6000, result);
+            result = data[4];
+            poke(0x6001, result);
+            poke(0x6002, value);
+            poke(0x6003, index);
+            test_stop();
+            while (true) ;
+            static extern void test_stop();
+            """);
+        Assert.Equal(new byte[] { expected, 99, value, index }, cpu.Memory[0x6000..0x6004]);
+        Assert.Equal(Cpu6502.SoftwareStackTop, cpu.SoftwareStackPointer);
+    }
+
+    [Theory]
+    [InlineData("index - 1", 44)]
+    [InlineData("index ^ 1", 44)]
+    [InlineData("index >> 1", 33)]
+    [InlineData("index++ - 1", 44)]
+    public void ComputedReadsUseTheComputedIndex(string expression, byte expected)
+    {
+        var cpu = ExecuteProgram(
+            $$"""
+            byte[] data = new byte[8];
+            data[1] = 33;
+            data[2] = 44;
+            byte index = 3;
+            byte result = 0;
+            byte frame = 0;
+            while (frame < 1)
+            {
+                result = data[(byte)({{expression}})];
+                frame++;
+            }
+            poke(0x6000, result);
+            poke(0x6001, index);
+            test_stop();
+            while (true) ;
+            static extern void test_stop();
+            """);
+        Assert.Equal(expected, cpu.Memory[0x6000]);
+        Assert.Equal(expression.Contains("++") ? 4 : 3, cpu.Memory[0x6001]);
+        Assert.Equal(Cpu6502.SoftwareStackTop, cpu.SoftwareStackPointer);
+    }
+
+    [Theory]
+    [InlineData("40 + data[(byte)(index >> 1)]", 73)]
+    [InlineData("(byte)(x - y) + data[(byte)((x >> 3) + ((y >> 3) << 4))]", 60)]
+    [InlineData("40 + (data[(byte)(index >> 1)] >> 1)", 56)]
+    public void ComputedReadKeepsAnOlderLiveOperand(string expression, byte expected)
+    {
+        var cpu = ExecuteProgram(
+            $$"""
+            byte[] data = new byte[32];
+            data[1] = 33;
+            data[19] = 44;
+            byte index = 3;
+            byte x = 26;
+            byte y = 10;
+            byte result = 0;
+            byte frame = 0;
+            while (frame < 1)
+            {
+                result = (byte)({{expression}});
+                frame++;
+            }
+            poke(0x6000, result);
+            test_stop();
+            while (true) ;
+            static extern void test_stop();
+            """);
+        Assert.Equal(expected, cpu.Memory[0x6000]);
+        Assert.Equal(Cpu6502.SoftwareStackTop, cpu.SoftwareStackPointer);
+    }
+
+    [Fact]
+    public void ConditionalCompoundValueIsDiagnosed()
+    {
+        var exception = Assert.Throws<TranspileException>(() => GetProgramBytes(
+            """
+            byte[] data = new byte[8];
+            byte index = 3;
+            byte flag = (byte)pad_poll(0);
+            data[index] += (byte)(flag == 0 ? 11 : 22);
+            while (true) ;
+            """));
+        Assert.Contains("unsupported control flow", exception.Message);
+    }
+
+    [Theory]
     [InlineData("data[index]", 21)]
     [InlineData("table[index]", 44)]
     public void DirectArrayCopyRetainsTheReadValue(string expression, byte expected)
