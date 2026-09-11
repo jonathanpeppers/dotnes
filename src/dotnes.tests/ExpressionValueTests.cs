@@ -4,6 +4,65 @@ namespace dotnes.tests;
 
 public class ExpressionValueTests(ITestOutputHelper output) : ExecutionTests(output)
 {
+    [Fact]
+    public void DerivedStorePreservesRetainedOriginal()
+    {
+        var cpu = ExecuteProgram(
+            """
+            byte value = Helpers.Next();
+            byte derived = (byte)(value + 1);
+            byte result = (byte)(value + derived);
+            poke(0x6000, result);
+            test_stop(); while (true) ;
+            static extern void test_stop();
+            static class Helpers { public static byte Next() => 15; }
+            """);
+        Assert.Equal(31, cpu.Memory[0x6000]);
+    }
+
+    [Fact]
+    public void VoidConsumerPreservesRetainedOriginal()
+    {
+        var cpu = ExecuteProgram(
+            """
+            byte value = Helpers.Next();
+            Helpers.Ignore(value);
+            poke(0x6000, value);
+            test_stop(); while (true) ;
+            static extern void test_stop();
+            static class Helpers
+            {
+                public static byte Next() => 37;
+                public static void Ignore(byte value) { }
+            }
+            """);
+        Assert.Equal(37, cpu.Memory[0x6000]);
+        Assert.Equal(Cpu6502.SoftwareStackTop, cpu.SoftwareStackPointer);
+    }
+
+    [Fact]
+    public void ForwardedArgumentsRestoreCallerParameterOffsets()
+    {
+        var cpu = ExecuteProgram(
+            """
+            byte result = Helpers.Set(37);
+            poke(0x6000, result);
+            test_stop(); while (true) ;
+            static extern void test_stop();
+            static class Helpers
+            {
+                static void Ignore(byte first, byte second) { }
+                public static byte Set(byte value)
+                {
+                    Ignore(value, value);
+                    return value;
+                }
+            }
+            """);
+        Assert.Equal(37, cpu.Memory[0x6000]);
+        Assert.Equal(Cpu6502.SoftwareStackTop, cpu.SoftwareStackPointer);
+    }
+
     [Theory]
     [InlineData(0, 42)]
     [InlineData(1, 76)]

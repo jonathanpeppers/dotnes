@@ -105,13 +105,6 @@ partial class Transpiler
                 .Any(i => i.OpCode == ILOpCode.Call && i.String is "pad_poll" or "pad_trigger");
         }
 
-        bool DependsOn(int consumer, int producer)
-        {
-            var visited = new HashSet<int>();
-            bool Visit(int node) => visited.Add(node) && analysis.Inputs[node]
-                .Any(p => p == producer || (p >= 0 && Visit(p)));
-            return Visit(consumer);
-        }
         for (int i = 0; i < instructions.Length; i++)
         {
             var inputs = analysis.Inputs[i];
@@ -143,9 +136,8 @@ partial class Transpiler
                     continue;
                 for (int j = producer + 1; j < i; j++)
                 {
-                    if ((instructions[j].GetStlocIndex() != null
+                    if ((instructions[j].GetStlocIndex() != null && !analysis.Inputs[j].Contains(producer))
                         || instructions[j].OpCode is ILOpCode.Call or ILOpCode.Stsfld)
-                        && !DependsOn(j, producer))
                     {
                         spills.Add(producer);
                         break;
