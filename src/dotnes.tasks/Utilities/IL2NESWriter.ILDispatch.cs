@@ -289,6 +289,8 @@ partial class IL2NESWriter
                 }
                 break;
             case ILOpCode.Conv_u1:
+                if (Stack.Count > 0)
+                    Stack.Push(unchecked((byte)Stack.Pop()));
                 // When truncating from ushort to byte, discard high byte
                 if (_ushortInAX)
                     _ushortInAX = false;
