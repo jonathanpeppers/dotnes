@@ -84,6 +84,29 @@ public class IntegerSemanticsTests(ITestOutputHelper output) : ExecutionTests(ou
     }
 
     [Theory]
+    [InlineData("long", "Int64")]
+    [InlineData("ulong", "UInt64")]
+    [InlineData("float", "Single")]
+    [InlineData("double", "Double")]
+    [InlineData("char", "Char")]
+    [InlineData("bool", "Boolean")]
+    [InlineData("nint", "IntPtr")]
+    [InlineData("nuint", "UIntPtr")]
+    public void UnsupportedPrimitiveArgumentCannotUseAByteFrame(string type, string decodedType)
+    {
+        var error = Assert.Throws<TranspileException>(() => GetProgramBytes($$"""
+            while (true);
+            static class Helpers
+            {
+                public static byte Read({{type}} value) => 42;
+            }
+            """));
+        Assert.Contains("Parameter 0", error.Message);
+        Assert.Contains(decodedType, error.Message);
+        Assert.Contains("byte and sbyte only", error.Message);
+    }
+
+    [Theory]
     [InlineData(0, 10)]
     [InlineData(253, 258)]
     public void BoundedIntCounterKeepsIndexSemantics(int start, int end)

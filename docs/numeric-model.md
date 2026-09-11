@@ -54,8 +54,10 @@ an already-truncated intermediate cannot be widened afterward to recover them.
 Promoted left shifts whose observable results need more than a word are diagnosed,
 including a later right shift that would bring those bits back into a byte.
 
-User-defined scalar parameters support `byte` and `sbyte`, not word arguments;
-an unsupported parameter reports its method, index and type. Word returns retain
+User-defined scalar parameters support `byte` and `sbyte`; all other decoded
+primitive parameter types are rejected, even when the method does not read the
+argument. An unsupported parameter reports its method, index and type. Arrays
+and closure references use their separate lowering. Word returns retain
 both bytes, including signed extension from a byte-sized source. Signed division
 by a positive power-of-two constant truncates toward zero, including for negative
 operands. Other signed divisors and signed remainder produce diagnostics rather

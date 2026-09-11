@@ -22,8 +22,7 @@ partial class IL2NESWriter
         if (MethodName != null && _numericTypes != null)
         {
             for (int i = 0; i < _numericTypes.Parameters.Length; i++)
-                if (_numericTypes.Parameters[i] is PrimitiveTypeCode.Int16 or PrimitiveTypeCode.UInt16
-                    or PrimitiveTypeCode.Int32 or PrimitiveTypeCode.UInt32)
+                if (_numericTypes.Parameters[i] is not (null or PrimitiveTypeCode.Byte or PrimitiveTypeCode.SByte))
                     throw new TranspileException(
                         $"Parameter {i} has type {_numericTypes.Parameters[i]}, but user-method scalar arguments " +
                         "currently support byte and sbyte only. Keep word values in locals or use a supported " +
