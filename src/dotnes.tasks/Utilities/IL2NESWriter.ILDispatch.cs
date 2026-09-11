@@ -2671,7 +2671,7 @@ partial class IL2NESWriter
                                     _pokeLastValue = null;
                                     _immediateInA = null;
                                 }
-                                else if (_pokeLastValue != (byte)value)
+                                else if (!CanReuseConstantPokeValue((byte)value))
                                 {
                                     Emit(Opcode.LDA, AddressMode.Immediate, (byte)value);
                                     _pokeLastValue = (byte)value;

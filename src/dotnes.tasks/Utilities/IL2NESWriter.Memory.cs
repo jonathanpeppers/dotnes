@@ -10,7 +10,18 @@ partial class IL2NESWriter
     readonly Dictionary<int, int> _savedMemoryAddresses = new();
     readonly Stack<(int Producer, int Call)> _memorySaveOrder = new();
     readonly HashSet<int> _runtimeMemoryCalls = new();
+    readonly HashSet<int> _memoryBranchTargets = new();
     bool _memoryCallsPrepared;
+
+    bool CanReuseConstantPokeValue(byte value)
+    {
+        if (_pokeLastValue != value || Instructions is null || Index < 3
+            || Instructions[Index - 3].OpCode != ILOpCode.Call
+            || Instructions[Index - 3].String != nameof(NESLib.poke))
+            return false;
+        return !Instructions.Skip(Index - 2).Take(3)
+            .Any(i => _memoryBranchTargets.Contains(i.Offset));
+    }
 
     void RemoveMemoryArgumentInstructions(int firstArgument, int count)
     {
@@ -45,7 +56,7 @@ partial class IL2NESWriter
                 && i.String is nameof(NESLib.peek) or nameof(NESLib.poke)))
                 return;
             var analysis = new ILValueAnalysis(Instructions, _reflectionCache);
-            var branchTargets = new HashSet<int>(Instructions.SelectMany(ILValueAnalysis.GetBranchTargets));
+            _memoryBranchTargets.UnionWith(Instructions.SelectMany(ILValueAnalysis.GetBranchTargets));
             for (int call = 0; call < Instructions.Length; call++)
             {
                 var instruction = Instructions[call];
@@ -76,7 +87,7 @@ partial class IL2NESWriter
                         || Instructions.Skip(address + 1).Take(call - address - 1)
                             .Any(i => ILValueAnalysis.IsBranch(i.OpCode) || i.OpCode == ILOpCode.Ret)
                         || Instructions.Skip(address + 1).Take(call - address)
-                            .Any(i => branchTargets.Contains(i.Offset)))
+                            .Any(i => _memoryBranchTargets.Contains(i.Offset)))
                         throw new TranspileException("A dynamic poke address must have one consumer without intervening control flow.", MethodName);
                     _memoryAddressCalls.Add(address, call);
                 }

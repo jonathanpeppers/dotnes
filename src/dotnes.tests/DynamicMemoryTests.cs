@@ -395,4 +395,91 @@ public class DynamicMemoryTests(ITestOutputHelper output) : ExecutionTests(outpu
         Assert.Equal(0x800, cpu.SoftwareStackPointer);
         Assert.Equal(0xFD, cpu.SP);
     }
+
+    [Fact]
+    public void ConstantWriteReloadsAfterALocalInitialization()
+    {
+        var cpu = ExecuteProgram("""
+            poke(0x6000, 42);
+            byte value = 5;
+            poke(0x6001, 42);
+            poke(0x6002, value);
+            test_stop();
+            while (true) ;
+            static extern void test_stop();
+            """);
+        Assert.Equal(new byte[] { 42, 42, 5 }, cpu.Memory[0x6000..0x6003]);
+        Assert.Equal(0x800, cpu.SoftwareStackPointer);
+        Assert.Equal(0xFD, cpu.SP);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    public void ConstantWriteReloadsAcrossAConditional(byte flag)
+    {
+        var cpu = ExecuteProgram("""
+            byte flag = peek(0x6020);
+            poke(0x6000, 42);
+            if (flag != 0)
+                poke(0x6002, 42);
+            poke(0x6001, 42);
+            test_stop();
+            while (true) ;
+            static extern void test_stop();
+            """, cpu => cpu.Memory[0x6020] = flag);
+        Assert.Equal(42, cpu.Memory[0x6000]);
+        Assert.Equal(42, cpu.Memory[0x6001]);
+        Assert.Equal(flag != 0 ? 42 : 0, cpu.Memory[0x6002]);
+        Assert.Equal(0x800, cpu.SoftwareStackPointer);
+        Assert.Equal(0xFD, cpu.SP);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void SharedAddressSpillsMaterializePromotedWordOperands(bool subtract)
+    {
+        var cpu = ExecuteProgram($$"""
+            Copy(100, 200);
+            test_stop();
+            while (true) ;
+            static extern void test_stop();
+            static void Copy(byte a, byte b)
+            {
+                ushort address = 0x6000;
+                poke(address, 11);
+                ushort next = (ushort)(address + (a {{(subtract ? "-" : "+")}} b));
+                poke(next, 22);
+            }
+            """);
+        Assert.Equal(11, cpu.Memory[0x6000]);
+        Assert.Equal(22, cpu.Memory[subtract ? 0x5F9C : 0x612C]);
+        Assert.Equal(0, cpu.Memory[subtract ? 0x609C : 0x602C]);
+        Assert.Equal(0x800, cpu.SoftwareStackPointer);
+        Assert.Equal(0xFD, cpu.SP);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(31)]
+    [InlineData(32)]
+    [InlineData(255)]
+    public void PromotedReadMultiplicationSurvivesAValueCall(byte input)
+    {
+        var cpu = ExecuteProgram("""
+            ushort result = (ushort)(peek(0x6012) * 8 + Next());
+            poke(0x6000, (byte)result);
+            poke(0x6001, (byte)(result >> 8));
+            test_stop();
+            while (true) ;
+            static extern void test_stop();
+            static byte Next() => 7;
+            """, cpu => cpu.Memory[0x6012] = input);
+        int expected = input * 8 + 7;
+        Assert.Equal((byte)expected, cpu.Memory[0x6000]);
+        Assert.Equal((byte)(expected >> 8), cpu.Memory[0x6001]);
+        Assert.Equal(0x800, cpu.SoftwareStackPointer);
+        Assert.Equal(0xFD, cpu.SP);
+    }
 }
