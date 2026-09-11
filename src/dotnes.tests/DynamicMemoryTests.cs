@@ -247,4 +247,152 @@ public class DynamicMemoryTests(ITestOutputHelper output) : ExecutionTests(outpu
         Assert.Equal(0x800, cpu.SoftwareStackPointer);
         Assert.Equal(0xFD, cpu.SP);
     }
+
+    [Theory]
+    [InlineData(3, false)]
+    [InlineData(16, false)]
+    [InlineData(3, true)]
+    [InlineData(16, true)]
+    public void NestedAddressArithmeticPreservesSavedOperands(byte index, bool dynamicDestination)
+    {
+        var cpu = ExecuteProgram($$"""
+            Copy({{index}});
+            Copy({{index}});
+            test_stop();
+            while (true) ;
+            static extern void test_stop();
+            static void Copy(byte index)
+            {
+                poke({{(dynamicDestination ? "(ushort)(0x6140 + index)" : "0x6040")}},
+                    peek((ushort)(0x60F0 + index)));
+            }
+            """, cpu =>
+            {
+                cpu.Memory[0x6000 + index] = 21;
+                cpu.Memory[0x60F0 + index] = 75;
+            });
+        Assert.Equal(75, cpu.Memory[dynamicDestination ? 0x6140 + index : 0x6040]);
+        Assert.Equal(0x800, cpu.SoftwareStackPointer);
+        Assert.Equal(0xFD, cpu.SP);
+    }
+
+    [Theory]
+    [InlineData("NTADR_A", 0x2041)]
+    [InlineData("NTADR_B", 0x2441)]
+    [InlineData("NTADR_C", 0x2841)]
+    [InlineData("NTADR_D", 0x2C41)]
+    public void NametableAddressRetainsItsHighByte(string intrinsic, ushort address)
+    {
+        var cpu = ExecuteProgram($$"""
+            byte result = peek({{intrinsic}}(1, 2));
+            poke(0x6000, result);
+            poke({{intrinsic}}(1, 2), 77);
+            test_stop();
+            while (true) ;
+            static extern void test_stop();
+            """, cpu =>
+            {
+                cpu.Memory[address] = 99;
+                cpu.Memory[0x41] = 13;
+            });
+        Assert.Equal(99, cpu.Memory[0x6000]);
+        Assert.Equal(77, cpu.Memory[address]);
+        Assert.Equal(13, cpu.Memory[0x41]);
+        Assert.Equal(0x800, cpu.SoftwareStackPointer);
+        Assert.Equal(0xFD, cpu.SP);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    public void ConstantWriteDoesNotRemoveAnEarlierReturn(byte flag)
+    {
+        var cpu = ExecuteProgram($$"""
+            byte result = Probe({{flag}});
+            poke(0x6000, result);
+            test_stop();
+            while (true) ;
+            static extern void test_stop();
+            static byte Probe(byte flag)
+            {
+                if (flag == 0)
+                    return peek(0x6010);
+                poke(0x6001, 44);
+                return 77;
+            }
+            """, cpu => cpu.Memory[0x6010] = 255);
+        Assert.Equal(flag == 0 ? 255 : 77, cpu.Memory[0x6000]);
+        Assert.Equal(flag == 0 ? 0 : 44, cpu.Memory[0x6001]);
+        Assert.Equal(0x800, cpu.SoftwareStackPointer);
+        Assert.Equal(0xFD, cpu.SP);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void SharedAddressSpillsPreserveSignedOffsets(bool dynamicAddress)
+    {
+        var cpu = ExecuteProgram($$"""
+            Copy(3, -1);
+            test_stop();
+            while (true) ;
+            static extern void test_stop();
+            static void Copy(byte index, sbyte delta)
+            {
+                ushort address = {{(dynamicAddress ? "(ushort)(0x6000 + index)" : "0x6003")}};
+                poke(address, 11);
+                ushort next = (ushort)(address + delta);
+                poke(next, 22);
+            }
+            """);
+        Assert.Equal(11, cpu.Memory[0x6003]);
+        Assert.Equal(22, cpu.Memory[0x6002]);
+        Assert.Equal(0, cpu.Memory[0x6102]);
+        Assert.Equal(0x800, cpu.SoftwareStackPointer);
+        Assert.Equal(0xFD, cpu.SP);
+    }
+
+    [Theory]
+    [InlineData(0x7F)]
+    [InlineData(0xFF)]
+    public void SignedByteReadExtendsIntoWordStorage(byte input)
+    {
+        var cpu = ExecuteProgram("""
+            short value = (sbyte)peek(0x6010);
+            poke(0x6030, (byte)value);
+            byte result = 11;
+            if (value < 0)
+                result = 22;
+            poke(0x6000, result);
+            test_stop();
+            while (true) ;
+            static extern void test_stop();
+            """, cpu => cpu.Memory[0x6010] = input);
+        Assert.Equal(input, cpu.Memory[0x6030]);
+        Assert.Equal(input > 127 ? 22 : 11, cpu.Memory[0x6000]);
+        Assert.Equal(0x800, cpu.SoftwareStackPointer);
+        Assert.Equal(0xFD, cpu.SP);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void WriteValuePreservesBothReadResults(bool helperCalls)
+    {
+        var cpu = ExecuteProgram($$"""
+            poke(0x6000, (byte)({{(helperCalls ? "ReadLeft() + ReadRight()" : "peek(0x6010) + peek(0x6011)")}}));
+            test_stop();
+            while (true) ;
+            static extern void test_stop();
+            static byte ReadLeft() => peek(0x6010);
+            static byte ReadRight() => peek(0x6011);
+            """, cpu =>
+            {
+                cpu.Memory[0x6010] = 3;
+                cpu.Memory[0x6011] = 7;
+            });
+        Assert.Equal(10, cpu.Memory[0x6000]);
+        Assert.Equal(0x800, cpu.SoftwareStackPointer);
+        Assert.Equal(0xFD, cpu.SP);
+    }
 }

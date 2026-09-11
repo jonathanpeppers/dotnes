@@ -2634,17 +2634,20 @@ partial class IL2NESWriter
 
                                 // Check if the value is from a runtime local variable
                                 Local? pokeLocal = null;
-                                bool valueIsLocal = _lastLoadedLocalIndex.HasValue &&
-                                    Locals.TryGetValue(_lastLoadedLocalIndex.Value, out pokeLocal) &&
+                                int? valueLocalIndex = Instructions is null
+                                    ? _lastLoadedLocalIndex : Instructions[Index - 1].GetLdlocIndex();
+                                bool valueIsLocal = valueLocalIndex.HasValue &&
+                                    Locals.TryGetValue(valueLocalIndex.Value, out pokeLocal) &&
                                     pokeLocal.Address.HasValue;
 
                                 // Check if the value is from a static field
-                                bool valueIsStaticField = _lastStaticFieldAddress.HasValue;
+                                bool valueIsStaticField = _lastStaticFieldAddress.HasValue
+                                    && (Instructions is null || Instructions[Index - 1].OpCode == ILOpCode.Ldsfld);
 
                                 // Remove previously emitted instructions:
                                 // ushort addr: LDX #hi, LDA #lo, JSR pushax, LDA #value = 4 instructions
                                 // byte addr:   LDA #lo, JSR pusha, LDA #value = 3 instructions
-                                RemoveLastInstructions(addr > byte.MaxValue ? 4 : 3);
+                                RemoveMemoryArgumentInstructions(Index - 2, addr > byte.MaxValue ? 4 : 3);
 
                                 if (valueIsLocal)
                                 {

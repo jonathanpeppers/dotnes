@@ -6,21 +6,27 @@ namespace dotnes;
 
 partial class IL2NESWriter
 {
-    readonly HashSet<int> _memoryAddressEnds = new();
+    readonly Dictionary<int, int> _memoryAddressCalls = new();
+    readonly Dictionary<int, int> _savedMemoryAddresses = new();
+    readonly Stack<(int Producer, int Call)> _memorySaveOrder = new();
     readonly HashSet<int> _runtimeMemoryCalls = new();
     bool _memoryCallsPrepared;
+
+    void RemoveMemoryArgumentInstructions(int firstArgument, int count)
+    {
+        if (Instructions is not null
+            && _blockCountAtILOffset.TryGetValue(Instructions[firstArgument].Offset, out int start))
+            count = Math.Min(count, GetBufferedBlockCount() - start);
+        if (count > 0)
+            RemoveLastInstructions(count);
+    }
 
     void EmitConstantPeek(int address)
     {
         // A previous branch/return can leave a tracked runtime value in A, causing
         // WriteLdc to defer the address. Remove only code from this argument, never
         // a preceding return jump or the computation of a live caller value.
-        int count = address > byte.MaxValue ? 2 : 1;
-        if (Instructions is not null
-            && _blockCountAtILOffset.TryGetValue(Instructions[Index - 1].Offset, out int start))
-            count = Math.Min(count, GetBufferedBlockCount() - start);
-        if (count > 0)
-            RemoveLastInstructions(count);
+        RemoveMemoryArgumentInstructions(Index - 1, address > byte.MaxValue ? 2 : 1);
         Emit(Opcode.LDA, AddressMode.Absolute, (ushort)address);
         _lastLoadedLocalIndex = null;
         _lastStaticFieldAddress = null;
@@ -39,6 +45,7 @@ partial class IL2NESWriter
                 && i.String is nameof(NESLib.peek) or nameof(NESLib.poke)))
                 return;
             var analysis = new ILValueAnalysis(Instructions, _reflectionCache);
+            var branchTargets = new HashSet<int>(Instructions.SelectMany(ILValueAnalysis.GetBranchTargets));
             for (int call = 0; call < Instructions.Length; call++)
             {
                 var instruction = Instructions[call];
@@ -64,21 +71,32 @@ partial class IL2NESWriter
 
                 _runtimeMemoryCalls.Add(call);
                 if (value != call)
-                    _memoryAddressEnds.Add(address + 1);
+                {
+                    if (analysis.Escapes[address] || analysis.Consumers[address].Count != 1
+                        || Instructions.Skip(address + 1).Take(call - address - 1)
+                            .Any(i => ILValueAnalysis.IsBranch(i.OpCode) || i.OpCode == ILOpCode.Ret)
+                        || Instructions.Skip(address + 1).Take(call - address)
+                            .Any(i => branchTargets.Contains(i.Offset)))
+                        throw new TranspileException("A dynamic poke address must have one consumer without intervening control flow.", MethodName);
+                    _memoryAddressCalls.Add(address, call);
+                }
             }
         }
 
-        if (_memoryAddressEnds.Contains(Index))
+        int producer = Index - 1;
+        if (_memoryAddressCalls.TryGetValue(producer, out int memoryCall))
         {
             // The address must survive arbitrary calls while the value is evaluated.
             // The hardware stack does not change cc65 parameter offsets and nests
             // naturally with JSR/RTS and other memory intrinsics.
-            if (!_ushortInAX)
-                Emit(Opcode.LDX, AddressMode.Immediate, (byte)0);
+            NormalizeMemoryAddress(producer);
             Emit(Opcode.PHA, AddressMode.Implied);
             Emit(Opcode.TXA, AddressMode.Implied);
             Emit(Opcode.PHA, AddressMode.Implied);
+            _savedMemoryAddresses.Add(producer, memoryCall);
+            _memorySaveOrder.Push((producer, memoryCall));
             _accState = AccumulatorState.Empty;
+            _ntadrRuntimeResult = false;
             _lastLoadedLocalIndex = null;
             _lastStaticFieldAddress = null;
             _savedRuntimeToTemp = false;
@@ -86,11 +104,26 @@ partial class IL2NESWriter
         }
     }
 
+    bool IsSavedMemoryAddress(int producer, int consumer) =>
+        _savedMemoryAddresses.TryGetValue(producer, out int memoryCall)
+        && producer < consumer && consumer < memoryCall;
+
+    void NormalizeMemoryAddress(int producer)
+    {
+        // NTADR's dedicated handler emits A:X but intentionally bypasses normal
+        // return tracking. Its declared word result must not be zero-extended.
+        bool wordResult = Instructions is not null
+            && Instructions[producer].OpCode == ILOpCode.Call
+            && Instructions[producer].String is string method
+            && _reflectionCache.TryReturns16Bit(method);
+        if (!_ushortInAX && !wordResult)
+            Emit(Opcode.LDX, AddressMode.Immediate, (byte)0);
+    }
+
     void EmitRuntimePeek()
     {
         Stack.Pop();
-        if (!_ushortInAX)
-            Emit(Opcode.LDX, AddressMode.Immediate, (byte)0);
+        NormalizeMemoryAddress(Index - 1);
         Emit(Opcode.STA, AddressMode.ZeroPage, ptr1);
         Emit(Opcode.STX, AddressMode.ZeroPage, (byte)(ptr1 + 1));
         Emit(Opcode.LDY, AddressMode.Immediate, (byte)0);
@@ -103,6 +136,10 @@ partial class IL2NESWriter
 
     void EmitRuntimePoke()
     {
+        if (_memorySaveOrder.Count == 0 || _memorySaveOrder.Peek().Call != Index)
+            throw new TranspileException("The dynamic poke address does not match the most recently saved operand.", MethodName);
+        var saved = _memorySaveOrder.Pop();
+        _savedMemoryAddresses.Remove(saved.Producer);
         Stack.Pop();
         Stack.Pop();
         Emit(Opcode.TAX, AddressMode.Implied);

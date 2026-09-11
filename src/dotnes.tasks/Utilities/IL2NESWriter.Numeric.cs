@@ -98,7 +98,8 @@ partial class IL2NESWriter
             || lhs + 1 != second || rhs + 1 != Index)
             return false;
         for (int i = 0; i < first; i++)
-            if (_numericValues.Consumers[i].Any(consumer => consumer >= Index))
+            if (_numericValues.Consumers[i].Any(consumer => consumer >= Index)
+                && !IsSavedMemoryAddress(i, Index))
                 return false;
         for (int i = first; i < Index; i++)
             if (_numericValues.Escapes[i] || _numericValues.Consumers[i].Count > 1)
