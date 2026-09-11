@@ -159,13 +159,35 @@ public static class NESLib
     /// Set NMI callback to a function (called every NMI frame).
     /// Usage: nmi_set_callback(&amp;my_nmi_handler)
     /// </summary>
+    /// <remarks>
+    /// Accepts a direct address of a static managed or extern void method with no arguments.
+    /// Disable PPU NMI generation before changing the callback; the address update is not atomic.
+    /// Native callbacks return with RTS, not RTI, and must preserve compiler scratch memory.
+    /// </remarks>
     public static unsafe void nmi_set_callback(delegate*<void> callback) => throw null!;
 
     /// <summary>
     /// Set IRQ callback to a function (called when a hardware IRQ fires).
     /// Usage: irq_set_callback(&amp;my_irq_handler)
     /// </summary>
+    /// <remarks>
+    /// Accepts a direct address of a static managed or extern void method with no arguments.
+    /// This call retains the IRQ dispatcher even when the callback is entirely native.
+    /// Disable IRQs before changing the callback. Native callbacks must acknowledge their
+    /// IRQ source, preserve compiler scratch memory, and return with RTS, not RTI.
+    /// </remarks>
     public static unsafe void irq_set_callback(delegate*<void> callback) => throw null!;
+
+    /// <summary>
+    /// Compile-time directive selecting native ownership of PPU/OAM for the entire program.
+    /// The NMI dispatcher retains frame counters and the callback but performs no graphics I/O.
+    /// </summary>
+    /// <remarks>
+    /// Put this declaration in the program's startup code. It emits no instructions and
+    /// is not a runtime switch. Stock buffered rendering APIs cannot be used in this mode.
+    /// Reset-time PPU initialization is unchanged; the native runtime owns graphics after startup.
+    /// </remarks>
+    public static void ppu_use_native_renderer() => throw null!;
 
     /// <summary>
     /// enable CPU interrupts (6502 CLI instruction)
@@ -1133,4 +1155,3 @@ public static class NESLib
         0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30,
     ];
 }
-
