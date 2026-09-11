@@ -4,13 +4,14 @@ namespace dotnes;
 
 partial class Transpiler
 {
-    ILInstruction[] PreserveExpressionValues(ILInstruction[] instructions, ReflectionCache reflection, string method)
+    ILInstruction[] PreserveExpressionValues(ILInstruction[] instructions, ReflectionCache reflection, string method,
+        IReadOnlyDictionary<int, PrimitiveTypeCode>? compactInts = null)
     {
         instructions = MaterializeConditionalValues(instructions, reflection, method);
         var analysis = new ILValueAnalysis(instructions, reflection);
         var stableAddresses = GetStableClosureArguments(instructions, method);
         var scalar = new bool[instructions.Length];
-        var types = GetExpressionValueTypes(instructions, analysis, reflection, method);
+        var types = GetExpressionValueTypes(instructions, analysis, reflection, method, compactInts);
         for (int i = 0; i < instructions.Length; i++)
         {
             if (!analysis.ProducesValue[i])

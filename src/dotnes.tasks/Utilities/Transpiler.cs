@@ -376,6 +376,10 @@ partial class Transpiler : IDisposable
             PreAllocateClosureFields(ref staticFieldBytes);
         }
 
+        instructions = MaterializeSharedMemoryAddresses(instructions, reflectionCache, "main");
+        foreach (string methodName in UserMethods.Keys.ToArray())
+            UserMethods[methodName] = MaterializeSharedMemoryAddresses(UserMethods[methodName], reflectionCache, methodName);
+
         instructions = PreserveExpressionValues(instructions, reflectionCache, "main");
         foreach (var name in UserMethods.Keys.ToArray())
             UserMethods[name] = PreserveExpressionValues(UserMethods[name], reflectionCache, name);

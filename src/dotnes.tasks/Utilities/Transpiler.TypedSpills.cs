@@ -28,11 +28,14 @@ partial class Transpiler
                 && !ILExpressionSpiller.CanRematerialize(instructions[i]) && !stableAddresses.Contains(i))))
             throw new InvalidOperationException($"Cannot spill an untyped expression value in '{method}'.");
 
-        var words = new HashSet<int>(selected.Where(i => types[i] is PrimitiveTypeCode.UInt16
-            or PrimitiveTypeCode.Int16 or PrimitiveTypeCode.Int32 or PrimitiveTypeCode.UInt32));
+        foreach (int producer in selected)
+            NumericStorage.RequireNarrowType(types[producer], method);
+        var words = new HashSet<int>(selected.Where(i => NumericStorage.IsWord(types[i])));
+        var signedWords = new HashSet<int>(words.Where(i => NumericStorage.IsSigned(types[i])));
         var spillLocals = new Dictionary<int, int>();
         var rewritten = ILExpressionSpiller.Rewrite(instructions, analysis, selected, words,
-            spillLocals, signature.Locals.Length, stableAddressProducers: stableAddresses);
+            spillLocals, signature.Locals.Length, stableAddressProducers: stableAddresses,
+            signedWordProducers: signedWords);
         if (spillLocals.Count == 0)
             return rewritten;
 

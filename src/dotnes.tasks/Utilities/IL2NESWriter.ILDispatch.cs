@@ -2668,48 +2668,13 @@ partial class IL2NESWriter
                         break;
                     case nameof(NESLib.poke):
                         {
-                            // poke(ushort addr, byte value) -> LDA #value, STA abs addr
-                            if (Stack.Count >= 2)
+                            if (_runtimeMemoryCalls.Contains(Index))
                             {
-                                int value = Stack.Pop();
-                                int addr = Stack.Pop();
-
-                                // Check if the value is from a runtime local variable
-                                Local? pokeLocal = null;
-                                bool valueIsLocal = _lastLoadedLocalIndex.HasValue &&
-                                    Locals.TryGetValue(_lastLoadedLocalIndex.Value, out pokeLocal) &&
-                                    pokeLocal.Address.HasValue;
-
-                                // Check if the value is from a static field
-                                bool valueIsStaticField = _lastStaticFieldAddress.HasValue;
-
-                                // Remove previously emitted instructions:
-                                // ushort addr: LDX #hi, LDA #lo, JSR pushax, LDA #value = 4 instructions
-                                // byte addr:   LDA #lo, JSR pusha, LDA #value = 3 instructions
-                                RemoveLastInstructions(addr > byte.MaxValue ? 4 : 3);
-
-                                if (valueIsLocal)
-                                {
-                                    Emit(Opcode.LDA, AddressMode.Absolute, (ushort)pokeLocal!.Address!.Value);
-                                    _pokeLastValue = null;
-                                    _immediateInA = null;
-                                }
-                                else if (valueIsStaticField)
-                                {
-                                    Emit(Opcode.LDA, AddressMode.Absolute, _lastStaticFieldAddress!.Value);
-                                    _pokeLastValue = null;
-                                    _immediateInA = null;
-                                }
-                                else if (_pokeLastValue != (byte)value)
-                                {
-                                    Emit(Opcode.LDA, AddressMode.Immediate, (byte)value);
-                                    _pokeLastValue = (byte)value;
-                                    _immediateInA = (byte)value;
-                                }
-                                Emit(Opcode.STA, AddressMode.Absolute, (ushort)addr);
+                                EmitRuntimePoke();
+                                argsAlreadyPopped = true;
+                                break;
                             }
-                            _lastLoadedLocalIndex = null;
-                            _lastStaticFieldAddress = null;
+                            EmitConstantPoke();
                             argsAlreadyPopped = true;
                         }
                         break;
@@ -2791,15 +2756,17 @@ partial class IL2NESWriter
                         break;
                     case nameof(NESLib.peek):
                         {
+                            if (_runtimeMemoryCalls.Contains(Index))
+                            {
+                                EmitRuntimePeek();
+                                argsAlreadyPopped = true;
+                                break;
+                            }
                             // peek(ushort addr) -> LDA abs addr
                             if (Stack.Count >= 1)
                             {
                                 int addr = Stack.Pop();
-                                // Remove previously emitted instructions:
-                                // ushort addr: LDX #hi, LDA #lo = 2 instructions
-                                // byte addr:   LDA #lo = 1 instruction
-                                RemoveLastInstructions(addr > byte.MaxValue ? 2 : 1);
-                                Emit(Opcode.LDA, AddressMode.Absolute, (ushort)addr);
+                                EmitConstantPeek(addr);
                                 _runtimeValueInA = true;
                                 _immediateInA = null;
                                 _pokeLastValue = null;

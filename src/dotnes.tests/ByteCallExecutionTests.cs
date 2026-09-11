@@ -7,6 +7,29 @@ namespace dotnes.tests;
 public class ByteCallExecutionTests(ITestOutputHelper output) : ExecutionTests(output)
 {
     [Fact]
+    public void ForwardedClosurePreservesDynamicPokeAddressAcrossValueCall()
+    {
+        var cpu = ExecuteProgram(
+            """
+            byte captured = 7;
+            Forward(3);
+            test_stop(); while (true) ;
+            static extern void test_stop();
+            static byte Next(byte value) => (byte)(value + 1);
+            void Forward(byte offset) => Store(offset);
+            void Store(byte offset)
+            {
+                byte value = captured;
+                ushort address = (ushort)(0x6000 + offset);
+                poke(address, (byte)(Next(offset) + value));
+            }
+            """);
+        Assert.Equal(new byte[] { 0, 11, 0 }, cpu.Memory[0x6002..0x6005]);
+        Assert.Equal(Cpu6502.SoftwareStackTop, cpu.SoftwareStackPointer);
+        Assert.Equal(0xFD, cpu.SP);
+    }
+
+    [Fact]
     public void ClosureParameterMetadataExcludesOrdinaryReferences()
     {
         using var assembly = CompileAssembly(

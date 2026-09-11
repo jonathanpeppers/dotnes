@@ -59,8 +59,16 @@ public class VariableShiftTypeTests(ITestOutputHelper output) : ExecutionTests(o
             {{method}}
             static class State { public static {{type}} Value; public static byte Count; }
             """));
-        Assert.Contains("Variable shifts", error.Message);
-        Assert.Contains("byte/ushort", error.Message);
+        if (type is "int" or "uint")
+        {
+            Assert.Contains("32-bit", error.Message);
+            Assert.Contains("source storage", error.Message);
+        }
+        else
+        {
+            Assert.Contains("Variable shifts", error.Message);
+            Assert.Contains("byte/ushort", error.Message);
+        }
     }
 
     [Theory]
