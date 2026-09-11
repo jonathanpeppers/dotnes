@@ -40,7 +40,8 @@ partial class IL2NESWriter
 
     public void Write(ILInstruction instruction)
     {
-        if (TryNumericLeftShift(instruction))
+        if (TryNumericLeftShift(instruction)
+            || TryNumericMultiply(instruction) || TryNumericBitwise(instruction))
             return;
         if (instruction.OpCode is ILOpCode.Add or ILOpCode.Sub
             && TryNumericAddSub(instruction.OpCode == ILOpCode.Add))

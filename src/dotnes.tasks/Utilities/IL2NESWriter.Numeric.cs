@@ -47,6 +47,27 @@ partial class IL2NESWriter
             ILOpCode.Ldelem_i1 or ILOpCode.Ldind_i1 => PrimitiveTypeCode.SByte,
             ILOpCode.Ldelem_u2 or ILOpCode.Ldind_u2 => PrimitiveTypeCode.UInt16,
             ILOpCode.Ldelem_i2 or ILOpCode.Ldind_i2 => PrimitiveTypeCode.Int16,
+            ILOpCode.Mul or ILOpCode.Shl when _numericValues.Inputs[producer].Length == 2 =>
+                _numericValues.Inputs[producer].Any(input => SignedNumericType(NumericType(input)))
+                    ? PrimitiveTypeCode.Int16 : PrimitiveTypeCode.UInt16,
+            ILOpCode.And when _numericValues.Inputs[producer].Length == 2
+                && _numericValues.Inputs[producer].Any(input => NumericType(input) == PrimitiveTypeCode.Byte) =>
+                    PrimitiveTypeCode.Byte,
+            ILOpCode.And when _numericValues.Inputs[producer].Length == 2
+                && _numericValues.Inputs[producer].Any(input => NumericType(input) == PrimitiveTypeCode.UInt16) =>
+                    PrimitiveTypeCode.UInt16,
+            ILOpCode.And or ILOpCode.Or or ILOpCode.Xor when _numericValues.Inputs[producer].Length == 2 =>
+                _numericValues.Inputs[producer].Any(input => SignedNumericType(NumericType(input)))
+                    ? PrimitiveTypeCode.Int16
+                    : _numericValues.Inputs[producer].Any(input => WordNumericType(NumericType(input)))
+                        ? PrimitiveTypeCode.UInt16 : PrimitiveTypeCode.Byte,
+            ILOpCode.Add or ILOpCode.Sub when _numericValues.Inputs[producer].Length == 2
+                && NumericType(_numericValues.Inputs[producer][0]) is PrimitiveTypeCode.Byte or PrimitiveTypeCode.SByte
+                && NumericType(_numericValues.Inputs[producer][1]) is PrimitiveTypeCode.Byte or PrimitiveTypeCode.SByte =>
+                    instruction.OpCode == ILOpCode.Sub
+                    || SignedNumericType(NumericType(_numericValues.Inputs[producer][0]))
+                    || SignedNumericType(NumericType(_numericValues.Inputs[producer][1]))
+                        ? PrimitiveTypeCode.Int16 : PrimitiveTypeCode.UInt16,
             _ => null,
         };
     }
