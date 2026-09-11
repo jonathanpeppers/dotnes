@@ -80,11 +80,13 @@ public class StaticArrayAliasTests(ITestOutputHelper output) : ExecutionTests(ou
         Assert.Equal(Cpu6502.SoftwareStackTop, cpu.SoftwareStackPointer);
     }
 
-    [Fact]
-    public void EscapedFixedAllocationSurvivesOtherHelperFrames()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void EscapedFixedAllocationSurvivesOtherHelperFrames(bool direct)
     {
         var cpu = ExecuteProgram(
-            """
+            $$"""
             Create();
             Clobber();
             Update(State.Data);
@@ -97,10 +99,10 @@ public class StaticArrayAliasTests(ITestOutputHelper output) : ExecutionTests(ou
             static extern void test_stop();
             static void Create()
             {
-                byte[] data = new byte[750];
-                data[250] = 21;
-                data[251] = 99;
-                State.Data = data;
+                {{(direct ? "State.Data = new byte[750];" : "byte[] data = new byte[750];")}}
+                {{(direct ? "State.Data" : "data")}}[250] = 21;
+                {{(direct ? "State.Data" : "data")}}[251] = 99;
+                {{(direct ? "" : "State.Data = data;")}}
             }
             static void Clobber()
             {
@@ -114,6 +116,25 @@ public class StaticArrayAliasTests(ITestOutputHelper output) : ExecutionTests(ou
             """);
         Assert.Equal(new byte[] { 22, 99, 77 }, cpu.Memory[0x6000..0x6003]);
         Assert.Equal(Cpu6502.SoftwareStackTop, cpu.SoftwareStackPointer);
+    }
+
+    [Theory]
+    [InlineData(int.MaxValue)]
+    [InlineData(int.MaxValue - 1)]
+    [InlineData(2048)]
+    public void OversizedPersistentAllocationIsDiagnosedWithoutOverflow(int count)
+    {
+        var exception = Assert.Throws<TranspileException>(() => GetProgramBytes(
+            $$"""
+            State.Sentinel = 7;
+            byte[] data = new byte[{{count}}];
+            data[0] = 21;
+            State.Data = data;
+            while (true) ;
+            static class State { public static byte[] Data; public static byte Sentinel; }
+            """));
+        Assert.Contains("exceed the available NES RAM", exception.Message);
+        Assert.Contains($"{(long)count + 1} bytes", exception.Message);
     }
 
     [Fact]

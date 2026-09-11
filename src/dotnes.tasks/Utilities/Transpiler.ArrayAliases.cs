@@ -45,7 +45,9 @@ partial class Transpiler
                 if (!provenStores.TryGetValue(il, out var stores))
                     provenStores[il] = stores = [];
                 stores.Add(il[i].Offset);
-                if (origin.Method != il || origin.Producer != i - 1)
+                // Only direct allocations already reserved as static fields
+                // can retain their existing compact emission path.
+                if (origin.Method != il || origin.Producer != i - 1 || !existingAllocations.ContainsKey(origin))
                     shared.Add(origin);
             }
         }
@@ -67,8 +69,10 @@ partial class Transpiler
                     throw new TranspileException("Static array aliases require fixed-size byte-array allocations.");
                 if (!existingAllocations.TryGetValue(origin, out array))
                 {
-                    if (staticBytes + count.Value > NESConstants.MaxLocalBytes)
-                        throw new TranspileException("Fixed static array aliases exceed the available NES RAM.");
+                    if (count.Value > NESConstants.MaxLocalBytes - staticBytes)
+                        throw new TranspileException(
+                            $"Fixed static array aliases require {(long)staticBytes + count.Value} bytes and exceed the available NES RAM " +
+                            $"(${NESConstants.LocalStackBase:X4}-$07FF, {NESConstants.MaxLocalBytes} bytes).");
                     array = new Local(count.Value, NESConstants.LocalStackBase + staticBytes, ArraySize: count.Value);
                     staticBytes += count.Value;
                 }

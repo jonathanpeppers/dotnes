@@ -4,6 +4,56 @@ namespace dotnes.tests;
 
 public class ArrayExecutionTests(ITestOutputHelper output) : ExecutionTests(output)
 {
+    [Theory]
+    [InlineData("State.Index", 3, false)]
+    [InlineData("(byte)(State.Index + 1)", 4, false)]
+    [InlineData("(byte)(prefix + State.Index)", 4, false)]
+    [InlineData("State.Index", 3, true)]
+    [InlineData("(byte)(State.Index + 1)", 4, true)]
+    [InlineData("(byte)(prefix + State.Index)", 4, true)]
+    public void StaticTargetIndexIsCapturedBeforeValueCall(string index, int target, bool helper)
+    {
+        string store = $"byte prefix = 1; data[{index}] = State.GetValue();";
+        var cpu = ExecuteProgram(
+            $$"""
+            byte[] data = new byte[8];
+            data[3] = 99;
+            data[4] = 99;
+            data[5] = 99;
+            State.Index = 3;
+            State.Calls = 0;
+            {{(helper ? "Update(data);" : store)}}
+            byte first = data[3];
+            byte second = data[4];
+            byte third = data[5];
+            byte after = State.Index;
+            byte calls = State.Calls;
+            poke(0x6000, first);
+            poke(0x6001, second);
+            poke(0x6002, third);
+            poke(0x6003, after);
+            poke(0x6004, calls);
+            test_stop();
+            while (true) ;
+            static extern void test_stop();
+            {{(helper ? "static void Update(byte[] data) { " + store + " }" : "")}}
+            static class State
+            {
+                public static byte Index;
+                public static byte Calls;
+                public static byte GetValue()
+                {
+                    Index = 5;
+                    Calls++;
+                    return 91;
+                }
+            }
+            """);
+        Assert.Equal(new byte[] { (byte)(target == 3 ? 91 : 99), (byte)(target == 4 ? 91 : 99), 99, 5, 1 },
+            cpu.Memory[0x6000..0x6005]);
+        Assert.Equal(Cpu6502.SoftwareStackTop, cpu.SoftwareStackPointer);
+    }
+
     [Fact]
     public void IndexIsEvaluatedOnceBeforeSideEffectingValue()
     {

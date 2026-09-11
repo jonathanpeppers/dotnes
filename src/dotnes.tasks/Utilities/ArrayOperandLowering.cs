@@ -243,7 +243,8 @@ static class ArrayOperandLowering
                 // even when the yielded index/value is a simple local load.
                 int firstScalar = OperandClosure(inputs.Skip(1)).Min();
                 bool independentEffect = HasIndependentEffect(i, closure, firstScalar);
-                if (!legacyIndex || !legacyValue || independentEffect || HasStaticField(inputs[2]))
+                if (!legacyIndex || !legacyValue || independentEffect ||
+                    HasStaticField(inputs[1]) || HasStaticField(inputs[2]))
                 {
                     SelectInputs(i);
                     SelectValueExpression(inputs[1]);
