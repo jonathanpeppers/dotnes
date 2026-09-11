@@ -68,6 +68,12 @@ actionable diagnostic identifies the operation. Distinct conditional stores to
 byte/word locals remain supported; instruction adjacency alone is never a range
 proof.
 
+For constant-address `poke`, converted local, field and byte-parameter loads
+retain their value and stack balance. A converted compound expression whose
+memory-call lowering cannot be proven produces a diagnostic rather than treating
+a runtime placeholder as a constant. Store that converted result in an explicit
+`byte` local before the memory call.
+
 ## `int` is not an arbitrary-width accumulator
 
 The backend does not provide full 32-bit local arithmetic. It accepts `int`

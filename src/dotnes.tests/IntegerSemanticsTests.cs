@@ -247,7 +247,9 @@ public class IntegerSemanticsTests(ITestOutputHelper output) : ExecutionTests(ou
                 signedWord = (short)word;
                 signedByte = (sbyte)signedWord;
                 counter = peek(0x6010);
-                poke(0x6000, (byte)(word + signedWord + signedByte + counter));
+                byte result = (byte)(word + signedWord + signedByte + counter);
+                poke(0x6030, 42);
+                poke(0x6000, result);
             }
             static ushort Identity(byte value) => value;
             static extern short ReadSignedWord();

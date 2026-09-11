@@ -31,26 +31,60 @@ partial class IL2NESWriter
             throw new TranspileException("poke requires an address and a byte value.", MethodName);
         int value = Stack.Pop();
         int address = Stack.Pop();
+        int producer = Index - 1;
+        int firstArgument = Index - 2;
+        bool convertedValue = false;
+        if (Instructions is not null && _numericValues is not null && _numericValues.Inputs[Index].Length == 2)
+        {
+            producer = _numericValues.Inputs[Index][1];
+            if (_numericValues.Inputs[Index][0] >= 0)
+                firstArgument = _numericValues.Inputs[Index][0];
+            while (producer >= 0 && Instructions[producer].OpCode is
+                ILOpCode.Conv_u1 or ILOpCode.Conv_i1 or ILOpCode.Conv_u2 or ILOpCode.Conv_i2
+                && _numericValues.Inputs[producer].Length == 1)
+            {
+                convertedValue = true;
+                producer = _numericValues.Inputs[producer][0];
+            }
+        }
         Local? local = null;
         int? localIndex = Instructions is null
-            ? _lastLoadedLocalIndex : Instructions[Index - 1].GetLdlocIndex();
+            ? _lastLoadedLocalIndex : producer >= 0 ? Instructions[producer].GetLdlocIndex() : null;
         bool valueIsLocal = localIndex.HasValue && Locals.TryGetValue(localIndex.Value, out local)
             && local.Address.HasValue;
-        bool valueIsStaticField = _lastStaticFieldAddress.HasValue
-            && (Instructions is null || Instructions[Index - 1].OpCode == ILOpCode.Ldsfld);
+        ushort? staticAddress = Instructions is null ? _lastStaticFieldAddress
+            : producer >= 0 && Instructions[producer].OpCode == ILOpCode.Ldsfld
+                && Instructions[producer].String is string field && StaticFieldAddresses.TryGetValue(field, out ushort location)
+                    ? location : null;
+        bool valueIsArgument = Instructions is not null && producer >= 0
+            && NumericArgIndex(Instructions[producer]).HasValue && PureNumericOperand(producer, out _);
 
         // Deferred literals may emit nothing. Never remove earlier control flow
         // or infer this call's value from stale accumulator/local bookkeeping.
-        RemoveMemoryArgumentInstructions(Index - 2, address > byte.MaxValue ? 4 : 3);
+        if (convertedValue)
+        {
+            if (!TryNumericOperands(out _, out _))
+                throw new TranspileException(
+                    "poke cannot preserve this converted operand directly. Store the converted byte in an " +
+                    "explicit byte local before calling poke.", MethodName);
+        }
+        else
+            RemoveMemoryArgumentInstructions(firstArgument, address > byte.MaxValue ? 4 : 3);
         if (valueIsLocal)
         {
             Emit(Opcode.LDA, AddressMode.Absolute, (ushort)local!.Address!.Value);
             _pokeLastValue = null;
             _immediateInA = null;
         }
-        else if (valueIsStaticField)
+        else if (staticAddress.HasValue)
         {
-            Emit(Opcode.LDA, AddressMode.Absolute, _lastStaticFieldAddress!.Value);
+            Emit(Opcode.LDA, AddressMode.Absolute, staticAddress.Value);
+            _pokeLastValue = null;
+            _immediateInA = null;
+        }
+        else if (valueIsArgument)
+        {
+            EmitNumericOperand(producer);
             _pokeLastValue = null;
             _immediateInA = null;
         }

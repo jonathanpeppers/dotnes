@@ -6,6 +6,71 @@ namespace dotnes.tests;
 public class NumericReviewRegressionTests(ITestOutputHelper output) : ExecutionTests(output)
 {
     [Fact]
+    public void UnprovenConvertedPokeDoesNotUseARuntimePlaceholder()
+    {
+        var error = Assert.Throws<TranspileException>(() => GetProgramBytes("""
+            short value = (sbyte)peek(0x6010);
+            poke(0x6000, (byte)(value + 2));
+            while (true);
+            """));
+        Assert.Contains("explicit byte local", error.Message);
+    }
+
+    [Theory]
+    [InlineData(128, 130)]
+    [InlineData(255, 1)]
+    public void ExplicitByteStoragePreservesConvertedPokeExpression(int input, int expected)
+    {
+        var cpu = ExecuteProgram("""
+            short value = (sbyte)peek(0x6010);
+            byte result = (byte)(value + 2);
+            poke(0x6030, 42);
+            poke(0x6000, result);
+            test_stop(); while (true);
+            static extern void test_stop();
+            """, cpu => cpu.Memory[0x6010] = (byte)input);
+        Assert.Equal(expected, cpu.Memory[0x6000]);
+        Assert.Equal(Cpu6502.SoftwareStackTop, cpu.SoftwareStackPointer);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(127)]
+    [InlineData(128)]
+    [InlineData(255)]
+    public void ConvertedArgumentPokePreservesTheParameterFrame(int input)
+    {
+        var cpu = ExecuteProgram("""
+            Store((sbyte)peek(0x6010));
+            test_stop(); while (true);
+            static extern void test_stop();
+            static void Store(sbyte value) => poke(0x6000, (byte)(ushort)value);
+            """, cpu => cpu.Memory[0x6010] = (byte)input);
+        Assert.Equal(input, cpu.Memory[0x6000]);
+        Assert.Equal(Cpu6502.SoftwareStackTop, cpu.SoftwareStackPointer);
+    }
+
+    [Theory]
+    [InlineData("sbyte", 128)]
+    [InlineData("sbyte", 255)]
+    [InlineData("short", 128)]
+    [InlineData("ushort", 255)]
+    public void ConstantPokeUsesConvertedFieldProducer(string type, int input)
+    {
+        var cpu = ExecuteProgram($$"""
+            State.Value = ({{type}})peek(0x6010);
+            poke(0x6000, (byte)State.Value);
+            poke(0x6001, (byte)(ushort)(sbyte)State.Value);
+            test_stop(); while (true);
+            static extern void test_stop();
+            static class State { public static {{type}} Value; }
+            """, cpu => cpu.Memory[0x6010] = (byte)input);
+        Assert.Equal(input, cpu.Memory[0x6000]);
+        Assert.Equal(input, cpu.Memory[0x6001]);
+        Assert.Equal(Cpu6502.SoftwareStackTop, cpu.SoftwareStackPointer);
+    }
+
+    [Fact]
     public void ConditionalNormalizationCannotHideASeventeenBitSum()
     {
         var error = Assert.Throws<TranspileException>(() => GetProgramBytes("""
