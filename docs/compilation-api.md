@@ -110,6 +110,19 @@ such as `.word`/`.addr` at their placeholder values (normally zero). Callers mus
 ensure those data symbols are defined before emission; successful `ToBytes()`
 alone does not prove that every native data reference was bound.
 
+`OptimizeByteHelpers` also preserves the standard calling convention for this
+late-binding path: any C# extern declaration disables the optimization for the
+compilation, even if no native source is supplied or the declaration is unused.
+`DefineExternalLabel` only binds a symbol; it does not install code, add a call,
+or register an interrupt handler. Binding an unreferenced name therefore creates
+no new entry point. Native callers pass the byte argument in A; the managed
+callee owns its parameter storage in both conventions.
+
+The optimization proof covers the program as compiled. If a host injects extra
+instructions, callbacks, or interrupt entry points after compilation, compile
+with `OptimizeByteHelpers = false`; arbitrary model edits or out-of-band host
+execution are not reanalyzed by `DefineExternalLabel` or `ToBytes()`.
+
 Choose the complete program's placement through `CompilationOptions` before
 compiling. Although `Program6502` exposes `BaseAddress` and block editing, those
 operations are not a supported way to rebase or freely rearrange the complete

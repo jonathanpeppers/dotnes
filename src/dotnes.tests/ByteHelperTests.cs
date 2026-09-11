@@ -54,6 +54,61 @@ public class ByteHelperTests(ITestOutputHelper output) : RoslynTests(output)
         Assert.True(program.Labels.TryResolve("native_callback", out _));
     }
 
+    [Fact]
+    public void LateBoundHostCallingManagedHelperRetainsStandardStorage()
+    {
+        using var assembly = CompileAssembly("""
+            State.First = helper(42);
+            State.Second = native_entry();
+            while (true) ;
+            static byte helper(byte value) => (byte)(value ^ 3);
+            static extern byte native_entry();
+            static class State { public static byte First, Second; }
+            """);
+        var baseline = NesCompiler.Compile(assembly);
+        assembly.Position = 0;
+        var program = NesCompiler.Compile(assembly, new CompilationOptions { OptimizeByteHelpers = true });
+        AssertStackParameter(program, "helper");
+        baseline.DefineExternalLabel("_native_entry", 0x6000);
+        program.DefineExternalLabel("_native_entry", 0x6000);
+        Assert.Equal(baseline.ToBytes(), program.ToBytes());
+        ushort helper = program.GetLabels()["helper"];
+
+        // The host uses the unchanged A-register call ABI. The callee, not the
+        // native caller, creates and removes the software-stack parameter frame.
+        byte[] host = [0xA9, 7, 0x20, (byte)helper, (byte)(helper >> 8), 0x60];
+        var before = Execute(baseline, cpu => host.CopyTo(cpu.Memory, 0x6000));
+        var after = Execute(program, cpu => host.CopyTo(cpu.Memory, 0x6000));
+        Assert.Equal(new byte[] { 41, 4 }, before.Memory.AsSpan(NESConstants.LocalStackBase, 2).ToArray());
+        Assert.Equal(before.Memory.AsSpan(NESConstants.LocalStackBase, 2).ToArray(),
+            after.Memory.AsSpan(NESConstants.LocalStackBase, 2).ToArray());
+        AssertBalancedStacks(before, after);
+    }
+
+    [Fact]
+    public void UnreferencedExternalBindingDoesNotAddNativeEntryPoints()
+    {
+        using var assembly = CompileAssembly("""
+            State.Result = helper(42);
+            while (true) ;
+            static byte helper(byte value) => (byte)(value ^ 3);
+            static class State { public static byte Result; }
+            """);
+        var program = NesCompiler.Compile(assembly, new CompilationOptions { OptimizeByteHelpers = true });
+        AssertHomeParameter(program, "helper");
+        byte[] original = program.ToBytes();
+        int blockCount = program.Blocks.Count;
+        program.DefineExternalLabel("unreferenced_host", 0x6000);
+        program.ResolveAddresses();
+        Assert.Equal(0x6000, program.GetLabels()["unreferenced_host"]);
+        Assert.Equal(blockCount, program.Blocks.Count);
+        Assert.Equal(original, program.ToBytes());
+        var result = Execute(program);
+        Assert.Equal(41, result.Memory[NESConstants.LocalStackBase]);
+        Assert.Equal(Cpu6502.SoftwareStackTop, result.SoftwareStackPointer);
+        Assert.Equal(0xFF, result.SP);
+    }
+
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
