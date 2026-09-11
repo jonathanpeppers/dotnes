@@ -6,6 +6,39 @@ namespace dotnes.tests;
 public class ArrayReviewTests(ITestOutputHelper output) : ExecutionTests(output)
 {
     [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ComputedReadCanBePassedToCapturedScalarHelper(bool earlierArgument)
+    {
+        var cpu = ExecuteProgram(
+            $$"""
+            byte captured = 7;
+            byte[] data = new byte[8];
+            data[2] = 44;
+            byte index = 3;
+            byte frame = 0;
+            while (frame < 2)
+            {
+                Consume({{(earlierArgument ? "88, " : "")}}data[(byte)(index - 1)]);
+                frame++;
+            }
+            test_stop();
+            while (true) ;
+            static extern void test_stop();
+            void Consume({{(earlierArgument ? "byte first, " : "")}}byte value)
+            {
+                byte c = captured;
+                poke(0x6001, c);
+                byte v = value;
+                poke(0x6000, v);
+                {{(earlierArgument ? "byte a = first; poke(0x6002, a);" : "")}}
+            }
+            """);
+        Assert.Equal(new byte[] { 44, 7, (byte)(earlierArgument ? 88 : 0) }, cpu.Memory[0x6000..0x6003]);
+        Assert.Equal(Cpu6502.SoftwareStackTop, cpu.SoftwareStackPointer);
+    }
+
+    [Theory]
     [InlineData("data[index] += (byte)(value + 1);", 33, 11, 3)]
     [InlineData("data[index] += value++;", 32, 12, 3)]
     [InlineData("data[index] += (byte)(value ^ y);", 50, 11, 3)]

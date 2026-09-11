@@ -4,6 +4,31 @@ namespace dotnes.tests;
 
 public class ILValueAnalysisTests
 {
+    [Theory]
+    [InlineData(ILOpCode.Ldloca_s)]
+    [InlineData(ILOpCode.Ldloca)]
+    [InlineData(ILOpCode.Ldarga_s)]
+    [InlineData(ILOpCode.Ldarga)]
+    public void StableStorageAddressesAreRematerializedInsteadOfScalarSpilled(ILOpCode addressLoad)
+    {
+        var reflection = new ReflectionCache();
+        reflection.RegisterUserMethod("Consume", 2, false);
+        ILInstruction[] il =
+        [
+            new(ILOpCode.Ldc_i4_1, 0),
+            new(addressLoad, 1, 3),
+            new(ILOpCode.Call, 5, String: "Consume"),
+        ];
+        var analysis = new ILValueAnalysis(il, reflection);
+        var rewritten = ILExpressionSpiller.Rewrite(il, analysis, new HashSet<int> { 0, 1 });
+        Assert.DoesNotContain(rewritten, instruction => instruction.GetStlocIndex() is not null);
+        Assert.Equal(ILOpCode.Ldc_i4_1, rewritten[^3].OpCode);
+        Assert.Equal(addressLoad, rewritten[^2].OpCode);
+        Assert.Equal(3, rewritten[^2].Integer);
+        Assert.Equal(ILOpCode.Call, rewritten[^1].OpCode);
+        Assert.Equal(new[] { ILOpCode.Nop, ILOpCode.Nop }, rewritten.Take(2).Select(i => i.OpCode));
+    }
+
     [Fact]
     public void SourceAritySurvivesClosureAbiAdjustment()
     {
