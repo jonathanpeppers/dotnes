@@ -4,6 +4,13 @@ namespace dotnes;
 
 static class ILBranchTargets
 {
+    public static bool HasEntryAfter(ILInstruction[] instructions, int firstIndex, int lastIndex)
+    {
+        var interiorOffsets = new HashSet<int>(instructions.Skip(firstIndex + 1)
+            .Take(lastIndex - firstIndex).Select(instruction => instruction.Offset));
+        return instructions.SelectMany(GetTargets).Any(interiorOffsets.Contains);
+    }
+
     public static int? GetTarget(ILInstruction instruction)
     {
         if (instruction.Integer is not int operand)
