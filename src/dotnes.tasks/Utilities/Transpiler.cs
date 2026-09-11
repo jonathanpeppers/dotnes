@@ -426,6 +426,7 @@ partial class Transpiler : IDisposable
         var methodFrameOffsets = ComputeMethodFrameOffsets(UserMethods, reflectionCache, mainLocalCount, structLayouts,
             _closureStructLocalIndex, _closureFieldTypes.Count > 0 ? _closureFieldTypes : null);
         int userMethodsTotalSize = 0;
+        int localHighWater = mainLocalCount;
         foreach (var kvp in UserMethods.OrderBy(x => x.Key, StringComparer.Ordinal))
         {
             var methodName = kvp.Key;
@@ -529,6 +530,7 @@ partial class Transpiler : IDisposable
                 writer.MergeStringTableEntry(label, data);
             foreach (var bytes in methodWriter.ByteArrays)
                 writer.MergeByteArray(bytes);
+            localHighWater = Math.Max(localHighWater, methodWriter.LocalCount);
         }
 
         // Parse and add extern code blocks from .s assembly files using ca65 assembler
@@ -563,6 +565,11 @@ partial class Transpiler : IDisposable
 
         // Get local count from writer
         locals = (ushort)writer.LocalCount;
+        if (OptimizeByteHelpers && TryOptimizeByteHelpers(program, instructions, localHighWater, out int optimizedLocals))
+        {
+            locals = (ushort)optimizedLocals;
+            userMethodsTotalSize = UserMethods.Keys.Sum(name => program.GetBlock(name)!.Size);
+        }
 
         // Store named ushort[] arrays (note tables) as interleaved 16-bit data (cc65 compatible)
         var noteTableData = new List<(string label, byte[] data)>();

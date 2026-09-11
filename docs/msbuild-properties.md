@@ -25,6 +25,56 @@ issues.
 </PropertyGroup>
 ```
 
+### `NESOptimizeByteHelpers`
+
+Use private RAM parameter homes for proven non-reentrant byte helpers instead of
+pushing their incoming argument onto the cc65 software stack.
+
+| | |
+|---|---|
+| **Type** | `bool` |
+| **Default** | `false` |
+
+```xml
+<PropertyGroup>
+  <NESOptimizeByteHelpers>true</NESOptimizeByteHelpers>
+</PropertyGroup>
+```
+
+The initial optimization admits private static helpers and static local functions
+reachable from main with
+exactly one by-value `byte` parameter, a `byte` or `void` return, at most four byte
+locals, and at most 64 IL instructions. Bodies may contain scalar byte operations,
+branches and calls to other eligible acyclic helpers. Each helper gets its own
+one-byte home, above the final static/local/synthetic-local high-water mark,
+populated on **every** call. Argument
+evaluation, local initialization and the A-register call/return ABI are unchanged.
+
+Other signatures, mutable/address-taken parameters, memory access, exception
+regions, user attributes, built-in/unknown calls and recursive call chains are not
+optimized. Methods reachable from non-private entry points retain standard storage.
+Any declared extern, function pointer or indirect call disables this optimization
+for the compilation, since external assembly/callback effects are unproven.
+Existing recursion and unsupported-IL diagnostics still apply. This does not
+replace general multi-argument calling conventions or all consumer-side rewrites.
+
+Helpers whose results feed a direct boolean branch also retain standard storage:
+the existing branch lowering relies on callee flags rather than testing the return
+value. Removing stack cleanup must not conceal that separate correctness issue.
+
+The default preserves existing ROM bytes. Enabling it trades one RAM byte per
+eligible method for fewer software-stack accesses; diagnostic logging reports the
+allocated homes.
+
+Before changing any instructions, the compiler bounds the software stack from
+the emitted control-flow graph, including pending arguments and nested calls.
+Homes must fit below its lowest reachable address (the production stack starts
+at `$0800`). Inconsistent stack depths at joins/loops, recursion, unknown calls
+or stack-pointer effects, indexed/dynamic RAM access, accesses to the internal-RAM
+mirrors at `$0800-$1FFF`, and insufficient capacity
+leave the original IR unchanged. This intentionally excludes some otherwise
+eligible helpers in programs whose complete storage safety is not yet proven.
+
 ### `NESMirroring`
 
 Controls the nametable mirroring mode stored in the iNES header (Flags6, bit 0).

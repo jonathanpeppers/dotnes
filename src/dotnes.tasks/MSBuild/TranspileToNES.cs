@@ -12,6 +12,8 @@ public class TranspileToNES : Task
 
     public bool DiagnosticLogging { get; set; }
 
+    public bool NESOptimizeByteHelpers { get; set; }
+
     /// <summary>
     /// Nametable mirroring mode: "Horizontal" (default) or "Vertical".
     /// </summary>
@@ -73,7 +75,10 @@ public class TranspileToNES : Task
             NESBattery,
             NESMmc3BankedLayout,
             prgBankAssets,
-            chrBankAssets);
+            chrBankAssets)
+        {
+            OptimizeByteHelpers = NESOptimizeByteHelpers,
+        };
         transpiler.Write(output);
 
         return !Log.HasLoggedErrors;
