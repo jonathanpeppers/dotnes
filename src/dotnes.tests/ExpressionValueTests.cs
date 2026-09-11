@@ -4,6 +4,29 @@ namespace dotnes.tests;
 
 public class ExpressionValueTests(ITestOutputHelper output) : ExecutionTests(output)
 {
+    [Fact]
+    public void ForwardedArgumentsRestoreCallerParameterOffsets()
+    {
+        var cpu = ExecuteProgram(
+            """
+            byte result = Helpers.Set(37);
+            poke(0x6000, result);
+            test_stop(); while (true) ;
+            static extern void test_stop();
+            static class Helpers
+            {
+                static void Ignore(byte first, byte second) { }
+                public static byte Set(byte value)
+                {
+                    Ignore(value, value);
+                    return value;
+                }
+            }
+            """);
+        Assert.Equal(37, cpu.Memory[0x6000]);
+        Assert.Equal(Cpu6502.SoftwareStackTop, cpu.SoftwareStackPointer);
+    }
+
     [Theory]
     [InlineData(0, 42)]
     [InlineData(1, 76)]
