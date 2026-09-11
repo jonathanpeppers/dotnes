@@ -5,9 +5,11 @@ namespace dotnes.tests;
 public class DynamicMemoryTests(ITestOutputHelper output) : ExecutionTests(output)
 {
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public void ReadInHelper(bool materialize)
+    [InlineData(false, 0x700)]
+    [InlineData(true, 0x700)]
+    [InlineData(false, 0x800)]
+    [InlineData(true, 0x800)]
+    public void ReadInHelper(bool materialize, ushort stackTop)
     {
         var cpu = ExecuteProgram($$"""
             poke(0x6000, 21);
@@ -27,16 +29,18 @@ public class DynamicMemoryTests(ITestOutputHelper output) : ExecutionTests(outpu
                     ? "ushort address = 0x6000; address = (ushort)(address + index); return peek(address);"
                     : "return peek((ushort)(0x6000 + index));")}}
             }
-            """);
+            """, cpu => cpu.Memory[0x23] = (byte)(stackTop >> 8));
         Assert.Equal(75, cpu.Memory[0x6010]);
-        Assert.Equal(0x700, cpu.SoftwareStackPointer);
+        Assert.Equal(stackTop, cpu.SoftwareStackPointer);
         Assert.Equal(0xFD, cpu.SP);
     }
 
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public void WriteInHelper(bool materialize)
+    [InlineData(false, 0x700)]
+    [InlineData(true, 0x700)]
+    [InlineData(false, 0x800)]
+    [InlineData(true, 0x800)]
+    public void WriteInHelper(bool materialize, ushort stackTop)
     {
         var cpu = ExecuteProgram($$"""
             poke(0x6000, 21);
@@ -58,10 +62,10 @@ public class DynamicMemoryTests(ITestOutputHelper output) : ExecutionTests(outpu
                     ? "ushort address = 0x6000; address = (ushort)(address + index); poke(address, value);"
                     : "poke((ushort)(0x6000 + index), value);")}}
             }
-            """);
+            """, cpu => cpu.Memory[0x23] = (byte)(stackTop >> 8));
         Assert.Equal(21, cpu.Memory[0x6000]);
         Assert.Equal(77, cpu.Memory[0x6003]);
-        Assert.Equal(0x700, cpu.SoftwareStackPointer);
+        Assert.Equal(stackTop, cpu.SoftwareStackPointer);
         Assert.Equal(0xFD, cpu.SP);
     }
 
@@ -94,7 +98,7 @@ public class DynamicMemoryTests(ITestOutputHelper output) : ExecutionTests(outpu
             """);
         Assert.Equal(53, cpu.Memory[0x60F0 + index]);
         Assert.Equal(53, cpu.Memory[0x6030]);
-        Assert.Equal(0x700, cpu.SoftwareStackPointer);
+        Assert.Equal(0x800, cpu.SoftwareStackPointer);
         Assert.Equal(0xFD, cpu.SP);
     }
 
@@ -115,7 +119,7 @@ public class DynamicMemoryTests(ITestOutputHelper output) : ExecutionTests(outpu
             """);
         Assert.Equal(93, cpu.Memory[address]);
         Assert.Equal(93, cpu.Memory[0x6030]);
-        Assert.Equal(0x700, cpu.SoftwareStackPointer);
+        Assert.Equal(0x800, cpu.SoftwareStackPointer);
         Assert.Equal(0xFD, cpu.SP);
     }
 
@@ -136,7 +140,7 @@ public class DynamicMemoryTests(ITestOutputHelper output) : ExecutionTests(outpu
                 cpu.Memory[0x6211] = 87;
             });
         Assert.Equal(87, cpu.Memory[0x6104]);
-        Assert.Equal(0x700, cpu.SoftwareStackPointer);
+        Assert.Equal(0x800, cpu.SoftwareStackPointer);
         Assert.Equal(0xFD, cpu.SP);
     }
 
@@ -170,7 +174,7 @@ public class DynamicMemoryTests(ITestOutputHelper output) : ExecutionTests(outpu
         Assert.Equal(branch == 0 ? 19 : 71, cpu.Memory[0x6104]);
         Assert.Equal(cpu.Memory[0x6104], cpu.Memory[0x6040]);
         Assert.Equal(55, cpu.Memory[0x6041]);
-        Assert.Equal(0x700, cpu.SoftwareStackPointer);
+        Assert.Equal(0x800, cpu.SoftwareStackPointer);
         Assert.Equal(0xFD, cpu.SP);
     }
 
@@ -199,7 +203,7 @@ public class DynamicMemoryTests(ITestOutputHelper output) : ExecutionTests(outpu
         Assert.Equal(38, cpu.Memory[0x6030]);
         Assert.Equal(92, cpu.Memory[0x6031]);
         Assert.Equal(92, cpu.Memory[0x60F3]);
-        Assert.Equal(0x700, cpu.SoftwareStackPointer);
+        Assert.Equal(0x800, cpu.SoftwareStackPointer);
         Assert.Equal(0xFD, cpu.SP);
     }
 
@@ -220,7 +224,7 @@ public class DynamicMemoryTests(ITestOutputHelper output) : ExecutionTests(outpu
             """;
         var cpu = ExecuteProgram(source, cpu => cpu.Memory[0x6105] = 80);
         Assert.Equal(82, cpu.Memory[0x6105]);
-        Assert.Equal(0x700, cpu.SoftwareStackPointer);
+        Assert.Equal(0x800, cpu.SoftwareStackPointer);
         Assert.Equal(0xFD, cpu.SP);
     }
 
@@ -240,7 +244,7 @@ public class DynamicMemoryTests(ITestOutputHelper output) : ExecutionTests(outpu
             }
             """);
         Assert.Equal(32, cpu.Memory[0x6105]);
-        Assert.Equal(0x700, cpu.SoftwareStackPointer);
+        Assert.Equal(0x800, cpu.SoftwareStackPointer);
         Assert.Equal(0xFD, cpu.SP);
     }
 }
