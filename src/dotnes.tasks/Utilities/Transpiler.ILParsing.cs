@@ -110,23 +110,18 @@ partial class Transpiler
                 if (userRegions.Length > 0)
                     UserMethodExceptionRegions[cleanName] = userRegions;
 
-                // Extract metadata from method signature blob
-                var sig = _reader.GetBlobReader(methodDef.Signature);
-                sig.ReadByte(); // calling convention
-                int paramCount = sig.ReadCompressedInteger();
-                byte retTypeByte = sig.ReadByte(); // ELEMENT_TYPE_VOID = 0x01
-                bool hasReturnValue = retTypeByte != 0x01;
-                // Parse parameter types to detect byte[] (ELEMENT_TYPE_SZARRAY = 0x1D)
-                bool[] isArrayParam = new bool[paramCount];
-                for (int i = 0; i < paramCount; i++)
-                {
-                    byte paramTypeByte = sig.ReadByte();
-                    if (paramTypeByte == 0x1D) // ELEMENT_TYPE_SZARRAY
-                    {
-                        sig.ReadByte(); // skip element type (e.g., 0x05 for byte[])
-                        isArrayParam[i] = true;
-                    }
-                }
+                var signature = methodDef.DecodeSignature(new ArrayTypeDecoder(), null);
+                int paramCount = signature.ParameterTypes.Length;
+                bool hasReturnValue = signature.ReturnType != ArraySignatureType.Void;
+                if (signature.ReturnType is ArraySignatureType.ByteArray or ArraySignatureType.UnsupportedArray)
+                    throw new TranspileException("Returning array references from helpers is not supported.", cleanName);
+                if (signature.ParameterTypes.Contains(ArraySignatureType.UnsupportedArray))
+                    throw new TranspileException("Only existing fixed byte[] arrays can be passed to helpers; other array element types, ranks, and ref array parameters are not supported.", cleanName);
+                bool[] isArrayParam = signature.ParameterTypes.Select(type => type == ArraySignatureType.ByteArray).ToArray();
+                if (isArrayParam.Contains(true) &&
+                    (signature.ParameterTypes.Contains(ArraySignatureType.Other) ||
+                     signature.ReturnType == ArraySignatureType.Other))
+                    _unsupportedArrayHelperSignatures.Add(cleanName);
                 UserMethodMetadata[cleanName] = (paramCount, hasReturnValue, isArrayParam);
             }
         }

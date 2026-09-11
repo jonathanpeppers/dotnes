@@ -5,6 +5,26 @@ namespace dotnes.tests;
 public class ILValueAnalysisTests
 {
     [Fact]
+    public void RomInitializationLeavesOneArrayValue()
+    {
+        ILInstruction[] il =
+        [
+            new(ILOpCode.Ldc_i4_4, 0),
+            new(ILOpCode.Newarr, 1, String: "Byte"),
+            new(ILOpCode.Dup, 2),
+            new(ILOpCode.Ldtoken, 3, Bytes: System.Collections.Immutable.ImmutableArray.Create<byte>(1, 2, 3, 4)),
+            new(ILOpCode.Stloc_0, 4),
+            new(ILOpCode.Ldloc_0, 5),
+            new(ILOpCode.Pop, 6),
+            new(ILOpCode.Ret, 7),
+        ];
+        var analysis = new ILValueAnalysis(il, new ReflectionCache());
+        Assert.Equal(new[] { 3 }, analysis.Outputs[3]);
+        Assert.Empty(analysis.Outputs[4]);
+        Assert.Empty(analysis.Outputs[6]);
+    }
+
+    [Fact]
     public void OrdinaryArgumentValuesAreCapturedBeforeArgumentMutation()
     {
         var reflection = new ReflectionCache();
@@ -41,6 +61,26 @@ public class ILValueAnalysisTests
             Assert.Equal(3, analysis.Inputs[index].Length);
             Assert.Empty(analysis.Outputs[index]);
         }
+    }
+
+    [Fact]
+    public void OnlyDeclaredContextLoadsAreRematerialized()
+    {
+        var reflection = new ReflectionCache();
+        reflection.RegisterUserMethod("Consume", 2, false);
+        ILInstruction[] il =
+        [
+            new(ILOpCode.Ldarg_0, 0),
+            new(ILOpCode.Ldarg_1, 1),
+            new(ILOpCode.Call, 2, String: "Consume"),
+        ];
+        var analysis = new ILValueAnalysis(il, reflection);
+        var rewritten = ILExpressionSpiller.Rewrite(il, analysis, new HashSet<int> { 0, 1 },
+            stableAddressProducers: new HashSet<int> { 1 });
+        Assert.Single(rewritten, i => i.GetStlocIndex() is not null);
+        Assert.Equal(ILOpCode.Ldloc_s, rewritten[^3].OpCode);
+        Assert.Equal(ILOpCode.Ldarg_1, rewritten[^2].OpCode);
+        Assert.Equal(ILOpCode.Call, rewritten[^1].OpCode);
     }
 
     [Fact]

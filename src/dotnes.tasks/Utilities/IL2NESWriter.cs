@@ -458,10 +458,9 @@ partial class IL2NESWriter : NESWriter
 
     /// <summary>
     /// Pending byte array element access state from ldelema System.Byte.
-    /// Null when no byte array ldelema is pending.
-    /// Used for compound assignments: arr[i]++, arr[i] += expr, etc.
+    /// Nested compound assignments retain each outer reference until its stind.
     /// </summary>
-    PendingByteArrayElement? _pendingByteArrayElement;
+    readonly Stack<PendingByteArrayElement> _pendingByteArrayElements = new();
 
     /// <summary>
     /// Pending ushort array element access state from ldelema System.UInt16.
@@ -489,7 +488,9 @@ partial class IL2NESWriter : NESWriter
         /// <summary>Array base address for AbsoluteX addressing (runtime index).</summary>
         ushort ArrayBase,
         /// <summary>Element address for constant-index access; null for runtime-index.</summary>
-        ushort? ConstantElementAddress
+        ushort? ConstantElementAddress,
+        Local? ParameterArray = null,
+        ILInstruction? SavedIndex = null
     );
 
     /// <summary>
@@ -655,6 +656,7 @@ partial class IL2NESWriter : NESWriter
         _numericWordAtILOffset[ilOffset] = _ushortInAX;
         if (_bufferedBlock != null)
             _blockCountAtILOffset[ilOffset] = GetBufferedBlockCount();
+        _arrayArgumentAdjustments[ilOffset] = _argStackAdjust;
     }
 
     /// <summary>

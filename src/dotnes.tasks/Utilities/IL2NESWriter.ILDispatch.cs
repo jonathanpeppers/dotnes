@@ -40,6 +40,7 @@ partial class IL2NESWriter
 
     public void Write(ILInstruction instruction)
     {
+        if (TryStoreArrayAlias(instruction)) return;
         BeginVariableShiftCount();
         if (TryNumericDivision(instruction) || TryUnsignedWordDivision(instruction) || TryNumericLeftShift(instruction)
             || TryNumericMultiply(instruction) || TryNumericBitwise(instruction))
@@ -340,6 +341,7 @@ partial class IL2NESWriter
             case ILOpCode.Ldind_u1:
                 // ldind.u1: load byte through pointer (from ldelema System.Byte)
                 HandleLdindU1();
+                _ushortInAX = false;
                 break;
             case ILOpCode.Ldind_u2:
             case ILOpCode.Ldind_i2:
@@ -966,6 +968,15 @@ partial class IL2NESWriter
                     _lastStaticFieldAddress = null;
                     int xorVal2 = Stack.Pop();
                     int xorVal1 = Stack.Count > 0 ? Stack.Pop() : 0;
+                    int? xorLiteral = null;
+                    if (Instructions != null)
+                    {
+                        _byteCallValues ??= new ILValueAnalysis(Instructions, _reflectionCache);
+                        var inputs = _byteCallValues.Inputs[Index];
+                        foreach (int producer in inputs)
+                            if (producer >= 0 && Instructions[producer].GetLdcValue() is int literal)
+                                xorLiteral = literal;
+                    }
 
                     bool xorLocalInA = _lastLoadedLocalIndex.HasValue &&
                         Locals.TryGetValue(_lastLoadedLocalIndex.Value, out var xorLocal) && xorLocal.Address != null;
@@ -973,8 +984,8 @@ partial class IL2NESWriter
                     // 16-bit XOR: runtime ushort in A:X with immediate mask
                     if (_ushortInAX && (_runtimeValueInA || xorLocalInA))
                     {
-                        int xorConst = xorVal2;
-                        if (xorVal2 == 0 && xorVal1 != 0)
+                        int xorConst = xorLiteral ?? xorVal2;
+                        if (xorLiteral == null && xorVal2 == 0 && xorVal1 != 0)
                             xorConst = xorVal1;
                         if (!_runtimeValueInA && xorLocalInA)
                             RemoveLastInstructions(2);
@@ -1005,9 +1016,9 @@ partial class IL2NESWriter
                                 RemoveLastInstructions(1);
                             }
 
-                            // XOR is commutative: pick the non-zero operand as constant
-                            int xorConst = xorVal2;
-                            if (xorVal2 == 0 && xorVal1 != 0)
+                            // A literal zero is a value, not a runtime placeholder.
+                            int xorConst = xorLiteral ?? xorVal2;
+                            if (xorLiteral == null && xorVal2 == 0 && xorVal1 != 0)
                                 xorConst = xorVal1;
 
                             Emit(Opcode.EOR, AddressMode.Immediate, checked((byte)xorConst));
@@ -1173,6 +1184,7 @@ partial class IL2NESWriter
                 // ldelem.u1: pop array ref and index, push array[index]
                 // Pattern: Ldloc_N (array), Ldloc_M (index), Ldelem_u1
                 HandleLdelemU1();
+                _ushortInAX = false;
                 break;
             case ILOpCode.Ldelem_u2:
             case ILOpCode.Ldelem_i2:
@@ -1245,6 +1257,7 @@ partial class IL2NESWriter
 
     public void Write(ILInstruction instruction, int operand)
     {
+        if (TryStoreArrayAlias(instruction)) return;
         BeginVariableShiftCount();
         _ldlocByteArrayLabel = null;
         switch (instruction.OpCode)
@@ -1900,6 +1913,8 @@ partial class IL2NESWriter
 
     public void Write(ILInstruction instruction, string operand)
     {
+        if (TryStoreArrayAlias(instruction))
+            return;
         BeginVariableShiftCount();
         if (TryWriteByteCall(instruction, operand))
             return;
@@ -3311,6 +3326,8 @@ partial class IL2NESWriter
                         argsAlreadyPopped = true;
                         break;
                     default:
+                        if (TryEmitArrayParameterCall(operand))
+                            break;
                         // Handle byte array locals loaded via ldloc (pushax pattern).
                         // Fastcall functions (pal_bg, pal_spr, pal_all, vram_unrle) expect
                         // pointer in A:X, not on cc65 stack. Replace pushax+size with just LDA/LDX.

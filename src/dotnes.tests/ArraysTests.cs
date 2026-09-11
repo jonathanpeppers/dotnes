@@ -513,8 +513,8 @@ public class ArraysTests : RoslynTests
         Assert.Contains("4A4A4A", hex);
         // Four consecutive ASL A (0A) for << 4 shift
         Assert.Contains("0A0A0A0A", hex);
-        // TAX (AA) immediately followed by LDA absolute,X (BD) for indexed array access
-        Assert.Contains("AABD", hex);
+        // Materialized indexes are reloaded into X before the array read.
+        Assert.Matches("AE[0-9A-F]{4}BD", hex);
     }
 
     [Fact]
@@ -538,16 +538,16 @@ public class ArraysTests : RoslynTests
         Assert.NotEmpty(bytes);
         var hex = Convert.ToHexString(bytes);
         _logger.WriteLine($"SimpleShiftIndex hex: {hex}");
-        // Three consecutive LSR A (4A) followed by TAX (AA) + LDA absolute,X (BD)
-        // This is the full expected sequence: shift index, transfer to X, load from array
-        Assert.Contains("4A4A4AAABD", hex);
+        // The shifted index is materialized before the indexed read.
+        Assert.Contains("4A4A4A", hex);
+        Assert.Matches("AE[0-9A-F]{4}BD", hex);
     }
 
     [Fact]
-    public void ComplexArrayIndex_PreservesOperandInTemp()
+    public void ComplexArrayIndex_PreservesOlderOperand()
     {
         // Verifies that a runtime value computed before the array access
-        // is preserved in TEMP ($17) across the complex index computation.
+        // is preserved across the complex index computation.
         // Pattern: (x - y) + arr[(byte)(x >> 3)]
         // The subtraction result must survive through the shift/TAX/LDA sequence.
         var bytes = GetProgramBytes(
@@ -568,10 +568,10 @@ public class ArraysTests : RoslynTests
         Assert.NotEmpty(bytes);
         var hex = Convert.ToHexString(bytes);
         _logger.WriteLine($"PreservesOperandInTemp hex: {hex}");
-        // STA $17 (8517) must appear before the index computation to save (x - y) to TEMP
-        Assert.Contains("8517", hex);
-        // TAX + LDA absolute,X for the indexed array access
-        Assert.Contains("AABD", hex);
+        // The earlier operand and index now use separate materialized locals;
+        // ArrayReviewTests executes the corresponding preservation cases.
+        // The materialized index is loaded into X for the indexed array access.
+        Assert.Matches("AE[0-9A-F]{4}BD", hex);
     }
 
     [Fact]

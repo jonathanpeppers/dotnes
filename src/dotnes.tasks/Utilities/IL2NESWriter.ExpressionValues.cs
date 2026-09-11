@@ -7,8 +7,17 @@ partial class IL2NESWriter
 {
     bool TryWriteLocalBinary(ILOpCode op)
     {
-        if (Instructions == null || Index < 2
-            || op is not (ILOpCode.Add or ILOpCode.Sub or ILOpCode.And or ILOpCode.Or or ILOpCode.Xor)
+        if (Instructions == null || Index < 2 ||
+            op is not (ILOpCode.Add or ILOpCode.Sub or ILOpCode.Mul or ILOpCode.Div or ILOpCode.Div_un or
+                ILOpCode.Rem or ILOpCode.Rem_un or ILOpCode.And or ILOpCode.Or or ILOpCode.Xor or
+                ILOpCode.Shl or ILOpCode.Shr or ILOpCode.Shr_un))
+            return false;
+
+        _byteCallValues ??= _numericValues ?? new ILValueAnalysis(Instructions, _reflectionCache);
+        if (_byteCallValues.Inputs[Index].Any(p => p < 0))
+            throw new TranspileException("Merged scalar expression operands require typed conditional-value lowering, which is not supported by this compiler path.", MethodName);
+
+        if (op is not (ILOpCode.Add or ILOpCode.Sub or ILOpCode.And or ILOpCode.Or or ILOpCode.Xor)
             || Instructions[Index - 1].GetLdlocIndex() is not int rightIndex
             || !Locals.TryGetValue(rightIndex, out var right)
             || right.Address is not int rightAddress || right.ArraySize != 0 || right.IsWord)
@@ -21,6 +30,21 @@ partial class IL2NESWriter
             && !left.IsWord && left.ArraySize == 0)
             leftAddress = address;
         else if (constant is not (>= 0 and <= 255) || op is ILOpCode.Add or ILOpCode.Sub)
+            return false;
+
+        int first = Index - 2;
+        if (!_byteCallValues.Inputs[Index].SequenceEqual(new[] { first, first + 1 }) ||
+            _byteCallValues.Predecessors[first + 1].Any(p => p != first) ||
+            _byteCallValues.Predecessors[Index].Any(p => p != Index - 1))
+            return false;
+        // The legacy array store reloads its target and index; those logical
+        // operands do not require preserving a preceding accumulator push.
+        bool IsStoreTarget(int producer) => producer >= 0 &&
+            (Instructions[producer].OpCode == ILOpCode.Ldelema ||
+            _byteCallValues.Consumers[producer].Count > 0 &&
+            _byteCallValues.Consumers[producer].All(c => Instructions[c].OpCode == ILOpCode.Stelem_i1 &&
+                _byteCallValues.Inputs[c].Take(2).Contains(producer)));
+        if (_byteCallValues.Predecessors[first].Any(p => !_byteCallValues.Outputs[p].All(IsStoreTarget)))
             return false;
 
         int start = _blockCountAtILOffset[Instructions[Index - 2].Offset];

@@ -43,6 +43,7 @@ partial class Transpiler : IDisposable
     /// Populated by ReadStaticVoidMain().
     /// </summary>
     public Dictionary<string, (int argCount, bool hasReturnValue, bool[] isArrayParam)> UserMethodMetadata { get; } = new(StringComparer.Ordinal);
+    readonly HashSet<string> _unsupportedArrayHelperSignatures = new(StringComparer.Ordinal);
 
     /// <summary>
     /// Extern methods declared with 'static extern' (name -> arg count, has return value).
@@ -343,6 +344,8 @@ partial class Transpiler : IDisposable
         {
             reflectionCache.RegisterUserMethod(kvp.Key, kvp.Value.argCount, kvp.Value.hasReturnValue);
         }
+        var arrayParameters = UserMethodMetadata.ToDictionary(
+            kvp => kvp.Key, kvp => kvp.Value.isArrayParam, StringComparer.Ordinal);
         // Register extern methods so Call handler can look up arg counts
         foreach (var kvp in ExternMethods)
         {
@@ -390,6 +393,50 @@ partial class Transpiler : IDisposable
         instructions = PreserveExpressionValues(instructions, reflectionCache, "main", mainCompactInts);
         foreach (var name in UserMethods.Keys.ToArray())
             UserMethods[name] = PreserveExpressionValues(UserMethods[name], reflectionCache, name, methodCompactInts[name]);
+
+        ArrayStorageAnalysis ArrayAliasesFor(ILInstruction[] body, string name)
+        {
+            var parameters = UserMethods.Where(pair => pair.Key != name)
+                .ToDictionary(pair => pair.Value, pair => arrayParameters[pair.Key]);
+            if (name != "main")
+                parameters.Add(body, arrayParameters[name]);
+            return new ArrayStorageAnalysis(parameters.Keys.Prepend(name == "main" ? body : instructions),
+                reflectionCache, parameters);
+        }
+        instructions = MaterializeConditionalValues(instructions, reflectionCache, "main", mainCompactInts,
+            body => ArrayAliasesFor(body, "main"));
+        foreach (var name in UserMethods.Keys.ToArray())
+            UserMethods[name] = MaterializeConditionalValues(UserMethods[name], reflectionCache, name, methodCompactInts[name],
+                body => ArrayAliasesFor(body, name));
+
+        var arrayStorage = new ArrayStorageAnalysis(UserMethods.Values.Prepend(instructions), reflectionCache,
+            UserMethods.ToDictionary(pair => pair.Value, pair => arrayParameters[pair.Key]));
+        ILInstruction[] RewriteArrays(ILInstruction[] body, string name)
+        {
+            return ArrayOperandLowering.Rewrite(body, reflectionCache, arrayParameters,
+                arrayParameters.TryGetValue(name, out var parameters) ? parameters : null,
+                _unsupportedArrayHelperSignatures,
+                _closureMethodArgIndex.TryGetValue(name, out int context) ? context : -1,
+                arrayStorage, (analysis, selected) =>
+                {
+                    var types = GetExpressionValueTypes(body, analysis, reflectionCache, name,
+                        name == "main" ? mainCompactInts : methodCompactInts[name]);
+                    var references = new HashSet<int>(selected.Where(p => types[p] is null &&
+                        arrayStorage.GetStorage(body, p) is ArrayStorage.Ram or ArrayStorage.Rom or ArrayStorage.Parameter));
+                    return RewriteTypedExpressionValues(body, analysis, selected, types, name, references);
+                });
+        }
+        instructions = RewriteArrays(instructions, "main");
+        foreach (var name in UserMethods.Keys.ToArray())
+            UserMethods[name] = RewriteArrays(UserMethods[name], name);
+
+        arrayStorage = new ArrayStorageAnalysis(UserMethods.Values.Prepend(instructions), reflectionCache,
+            UserMethods.ToDictionary(pair => pair.Value, pair => arrayParameters[pair.Key]));
+        var (staticArrayAliases, fixedArrayAllocations, provenStaticArrayStores) = PreAllocateArrayAliases(
+            UserMethods.Values.Prepend(instructions), reflectionCache, ref staticFieldBytes, staticArrayFields,
+            UserMethods.ToDictionary(pair => pair.Value, pair => arrayParameters[pair.Key]));
+        ValidateStaticArrayInitialization(instructions, UserMethods, reflectionCache, staticArrayAliases.Keys, provenStaticArrayStores);
+
         var byteParameterCalls = NumericTypes.Where(kvp =>
             UserMethods.ContainsKey(kvp.Key) && kvp.Value.Parameters.Where((p, index) =>
                     !_closureMethodArgIndex.TryGetValue(kvp.Key, out int closure) || index != closure)
@@ -403,6 +450,8 @@ partial class Transpiler : IDisposable
             Instructions = instructions,
             UsedMethods = UsedMethods,
             UserMethodNames = new HashSet<string>(UserMethods.Keys, StringComparer.Ordinal),
+            UserMethodArrayParameters = arrayParameters,
+            UnsupportedArrayHelperSignatures = _unsupportedArrayHelperSignatures,
             ByteParameterCalls = byteParameterCalls,
             ExternMethodNames = externNames,
             WordLocals = DetectWordLocals(instructions, reflectionCache),
@@ -412,6 +461,9 @@ partial class Transpiler : IDisposable
             WordStaticFields = wordStaticFields,
             LocalCount = staticFieldBytes,
             StaticArrayFields = staticArrayFields,
+            StaticArrayAliases = staticArrayAliases,
+            FixedArrayAllocations = fixedArrayAllocations.TryGetValue(instructions, out var mainAllocations) ? mainAllocations : new(),
+            ProvenStaticArrayStores = provenStaticArrayStores.TryGetValue(instructions, out var mainStores) ? mainStores : new(),
             ClosureFieldTypes = _closureFieldTypes.Count > 0 ? _closureFieldTypes : null,
             ClosureFieldLabels = _closureFieldLabels,
             ClosureFieldAddresses = _closureFieldAddresses,
@@ -482,7 +534,9 @@ partial class Transpiler : IDisposable
         // Each method's locals must use unique addresses to prevent collisions in nested calls
         int mainLocalCount = writer.LocalCount;
         var methodFrameOffsets = ComputeMethodFrameOffsets(UserMethods, reflectionCache, mainLocalCount, structLayouts,
-            _closureStructLocalIndex, _closureFieldTypes.Count > 0 ? _closureFieldTypes : null);
+            _closureStructLocalIndex, _closureFieldTypes.Count > 0 ? _closureFieldTypes : null,
+            UserMethods.ToDictionary(pair => pair.Key, pair => fixedArrayAllocations.TryGetValue(pair.Value, out var allocations)
+                ? new HashSet<int>(allocations.Keys) : new HashSet<int>(), StringComparer.Ordinal), arrayStorage);
         int userMethodsTotalSize = 0;
         int localHighWater = mainLocalCount;
         foreach (var kvp in UserMethods.OrderBy(x => x.Key, StringComparer.Ordinal))
@@ -496,6 +550,8 @@ partial class Transpiler : IDisposable
                 Instructions = methodIL,
                 UsedMethods = UsedMethods,
                 UserMethodNames = new HashSet<string>(UserMethods.Keys, StringComparer.Ordinal),
+                UserMethodArrayParameters = arrayParameters,
+                UnsupportedArrayHelperSignatures = _unsupportedArrayHelperSignatures,
                 ByteParameterCalls = byteParameterCalls,
                 ExternMethodNames = externNames,
                 MethodParamCount = paramCount,
@@ -509,6 +565,10 @@ partial class Transpiler : IDisposable
                 LocalCount = methodFrameOffsets[methodName],
                 StaticFieldAddresses = staticFields,
                 WordStaticFields = wordStaticFields,
+                StaticArrayFields = staticArrayFields,
+                StaticArrayAliases = staticArrayAliases,
+                FixedArrayAllocations = fixedArrayAllocations.TryGetValue(methodIL, out var methodAllocations) ? methodAllocations : new(),
+                ProvenStaticArrayStores = provenStaticArrayStores.TryGetValue(methodIL, out var methodStores) ? methodStores : new(),
                 ClosureFieldTypes = _closureFieldTypes.Count > 0 ? _closureFieldTypes : null,
                 ClosureFieldLabels = _closureFieldLabels,
                 ClosureFieldAddresses = _closureFieldAddresses,

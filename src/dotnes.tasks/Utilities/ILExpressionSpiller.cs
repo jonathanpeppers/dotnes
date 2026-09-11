@@ -5,7 +5,7 @@ namespace dotnes;
 
 /// <summary>
 /// Materializes selected stack values at their original evaluation points.
-/// Callers supply a closed set of scalar producers; array identities stay in IL.
+/// Scalar values use typed storage; array identities use alias-aware locals.
 /// </summary>
 static class ILExpressionSpiller
 {

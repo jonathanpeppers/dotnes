@@ -14,7 +14,8 @@ partial class Transpiler
     }
 
     internal ILInstruction[] RewriteTypedExpressionValues(ILInstruction[] instructions, ILValueAnalysis analysis,
-        ISet<int> selected, IReadOnlyList<PrimitiveTypeCode?> types, string method)
+        ISet<int> selected, IReadOnlyList<PrimitiveTypeCode?> types, string method,
+        ISet<int>? arrayProducers = null)
     {
         if (selected.Count == 0)
             return instructions;
@@ -24,7 +25,8 @@ partial class Transpiler
             throw new ArgumentException("Producer types must correspond to the input IL instructions.", nameof(types));
         var stableAddresses = GetStableClosureArguments(instructions, method);
         if (selected.Any(i => i < 0 || i >= types.Count
-            || (types[i] is null or PrimitiveTypeCode.Void
+            || types[i] == PrimitiveTypeCode.Void
+            || (types[i] is null && arrayProducers?.Contains(i) != true
                 && !ILExpressionSpiller.CanRematerialize(instructions[i]) && !stableAddresses.Contains(i))))
             throw new InvalidOperationException($"Cannot spill an untyped expression value in '{method}'.");
 

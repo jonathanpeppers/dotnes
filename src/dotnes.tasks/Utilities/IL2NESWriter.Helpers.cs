@@ -18,6 +18,8 @@ partial class IL2NESWriter
     /// </summary>
     Local? TryResolveArrayLocal(ILInstruction instr)
     {
+        if (instr.OpCode == ILOpCode.Newarr && FixedArrayAllocations.TryGetValue(instr.Offset, out var allocation))
+            return allocation;
         // Try local variable first
         var localIdx = instr.GetLdlocIndex();
         if (localIdx != null && Locals.TryGetValue(localIdx.Value, out var loc))
@@ -25,8 +27,14 @@ partial class IL2NESWriter
 
         // Try static field array
         if (instr.OpCode == ILOpCode.Ldsfld && instr.String != null
+            && StaticArrayAliases.TryGetValue(instr.String, out var alias))
+            return alias;
+        if (instr.OpCode == ILOpCode.Ldsfld && instr.String != null
             && _staticFieldArrayLocals.TryGetValue(instr.String, out var sfLoc))
             return sfLoc;
+
+        if (instr.GetLdargIndex() is int arg && arg < ParamIsArray.Length && ParamIsArray[arg])
+            return new Local(0, ArrayParameterIndex: arg);
 
         return null;
     }

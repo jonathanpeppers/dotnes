@@ -5,7 +5,8 @@ namespace dotnes;
 partial class Transpiler
 {
     ILInstruction[] MaterializeConditionalValues(ILInstruction[] instructions, ReflectionCache reflection, string method,
-        IReadOnlyDictionary<int, PrimitiveTypeCode>? compactInts = null)
+        IReadOnlyDictionary<int, PrimitiveTypeCode>? compactInts = null,
+        Func<ILInstruction[], ArrayStorageAnalysis>? arrayAliases = null)
     {
         if (!NumericTypes.TryGetValue(method, out var signature))
             return instructions;
@@ -14,6 +15,23 @@ partial class Transpiler
         {
             var analysis = new ILValueAnalysis(instructions, reflection);
             var types = GetExpressionValueTypes(instructions, analysis, reflection, method, compactInts);
+            var arrays = arrayAliases?.Invoke(instructions);
+            var identities = new HashSet<(ILInstruction[] Method, int Producer)>();
+            if (arrays is not null)
+                for (int i = 0; i < instructions.Length; i++)
+                {
+                    bool arrayAccess = instructions[i].OpCode is ILOpCode.Ldelem_u1 or ILOpCode.Stelem_i1 ||
+                        instructions[i].OpCode == ILOpCode.Ldelema && instructions[i].String is "Byte" or "byte";
+                    bool mergedAlias = instructions[i].GetStlocIndex() is not null &&
+                        analysis.Inputs[i].Length == 1 && analysis.Inputs[i][0] < 0;
+                    if (!arrayAccess && !mergedAlias)
+                        continue;
+                    identities.Clear();
+                    var storage = arrays.GetInputIdentity(instructions, i, 0, identities);
+                    if ((storage != ArrayStorage.Unknown || arrayAccess) &&
+                        (storage is not (ArrayStorage.Ram or ArrayStorage.Rom or ArrayStorage.Parameter) || identities.Count != 1))
+                        throw new ObjectModel.TranspileException("A conditional array alias must retain one proven array identity.", method);
+                }
             int join = -1;
             var sources = new HashSet<int>();
             PrimitiveTypeCode? type = null;
@@ -26,6 +44,7 @@ partial class Transpiler
                 if (height == 0)
                     continue;
                 sources.Clear();
+                identities.Clear();
                 bool valid = true;
                 foreach (int predecessor in predecessors)
                 {
@@ -39,9 +58,12 @@ partial class Transpiler
                     bool direct = predecessor + 1 == i
                         && !ILValueAnalysis.GetBranchTargets(instructions[predecessor]).Contains(instructions[i].Offset);
                     bool jumped = instructions[predecessor].OpCode is ILOpCode.Br or ILOpCode.Br_s;
-                    if ((!direct && !jumped)
-                        || types[source] is not (PrimitiveTypeCode.Byte or PrimitiveTypeCode.SByte
-                            or PrimitiveTypeCode.Boolean or PrimitiveTypeCode.Int16 or PrimitiveTypeCode.UInt16))
+                    bool supported = arrays is null
+                        ? types[source] is PrimitiveTypeCode.Byte or PrimitiveTypeCode.SByte
+                            or PrimitiveTypeCode.Boolean or PrimitiveTypeCode.Int16 or PrimitiveTypeCode.UInt16
+                        : types[source] is null && arrays.GetIdentity(instructions, source, identities)
+                            is ArrayStorage.Ram or ArrayStorage.Rom or ArrayStorage.Parameter;
+                    if ((!direct && !jumped) || !supported)
                     {
                         valid = false;
                         break;
@@ -50,6 +72,8 @@ partial class Transpiler
                 }
                 if (!valid || sources.Count < 2)
                     continue;
+                if (arrays is not null && identities.Count != 1)
+                    throw new ObjectModel.TranspileException("A conditional array alias must retain one proven array identity.", method);
                 var sourceTypes = sources.Select(source => types[source]).Distinct().ToArray();
                 type = sourceTypes.Length == 1 ? sourceTypes[0]
                     : sourceTypes.All(t => t is PrimitiveTypeCode.Byte or PrimitiveTypeCode.Boolean)

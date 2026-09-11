@@ -6,6 +6,7 @@ namespace dotnes;
 partial class IL2NESWriter
 {
     internal IReadOnlyDictionary<string, int> ByteParameterCalls { get; init; } = new Dictionary<string, int>();
+    ILValueAnalysis? _byteCallValues;
 
     bool TryWriteByteCall(ILInstruction instruction, string method)
     {
@@ -64,7 +65,10 @@ partial class IL2NESWriter
             else
                 Emit(Opcode.LDA, AddressMode.Absolute, (ushort)Locals[arg.GetLdlocIndex()!.Value].Address!.Value);
             if (physical != physicalArguments.Length - 1)
+            {
                 EmitJSR("pusha");
+                UsedMethods?.Add("pusha");
+            }
         }
         EmitJSR(method);
         _argStackAdjust = argumentAdjustment;

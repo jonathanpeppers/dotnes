@@ -225,6 +225,49 @@ The types of things I wanted to get working initially:
 * Music playback via the NES APU (see `samples/music`)
 * Metasprites, for loops, runtime arrays, and `rand8()` (see `samples/metasprites`)
 
+Fixed RAM `byte[]` arrays can be passed to static helpers without copying their
+contents. Helpers can read and write the caller's array, including passing the
+same array to nested helpers or to multiple parameters. For example:
+
+```csharp
+byte[] actors = new byte[8];
+actors[3] = 75;
+Update(actors, 3);
+while (true) ;
+
+static void Update(byte[] actors, byte index)
+{
+    actors[index]++;
+}
+```
+
+This uses the existing fixed-allocation model, not managed allocation or GC.
+Array-reference returns, `ref` array parameters, and helper parameters with
+other array element types or ranks are not supported. Array indexes and scalar
+arguments in this byte-array path are byte-sized. Scalar parameters and returns
+are limited to primitive `byte`, `sbyte`, and `bool` (or `void` returns), not
+byte-backed enums. Captured/by-reference array-helper contexts are not supported.
+An alias must keep the same
+array identity, including at conditional joins. Same-identity branches preserve
+their evaluation order; differing or unproven merged identities are diagnosed.
+Mixing RAM
+arrays and read-only ROM tables in one helper call is also diagnosed, including
+through local and static-field aliases, rather than treating a ROM table as
+writable RAM. Existing ROM-only helper calls keep their previous behavior.
+That legacy path does not gain the new RAM-helper signature or mutability
+validation: writes through ROM parameters and unsupported legacy scalar/captured
+call shapes remain outside this contract.
+Fixed static-field aliases can share an allocation established by the caller;
+capturing a helper's parameter-frame pointer in a static alias is not supported.
+These aliases must be initialized on every path before use, including through
+helper calls; a future or conditional-only assignment is not an initialization proof.
+Allocations shared this way are reserved once in persistent RAM before method
+emission, so helper ordering and reuse of other local frames do not change them.
+Supported conditional scalar operands use the shared expression pipeline before
+array operand capture. This fixed-array ABI does not expand scalar operator
+support; any remaining unlowered merged operand is diagnosed rather than guessed
+from an adjacent load.
+
 Down the road, I might think about support for:
 
 * Methods
