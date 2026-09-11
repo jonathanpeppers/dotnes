@@ -5,6 +5,19 @@ namespace dotnes.tests;
 public class ILValueAnalysisTests
 {
     [Fact]
+    public void ConstantMemoryArgumentAfterLoopHasKnownProducer()
+    {
+        using var dll = Utilities.GetResource("shoot2.release.dll");
+        using var transpiler = new Transpiler(dll, Array.Empty<AssemblyReader>());
+        var il = transpiler.ReadStaticVoidMain().ToArray();
+        var analysis = new ILValueAnalysis(il, new ReflectionCache());
+        int call = Array.FindIndex(il, i => i.Offset == 0x028A);
+        Assert.True(analysis.Inputs[call].SequenceEqual(new[] { call - 1 }),
+            $"Inputs: {string.Join(",", analysis.Inputs[call])}; predecessor: {il[call - 1]}; edges: "
+            + string.Join("; ", il.Where(i => ILValueAnalysis.GetBranchTargets(i).Contains(0x028A))));
+    }
+
+    [Fact]
     public void NestedOperandsHaveDistinctProducers()
     {
         ILInstruction[] il =
