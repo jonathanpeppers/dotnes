@@ -70,6 +70,25 @@ partial class Transpiler
         }
 
         var spills = new HashSet<int>();
+        bool HasPreservedPadResult(int producer)
+        {
+            if (instructions[producer].OpCode != ILOpCode.Call
+                || instructions[producer].String is not ("pad_poll" or "pad_trigger"))
+                return false;
+            var consumers = analysis.Consumers[producer];
+            if (consumers.Any(c => instructions[c].OpCode != ILOpCode.Dup
+                && ((instructions[c].OpCode != ILOpCode.And
+                        && !(instructions[c].OpCode == ILOpCode.Call && instructions[c].String == "pad_pressed"))
+                    || analysis.Inputs[c].Length != 2
+                    || analysis.Inputs[c][0] != producer || analysis.Inputs[c][1] < 0
+                    || instructions[analysis.Inputs[c][1]].GetLdcValue() == null)))
+                return false;
+            // The existing pad-mask lowering has its own persistent reload
+            // local. Do not allocate a second snapshot for the same value.
+            return !instructions.Skip(producer + 1).Take(consumers.Max() - producer - 1)
+                .Any(i => i.OpCode == ILOpCode.Call && i.String is "pad_poll" or "pad_trigger");
+        }
+
         bool DependsOn(int consumer, int producer)
         {
             var visited = new HashSet<int>();
@@ -103,7 +122,8 @@ partial class Transpiler
             }
             foreach (int producer in inputs)
             {
-                if (producer < 0 || !scalar[producer] || arrayOperands.Contains(producer))
+                if (producer < 0 || !scalar[producer] || arrayOperands.Contains(producer)
+                    || HasPreservedPadResult(producer))
                     continue;
                 for (int j = producer + 1; j < i; j++)
                 {
