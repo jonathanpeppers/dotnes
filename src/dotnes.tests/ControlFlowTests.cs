@@ -4,7 +4,7 @@ using Xunit.Abstractions;
 
 namespace dotnes.tests;
 
-public class ControlFlowTests : RoslynTests
+public class ControlFlowTests : ExecutionTests
 {
     public ControlFlowTests(ITestOutputHelper output) : base(output) { }
 
@@ -12,28 +12,21 @@ public class ControlFlowTests : RoslynTests
     public void EnumSwitch()
     {
         // Enum used in a switch-like if/else chain (common game pattern)
-        var bytes = GetProgramBytes(
+        var cpu = ExecuteProgram(
             """
             byte x = 128;
             Direction dir = Direction.Right;
             if (dir == Direction.Left) x--;
             if (dir == Direction.Right) x++;
+            poke(0x6000, x);
+            test_stop();
             ppu_on_all();
             while (true) ;
+            static extern void test_stop();
 
             enum Direction : byte { Left, Right, Up, Down }
             """);
-        Assert.NotNull(bytes);
-        Assert.NotEmpty(bytes);
-
-        var hex = Convert.ToHexString(bytes);
-        // Direction.Right = 1, stored with LDA #$01 (A901)
-        Assert.Contains("A901", hex);
-        // Direction.Left = 0: compiler optimizes == 0 to BNE (D0) without CMP
-        Assert.Contains("D0", hex);
-        // INC (EE) for x++ and DEC (CE) for x--
-        Assert.Contains("EE", hex);
-        Assert.Contains("CE", hex);
+        Assert.Equal(129, cpu.Memory[0x6000]);
     }
 
     [Fact]
