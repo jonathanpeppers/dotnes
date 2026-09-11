@@ -18,6 +18,8 @@ sealed class ILValueAnalysis
         .Select(method => method.Name), StringComparer.Ordinal);
 
     public int[][] Inputs { get; }
+    public int[][] Outputs { get; }
+    public List<int>[] Predecessors { get; }
     public List<int>[] Consumers { get; }
     public bool[] ProducesValue { get; }
     public bool[] Escapes { get; }
@@ -25,6 +27,8 @@ sealed class ILValueAnalysis
     public ILValueAnalysis(ILInstruction[] instructions, ReflectionCache reflection)
     {
         Inputs = Enumerable.Range(0, instructions.Length).Select(_ => Array.Empty<int>()).ToArray();
+        Outputs = Enumerable.Range(0, instructions.Length).Select(_ => Array.Empty<int>()).ToArray();
+        Predecessors = Enumerable.Range(0, instructions.Length).Select(_ => new List<int>()).ToArray();
         Consumers = Enumerable.Range(0, instructions.Length).Select(_ => new List<int>()).ToArray();
         ProducesValue = new bool[instructions.Length];
         Escapes = new bool[instructions.Length];
@@ -45,13 +49,15 @@ sealed class ILValueAnalysis
                     Escapes[producer] = true;
         }
 
-        void Merge(int successor, List<int> stack)
+        void Merge(int predecessor, int successor, List<int> stack)
         {
             if (successor >= instructions.Length)
             {
                 Escape(stack);
                 return;
             }
+            if (!Predecessors[successor].Contains(predecessor))
+                Predecessors[successor].Add(predecessor);
             var old = states[successor];
             if (old == null)
             {
@@ -137,16 +143,17 @@ sealed class ILValueAnalysis
                 Escape(stack);
                 stack.Clear();
             }
+            Outputs[i] = stack.ToArray();
             foreach (int target in GetBranchTargets(instruction))
             {
                 if (offsets.TryGetValue(target, out int successor))
-                    Merge(successor, stack);
+                    Merge(i, successor, stack);
                 else
                     Escape(stack);
             }
             if (!opcodes.TryGetValue((ushort)instruction.OpCode, out var opcode)
                 || opcode.FlowControl is not (FlowControl.Branch or FlowControl.Return or FlowControl.Throw))
-                Merge(i + 1, stack);
+                Merge(i, i + 1, stack);
             else if (opcode.FlowControl is FlowControl.Return or FlowControl.Throw)
                 Escape(stack);
         }

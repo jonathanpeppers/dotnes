@@ -4,6 +4,150 @@ namespace dotnes.tests;
 
 public class ExpressionValueTests(ITestOutputHelper output) : ExecutionTests(output)
 {
+    [Theory]
+    [InlineData(0, 17)]
+    [InlineData(1, 16)]
+    public void ConditionalCallArgumentKeepsSelectedValue(byte flag, byte expected)
+    {
+        var cpu = ExecuteProgram(
+            """
+            byte flag = peek(0x6010);
+            byte result = Helpers.Pair(flag != 0 ? Helpers.Left() : Helpers.Right(), 9);
+            poke(0x6000, result);
+            byte calls = Helpers.Calls;
+            poke(0x6001, calls);
+            test_stop(); while (true) ;
+            static extern void test_stop();
+            static class Helpers
+            {
+                public static byte Calls;
+                public static byte Left() { Calls++; return 7; }
+                public static byte Right() { Calls++; return 8; }
+                public static byte Pair(byte first, byte second) => (byte)(first + second);
+            }
+            """, initialize: cpu => cpu.Memory[0x6010] = flag);
+        Assert.Equal(new byte[] { expected, 1 }, cpu.Memory[0x6000..0x6002]);
+        Assert.Equal(Cpu6502.SoftwareStackTop, cpu.SoftwareStackPointer);
+    }
+
+    [Theory]
+    [InlineData(0, 0x0113)]
+    [InlineData(1, 0x0214)]
+    public void ConditionalWordOperandPreservesWidth(byte flag, ushort expected)
+    {
+        var cpu = ExecuteProgram(
+            """
+            byte left = peek(0x6010);
+            ushort value = (ushort)(left + (peek(0x6011) == 0 ? 0x102 : 0x203));
+            byte low = (byte)value;
+            byte high = (byte)(value >> 8);
+            poke(0x6000, low);
+            poke(0x6001, high);
+            test_stop(); while (true) ;
+            static extern void test_stop();
+            """, initialize: cpu =>
+            {
+                cpu.Memory[0x6010] = 17;
+                cpu.Memory[0x6011] = flag;
+            });
+        Assert.Equal(new byte[] { (byte)expected, (byte)(expected >> 8) }, cpu.Memory[0x6000..0x6002]);
+    }
+
+    [Theory]
+    [InlineData(0, 20)]
+    [InlineData(1, 22)]
+    public void ConditionalOperandPreservesBothArms(byte condition, byte expected)
+    {
+        var cpu = ExecuteProgram(
+            $$"""
+            byte result = Helpers.Add(17, {{condition}});
+            poke(0x6000, result);
+            test_stop(); while (true) ;
+            static extern void test_stop();
+            static class Helpers
+            {
+                public static byte Add(byte value, byte condition) =>
+                    (byte)(value + (condition == 0 ? 3 : 5));
+            }
+            """);
+        Assert.Equal(expected, cpu.Memory[0x6000]);
+        Assert.Equal(Cpu6502.SoftwareStackTop, cpu.SoftwareStackPointer);
+    }
+
+    [Theory]
+    [InlineData("==", 0, 76)]
+    [InlineData("==", 1, 42)]
+    [InlineData("<", 0, 76)]
+    [InlineData("<", 2, 42)]
+    [InlineData(">", 0, 42)]
+    [InlineData(">", 2, 76)]
+    public void ComparisonValueSurvivesCalls(string comparison, byte value, byte expected)
+    {
+        int right = comparison == "==" ? 0 : 1;
+        var cpu = ExecuteProgram(
+            $$"""
+            bool flag = Helpers.Get() {{comparison}} {{right}};
+            byte other = Helpers.Next();
+            byte selected = 42;
+            if (flag) selected = 76;
+            poke(0x6000, selected);
+            poke(0x6001, other);
+            test_stop(); while (true) ;
+            static extern void test_stop();
+            static class Helpers
+            {
+                public static byte Get() => {{value}};
+                public static byte Next() => 7;
+            }
+            """);
+        Assert.Equal(new byte[] { expected, 7 }, cpu.Memory[0x6000..0x6002]);
+    }
+
+    [Fact]
+    public void SignedConversionSurvivesCall()
+    {
+        var cpu = ExecuteProgram(
+            """
+            sbyte value = (sbyte)Helpers.Get();
+            Helpers.Ignore();
+            byte selected = 42;
+            if (value < 0) selected = 76;
+            poke(0x6000, selected);
+            test_stop(); while (true) ;
+            static extern void test_stop();
+            static class Helpers
+            {
+                public static byte Get() => 255;
+                public static void Ignore() { }
+            }
+            """);
+        Assert.Equal(76, cpu.Memory[0x6000]);
+    }
+
+    [Fact]
+    public void PromotedSumSurvivesCall()
+    {
+        var cpu = ExecuteProgram(
+            """
+            byte a = Helpers.First();
+            byte b = Helpers.Second();
+            ushort value = (ushort)((a + b) + Helpers.Zero());
+            byte low = (byte)value;
+            byte high = (byte)(value >> 8);
+            poke(0x6000, low);
+            poke(0x6001, high);
+            test_stop(); while (true) ;
+            static extern void test_stop();
+            static class Helpers
+            {
+                public static byte First() => 202;
+                public static byte Second() => 87;
+                public static byte Zero() => 0;
+            }
+            """);
+        Assert.Equal(new byte[] { 0x21, 1 }, cpu.Memory[0x6000..0x6002]);
+    }
+
     [Fact]
     public void DerivedStorePreservesRetainedOriginal()
     {
