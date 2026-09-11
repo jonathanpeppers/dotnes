@@ -364,6 +364,7 @@ partial class Transpiler : IDisposable
             TryFinallyRegions = MainExceptionRegions.Length > 0 ? MainExceptionRegions : null,
         };
 
+        writer.ConfigureNumericTypes(NumericTypes);
         writer.StartBlockBuffering();
 
         // Translate IL to 6502 (single pass - sizeOfMain = 0 since we'll calculate later)
@@ -385,6 +386,8 @@ partial class Transpiler : IDisposable
             
             // Record block count before processing this instruction
             writer.RecordBlockCount(instruction.Offset);
+            if (writer.TryNumericComparison(instruction))
+                continue;
             
             if (instruction.Integer != null)
             {
@@ -440,7 +443,7 @@ partial class Transpiler : IDisposable
                 MethodParamCount = paramCount,
                 ParamIsArray = isArrayParam,
                 MethodName = methodName,
-                WordLocals = DetectWordLocals(methodIL, reflectionCache),
+                WordLocals = DetectWordLocals(methodIL, reflectionCache, methodName),
                 StructLayouts = structLayouts,
                 BufferFieldSizes = _bufferFieldSizes,
                 ByteArrayLabelStartIndex = writer.ByteArrays.Count,
@@ -454,6 +457,7 @@ partial class Transpiler : IDisposable
                 ClosureArgIndex = _closureMethodArgIndex.TryGetValue(methodName, out var cai) ? cai : -1,
                 TryFinallyRegions = UserMethodExceptionRegions.TryGetValue(methodName, out var umer) ? umer : null,
             };
+            methodWriter.ConfigureNumericTypes(NumericTypes);
             methodWriter.StartBlockBuffering();
 
             // If method has parameters, emit prologue to push last arg onto cc65 stack
@@ -477,6 +481,8 @@ partial class Transpiler : IDisposable
                 if (methodWriter.CurrentBlock != null)
                     methodWriter.CurrentBlock.SetNextLabel(labelName);
                 methodWriter.RecordBlockCount(instruction.Offset);
+                if (methodWriter.TryNumericComparison(instruction))
+                    continue;
 
                 if (instruction.Integer != null)
                     methodWriter.Write(instruction, instruction.Integer.Value);
