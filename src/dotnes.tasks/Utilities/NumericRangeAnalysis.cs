@@ -37,10 +37,19 @@ sealed class NumericRangeAnalysis
         var result = new Dictionary<int, PrimitiveTypeCode>();
         for (int i = 0; i < types.Locals.Length; i++)
         {
+            if (types.Locals[i] is null or PrimitiveTypeCode.Boolean or PrimitiveTypeCode.Byte
+                or PrimitiveTypeCode.SByte or PrimitiveTypeCode.Int16 or PrimitiveTypeCode.UInt16)
+                continue;
+            int firstUse = Array.FindIndex(instructions, instruction =>
+                instruction.GetStlocIndex() == i || instruction.GetLdlocIndex() == i
+                || instruction.OpCode is ILOpCode.Ldloca or ILOpCode.Ldloca_s && instruction.Integer == i);
+            if (firstUse < 0)
+                continue;
             if (types.Locals[i] != PrimitiveTypeCode.Int32)
-                continue;
-            if (!instructions.Any(instruction => instruction.GetStlocIndex() == i))
-                continue;
+                throw new TranspileException(
+                    $"Local {i} at IL_{instructions[firstUse].Offset:X4} has unsupported primitive type {types.Locals[i]}. " +
+                    "Use an explicitly supported storage type (byte, sbyte, short or ushort) with conversions " +
+                    "only when its range and truncation semantics are intended.", methodName);
             var range = LocalRange(i);
             if (range is { Min: >= 0, Max: <= byte.MaxValue })
                 result.Add(i, PrimitiveTypeCode.Byte);
@@ -50,9 +59,8 @@ sealed class NumericRangeAnalysis
                 result.Add(i, PrimitiveTypeCode.Int16);
             else
             {
-                var store = instructions.First(instruction => instruction.GetStlocIndex() == i);
                 throw new TranspileException(
-                    $"Int32 local {i} at IL_{store.Offset:X4} requires a range that cannot be proven to fit " +
+                    $"Int32 local {i} at IL_{instructions[firstUse].Offset:X4} requires a range that cannot be proven to fit " +
                     "the NES byte/word backend. Full 32-bit local arithmetic is not supported. " +
                     "Use byte, sbyte, short or ushort with explicit conversions only if their range and " +
                     "truncation semantics are intended, or bound the counter before updating it.",

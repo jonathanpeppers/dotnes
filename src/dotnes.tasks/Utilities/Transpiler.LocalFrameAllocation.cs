@@ -269,7 +269,7 @@ partial class Transpiler
     /// Pre-scans main and all user method IL for user-defined static field references
     /// (Stsfld/Ldsfld) and allocates a shared address for each unique field.
     /// This ensures all methods resolve the same field name to the same RAM address.
-    /// Multi-byte fields (int, ushort, short) get 2 bytes of zero page.
+    /// Multi-byte fields (ushort, short) get 2 bytes of RAM.
     /// </summary>
     (Dictionary<string, ushort> addresses, HashSet<string> wordFields, int totalBytes, Dictionary<string, (ushort Address, int ArraySize)> arrayFields) PreAllocateStaticFields(ILInstruction[] mainInstructions)
     {
@@ -297,6 +297,7 @@ partial class Transpiler
 
         // Build field size map from metadata
         var fieldSizes = BuildStaticFieldSizes();
+        var fieldTypes = GetNumericFieldTypes();
 
         // Allocate addresses sequentially starting at LocalStackBase,
         // using the correct byte size for each field.
@@ -306,6 +307,13 @@ partial class Transpiler
         int offset = 0;
         foreach (var name in fieldNames.OrderBy(n => n, StringComparer.Ordinal))
         {
+            if (fieldTypes.TryGetValue(name, out var type)
+                && type is not (null or PrimitiveTypeCode.Boolean or PrimitiveTypeCode.Byte
+                    or PrimitiveTypeCode.SByte or PrimitiveTypeCode.Int16 or PrimitiveTypeCode.UInt16))
+                throw new TranspileException(
+                    $"Static field '{name}' has unsupported primitive type {type}. " +
+                    "Use an explicitly supported storage type (byte, sbyte, short or ushort) with conversions " +
+                    "only when its range and truncation semantics are intended. Compact Int32 proofs apply to locals only.");
             addresses[name] = (ushort)(NESConstants.LocalStackBase + offset);
             int size = fieldSizes.TryGetValue(name, out var s) ? s : 1;
             if (size < 0)

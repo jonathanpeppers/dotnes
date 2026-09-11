@@ -344,7 +344,7 @@ public class LocalsTests : ExecutionTests
             static class G
             {
                 public static byte byte_val;
-                public static int int_val;
+                public static short int_val;
             }
             """);
         var hex = Convert.ToHexString(bytes);
@@ -385,7 +385,7 @@ public class LocalsTests : ExecutionTests
             static class G
             {
                 public static byte byte_val;
-                public static int int_val;
+                public static short int_val;
                 public static ushort word_val;
             }
             """);

@@ -14,6 +14,12 @@ silently become an eight-bit accumulator, nor does choosing this target redefine
 | `short` | -32768 to 32767 | Two bytes, signed |
 | `int` local | A statically proven byte/word range | Compact storage only when the range is proven |
 
+Used unsupported primitive locals and static fields are diagnosed before storage
+allocation. In particular, `uint` does not implicitly become a word, and static
+`int` fields do not inherit the compact-range exception for Int32 locals. A later
+explicit conversion cannot repair bytes already lost in unsupported storage.
+Boolean locals and static fields retain their one-byte logical representation.
+
 Local signatures, rather than the initializer's current value, determine signedness.
 A word local can retain compact byte storage when every assignment explicitly
 truncates to `byte`. The software stack and local frame accounting must still

@@ -54,7 +54,7 @@ public class VariableShiftTypeTests(ITestOutputHelper output) : ExecutionTests(o
             static class State { public static {{type}} Value; public static byte Count; }
             """));
         Assert.True(error.Message.Contains("Variable shifts") || error.Message.Contains("Int32 local")
-            || error.Message.Contains("Parameter"), error.Message);
+            || error.Message.Contains("Parameter") || error.Message.Contains("unsupported primitive type"), error.Message);
     }
 
     [Theory]
