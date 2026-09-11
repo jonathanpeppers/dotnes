@@ -551,6 +551,8 @@ partial class IL2NESWriter
         if (Stack.Count > 0) Stack.Pop(); // array ref
 
         // Find the two Ldloc instructions that loaded array and index
+        if (TryEmitArrayParameterRead())
+            return;
         var indexInstr = Instructions[Index - 1];
         var arrayInstr = Instructions[Index - 2];
 
@@ -943,6 +945,9 @@ partial class IL2NESWriter
 
         if (Stack.Count >= 3) { Stack.Pop(); Stack.Pop(); Stack.Pop(); }
         else Stack.Clear();
+
+        if (TryEmitArrayParameterStore())
+            return;
 
         // Analyze the IL pattern by scanning backward to find:
         // - The target array and index (from the first two ldlocs in the stelem sequence)

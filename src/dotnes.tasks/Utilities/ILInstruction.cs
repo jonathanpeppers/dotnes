@@ -30,7 +30,17 @@ record ILInstruction(ILOpCode OpCode, int Offset = 0, int? Integer = null, strin
         ILOpCode.Ldloc_1 => 1,
         ILOpCode.Ldloc_2 => 2,
         ILOpCode.Ldloc_3 => 3,
-        ILOpCode.Ldloc_s => Integer,
+        ILOpCode.Ldloc_s or ILOpCode.Ldloc => Integer,
+        _ => null
+    };
+
+    public int? GetLdargIndex() => OpCode switch
+    {
+        ILOpCode.Ldarg_0 => 0,
+        ILOpCode.Ldarg_1 => 1,
+        ILOpCode.Ldarg_2 => 2,
+        ILOpCode.Ldarg_3 => 3,
+        ILOpCode.Ldarg_s or ILOpCode.Ldarg => Integer,
         _ => null
     };
 

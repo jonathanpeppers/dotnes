@@ -40,6 +40,7 @@ partial class IL2NESWriter
 
     public void Write(ILInstruction instruction)
     {
+        if (TryStoreArrayAlias(instruction)) return;
         // Clear ldloc byte array label for non-ldloc instructions
         if (instruction.OpCode is not (ILOpCode.Ldloc_0 or ILOpCode.Ldloc_1
             or ILOpCode.Ldloc_2 or ILOpCode.Ldloc_3 or ILOpCode.Ldloc_s))
@@ -1200,6 +1201,7 @@ partial class IL2NESWriter
 
     public void Write(ILInstruction instruction, int operand)
     {
+        if (TryStoreArrayAlias(instruction)) return;
         _ldlocByteArrayLabel = null;
         switch (instruction.OpCode)
         {
@@ -3273,6 +3275,8 @@ partial class IL2NESWriter
                         argsAlreadyPopped = true;
                         break;
                     default:
+                        if (TryEmitArrayParameterCall(operand))
+                            break;
                         // Handle byte array locals loaded via ldloc (pushax pattern).
                         // Fastcall functions (pal_bg, pal_spr, pal_all, vram_unrle) expect
                         // pointer in A:X, not on cc65 stack. Replace pushax+size with just LDA/LDX.

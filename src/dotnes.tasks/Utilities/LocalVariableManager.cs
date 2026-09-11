@@ -210,5 +210,5 @@ class LocalVariableManager
     /// <summary>
     /// The local variable record, representing a single local's allocation and metadata.
     /// </summary>
-    public record Local(int Value, int? Address = null, string? LabelName = null, int ArraySize = 0, bool IsWord = false, string? StructArrayType = null);
+    public record Local(int Value, int? Address = null, string? LabelName = null, int ArraySize = 0, bool IsWord = false, string? StructArrayType = null, int? ArrayParameterIndex = null);
 }

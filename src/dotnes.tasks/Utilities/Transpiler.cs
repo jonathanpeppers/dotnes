@@ -323,10 +323,18 @@ partial class Transpiler : IDisposable
         {
             reflectionCache.RegisterUserMethod(kvp.Key, kvp.Value.argCount, kvp.Value.hasReturnValue);
         }
+        var arrayParameters = UserMethodMetadata.ToDictionary(
+            kvp => kvp.Key, kvp => kvp.Value.isArrayParam, StringComparer.Ordinal);
         // Register extern methods so Call handler can look up arg counts
         foreach (var kvp in ExternMethods)
         {
             reflectionCache.RegisterExternMethod(kvp.Key, kvp.Value.argCount, kvp.Value.hasReturnValue);
+        }
+        instructions = ArrayOperandLowering.Rewrite(instructions, reflectionCache, arrayParameters);
+        foreach (var method in UserMethods.Keys.ToArray())
+        {
+            UserMethods[method] = ArrayOperandLowering.Rewrite(
+                UserMethods[method], reflectionCache, arrayParameters, arrayParameters[method]);
         }
 
         // Build main program block using label references (addresses resolved later)
@@ -349,6 +357,7 @@ partial class Transpiler : IDisposable
             Instructions = instructions,
             UsedMethods = UsedMethods,
             UserMethodNames = new HashSet<string>(UserMethods.Keys, StringComparer.Ordinal),
+            UserMethodArrayParameters = arrayParameters,
             ExternMethodNames = externNames,
             WordLocals = DetectWordLocals(instructions, reflectionCache),
             StructLayouts = structLayouts,
@@ -437,6 +446,7 @@ partial class Transpiler : IDisposable
                 Instructions = methodIL,
                 UsedMethods = UsedMethods,
                 UserMethodNames = new HashSet<string>(UserMethods.Keys, StringComparer.Ordinal),
+                UserMethodArrayParameters = arrayParameters,
                 MethodParamCount = paramCount,
                 ParamIsArray = isArrayParam,
                 MethodName = methodName,
@@ -448,6 +458,7 @@ partial class Transpiler : IDisposable
                 LocalCount = methodFrameOffsets[methodName],
                 StaticFieldAddresses = staticFields,
                 WordStaticFields = wordStaticFields,
+                StaticArrayFields = staticArrayFields,
                 ClosureFieldTypes = _closureFieldTypes.Count > 0 ? _closureFieldTypes : null,
                 ClosureFieldLabels = _closureFieldLabels,
                 ClosureFieldAddresses = _closureFieldAddresses,

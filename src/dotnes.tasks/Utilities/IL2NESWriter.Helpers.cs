@@ -28,6 +28,9 @@ partial class IL2NESWriter
             && _staticFieldArrayLocals.TryGetValue(instr.String, out var sfLoc))
             return sfLoc;
 
+        if (instr.GetLdargIndex() is int arg && arg < ParamIsArray.Length && ParamIsArray[arg])
+            return new Local(0, ArrayParameterIndex: arg);
+
         return null;
     }
 
