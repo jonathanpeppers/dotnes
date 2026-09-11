@@ -253,6 +253,7 @@ public class NativeInteropTests : RoslynTests
             vram_put(1);
             vram_fill(2, 16);
             vram_write(new byte[] { 3, 4 });
+            vram_write("OamScope.status");
             ppu_wait_nmi();
             ppu_wait_frame();
             delay(1);

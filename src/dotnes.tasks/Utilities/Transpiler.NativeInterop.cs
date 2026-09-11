@@ -1,3 +1,4 @@
+using System.Reflection.Metadata;
 using dotnes.ObjectModel;
 
 namespace dotnes;
@@ -8,7 +9,8 @@ partial class Transpiler
     {
         foreach (var instruction in instructions.Concat(UserMethods.Values.SelectMany(body => body)))
         {
-            if (instruction.String?.StartsWith("OamScope.", StringComparison.Ordinal) == true)
+            if (instruction.OpCode is ILOpCode.Call or ILOpCode.Callvirt or ILOpCode.Newobj &&
+                instruction.String?.StartsWith("OamScope.", StringComparison.Ordinal) == true)
                 throw new TranspileException(
                     "'OamScope' uses the stock renderer and cannot be combined with ppu_use_native_renderer(). " +
                     "Use a native-owned OAM buffer, or remove the native renderer directive.");
