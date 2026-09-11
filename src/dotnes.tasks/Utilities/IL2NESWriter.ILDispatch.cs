@@ -1843,8 +1843,7 @@ partial class IL2NESWriter
             case ILOpCode.Nop:
                 break;
             case ILOpCode.Ldftn:
-                // Function pointer: store the method name for the callback handler
-                _lastLdftnMethod = operand;
+                // A direct function address is consumed by the following callback setter.
                 break;
             case ILOpCode.Ldstr:
                 // Deduplicate: reuse label if same string was already seen
@@ -2495,21 +2494,19 @@ partial class IL2NESWriter
                         EmitWithLabel(Opcode.JSR, AddressMode.Absolute, operand);
                         _immediateInA = null;
                         break;
+                    case nameof(NESLib.ppu_use_native_renderer):
+                        // Whole-program selection is handled before emitting any IL.
+                        break;
                     case nameof(NESLib.nmi_set_callback):
                     case nameof(NESLib.irq_set_callback):
                         {
-                            // Function pointer path: ldftn already gave us the method name
-                            string? labelName = _lastLdftnMethod;
-                            _lastLdftnMethod = null;
+                            string labelName = GetDirectCallbackMethod(operand);
 
-                            if (labelName != null)
-                            {
-                                // User-defined methods use their name as-is; extern methods use _ prefix (cc65 convention)
-                                bool isUserMethod = UserMethodNames != null && UserMethodNames.Contains(labelName);
-                                string label = isUserMethod ? labelName : $"_{labelName}";
-                                EmitWithLabel(Opcode.LDA, AddressMode.Immediate_LowByte, label);
-                                EmitWithLabel(Opcode.LDX, AddressMode.Immediate_HighByte, label);
-                            }
+                            // User-defined methods use their name as-is; extern methods use _ prefix (cc65 convention)
+                            bool isUserMethod = UserMethodNames != null && UserMethodNames.Contains(labelName);
+                            string label = isUserMethod ? labelName : $"_{labelName}";
+                            EmitWithLabel(Opcode.LDA, AddressMode.Immediate_LowByte, label);
+                            EmitWithLabel(Opcode.LDX, AddressMode.Immediate_HighByte, label);
                             EmitWithLabel(Opcode.JSR, AddressMode.Absolute, operand);
                             if (operand == nameof(NESLib.nmi_set_callback))
                                 UsedMethods?.Add("nmi_set_callback");
