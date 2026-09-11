@@ -69,6 +69,8 @@ partial class IL2NESWriter
             ILOpCode.Ldelem_i1 or ILOpCode.Ldind_i1 => PrimitiveTypeCode.SByte,
             ILOpCode.Ldelem_u2 or ILOpCode.Ldind_u2 => PrimitiveTypeCode.UInt16,
             ILOpCode.Ldelem_i2 or ILOpCode.Ldind_i2 => PrimitiveTypeCode.Int16,
+            ILOpCode.Neg or ILOpCode.Not when _numericValues.Inputs[producer].Length == 1 =>
+                PrimitiveTypeCode.Int16,
             ILOpCode.Div when _numericValues.Inputs[producer].Length == 2 =>
                 SignedNumericType(NumericType(_numericValues.Inputs[producer][0]))
                     ? PrimitiveTypeCode.Int16 : PrimitiveTypeCode.UInt16,

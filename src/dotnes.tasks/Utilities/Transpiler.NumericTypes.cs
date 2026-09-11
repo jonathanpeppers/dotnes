@@ -61,6 +61,11 @@ partial class Transpiler
                 type = PrimitiveTypeCode.SByte;
             else if (instruction.OpCode is ILOpCode.Ldelem_i2 or ILOpCode.Ldind_i2 or ILOpCode.Conv_i2)
                 type = PrimitiveTypeCode.Int16;
+            else if (instruction.OpCode is ILOpCode.Neg or ILOpCode.Not
+                && analysis.Inputs[i].Length == 1 && analysis.Inputs[i][0] >= 0
+                && types[analysis.Inputs[i][0]] != null)
+                type = NumericValueUsage.IsExplicitlyNarrowed(instructions, analysis, i, byteOnly: true)
+                    ? PrimitiveTypeCode.Byte : PrimitiveTypeCode.Int16;
             else if (instruction.OpCode is ILOpCode.Add or ILOpCode.Sub
                 && analysis.Inputs[i].Length == 2
                 && analysis.Inputs[i].All(p => p >= 0 && types[p] is PrimitiveTypeCode.Byte or PrimitiveTypeCode.SByte))

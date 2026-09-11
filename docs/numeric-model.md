@@ -23,8 +23,10 @@ explicit conversion cannot repair bytes already lost in unsupported storage.
 Boolean locals and static fields retain their one-byte logical representation.
 
 Local signatures, rather than the initializer's current value, determine signedness.
-A word local can retain compact byte storage when every assignment explicitly
-truncates to `byte`. The software stack and local frame accounting must still
+An unsigned word local can retain compact byte storage when every assignment
+explicitly truncates to `byte` and its address is not exposed. Signed word locals
+remain word-sized so a narrowed value such as 255 is not later sign-extended
+from its low byte. The software stack and local frame accounting must still
 preserve every byte of a live word across calls.
 
 Conversions to `byte`/`sbyte` retain the low eight bits, and conversions to
@@ -38,6 +40,12 @@ cannot be implemented as unsigned byte comparisons or by inspecting only the
 6502 subtraction's negative flag. In particular, `-128 < 127` and
 `(short)-1 < (ushort)65535` are both true. Word addition/subtraction must propagate
 carry/borrow before an explicit narrowing conversion.
+
+Unary negation and bitwise complement operate on both word bytes and retain signed
+provenance through comparisons and calls. Their original promoted range is also
+validated: `-ushortValue`, `~ushortValue`, and negating an arbitrary `short` can
+need more than the supported signed/unsigned word range. An explicit word cast
+requests wrapping; a later shift or comparison cannot recover discarded sign bits.
 
 Signed right shifts with constant counts preserve the sign. Shift counts use
 the C# low-five-bit mask. Runtime-count signed right shifts produce an actionable
@@ -68,10 +76,14 @@ argument. An unsupported parameter reports its method, index and type. Arrays
 and closure references use their separate lowering. Word returns retain
 both bytes, including signed extension from a byte-sized source.
 
-User-defined primitive returns support `byte`, `sbyte`, `short`, `ushort`, `bool`
-and `void`. Int32/UInt32 and other unsupported primitive return signatures are
+User-defined and extern primitive returns support `byte`, `sbyte`, `short`, `ushort`,
+`bool` and `void`. Int32/UInt32 and other unsupported primitive return signatures are
 diagnosed before emission; the compact-range exception for Int32 **locals** does
 not change the user-method return ABI.
+
+Generic scalar `ref`/`out` and address-taking operations are diagnosed: the existing
+managed-address lowering is for struct and closure access, not a scalar pointer ABI.
+Use byte/sbyte value parameters or explicit native memory interfaces instead.
 
 Signed division by a positive power-of-two constant truncates toward zero, including for negative
 operands. Other signed divisors and signed remainder produce diagnostics rather

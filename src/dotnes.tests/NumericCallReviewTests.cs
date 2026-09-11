@@ -5,6 +5,77 @@ namespace dotnes.tests;
 
 public class NumericCallReviewTests(ITestOutputHelper output) : ExecutionTests(output)
 {
+    [Fact]
+    public void OptimizedByteCallRetainsPushaWhenDecsp4IsNeeded()
+    {
+        using var transpiler = BuildProgram("""
+            oam_spr(1, 2, 3, 0, 0);
+            byte result = Add(20, 22);
+            poke(0x6000, result);
+            test_stop(); while (true);
+            static extern void test_stop();
+            static byte Add(byte first, byte second) => (byte)(first + second);
+            """, out var program);
+        Assert.Contains("decsp4", transpiler.UsedMethods);
+        Assert.Contains("pusha", transpiler.UsedMethods);
+        Assert.NotNull(program.GetBlock("pusha"));
+        const ushort stop = 0x7FF0;
+        program.DefineExternalLabel("_test_stop", stop);
+        var cpu = new Cpu6502(program.ToBytes(), program.BaseAddress, program.GetLabels()["main"]);
+        cpu.RunUntil(stop);
+        Assert.Equal(42, cpu.Memory[0x6000]);
+        Assert.Equal(Cpu6502.SoftwareStackTop, cpu.SoftwareStackPointer);
+        Assert.Equal(0xFD, cpu.SP);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(127)]
+    [InlineData(254)]
+    [InlineData(255)]
+    public void ShortLocalContainingNarrowedBytesReturnsAnUnsignedHighByte(int input)
+    {
+        var cpu = ExecuteProgram("""
+            short result = Get();
+            byte low = (byte)result;
+            byte high = (byte)(result >> 8);
+            poke(0x6000, low);
+            poke(0x6001, high);
+            test_stop(); while (true);
+            static extern void test_stop();
+            static short Get()
+            {
+                short value = (byte)(peek(0x6010) + 1);
+                if (peek(0x6011) != 0) value = (byte)(peek(0x6012) + 1);
+                return value;
+            }
+            """, cpu => cpu.Memory[0x6010] = (byte)input);
+        Assert.Equal((byte)(input + 1), cpu.Memory[0x6000]);
+        Assert.Equal(0, cpu.Memory[0x6001]);
+        Assert.Equal(Cpu6502.SoftwareStackTop, cpu.SoftwareStackPointer);
+        Assert.Equal(0xFD, cpu.SP);
+    }
+
+    [Theory]
+    [InlineData("int", "Int32")]
+    [InlineData("uint", "UInt32")]
+    [InlineData("long", "Int64")]
+    [InlineData("ulong", "UInt64")]
+    [InlineData("float", "Single")]
+    [InlineData("double", "Double")]
+    [InlineData("char", "Char")]
+    [InlineData("nint", "IntPtr")]
+    [InlineData("nuint", "UIntPtr")]
+    public void UnsupportedExternReturnSignatureIsRejectedBeforeEmission(string type, string decodedType)
+    {
+        var error = Assert.Throws<TranspileException>(() => GetProgramBytes($$"""
+            while (true);
+            static extern {{type}} Get();
+            """));
+        Assert.Contains($"Return type {decodedType}", error.Message);
+        Assert.Contains("supported return type", error.Message);
+    }
+
     [Theory]
     [InlineData(0)]
     [InlineData(127)]

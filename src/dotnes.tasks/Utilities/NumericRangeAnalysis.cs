@@ -81,7 +81,7 @@ sealed class NumericRangeAnalysis
                     || instructions[i].OpCode is ILOpCode.Conv_u1 or ILOpCode.Conv_i1 or ILOpCode.Conv_u2 or ILOpCode.Conv_i2)
                     continue;
                 if (instructions[i].OpCode is ILOpCode.Add or ILOpCode.Sub or ILOpCode.Mul
-                    or ILOpCode.Shl or ILOpCode.And or ILOpCode.Or or ILOpCode.Xor
+                    or ILOpCode.Shl or ILOpCode.And or ILOpCode.Or or ILOpCode.Xor or ILOpCode.Neg or ILOpCode.Not
                     && NumericValueUsage.IsExplicitlyNarrowed(instructions, values, i))
                     continue;
                 throw new TranspileException(
@@ -99,7 +99,7 @@ sealed class NumericRangeAnalysis
                     "by the NES numeric backend. Use nonnegative byte/ushort operands only when that " +
                     "range matches the intended computation.", methodName);
             if (instructions[i].OpCode is not (ILOpCode.Add or ILOpCode.Sub or ILOpCode.Mul or ILOpCode.Shl
-                or ILOpCode.And or ILOpCode.Or or ILOpCode.Xor))
+                or ILOpCode.And or ILOpCode.Or or ILOpCode.Xor or ILOpCode.Neg or ILOpCode.Not))
                 continue;
             if (instructions[i].OpCode is ILOpCode.Add or ILOpCode.Sub
                 && values.Inputs[i].Any(IsManagedAddress))
@@ -205,6 +205,13 @@ sealed class NumericRangeAnalysis
                 if (returnType == typeof(ushort)) return new(0, ushort.MaxValue);
                 if (returnType == typeof(short)) return new(short.MinValue, short.MaxValue);
                 return null;
+        }
+        if (instruction.OpCode is ILOpCode.Neg or ILOpCode.Not && values.Inputs[producer].Length == 1)
+        {
+            var operand = InputRange(producer, 0);
+            return operand == null ? null : instruction.OpCode == ILOpCode.Neg
+                ? new(-operand.Value.Max, -operand.Value.Min)
+                : new(~operand.Value.Max, ~operand.Value.Min);
         }
         if (values.Inputs[producer].Length != 2)
             return null;

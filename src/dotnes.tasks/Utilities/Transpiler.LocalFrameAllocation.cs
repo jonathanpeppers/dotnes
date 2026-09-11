@@ -38,12 +38,13 @@ partial class Transpiler
             for (int i = 0; i < types.Locals.Length; i++)
                 if (types.Locals[i] is PrimitiveTypeCode.UInt16 or PrimitiveTypeCode.Int16)
                 {
-                    // Retain compact storage when every assignment explicitly truncates
-                    // to a byte. The declared word type alone does not require a high byte.
-                    bool byteOnly = true;
+                    // Only unsigned words can reuse byte storage without changing load signedness.
+                    bool byteOnly = types.Locals[i] == PrimitiveTypeCode.UInt16;
                     for (int j = 0; j < instructions.Length; j++)
                         if (instructions[j].GetStlocIndex() == i
-                            && (j == 0 || instructions[j - 1].OpCode != ILOpCode.Conv_u1))
+                            && (j == 0 || instructions[j - 1].OpCode != ILOpCode.Conv_u1)
+                            || instructions[j].OpCode is ILOpCode.Ldloca or ILOpCode.Ldloca_s
+                                && instructions[j].Integer == i)
                             byteOnly = false;
                     if (!byteOnly)
                         result.Add(i);

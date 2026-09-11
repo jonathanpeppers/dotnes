@@ -20,7 +20,8 @@ static class NumericValueUsage
                 if (!byteOnly && instruction.OpCode is ILOpCode.Conv_u2 or ILOpCode.Conv_i2)
                     continue;
                 if (instruction.OpCode is ILOpCode.Add or ILOpCode.Sub or ILOpCode.Mul
-                    or ILOpCode.And or ILOpCode.Or or ILOpCode.Xor or ILOpCode.Shl && Visit(consumer))
+                    or ILOpCode.And or ILOpCode.Or or ILOpCode.Xor or ILOpCode.Shl
+                    or ILOpCode.Neg or ILOpCode.Not && Visit(consumer))
                     continue;
                 if (instruction.GetStlocIndex() is int local && isCompactStore?.Invoke(local) == true)
                     continue;

@@ -351,11 +351,11 @@ partial class Transpiler : IDisposable
         }
         foreach (var kvp in NumericTypes)
         {
-            if (UserMethodMetadata.ContainsKey(kvp.Key)
+            if ((UserMethodMetadata.ContainsKey(kvp.Key) || ExternMethods.ContainsKey(kvp.Key))
                 && kvp.Value.ReturnType is not (null or PrimitiveTypeCode.Void or PrimitiveTypeCode.Boolean
                     or PrimitiveTypeCode.Byte or PrimitiveTypeCode.SByte or PrimitiveTypeCode.Int16 or PrimitiveTypeCode.UInt16))
                 throw new TranspileException(
-                    $"Return type {kvp.Value.ReturnType} is not supported by the NES user-method calling convention. " +
+                    $"Return type {kvp.Value.ReturnType} is not supported by the NES user/extern-method calling convention. " +
                     "Use a supported return type (byte, sbyte, short, ushort, bool or void); only convert explicitly " +
                     "when the resulting range and truncation semantics are intended.", kvp.Key);
             if (kvp.Value.ReturnType is PrimitiveTypeCode.Int16 or PrimitiveTypeCode.UInt16)

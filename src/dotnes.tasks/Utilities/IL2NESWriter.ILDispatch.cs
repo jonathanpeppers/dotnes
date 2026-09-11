@@ -1019,6 +1019,8 @@ partial class IL2NESWriter
                 }
                 break;
             case ILOpCode.Neg:
+                if (TryNumericUnary(instruction))
+                    break;
                 {
                     int value = Stack.Pop();
 
@@ -1041,6 +1043,8 @@ partial class IL2NESWriter
                 }
                 break;
             case ILOpCode.Not:
+                if (TryNumericUnary(instruction))
+                    break;
                 {
                     int value = Stack.Pop();
 
@@ -1780,6 +1784,13 @@ partial class IL2NESWriter
                 break;
             case ILOpCode.Ldloca_s:
                 // Load address of local variable — used for struct field access
+                if (_numericTypes != null && operand < _numericTypes.Locals.Length
+                    && _numericTypes.Locals[operand] is PrimitiveTypeCode.Boolean or PrimitiveTypeCode.Byte
+                        or PrimitiveTypeCode.SByte or PrimitiveTypeCode.Int16 or PrimitiveTypeCode.UInt16)
+                    throw new TranspileException(
+                        $"Taking the address of scalar local {operand} at IL_{instruction.Offset:X4} is not supported. " +
+                        "Generic scalar by-reference access does not have a NES calling convention. " +
+                        "Use byte/sbyte value parameters or explicit native memory interfaces instead.", MethodName);
                 if (ClosureStructLocalIndex >= 0 && operand == ClosureStructLocalIndex
                     && Instructions is not null && ClosureFieldTypes != null)
                 {
