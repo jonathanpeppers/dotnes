@@ -51,7 +51,8 @@ record ILInstruction(ILOpCode OpCode, int Offset = 0, int? Integer = null, strin
         ILOpCode.Ldc_i4_6 => 6,
         ILOpCode.Ldc_i4_7 => 7,
         ILOpCode.Ldc_i4_8 => 8,
-        ILOpCode.Ldc_i4_s or ILOpCode.Ldc_i4 => Integer,
+        ILOpCode.Ldc_i4_s => Integer is int value ? (sbyte)(byte)value : null,
+        ILOpCode.Ldc_i4 => Integer,
         _ => null
     };
 }
