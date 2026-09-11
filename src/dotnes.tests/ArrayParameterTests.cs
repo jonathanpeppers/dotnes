@@ -4,6 +4,26 @@ namespace dotnes.tests;
 
 public class ArrayParameterTests(ITestOutputHelper output) : ExecutionTests(output)
 {
+    [Fact]
+    public void SingleArrayHelperPrologueIsIncludedWithDecsp4Runtime()
+    {
+        var cpu = ExecuteProgram(
+            """
+            byte[] data = new byte[8];
+            data[3] = 21;
+            oam_spr(1, 2, 3, 0, 0);
+            Update(data);
+            byte result = data[3];
+            poke(0x6000, result);
+            test_stop();
+            while (true) ;
+            static extern void test_stop();
+            static void Update(byte[] data) { data[3]++; }
+            """);
+        Assert.Equal(22, cpu.Memory[0x6000]);
+        Assert.Equal(Cpu6502.SoftwareStackTop, cpu.SoftwareStackPointer);
+    }
+
     [Theory]
     [InlineData("target[index]++;", 24)]
     [InlineData("target[1 + index] += source[index];", 48)]

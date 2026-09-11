@@ -7,8 +7,17 @@ partial class IL2NESWriter
 {
     bool TryWriteLocalBinary(ILOpCode op)
     {
-        if (Instructions == null || Index < 2
-            || op is not (ILOpCode.Add or ILOpCode.Sub or ILOpCode.And or ILOpCode.Or or ILOpCode.Xor)
+        if (Instructions == null || Index < 2 ||
+            op is not (ILOpCode.Add or ILOpCode.Sub or ILOpCode.Mul or ILOpCode.Div or ILOpCode.Div_un or
+                ILOpCode.Rem or ILOpCode.Rem_un or ILOpCode.And or ILOpCode.Or or ILOpCode.Xor or
+                ILOpCode.Shl or ILOpCode.Shr or ILOpCode.Shr_un))
+            return false;
+
+        _byteCallValues ??= new ILValueAnalysis(Instructions, _reflectionCache);
+        if (_byteCallValues.Inputs[Index].Any(p => p < 0))
+            throw new TranspileException("Merged scalar expression operands require typed conditional-value lowering, which is not supported by this compiler path.", MethodName);
+
+        if (op is not (ILOpCode.Add or ILOpCode.Sub or ILOpCode.And or ILOpCode.Or or ILOpCode.Xor)
             || Instructions[Index - 1].GetLdlocIndex() is not int rightIndex
             || !Locals.TryGetValue(rightIndex, out var right)
             || right.Address is not int rightAddress || right.ArraySize != 0 || right.IsWord)
@@ -23,10 +32,7 @@ partial class IL2NESWriter
         else if (constant is not (>= 0 and <= 255) || op is ILOpCode.Add or ILOpCode.Sub)
             return false;
 
-        _byteCallValues ??= new ILValueAnalysis(Instructions, _reflectionCache);
         int first = Index - 2;
-        if (_byteCallValues.Inputs[Index].Any(p => p < 0))
-            throw new TranspileException("Merged scalar expression operands require typed conditional-value lowering, which is not supported by this compiler path.", MethodName);
         if (!_byteCallValues.Inputs[Index].SequenceEqual(new[] { first, first + 1 }) ||
             _byteCallValues.Predecessors[first + 1].Any(p => p != first) ||
             _byteCallValues.Predecessors[Index].Any(p => p != Index - 1))
