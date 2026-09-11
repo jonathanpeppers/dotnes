@@ -75,9 +75,16 @@ partial class Transpiler
         return safe;
     }
 
-    bool TryOptimizeByteHelpers(Program6502 program, ILInstruction[] main, int localHighWater, out int localBytes)
+    internal bool TryOptimizeByteHelpers(Program6502 program, ILInstruction[] main, int localHighWater, bool hasNativeCode, out int localBytes)
     {
         localBytes = localHighWater;
+        // Native entry points are independent of C# extern declarations. Linked
+        // assembly and PRG bank payloads have no proven reentrancy contract.
+        if (hasNativeCode)
+        {
+            _logger.WriteLine($"Byte helper optimization disabled: linked native code has unproven entry points.");
+            return false;
+        }
         var candidates = FindByteHelpers(main);
         if (candidates.Count == 0)
             return false;

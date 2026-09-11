@@ -535,6 +535,7 @@ partial class Transpiler : IDisposable
 
         // Parse and add extern code blocks from .s assembly files using ca65 assembler
         int externBlocksTotalSize = 0;
+        bool hasNativeCode = _prgBankAssets.Count > 0;
         if (ExternMethods.Count > 0)
         {
             foreach (var assemblyFile in _assemblyFiles)
@@ -549,6 +550,7 @@ partial class Transpiler : IDisposable
                     foreach (var block in blocks)
                     {
                         program.AddBlock(block);
+                        hasNativeCode = true;
                         externBlocksTotalSize += block.Size;
                         _logger.WriteLine($"Extern block '{block.Label}': {block.Size} bytes");
                     }
@@ -565,7 +567,7 @@ partial class Transpiler : IDisposable
 
         // Get local count from writer
         locals = (ushort)writer.LocalCount;
-        if (OptimizeByteHelpers && TryOptimizeByteHelpers(program, instructions, localHighWater, out int optimizedLocals))
+        if (OptimizeByteHelpers && TryOptimizeByteHelpers(program, instructions, localHighWater, hasNativeCode, out int optimizedLocals))
         {
             locals = (ushort)optimizedLocals;
             userMethodsTotalSize = UserMethods.Keys.Sum(name => program.GetBlock(name)!.Size);

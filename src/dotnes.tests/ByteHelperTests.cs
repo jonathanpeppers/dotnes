@@ -24,6 +24,37 @@ public class ByteHelperTests(ITestOutputHelper output) : RoslynTests(output)
     }
 
     [Fact]
+    public void LinkedNativeCallerDisablesHomesWithoutExternDeclarations()
+    {
+        const string source = """
+            State.Result = helper(42);
+            while (true) ;
+            static byte helper(byte value) => value;
+            static class State { public static byte Result; }
+            """;
+        using var transpiler = BuildProgram(source, out var program);
+        Assert.Empty(transpiler.ExternMethods);
+        using var nativeSource = new StringReader("""
+            .segment "CODE"
+            native_callback:
+                lda #7
+                jsr helper
+                rts
+            """);
+        var nativeBlocks = new Ca65Assembler().Assemble(nativeSource).ToArray();
+        Assert.NotEmpty(nativeBlocks);
+        foreach (var block in nativeBlocks)
+            program.AddBlock(block);
+        byte[] original = program.ToBytes();
+
+        Assert.False(transpiler.TryOptimizeByteHelpers(program, transpiler.ReadStaticVoidMain().ToArray(),
+            localHighWater: 1, hasNativeCode: nativeBlocks.Length > 0, out _));
+        AssertStackParameter(program, "helper");
+        Assert.Equal(original, program.ToBytes());
+        Assert.True(program.Labels.TryResolve("native_callback", out _));
+    }
+
+    [Fact]
     public void NestedHelpersHaveDistinctHomes()
     {
         using var transpiler = BuildProgram(

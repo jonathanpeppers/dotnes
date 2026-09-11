@@ -53,8 +53,10 @@ evaluation, local initialization and the A-register call/return ABI are unchange
 Other signatures, mutable/address-taken parameters, memory access, exception
 regions, user attributes, built-in/unknown calls and recursive call chains are not
 optimized. Methods reachable from non-private entry points retain standard storage.
-Any declared extern, function pointer or indirect call disables this optimization
-for the compilation, since external assembly/callback effects are unproven.
+Any declared extern, function pointer, indirect call, linked assembly code or PRG
+bank payload disables this optimization for the compilation, since external entry
+points and assembly/callback effects are unproven. CHR graphics assets do not
+trigger the native-code barrier.
 Existing recursion and unsupported-IL diagnostics still apply. This does not
 replace general multi-argument calling conventions or all consumer-side rewrites.
 
