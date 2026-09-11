@@ -929,6 +929,14 @@ partial class IL2NESWriter
                     _lastStaticFieldAddress = null;
                     int xorVal2 = Stack.Pop();
                     int xorVal1 = Stack.Count > 0 ? Stack.Pop() : 0;
+                    int? xorLiteral = null;
+                    if (Instructions != null)
+                    {
+                        var inputs = new ILValueAnalysis(Instructions, _reflectionCache).Inputs[Index];
+                        foreach (int producer in inputs)
+                            if (producer >= 0 && Instructions[producer].GetLdcValue() is int literal)
+                                xorLiteral = literal;
+                    }
 
                     bool xorLocalInA = _lastLoadedLocalIndex.HasValue &&
                         Locals.TryGetValue(_lastLoadedLocalIndex.Value, out var xorLocal) && xorLocal.Address != null;
@@ -936,8 +944,8 @@ partial class IL2NESWriter
                     // 16-bit XOR: runtime ushort in A:X with immediate mask
                     if (_ushortInAX && (_runtimeValueInA || xorLocalInA))
                     {
-                        int xorConst = xorVal2;
-                        if (xorVal2 == 0 && xorVal1 != 0)
+                        int xorConst = xorLiteral ?? xorVal2;
+                        if (xorLiteral == null && xorVal2 == 0 && xorVal1 != 0)
                             xorConst = xorVal1;
                         if (!_runtimeValueInA && xorLocalInA)
                             RemoveLastInstructions(2);
@@ -968,9 +976,9 @@ partial class IL2NESWriter
                                 RemoveLastInstructions(1);
                             }
 
-                            // XOR is commutative: pick the non-zero operand as constant
-                            int xorConst = xorVal2;
-                            if (xorVal2 == 0 && xorVal1 != 0)
+                            // A literal zero is a value, not a runtime placeholder.
+                            int xorConst = xorLiteral ?? xorVal2;
+                            if (xorLiteral == null && xorVal2 == 0 && xorVal1 != 0)
                                 xorConst = xorVal1;
 
                             Emit(Opcode.EOR, AddressMode.Immediate, checked((byte)xorConst));
