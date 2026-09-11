@@ -261,6 +261,8 @@ partial class Transpiler
     /// </summary>
     int DecodeFieldSize(FieldDefinition field)
     {
+        if (NumericStorage.IsWord(field.DecodeSignature(new NumericTypeDecoder(), null)))
+            return 2;
         var sig = _reader.GetBlobReader(field.Signature);
         sig.ReadByte(); // field calling convention (0x06)
         byte elementType = sig.ReadByte();

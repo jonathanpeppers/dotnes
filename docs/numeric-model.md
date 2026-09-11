@@ -33,6 +33,9 @@ Supported captured scalar variables retain their declared numeric types through
 closure loads, arithmetic, comparisons and returns. Word stores use the actual
 runtime operand, or the original full literal, rather than a byte-sized tracking
 value. Byte fields do not inherit a previous operand's high-register state.
+Static and captured enums decoded to `short`/`ushort` allocate the same two bytes
+that their typed loads consume; this is not a separate enum calling convention.
+Enums backed by `long`/`ulong` remain unsupported storage and are diagnosed.
 
 Conversions to `byte`/`sbyte` retain the low eight bits, and conversions to
 `ushort`/`short` retain the low sixteen bits. Widening a signed byte sign-extends;
