@@ -143,6 +143,83 @@ public class NativeInteropTests : RoslynTests
     }
 
     [Theory]
+    [InlineData("scroll")]
+    [InlineData("popa")]
+    public void BuiltInsAndForwardReferencesCannotSupplyMissingNativeCallbacks(string name)
+    {
+        using var transpiler = BuildProgram(
+            $$"""
+            unsafe { nmi_set_callback(&Native.{{name}}); }
+            while (true) ;
+            static class Native { public static extern void {{name}}(); }
+            """, out var program, allowUnsafe: true);
+
+        Assert.NotNull(program.GetBlock(name));
+        Assert.False(program.Labels.IsDefined($"_{name}"));
+        var exception = Assert.Throws<UnresolvedLabelException>(() => program.ToBytes());
+        Assert.Equal($"_{name}", exception.Label);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void NativeExportMayShareABuiltInName(bool legacyName)
+    {
+        WithNativeProgram(
+            """
+            unsafe { nmi_set_callback(&Native.scroll); }
+            while (true) ;
+            static class Native { public static extern void scroll(); }
+            """,
+            $"{(legacyName ? "scroll" : "_scroll")}:\ninc $6000\nrts",
+            (program, _) =>
+            {
+                var nativeBlock = program.Blocks.Last(block => block.Label == (legacyName ? "scroll" : "_scroll"));
+                ushort nativeAddress = (ushort)(program.BaseAddress +
+                    program.Blocks.TakeWhile(block => block != nativeBlock).Sum(block => block.Size));
+                Assert.Equal(nativeAddress, program.GetLabels()["_scroll"]);
+                Assert.Contains($"A9{nativeAddress & 0xFF:X2}A2{nativeAddress >> 8:X2}",
+                    Convert.ToHexString(program.GetMainBlock()));
+                program.ToBytes();
+            });
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ExplicitBindingMayShareABuiltInName(bool legacyName)
+    {
+        using var transpiler = BuildProgram(
+            """
+            unsafe { nmi_set_callback(&Native.scroll); }
+            while (true) ;
+            static class Native { public static extern void scroll(); }
+            """, out var program, allowUnsafe: true);
+
+        program.DefineExternalLabel(legacyName ? "scroll" : "_scroll", 0x7000);
+        Assert.Contains("A900A270", Convert.ToHexString(program.GetMainBlock()));
+        Assert.Equal((ushort)0x7000, program.GetLabels()["_scroll"]);
+        Assert.NotEqual((ushort)0x7000, program.GetLabels()["scroll"]);
+        program.ToBytes();
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ManagedLabelsCannotSupplyLegacyBindingsOrConflicts(bool bindCanonical)
+    {
+        var program = new Program6502();
+        program.CreateBlock("Helper").Emit(new Instruction(Opcode.RTS, AddressMode.Implied));
+        program.RegisterExternSymbol("Helper");
+        if (bindCanonical)
+            program.DefineExternalLabel("_Helper", 0x7000);
+        program.ResolveAddresses();
+        Assert.Equal(bindCanonical, program.Labels.IsDefined("_Helper"));
+        if (bindCanonical)
+            Assert.Equal((ushort)0x7000, program.GetLabels()["_Helper"]);
+    }
+
+    [Theory]
     [InlineData("nmi_set_callback")]
     [InlineData("irq_set_callback")]
     public void NullCallbackIsRejected(string setter)

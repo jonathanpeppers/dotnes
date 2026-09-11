@@ -11,6 +11,8 @@ public class Program6502
     private readonly List<Block> _blocks = new();
     private readonly LabelTable _labels = new();
     private readonly Dictionary<string, ushort> _externalLabels = new();
+    private readonly Dictionary<string, ushort> _externBindings = new();
+    private readonly HashSet<Block> _nativeBlocks = new();
     private readonly HashSet<string> _externSymbols = new(StringComparer.Ordinal);
     private bool _addressesValid;
 
@@ -34,6 +36,12 @@ public class Program6502
     /// External labels are preserved across ResolveAddresses() calls.
     /// </summary>
     public void DefineExternalLabel(string name, ushort address)
+    {
+        _externBindings[name] = address;
+        DefineForwardLabel(name, address);
+    }
+
+    private void DefineForwardLabel(string name, ushort address)
     {
         _externalLabels[name] = address;
         _labels.DefineOrUpdate(name, address);
@@ -93,6 +101,12 @@ public class Program6502
     {
         _blocks.Add(block);
         _addressesValid = false;
+    }
+
+    internal void AddNativeBlock(Block block)
+    {
+        _nativeBlocks.Add(block);
+        AddBlock(block);
     }
 
     /// <summary>
@@ -183,6 +197,7 @@ public class Program6502
     public void ResolveAddresses()
     {
         _labels.Clear();
+        var nativeSymbols = new Dictionary<string, ushort>(_externBindings);
         
         // Restore external labels
         foreach (var kvp in _externalLabels)
@@ -192,9 +207,16 @@ public class Program6502
 
         foreach (var block in _blocks)
         {
+            void DefineBlockLabel(string name, ushort address)
+            {
+                _labels.DefineOrUpdate(name, address);
+                if (_nativeBlocks.Contains(block))
+                    nativeSymbols[name] = address;
+            }
+
             // Define block label (accounting for any label offset)
             if (block.Label != null)
-                _labels.DefineOrUpdate(block.Label, (ushort)(currentAddress + block.LabelOffset));
+                DefineBlockLabel(block.Label, (ushort)(currentAddress + block.LabelOffset));
 
             // Define additional labels (aliases) that point to the same block address
             // Format: "aliasName" = same as block label, or "aliasName=targetLabel" for instruction-level aliases
@@ -210,7 +232,7 @@ public class Program6502
                     }
                     else
                     {
-                        _labels.DefineOrUpdate(alias, (ushort)(currentAddress + block.LabelOffset));
+                        DefineBlockLabel(alias, (ushort)(currentAddress + block.LabelOffset));
                     }
                 }
             }
@@ -221,7 +243,7 @@ public class Program6502
                 if (block.InternalLabels != null)
                 {
                     foreach (var kvp in block.InternalLabels)
-                        _labels.DefineOrUpdate(kvp.Key, (ushort)(currentAddress + kvp.Value));
+                        DefineBlockLabel(kvp.Key, (ushort)(currentAddress + kvp.Value));
                 }
                 // Data blocks just advance the address by their size
                 currentAddress += (ushort)block.Size;
@@ -233,7 +255,7 @@ public class Program6502
                 {
                     if (label != null)
                     {
-                        _labels.DefineOrUpdate(ScopeLabel(label, block), currentAddress);
+                        DefineBlockLabel(ScopeLabel(label, block), currentAddress);
                     }
                     currentAddress += (ushort)instruction.Size;
                 }
@@ -243,7 +265,7 @@ public class Program6502
                 {
                     if (_labels.TryResolve(ScopeLabel(kvp.Value, block), out ushort address))
                     {
-                        _labels.DefineOrUpdate(ScopeLabel(kvp.Key, block), address);
+                        DefineBlockLabel(ScopeLabel(kvp.Key, block), address);
                     }
                 }
 
@@ -258,7 +280,7 @@ public class Program6502
                             var aliasName = alias.Substring(0, eqIdx);
                             var targetName = alias.Substring(eqIdx + 1);
                             if (_labels.TryResolve(targetName, out ushort address))
-                                _labels.DefineOrUpdate(aliasName, address);
+                                DefineBlockLabel(aliasName, address);
                         }
                     }
                 }
@@ -270,14 +292,16 @@ public class Program6502
         foreach (var name in _externSymbols)
         {
             string canonicalName = $"_{name}";
-            bool hasCanonical = _labels.Labels.TryGetValue(canonicalName, out ushort canonicalAddress);
-            bool hasLegacy = _labels.Labels.TryGetValue(name, out ushort address);
+            bool hasCanonical = nativeSymbols.TryGetValue(canonicalName, out ushort canonicalAddress);
+            bool hasLegacy = nativeSymbols.TryGetValue(name, out ushort address);
             if (hasCanonical && hasLegacy && canonicalAddress != address)
                 throw new TranspileException(
                     $"Conflicting native symbols '{canonicalName}' and '{name}' for extern method '{name}'. " +
                     "Export one spelling or make both labels aliases of the same address.");
-            if (!hasCanonical && hasLegacy)
-                _labels.Define(canonicalName, address);
+            if (hasCanonical)
+                _labels.DefineOrUpdate(canonicalName, canonicalAddress);
+            else if (hasLegacy)
+                _labels.DefineOrUpdate(canonicalName, address);
         }
 
         PatchPalBrightTables();
@@ -594,13 +618,13 @@ public class Program6502
 
         // Pre-define forward references with placeholder addresses (0)
         // These will be updated when AddFinalBuiltIns() is called
-        program.DefineExternalLabel("popa", 0);
-        program.DefineExternalLabel("popax", 0);
-        program.DefineExternalLabel("pusha", 0);
-        program.DefineExternalLabel("pushax", 0);
-        program.DefineExternalLabel("zerobss", 0);
-        program.DefineExternalLabel("copydata", 0);
-        program.DefineExternalLabel("main", 0);
+        program.DefineForwardLabel("popa", 0);
+        program.DefineForwardLabel("popax", 0);
+        program.DefineForwardLabel("pusha", 0);
+        program.DefineForwardLabel("pushax", 0);
+        program.DefineForwardLabel("zerobss", 0);
+        program.DefineForwardLabel("copydata", 0);
+        program.DefineForwardLabel("main", 0);
 
         // Add all standard built-in subroutines (same order as NESWriter.WriteBuiltIns)
         program.AddBlock(BuiltInSubroutines.Exit());

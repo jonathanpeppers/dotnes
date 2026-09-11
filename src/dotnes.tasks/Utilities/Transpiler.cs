@@ -565,7 +565,7 @@ partial class Transpiler : IDisposable
                     var blocks = ca65.Assemble(reader);
                     foreach (var block in blocks)
                     {
-                        program.AddBlock(block);
+                        program.AddNativeBlock(block);
                         externBlocksTotalSize += block.Size;
                         _logger.WriteLine($"Extern block '{block.Label}': {block.Size} bytes");
                     }

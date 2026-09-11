@@ -146,8 +146,11 @@ local-function names are reduced to the declared method name; containing C#
 types do not introduce a native namespace. Avoid same-name declarations with
 different signatures.
 
-For compatibility with older helper-method emission, bare `Foo` is accepted
-when `_Foo` is absent. Existing assembly exporting both spellings continues to
+For compatibility with older helper-method emission, bare `Foo` from native
+assembly or an explicit external binding is accepted when `_Foo` is absent.
+Stock built-ins, managed methods, and internal forward-reference placeholders
+are not native exports and cannot supply a legacy fallback or an alias conflict.
+Existing assembly exporting both spellings continues to
 work if they resolve to the same address. If both are defined at different
 addresses, compilation/address resolution reports a `TranspileException` naming
 the conflict rather than choosing silently. Only names registered as extern
