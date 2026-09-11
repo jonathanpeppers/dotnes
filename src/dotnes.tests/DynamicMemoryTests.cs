@@ -123,6 +123,25 @@ public class DynamicMemoryTests(ITestOutputHelper output) : ExecutionTests(outpu
         Assert.Equal(0xFD, cpu.SP);
     }
 
+    [Theory]
+    [InlineData(0)]
+    [InlineData(123)]
+    [InlineData(255)]
+    public void LiteralAddressWriteUsesTheHelperParameter(byte value)
+    {
+        var cpu = ExecuteProgram($$"""
+            Store(42);
+            Store({{value}});
+            test_stop();
+            while (true) ;
+            static extern void test_stop();
+            static void Store(byte value) => poke(0x6000, value);
+            """);
+        Assert.Equal(value, cpu.Memory[0x6000]);
+        Assert.Equal(0x800, cpu.SoftwareStackPointer);
+        Assert.Equal(0xFD, cpu.SP);
+    }
+
     [Fact]
     public void NestedReadsPreserveTheWriteAddress()
     {
