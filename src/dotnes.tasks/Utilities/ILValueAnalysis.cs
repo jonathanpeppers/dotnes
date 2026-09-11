@@ -26,8 +26,7 @@ sealed class ILValueAnalysis
         ProducesValue = new bool[instructions.Length];
         Escapes = new bool[instructions.Length];
         var stack = new List<int>();
-        var targets = new HashSet<int>(instructions.Where(i => IsBranch(i.OpCode) && i.Integer.HasValue)
-            .Select(i => i.Integer!.Value));
+        var targets = new HashSet<int>(instructions.Select(GetBranchTarget).OfType<int>());
 
         void EndRegion()
         {
@@ -82,6 +81,19 @@ sealed class ILValueAnalysis
     internal static bool IsBranch(ILOpCode code) =>
         opcodes.TryGetValue((ushort)code, out var op)
         && op.FlowControl is FlowControl.Branch or FlowControl.Cond_Branch;
+
+    internal static int? GetBranchTarget(ILInstruction instruction)
+    {
+        if (!IsBranch(instruction.OpCode) || instruction.Integer is not int operand)
+            return null;
+        var op = opcodes[(ushort)instruction.OpCode];
+        return op.OperandType switch
+        {
+            OperandType.ShortInlineBrTarget => instruction.Offset + 2 + unchecked((sbyte)operand),
+            OperandType.InlineBrTarget => instruction.Offset + 5 + operand,
+            _ => null
+        };
+    }
 
     static bool TryGetEffect(ILInstruction instruction, ReflectionCache reflection, out int pop, out int push)
     {
