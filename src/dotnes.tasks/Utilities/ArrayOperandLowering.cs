@@ -9,7 +9,7 @@ namespace dotnes;
 static class ArrayOperandLowering
 {
     internal const string UnsupportedSignatureMessage =
-        "Fixed RAM array helpers support only byte-sized scalar parameters and return values; captured/by-reference helper contexts are not supported.";
+        "Fixed RAM array helpers support only primitive byte, sbyte, and bool scalar parameters and return values (or void); enum scalars and captured/by-reference helper contexts are not supported.";
 
     internal static bool IndexNeedsPreservation(ILInstruction[] instructions, int elementAddress)
     {

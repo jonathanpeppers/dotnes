@@ -244,12 +244,17 @@ static void Update(byte[] actors, byte index)
 This uses the existing fixed-allocation model, not managed allocation or GC.
 Array-reference returns, `ref` array parameters, and helper parameters with
 other array element types or ranks are not supported. Array indexes and scalar
-arguments in this byte-array path are byte-sized; captured/by-reference helper
-contexts are not supported. An alias must keep the same
+arguments in this byte-array path are byte-sized. Scalar parameters and returns
+are limited to primitive `byte`, `sbyte`, and `bool` (or `void` returns), not
+byte-backed enums. Captured/by-reference array-helper contexts are not supported.
+An alias must keep the same
 array identity; assigning a different array to it is diagnosed. Mixing RAM
 arrays and read-only ROM tables in one helper call is also diagnosed, including
 through local and static-field aliases, rather than treating a ROM table as
 writable RAM. Existing ROM-only helper calls keep their previous behavior.
+That legacy path does not gain the new RAM-helper signature or mutability
+validation: writes through ROM parameters and unsupported legacy scalar/captured
+call shapes remain outside this contract.
 General conditional scalar-expression lowering is separate from this fixed-array
 ABI: unsupported merged scalar operands are diagnosed rather than replaced by
 an adjacent load from the wrong branch.

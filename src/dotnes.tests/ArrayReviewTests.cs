@@ -704,6 +704,23 @@ public class ArrayReviewTests(ITestOutputHelper output) : ExecutionTests(output)
         Assert.Contains("scalar", exception.Message);
     }
 
+    [Fact]
+    public void ByteBackedEnumInRamArrayHelperHasAnExplicitDiagnostic()
+    {
+        var exception = Assert.Throws<TranspileException>(() => GetProgramBytes(
+            """
+            byte[] data = new byte[8];
+            Set(data, PAD.A);
+            while (true) ;
+            static void Set(byte[] data, PAD buttons)
+            {
+                data[3] = (byte)buttons;
+            }
+            """));
+        Assert.Contains("primitive byte, sbyte, and bool", exception.Message);
+        Assert.Contains("enum", exception.Message);
+    }
+
     [Theory]
     [InlineData("3", "flag == 0 ? (byte)11 : (byte)22")]
     [InlineData("index", "(byte)((flag == 0 ? 11 : 22) + 5)")]

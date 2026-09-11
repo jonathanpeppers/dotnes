@@ -932,7 +932,8 @@ partial class IL2NESWriter
                     int? xorLiteral = null;
                     if (Instructions != null)
                     {
-                        var inputs = new ILValueAnalysis(Instructions, _reflectionCache).Inputs[Index];
+                        _byteCallValues ??= new ILValueAnalysis(Instructions, _reflectionCache);
+                        var inputs = _byteCallValues.Inputs[Index];
                         foreach (int producer in inputs)
                             if (producer >= 0 && Instructions[producer].GetLdcValue() is int literal)
                                 xorLiteral = literal;
