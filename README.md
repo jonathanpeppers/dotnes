@@ -216,6 +216,31 @@ The types of things I wanted to get working initially:
 * Music playback via the NES APU (see `samples/music`)
 * Metasprites, for loops, runtime arrays, and `rand8()` (see `samples/metasprites`)
 
+Fixed RAM `byte[]` arrays can be passed to static helpers without copying their
+contents. Helpers can read and write the caller's array, including passing the
+same array to nested helpers or to multiple parameters. For example:
+
+```csharp
+byte[] actors = new byte[8];
+actors[3] = 75;
+Update(actors, 3);
+while (true) ;
+
+static void Update(byte[] actors, byte index)
+{
+    actors[index]++;
+}
+```
+
+This uses the existing fixed-allocation model, not managed allocation or GC.
+Array-reference returns, `ref` array parameters, and helper parameters with
+other array element types or ranks are not supported. Array indexes and scalar
+arguments in this byte-array path are byte-sized. An alias must keep the same
+array identity; assigning a different array to it is diagnosed. Mixing RAM
+arrays and read-only ROM tables in one helper call is also diagnosed rather
+than treating a ROM table as writable RAM. Existing ROM-only helper calls keep
+their previous behavior.
+
 Down the road, I might think about support for:
 
 * Methods
@@ -327,4 +352,3 @@ To learn more about NES development, I found the following useful:
 * [INES File Format](https://wiki.nesdev.org/w/index.php/INES)
 * [6502 Instruction Set][6502-instructions]
 * [HxD Hex Editor](https://mh-nexus.de/en/hxd/)
-

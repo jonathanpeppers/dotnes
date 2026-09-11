@@ -45,7 +45,7 @@ public class ArrayExecutionTests(ITestOutputHelper output) : ExecutionTests(outp
             }
             """);
         Assert.Equal(new byte[] { 91, 91, 4 }, cpu.Memory[0x6000..0x6003]);
-        Assert.Equal(0x0700, cpu.SoftwareStackPointer);
+        Assert.Equal(Cpu6502.SoftwareStackTop, cpu.SoftwareStackPointer);
         Assert.Equal(0xFD, cpu.SP);
     }
 
@@ -86,7 +86,7 @@ public class ArrayExecutionTests(ITestOutputHelper output) : ExecutionTests(outp
             }
             """);
         Assert.Equal(new byte[] { 47, 99, 40, 7 }, cpu.Memory[0x6000..0x6004]);
-        Assert.Equal(0x0700, cpu.SoftwareStackPointer);
+        Assert.Equal(Cpu6502.SoftwareStackTop, cpu.SoftwareStackPointer);
     }
 
     [Fact]
@@ -113,7 +113,7 @@ public class ArrayExecutionTests(ITestOutputHelper output) : ExecutionTests(outp
             """);
         Assert.Equal(76, cpu.Memory[0x6000]);
         Assert.Equal(21, cpu.Memory[0x6001]);
-        Assert.Equal(0x0700, cpu.SoftwareStackPointer);
+        Assert.Equal(Cpu6502.SoftwareStackTop, cpu.SoftwareStackPointer);
     }
 
     [Theory]
@@ -145,7 +145,7 @@ public class ArrayExecutionTests(ITestOutputHelper output) : ExecutionTests(outp
             """);
         Assert.Equal(78, cpu.Memory[0x6000]);
         Assert.Equal(21, cpu.Memory[0x6001]);
-        Assert.Equal(0x0700, cpu.SoftwareStackPointer);
+        Assert.Equal(Cpu6502.SoftwareStackTop, cpu.SoftwareStackPointer);
     }
 
     [Theory]
@@ -175,7 +175,7 @@ public class ArrayExecutionTests(ITestOutputHelper output) : ExecutionTests(outp
             }
             """);
         Assert.Equal(10, cpu.Memory[0x6000]);
-        Assert.Equal(0x0700, cpu.SoftwareStackPointer);
+        Assert.Equal(Cpu6502.SoftwareStackTop, cpu.SoftwareStackPointer);
         Assert.Equal(0xFD, cpu.SP);
     }
 }

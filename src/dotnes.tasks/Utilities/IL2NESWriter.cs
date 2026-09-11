@@ -495,7 +495,9 @@ partial class IL2NESWriter : NESWriter
         /// <summary>Array base address for AbsoluteX addressing (runtime index).</summary>
         ushort ArrayBase,
         /// <summary>Element address for constant-index access; null for runtime-index.</summary>
-        ushort? ConstantElementAddress
+        ushort? ConstantElementAddress,
+        Local? ParameterArray = null,
+        ILInstruction? SavedIndex = null
     );
 
     /// <summary>

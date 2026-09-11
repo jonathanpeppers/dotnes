@@ -7,6 +7,9 @@ namespace dotnes;
 
 partial class IL2NESWriter
 {
+    bool ArrayIndexNeedsPreservation(int index) =>
+        Instructions is not null && ArrayOperandLowering.IndexNeedsPreservation(Instructions, index);
+
     internal Dictionary<string, bool[]> UserMethodArrayParameters { get; init; } = new(StringComparer.Ordinal);
     readonly Dictionary<int, int> _arrayArgumentAdjustments = new();
 
@@ -180,6 +183,11 @@ partial class IL2NESWriter
         var array = TryResolveArrayLocal(source);
         if (array is null || (array.ArraySize == 0 && array.LabelName is null && array.ArrayParameterIndex is null))
             return false;
+        if (Locals.TryGetValue(destination, out var existing) &&
+            (existing.ArraySize > 0 || existing.LabelName is not null || existing.ArrayParameterIndex is not null) &&
+            (existing.Address != array.Address || existing.LabelName != array.LabelName ||
+             existing.ArrayParameterIndex != array.ArrayParameterIndex))
+            throw new TranspileException("Reassigning an array alias to a different array is not supported.", MethodName);
         RemoveArrayArgumentLoads(source.Offset);
         Locals[destination] = array;
         Stack.Pop();

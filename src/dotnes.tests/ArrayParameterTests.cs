@@ -4,6 +4,42 @@ namespace dotnes.tests;
 
 public class ArrayParameterTests(ITestOutputHelper output) : ExecutionTests(output)
 {
+    [Theory]
+    [InlineData("target[index]++;", 24)]
+    [InlineData("target[1 + index] += source[index];", 48)]
+    public void CompoundUpdatesThroughArrayParameters(string update, byte expected)
+    {
+        var cpu = ExecuteProgram(
+            $$"""
+            byte[] data = new byte[8];
+            byte[] delta = new byte[8];
+            data[3] = 21;
+            data[4] = 21;
+            delta[3] = 9;
+            byte frame = 0;
+            while (frame < 3)
+            {
+                Helpers.Update(data, delta, 3);
+                frame++;
+            }
+            byte value = data[{{(update.Contains("1 +") ? 4 : 3)}}];
+            poke(0x6000, value);
+            test_stop();
+            while (true) ;
+            static extern void test_stop();
+            static class Helpers
+            {
+                public static void Update(byte[] target, byte[] source, byte index)
+                {
+                    {{update}}
+                }
+            }
+            """);
+        Assert.Equal(expected, cpu.Memory[0x6000]);
+        Assert.Equal(Cpu6502.SoftwareStackTop, cpu.SoftwareStackPointer);
+        Assert.Equal(0xFD, cpu.SP);
+    }
+
     [Fact]
     public void NestedHelpersPreserveAliasesAndCallerLocalsAcrossPages()
     {
@@ -49,7 +85,7 @@ public class ArrayParameterTests(ITestOutputHelper output) : ExecutionTests(outp
             }
             """);
         Assert.Equal(new byte[] { 41, 99, 7, 43 }, cpu.Memory[0x6000..0x6004]);
-        Assert.Equal(0x0700, cpu.SoftwareStackPointer);
+        Assert.Equal(Cpu6502.SoftwareStackTop, cpu.SoftwareStackPointer);
         Assert.Equal(0xFD, cpu.SP);
     }
 
@@ -82,7 +118,7 @@ public class ArrayParameterTests(ITestOutputHelper output) : ExecutionTests(outp
             }
             """);
         Assert.Equal(23, cpu.Memory[0x6000]);
-        Assert.Equal(0x0700, cpu.SoftwareStackPointer);
+        Assert.Equal(Cpu6502.SoftwareStackTop, cpu.SoftwareStackPointer);
         Assert.Equal(0xFD, cpu.SP);
     }
 
@@ -138,7 +174,7 @@ public class ArrayParameterTests(ITestOutputHelper output) : ExecutionTests(outp
             """);
         Assert.Equal(78, cpu.Memory[0x6000]);
         Assert.Equal(21, cpu.Memory[0x6001]);
-        Assert.Equal(0x0700, cpu.SoftwareStackPointer);
+        Assert.Equal(Cpu6502.SoftwareStackTop, cpu.SoftwareStackPointer);
         Assert.Equal(0xFD, cpu.SP);
     }
 }
