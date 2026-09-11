@@ -14,7 +14,7 @@ partial class Transpiler
 
         var analysis = new ILValueAnalysis(instructions, reflection);
         var selected = new HashSet<int>();
-        var words = new HashSet<int>();
+        var addresses = new HashSet<int>();
         for (int i = 0; i < instructions.Length; i++)
         {
             if (instructions[i].OpCode != ILOpCode.Call
@@ -24,7 +24,7 @@ partial class Transpiler
             if (address < 0 || !analysis.Consumers[address].Any(c => instructions[c].OpCode == ILOpCode.Dup))
                 continue;
             selected.Add(address);
-            words.Add(address);
+            addresses.Add(address);
         }
         if (selected.Count == 0)
             return instructions;
@@ -50,23 +50,9 @@ partial class Transpiler
                 }
             }
         }
-        if (!NumericTypes.TryGetValue(methodName, out var signature))
-            throw new TranspileException("Unable to resolve primitive types for shared memory operands.", methodName);
         var types = GetExpressionValueTypes(instructions, analysis, reflection, methodName);
-        var spillLocals = new Dictionary<int, int>();
-        var rewritten = ILExpressionSpiller.Rewrite(instructions, analysis, selected, words,
-            spillLocals, signature.Locals.Length);
-        var locals = signature.Locals.ToBuilder();
-        foreach (var pair in spillLocals)
-        {
-            var type = words.Contains(pair.Key) ? PrimitiveTypeCode.UInt16 : types[pair.Key];
-            if (type is null)
-                throw new TranspileException("Unable to classify a shared memory operand's primitive type.", methodName);
-            while (locals.Count <= pair.Value)
-                locals.Add(null);
-            locals[pair.Value] = type;
-        }
-        NumericTypes[methodName] = signature with { Locals = locals.ToImmutable() };
-        return rewritten;
+        foreach (int address in addresses)
+            types[address] = PrimitiveTypeCode.UInt16;
+        return RewriteTypedExpressionValues(instructions, analysis, selected, types, methodName);
     }
 }
