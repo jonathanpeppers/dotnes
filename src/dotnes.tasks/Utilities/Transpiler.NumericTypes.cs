@@ -62,6 +62,13 @@ partial class Transpiler
                     : instruction.OpCode == ILOpCode.Sub
                     || analysis.Inputs[i].Any(p => types[p] == PrimitiveTypeCode.SByte)
                         ? PrimitiveTypeCode.Int16 : PrimitiveTypeCode.UInt16;
+            else if (instruction.OpCode is ILOpCode.Mul or ILOpCode.Shl
+                && analysis.Inputs[i].Length == 2
+                && analysis.Inputs[i].All(p => p >= 0 && types[p] != null))
+                type = NumericValueUsage.IsExplicitlyNarrowed(instructions, analysis, i, byteOnly: true)
+                    ? PrimitiveTypeCode.Byte
+                    : analysis.Inputs[i].Any(p => types[p] is PrimitiveTypeCode.SByte or PrimitiveTypeCode.Int16)
+                        ? PrimitiveTypeCode.Int16 : PrimitiveTypeCode.UInt16;
             else if (IsScalarExpression(instruction.OpCode)
                 && analysis.Inputs[i].All(p => p >= 0 && types[p] != null && !analysis.Escapes[p]))
                 type = analysis.Inputs[i].Any(p => types[p] is PrimitiveTypeCode.Int16 or PrimitiveTypeCode.SByte)
