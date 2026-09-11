@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using System.Reflection.Metadata;
 
 namespace dotnes;
@@ -66,7 +67,14 @@ static class ILExpressionSpiller
             if (!first)
             {
                 int offset = nextOffset--;
-                if (ILValueAnalysis.GetBranchTarget(instruction) is int target)
+                if (instruction.OpCode == ILOpCode.Switch && instruction.Integer is int count)
+                {
+                    var bytes = ILValueAnalysis.GetBranchTargets(instruction)
+                        .SelectMany(target => BitConverter.GetBytes(target - offset - 5 - count * 4))
+                        .ToImmutableArray();
+                    instruction = instruction with { Offset = offset, Bytes = bytes };
+                }
+                else if (ILValueAnalysis.GetBranchTarget(instruction) is int target)
                 {
                     // Synthetic offsets need not be near the target. Promote a
                     // short branch so its IL displacement is not truncated.
