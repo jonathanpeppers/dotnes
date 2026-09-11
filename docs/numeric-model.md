@@ -34,6 +34,10 @@ carry/borrow before an explicit narrowing conversion.
 Signed right shifts with constant counts preserve the sign. Shift counts use
 the C# low-five-bit mask. Runtime-count signed right shifts produce an actionable
 diagnostic rather than being emitted as logical shifts.
+The unsigned right-shift operator `>>>` on a signed operand requires its CLR
+32-bit promotion and is diagnosed instead of shifting only its narrow storage.
+An explicit byte/ushort conversion before `>>>` requests different, supported
+narrow unsigned semantics.
 
 Byte sums preserve their promoted carry before a right shift or division:
 `(byte)((a + b) / 2)` and `(byte)((a + b) >> 1)` both produce 210 for

@@ -93,21 +93,35 @@ sealed class NumericRangeAnalysis
             if (instructions[i].OpCode is not (ILOpCode.Add or ILOpCode.Sub or ILOpCode.Mul or ILOpCode.Shl
                 or ILOpCode.And or ILOpCode.Or or ILOpCode.Xor))
                 continue;
+            if (instructions[i].OpCode is ILOpCode.Add or ILOpCode.Sub
+                && values.Inputs[i].Any(IsManagedAddress))
+                continue;
+            if (values.Consumers[i].Any(consumer => instructions[consumer].OpCode is
+                ILOpCode.Conv_ovf_u1 or ILOpCode.Conv_ovf_u1_un or ILOpCode.Conv_ovf_i1 or ILOpCode.Conv_ovf_i1_un
+                or ILOpCode.Conv_ovf_u2 or ILOpCode.Conv_ovf_u2_un or ILOpCode.Conv_ovf_i2 or ILOpCode.Conv_ovf_i2_un))
+                continue;
             var range = ValueRange(i);
             if (instructions[i].OpCode == ILOpCode.Shl && values.Inputs[i].Length == 2
                 && values.Inputs[i][1] >= 0 && instructions[values.Inputs[i][1]].GetLdcValue() is int shift
                 && (shift & 31) > 15 && InputRange(i, 0) is { } shifted
                 && (shifted.Min != 0 || shifted.Max != 0))
                 range = new(int.MinValue, int.MaxValue);
-            if (range == null || range is { Min: >= 0, Max: <= ushort.MaxValue }
+            if (range is { Min: >= 0, Max: <= ushort.MaxValue }
                 or { Min: >= short.MinValue, Max: <= short.MaxValue })
                 continue;
             if (!NumericValueUsage.IsExplicitlyNarrowed(instructions, values, i))
+            {
+                if (range == null)
+                    throw new TranspileException(
+                        $"Arithmetic at IL_{instructions[i].Offset:X4} has an unproven promoted range. " +
+                        "Store bounded operands in explicitly typed byte, sbyte, short or ushort locals, " +
+                        "or narrow before observing the result only if that truncation is intended.", methodName);
                 throw new TranspileException(
                     $"Arithmetic at IL_{instructions[i].Offset:X4} needs a promoted result wider than the " +
                     "supported word representation. An explicit conversion after a comparison or shift cannot " +
                     "restore a lost carry/sign bit. Narrow before that operation only if word wrapping is intended.",
                     methodName);
+            }
         }
     }
 
@@ -172,6 +186,8 @@ sealed class NumericRangeAnalysis
                 if (methods.TryGetValue(instruction.String, out var method))
                     return TypeRange(method.ReturnType);
                 var returnType = reflection.GetMethod(instruction.String).ReturnType;
+                if (returnType.IsEnum)
+                    returnType = Enum.GetUnderlyingType(returnType);
                 if (returnType == typeof(byte)) return new(0, byte.MaxValue);
                 if (returnType == typeof(sbyte)) return new(sbyte.MinValue, sbyte.MaxValue);
                 if (returnType == typeof(ushort)) return new(0, ushort.MaxValue);
@@ -199,6 +215,20 @@ sealed class NumericRangeAnalysis
                     left.Value.Max * right.Value.Min, left.Value.Max * right.Value.Max }.Max()),
             ILOpCode.Shl when right.Value.Min == right.Value.Max && (right.Value.Min & 31) <= 15 =>
                 new(left.Value.Min << (int)(right.Value.Min & 31), left.Value.Max << (int)(right.Value.Min & 31)),
+            ILOpCode.Shr when right.Value.Min == right.Value.Max =>
+                new(left.Value.Min >> (int)(right.Value.Min & 31), left.Value.Max >> (int)(right.Value.Min & 31)),
+            ILOpCode.Shr_un when left.Value.Min >= 0 && right.Value.Min == right.Value.Max =>
+                new(left.Value.Min >> (int)(right.Value.Min & 31), left.Value.Max >> (int)(right.Value.Min & 31)),
+            ILOpCode.Shr => new(Math.Min(left.Value.Min, 0), Math.Max(left.Value.Max, 0)),
+            ILOpCode.Shr_un when left.Value.Min >= 0 => new(0, left.Value.Max),
+            ILOpCode.Div when right.Value.Min > 0 => new(
+                new[] { left.Value.Min / right.Value.Min, left.Value.Min / right.Value.Max,
+                    left.Value.Max / right.Value.Min, left.Value.Max / right.Value.Max }.Min(),
+                new[] { left.Value.Min / right.Value.Min, left.Value.Min / right.Value.Max,
+                    left.Value.Max / right.Value.Min, left.Value.Max / right.Value.Max }.Max()),
+            ILOpCode.Rem when right.Value.Min > 0 => new(
+                left.Value.Min >= 0 ? 0 : -right.Value.Max + 1,
+                left.Value.Max <= 0 ? 0 : right.Value.Max - 1),
             ILOpCode.And when right.Value.Min == right.Value.Max && right.Value.Min >= 0 => new(0, right.Value.Max),
             ILOpCode.And when left.Value.Min >= 0 => new(0, left.Value.Max),
             ILOpCode.And when right.Value.Min >= 0 => new(0, right.Value.Max),
@@ -218,6 +248,16 @@ sealed class NumericRangeAnalysis
             return new(sbyte.MinValue, sbyte.MaxValue);
         return min >= short.MinValue && max <= short.MaxValue
             ? new(short.MinValue, short.MaxValue) : new(int.MinValue, int.MaxValue);
+    }
+
+    bool IsManagedAddress(int producer)
+    {
+        if (producer < 0)
+            return false;
+        var code = instructions[producer].OpCode;
+        return code is ILOpCode.Ldloca or ILOpCode.Ldloca_s or ILOpCode.Ldflda or ILOpCode.Ldsflda or ILOpCode.Ldelema
+            || code is ILOpCode.Conv_i or ILOpCode.Conv_u or ILOpCode.Add or ILOpCode.Sub
+                && values.Inputs[producer].Any(IsManagedAddress);
     }
 
     static bool FitsWord(Range range) => range is { Min: >= 0, Max: <= ushort.MaxValue }

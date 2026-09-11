@@ -68,6 +68,12 @@ partial class IL2NESWriter
                 // Skip for the final ret (it naturally falls through to the epilogue).
                 if (MethodName != null && Instructions != null && Index < Instructions.Length - 1)
                     EmitWithLabel(Opcode.JMP, AddressMode.Absolute, $"{MethodName}_epilogue");
+                if (WordNumericType(_numericTypes?.ReturnType))
+                {
+                    Stack.Clear();
+                    _accState = AccumulatorState.Empty;
+                    _savedState = SavedValueState.None;
+                }
                 break;
             case ILOpCode.Dup:
                 if (Stack.Count > 0)

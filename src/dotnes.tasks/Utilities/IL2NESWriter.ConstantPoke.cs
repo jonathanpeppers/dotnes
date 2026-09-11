@@ -61,7 +61,7 @@ partial class IL2NESWriter
 
         // Deferred literals may emit nothing. Never remove earlier control flow
         // or infer this call's value from stale accumulator/local bookkeeping.
-        if (convertedValue)
+        if (convertedValue || valueIsArgument)
         {
             if (!TryNumericOperands(out _, out _))
                 throw new TranspileException(

@@ -88,12 +88,14 @@ partial class IL2NESWriter
                     : _numericValues.Inputs[producer].Any(input => WordNumericType(NumericType(input)))
                         ? PrimitiveTypeCode.UInt16 : PrimitiveTypeCode.Byte,
             ILOpCode.Add or ILOpCode.Sub when _numericValues.Inputs[producer].Length == 2
-                && NumericType(_numericValues.Inputs[producer][0]) is PrimitiveTypeCode.Byte or PrimitiveTypeCode.SByte
-                && NumericType(_numericValues.Inputs[producer][1]) is PrimitiveTypeCode.Byte or PrimitiveTypeCode.SByte =>
+                && _numericValues.Inputs[producer].All(input => NumericType(input) is PrimitiveTypeCode.Byte
+                    or PrimitiveTypeCode.SByte or PrimitiveTypeCode.Int16 or PrimitiveTypeCode.UInt16) =>
                     instruction.OpCode == ILOpCode.Sub
                     || SignedNumericType(NumericType(_numericValues.Inputs[producer][0]))
                     || SignedNumericType(NumericType(_numericValues.Inputs[producer][1]))
                         ? PrimitiveTypeCode.Int16 : PrimitiveTypeCode.UInt16,
+            ILOpCode.Shr or ILOpCode.Shr_un when _numericValues.Inputs[producer].Length == 2 =>
+                NumericType(_numericValues.Inputs[producer][0]),
             _ => null,
         };
     }
@@ -239,9 +241,12 @@ partial class IL2NESWriter
                 Stack.Push(code == ILOpCode.Conv_i2 ? unchecked((short)value) : unchecked((ushort)value));
                 if (!_ushortInAX)
                 {
-                    bool signed = _numericValues != null && _numericValues.Inputs[Index].Length == 1
-                        && NumericType(_numericValues.Inputs[Index][0]) == PrimitiveTypeCode.SByte;
-                    EmitNumericExtension(signed);
+                    int producer = _numericValues != null && _numericValues.Inputs[Index].Length == 1
+                        ? _numericValues.Inputs[Index][0] : -1;
+                    if (producer >= 0 && Instructions![producer].GetLdcValue() is int constant)
+                        Emit(Opcode.LDX, AddressMode.Immediate, (byte)(constant >> 8));
+                    else
+                        EmitNumericExtension(SignedNumericType(NumericType(producer)));
                     _ushortInAX = true;
                 }
                 break;
@@ -254,8 +259,10 @@ partial class IL2NESWriter
         if (instruction.OpCode != ILOpCode.Ret || _numericTypes == null
             || !WordNumericType(_numericTypes.ReturnType) || _ushortInAX)
             return;
-        bool signed = Index > 0 && SignedNumericType(NumericType(Index - 1));
-        if (Index > 0 && Instructions![Index - 1].GetLdcValue() is int constant)
+        int producer = _numericValues != null && _numericValues.Inputs[Index].Length == 1
+            ? _numericValues.Inputs[Index][0] : -1;
+        bool signed = SignedNumericType(NumericType(producer));
+        if (producer >= 0 && Instructions![producer].GetLdcValue() is int constant)
             Emit(Opcode.LDX, AddressMode.Immediate, (byte)(constant >> 8));
         else
             EmitNumericExtension(signed);
@@ -448,12 +455,17 @@ partial class IL2NESWriter
 
     internal bool TryNumericShift(ILInstruction instruction)
     {
-        if (instruction.OpCode != ILOpCode.Shr || _numericValues == null
+        if (instruction.OpCode is not (ILOpCode.Shr or ILOpCode.Shr_un) || _numericValues == null
             || _numericValues.Inputs[Index].Length != 2)
             return false;
         int lhs = _numericValues.Inputs[Index][0], rhs = _numericValues.Inputs[Index][1];
         if (!SignedNumericType(NumericType(lhs)))
             return false;
+        if (instruction.OpCode == ILOpCode.Shr_un)
+            throw new TranspileException(
+                $"Signed logical right shift at IL_{instruction.Offset:X4} requires CLR 32-bit promotion, " +
+                "which this backend does not implement. Use an arithmetic right shift, or explicitly " +
+                "convert to byte/ushort first only if that narrowing is intended.", MethodName);
         if (rhs < 0 || Instructions![rhs].GetLdcValue() is not int count)
             throw new TranspileException(
                 $"Signed right shift at IL_{instruction.Offset:X4} requires a constant count. " +
