@@ -76,6 +76,15 @@ seventeen bits. If those bits remain observable, the compiler diagnoses that
 unsupported result **before** inserting temporary spill storage. A final byte
 cast does not authorize losing carry before a shift or comparison.
 
+Opt-in [`NESOptimizePromotedByteArithmetic`](msbuild-properties.md#nesoptimizepromotedbytearithmetic)
+specializes addition/subtraction of two proven unsigned-byte operands without
+changing these semantics. The 6502 low-byte carry/borrow constructs the complete
+high byte directly, replacing generic word scratch traffic. Operand reconstruction
+must still pass the existing purity, single-use, live-value, and branch-entry
+checks; signed/word operands keep their generic path. This is not range-based
+narrowing of `int` indexes or a new calling convention. It defaults to `false`
+to preserve existing ROM bytes.
+
 Runtime-count unsigned right shifts also preserve a proven byte sum's ninth bit.
 An explicit word conversion before the shift defines wrapping: for example,
 `(byte)((ushort)(value + 1) >> count)` produces 128 for byte `value = 255`

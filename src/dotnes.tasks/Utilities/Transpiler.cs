@@ -448,6 +448,7 @@ partial class Transpiler : IDisposable
         using var writer = new IL2NESWriter(new MemoryStream(), logger: _logger, reflectionCache: reflectionCache)
         {
             Instructions = instructions,
+            OptimizePromotedByteArithmetic = OptimizePromotedByteArithmetic,
             UsedMethods = UsedMethods,
             UserMethodNames = new HashSet<string>(UserMethods.Keys, StringComparer.Ordinal),
             UserMethodArrayParameters = arrayParameters,
@@ -548,6 +549,7 @@ partial class Transpiler : IDisposable
             using var methodWriter = new IL2NESWriter(new MemoryStream(), logger: _logger, reflectionCache: reflectionCache)
             {
                 Instructions = methodIL,
+                OptimizePromotedByteArithmetic = OptimizePromotedByteArithmetic,
                 UsedMethods = UsedMethods,
                 UserMethodNames = new HashSet<string>(UserMethods.Keys, StringComparer.Ordinal),
                 UserMethodArrayParameters = arrayParameters,

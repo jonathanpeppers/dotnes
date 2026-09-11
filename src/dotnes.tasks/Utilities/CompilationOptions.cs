@@ -23,4 +23,10 @@ public sealed class CompilationOptions
     /// Defaults to false. Unproven helpers and native entry points retain standard storage.
     /// </summary>
     public bool OptimizeByteHelpers { get; set; }
+
+    /// <summary>
+    /// Emits compact full-width addition/subtraction for proven unsigned-byte operands.
+    /// Defaults to false to preserve existing ROM bytes. Does not narrow results or change the ABI.
+    /// </summary>
+    public bool OptimizePromotedByteArithmetic { get; set; }
 }

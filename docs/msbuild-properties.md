@@ -25,6 +25,36 @@ issues.
 </PropertyGroup>
 ```
 
+### `NESOptimizePromotedByteArithmetic`
+
+Emit compact full-width addition and subtraction when both operands are proven
+unsigned bytes and their loads can be safely emitted at the operation.
+
+| | |
+|---|---|
+| **Type** | `bool` |
+| **Default** | `false` |
+
+```xml
+<PropertyGroup>
+  <NESOptimizePromotedByteArithmetic>true</NESOptimizePromotedByteArithmetic>
+</PropertyGroup>
+```
+
+The result still occupies A:X: addition retains its ninth carry bit and subtraction
+retains its signed borrow. This reduces scratch loads/stores, not integer widths.
+It is useful for promoted expressions such as `int index = 8 + offset` with a byte
+`offset`; 255 + 8 must still produce 263, not 7.
+
+The existing pure-operand, liveness, and control-flow checks remain mandatory.
+Signed/word operands and unproven expressions retain generic emission. Native calls,
+argument evaluation, spill storage, and the calling convention are unchanged;
+this option does not bypass the separate byte-helper native-code barrier.
+The default preserves existing ROM bytes. Changing this property invalidates
+incremental transpilation and setting it back to `false` restores default codegen.
+The in-memory API exposes the same switch as
+`CompilationOptions.OptimizePromotedByteArithmetic`.
+
 ### `NESOptimizeByteHelpers`
 
 Use private RAM parameter homes for proven non-reentrant byte helpers instead of

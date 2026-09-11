@@ -46,6 +46,7 @@ public static class NesCompiler
         {
             LeaveAssemblyReadersOpen = true,
             OptimizeByteHelpers = options.OptimizeByteHelpers,
+            OptimizePromotedByteArithmetic = options.OptimizePromotedByteArithmetic,
         };
         return transpiler.CompileProgram(out _, out _);
     }

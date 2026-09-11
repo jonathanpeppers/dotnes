@@ -6,6 +6,8 @@ namespace dotnes;
 
 partial class IL2NESWriter
 {
+    internal bool OptimizePromotedByteArithmetic { get; init; }
+
     MethodNumericTypes? _numericTypes;
     IReadOnlyDictionary<string, MethodNumericTypes>? _numericMethods;
     IReadOnlyDictionary<string, PrimitiveTypeCode?>? _numericFields;
@@ -345,31 +347,45 @@ partial class IL2NESWriter
             return false;
         }
 
-        EmitNumericOperand(left);
-        Emit(Opcode.STA, AddressMode.ZeroPage, TEMP);
-        Emit(Opcode.STX, AddressMode.ZeroPage, TEMP2);
-        EmitNumericOperand(right);
-        if (isAdd)
+        if (OptimizePromotedByteArithmetic && leftType == PrimitiveTypeCode.Byte && rightType == PrimitiveTypeCode.Byte)
         {
-            Emit(Opcode.CLC, AddressMode.Implied);
-            Emit(Opcode.ADC, AddressMode.ZeroPage, TEMP);
-            Emit(Opcode.STA, AddressMode.ZeroPage, TEMP);
-            Emit(Opcode.TXA, AddressMode.Implied);
-            Emit(Opcode.ADC, AddressMode.ZeroPage, TEMP2);
+            EmitUnsignedByteOperand(Opcode.LDA, left);
+            Emit(isAdd ? Opcode.CLC : Opcode.SEC, AddressMode.Implied);
+            EmitUnsignedByteOperand(isAdd ? Opcode.ADC : Opcode.SBC, right);
+            Emit(Opcode.LDX, AddressMode.Immediate, 0);
+            Emit(isAdd ? Opcode.BCC : Opcode.BCS, AddressMode.Relative, 1);
+            Emit(isAdd ? Opcode.INX : Opcode.DEX, AddressMode.Implied);
+            // Match the generic word path's low-byte N/Z flags without changing A:X.
+            Emit(Opcode.ORA, AddressMode.Immediate, 0);
         }
         else
         {
-            Emit(Opcode.STA, AddressMode.ZeroPage, TEMP3);
-            Emit(Opcode.LDA, AddressMode.ZeroPage, TEMP);
-            Emit(Opcode.SEC, AddressMode.Implied);
-            Emit(Opcode.SBC, AddressMode.ZeroPage, TEMP3);
+            EmitNumericOperand(left);
             Emit(Opcode.STA, AddressMode.ZeroPage, TEMP);
-            Emit(Opcode.STX, AddressMode.ZeroPage, TEMP3);
-            Emit(Opcode.LDA, AddressMode.ZeroPage, TEMP2);
-            Emit(Opcode.SBC, AddressMode.ZeroPage, TEMP3);
+            Emit(Opcode.STX, AddressMode.ZeroPage, TEMP2);
+            EmitNumericOperand(right);
+            if (isAdd)
+            {
+                Emit(Opcode.CLC, AddressMode.Implied);
+                Emit(Opcode.ADC, AddressMode.ZeroPage, TEMP);
+                Emit(Opcode.STA, AddressMode.ZeroPage, TEMP);
+                Emit(Opcode.TXA, AddressMode.Implied);
+                Emit(Opcode.ADC, AddressMode.ZeroPage, TEMP2);
+            }
+            else
+            {
+                Emit(Opcode.STA, AddressMode.ZeroPage, TEMP3);
+                Emit(Opcode.LDA, AddressMode.ZeroPage, TEMP);
+                Emit(Opcode.SEC, AddressMode.Implied);
+                Emit(Opcode.SBC, AddressMode.ZeroPage, TEMP3);
+                Emit(Opcode.STA, AddressMode.ZeroPage, TEMP);
+                Emit(Opcode.STX, AddressMode.ZeroPage, TEMP3);
+                Emit(Opcode.LDA, AddressMode.ZeroPage, TEMP2);
+                Emit(Opcode.SBC, AddressMode.ZeroPage, TEMP3);
+            }
+            Emit(Opcode.TAX, AddressMode.Implied);
+            Emit(Opcode.LDA, AddressMode.ZeroPage, TEMP);
         }
-        Emit(Opcode.TAX, AddressMode.Implied);
-        Emit(Opcode.LDA, AddressMode.ZeroPage, TEMP);
         if (Stack.Count > 0) Stack.Pop();
         if (Stack.Count > 0) Stack.Pop();
         Stack.Push(0);
@@ -379,6 +395,28 @@ partial class IL2NESWriter
             && rightType is PrimitiveTypeCode.Byte or PrimitiveTypeCode.SByte)
             _verifiedPromotedResults.Add(Index);
         return true;
+    }
+
+    void EmitUnsignedByteOperand(Opcode opcode, int producer)
+    {
+        var instruction = Instructions![producer];
+        if (instruction.GetLdcValue() is int constant)
+            Emit(opcode, AddressMode.Immediate, (byte)constant);
+        else if (instruction.GetLdlocIndex() is int local)
+            Emit(opcode, AddressMode.Absolute, checked((ushort)Locals[local].Address!.Value));
+        else if (NumericArgIndex(instruction) is int parameter)
+        {
+            Emit(Opcode.LDY, AddressMode.Immediate, checked((byte)ParameterOffset(parameter)));
+            Emit(opcode, AddressMode.IndirectIndexed, sp);
+        }
+        else if (instruction.OpCode == ILOpCode.Ldsfld && instruction.String is string field)
+            Emit(opcode, AddressMode.Absolute, StaticFieldAddresses[field]);
+        else if (instruction.OpCode == ILOpCode.Ldfld && instruction.String is string closureField)
+            Emit(opcode, AddressMode.Absolute, ClosureFieldAddresses[closureField]);
+        else if (instruction.OpCode is ILOpCode.Conv_i1 or ILOpCode.Conv_u1 or ILOpCode.Conv_i2 or ILOpCode.Conv_u2)
+            EmitUnsignedByteOperand(opcode, _numericValues!.Inputs[producer][0]);
+        else
+            throw new TranspileException("Expected a proven pure unsigned-byte operand.", MethodName);
     }
 
     void WriteLegacyNumericAddSub(bool isAdd)
