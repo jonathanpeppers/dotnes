@@ -137,6 +137,22 @@ partial class IL2NESWriter
         return true;
     }
 
+    void RefreshByteResultFlags()
+    {
+        var block = CurrentBlock;
+        if (block is null || block.Count == 0)
+            return;
+
+        var last = block[block.Count - 1];
+        // These built-ins explicitly restore A with TXA after stack cleanup.
+        if (last.Opcode == Opcode.JSR && last.Operand is LabelOperand label &&
+            label.Label is nameof(rect_overlap) or nameof(sprite_overlap))
+            return;
+        if (last.Opcode is Opcode.JSR or Opcode.LDX or Opcode.LDY
+            or Opcode.INX or Opcode.INY or Opcode.DEX or Opcode.DEY)
+            Emit(Opcode.CMP, AddressMode.Immediate, 0);
+    }
+
     /// <summary>
     /// Tries to emit a 16-bit comparison and branch sequence.
     /// When A:X hold a 16-bit runtime value (from a word local load), this method

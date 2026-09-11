@@ -1534,6 +1534,8 @@ partial class IL2NESWriter
                         Emit(Opcode.ORA, AddressMode.ZeroPage, TEMP);
                         _ushortInAX = false;
                     }
+                    else
+                        RefreshByteResultFlags();
                     EmitWithLabel(Opcode.BEQ, AddressMode.Relative, labelName);
                     if (Stack.Count > 0)
                         Stack.Pop();
@@ -1552,6 +1554,8 @@ partial class IL2NESWriter
                         Emit(Opcode.ORA, AddressMode.ZeroPage, TEMP);
                         _ushortInAX = false;
                     }
+                    else
+                        RefreshByteResultFlags();
                     EmitWithLabel(Opcode.BNE, AddressMode.Relative, labelName);
                     if (Stack.Count > 0)
                         Stack.Pop();
@@ -1717,6 +1721,8 @@ partial class IL2NESWriter
                         Emit(Opcode.ORA, AddressMode.ZeroPage, TEMP);
                         _ushortInAX = false;
                     }
+                    else
+                        RefreshByteResultFlags();
                     Emit(Opcode.BEQ, AddressMode.Relative, 3); // skip JMP if zero
                     EmitWithLabel(Opcode.JMP, AddressMode.Absolute, labelName);
                     if (Stack.Count > 0)
@@ -1735,6 +1741,8 @@ partial class IL2NESWriter
                         Emit(Opcode.ORA, AddressMode.ZeroPage, TEMP);
                         _ushortInAX = false;
                     }
+                    else
+                        RefreshByteResultFlags();
                     Emit(Opcode.BNE, AddressMode.Relative, 3); // skip JMP if non-zero
                     EmitWithLabel(Opcode.JMP, AddressMode.Absolute, labelName);
                     if (Stack.Count > 0)

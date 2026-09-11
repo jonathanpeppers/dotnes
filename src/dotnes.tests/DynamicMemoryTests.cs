@@ -436,6 +436,28 @@ public class DynamicMemoryTests(ITestOutputHelper output) : ExecutionTests(outpu
     }
 
     [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(128)]
+    [InlineData(255)]
+    public void ConstantWriteAfterHelperReturnUsesItsLiteral(byte input)
+    {
+        var cpu = ExecuteProgram("""
+            byte value = peek(0x6100);
+            if (Identity(value) != 0) poke(0x6000, 1);
+            if (Identity(value) == 0) poke(0x6001, 1);
+            test_stop();
+            while (true) ;
+            static extern void test_stop();
+            static byte Identity(byte value) => value;
+            """, cpu => cpu.Memory[0x6100] = input);
+        Assert.Equal(input != 0 ? 1 : 0, cpu.Memory[0x6000]);
+        Assert.Equal(input == 0 ? 1 : 0, cpu.Memory[0x6001]);
+        Assert.Equal(0x800, cpu.SoftwareStackPointer);
+        Assert.Equal(0xFD, cpu.SP);
+    }
+
+    [Theory]
     [InlineData(false)]
     [InlineData(true)]
     public void SharedAddressSpillsMaterializePromotedWordOperands(bool subtract)
