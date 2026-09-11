@@ -92,18 +92,21 @@ public abstract class RoslynTests
         return _stream;
     }
 
-    private protected Transpiler ReadProgram(string csharpSource, IList<AssemblyReader>? additionalAssemblyFiles = null, bool allowUnsafe = false)
+    private protected Transpiler ReadProgram(string csharpSource, IList<AssemblyReader>? additionalAssemblyFiles = null, bool allowUnsafe = false, bool optimizeByteHelpers = false)
     {
         CompileAssembly(csharpSource, allowUnsafe);
         var assemblyFiles = new List<AssemblyReader> { new AssemblyReader(new StreamReader(Utilities.GetResource("chr_generic.s"))) };
         if (additionalAssemblyFiles != null)
             assemblyFiles.AddRange(additionalAssemblyFiles);
-        return new Transpiler(_stream, assemblyFiles, _logger);
+        return new Transpiler(_stream, assemblyFiles, _logger)
+        {
+            OptimizeByteHelpers = optimizeByteHelpers,
+        };
     }
 
-    private protected Transpiler BuildProgram(string csharpSource, out Program6502 program, IList<AssemblyReader>? additionalAssemblyFiles = null, bool allowUnsafe = false)
+    private protected Transpiler BuildProgram(string csharpSource, out Program6502 program, IList<AssemblyReader>? additionalAssemblyFiles = null, bool allowUnsafe = false, bool optimizeByteHelpers = false)
     {
-        var transpiler = ReadProgram(csharpSource, additionalAssemblyFiles, allowUnsafe);
+        var transpiler = ReadProgram(csharpSource, additionalAssemblyFiles, allowUnsafe, optimizeByteHelpers);
         try
         {
             program = transpiler.BuildProgram6502(out _, out _);

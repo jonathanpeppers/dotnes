@@ -16,6 +16,8 @@ partial class Transpiler
     /// </summary>
     public IEnumerable<ILInstruction> ReadStaticVoidMain()
     {
+        _byteHelperDefinitions.Clear();
+        _ambiguousByteHelperNames = false;
         GetUsedMethods(_reader);
         var arrayValues = GetArrayValues(_reader);
 
@@ -98,6 +100,7 @@ partial class Transpiler
                 var instructions = ReadMethodBody(methodDef, arrayValues).ToArray();
                 UserMethods[cleanName] = instructions;
                 _userMethodDefinitions[cleanName] = methodDef;
+                RecordByteHelperDefinition(cleanName, methodDef);
 
                 // Parse exception regions (try/finally) for user methods
                 var userRegions = ParseExceptionRegions(methodDef);
