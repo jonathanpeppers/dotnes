@@ -50,6 +50,23 @@ partial class Transpiler
                 }
             }
         }
-        return ILExpressionSpiller.Rewrite(instructions, analysis, selected, words);
+        if (!NumericTypes.TryGetValue(methodName, out var signature))
+            throw new TranspileException("Unable to resolve primitive types for shared memory operands.", methodName);
+        var types = GetExpressionValueTypes(instructions, analysis, reflection, methodName);
+        var spillLocals = new Dictionary<int, int>();
+        var rewritten = ILExpressionSpiller.Rewrite(instructions, analysis, selected, words,
+            spillLocals, signature.Locals.Length);
+        var locals = signature.Locals.ToBuilder();
+        foreach (var pair in spillLocals)
+        {
+            var type = words.Contains(pair.Key) ? PrimitiveTypeCode.UInt16 : types[pair.Key];
+            if (type is null)
+                throw new TranspileException("Unable to classify a shared memory operand's primitive type.", methodName);
+            while (locals.Count <= pair.Value)
+                locals.Add(null);
+            locals[pair.Value] = type;
+        }
+        NumericTypes[methodName] = signature with { Locals = locals.ToImmutable() };
+        return rewritten;
     }
 }
