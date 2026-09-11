@@ -353,8 +353,9 @@ partial class Transpiler : IDisposable
         // Validate source arithmetic before synthetic narrowing can hide a
         // wider CLR intermediate from the native-width lowering passes.
         var numericFields = GetNumericFieldTypes();
-        new NumericRangeAnalysis(instructions, NumericTypes["main"], NumericTypes, reflectionCache, numericFields)
-            .ValidatePromotedArithmetic("main");
+        if (instructions.Length > 0)
+            new NumericRangeAnalysis(instructions, NumericTypes["main"], NumericTypes, reflectionCache, numericFields)
+                .ValidatePromotedArithmetic("main");
         foreach (var pair in UserMethods)
             new NumericRangeAnalysis(pair.Value, NumericTypes[pair.Key], NumericTypes, reflectionCache, numericFields)
                 .ValidatePromotedArithmetic(pair.Key);

@@ -8,6 +8,30 @@ namespace dotnes.tests;
 
 public class NesCompilerTests(ITestOutputHelper output) : RoslynTests(output)
 {
+    [Fact]
+    public void NoRecognizedEntryPointDoesNotRequireSyntheticLocalMetadata()
+    {
+        var compilation = CSharpCompilation.Create(
+            "AlternateLanguageEntry",
+            [CSharpSyntaxTree.ParseText("public static class Entry { public static void AlternateMain() { NES.NESLib.ppu_off(); } }")],
+            [
+                MetadataReference.CreateFromFile(typeof(object).Assembly.Location),
+                MetadataReference.CreateFromFile(Path.Combine(Path.GetDirectoryName(typeof(object).Assembly.Location)!, "System.Runtime.dll")),
+                MetadataReference.CreateFromFile(Path.Combine(Path.GetDirectoryName(typeof(object).Assembly.Location)!, "netstandard.dll")),
+                MetadataReference.CreateFromFile(typeof(NESLib).Assembly.Location),
+            ],
+            new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+        using var assembly = new MemoryStream();
+        var emitted = compilation.Emit(assembly);
+        Assert.True(emitted.Success, string.Join(Environment.NewLine, emitted.Diagnostics));
+        assembly.Position = 0;
+        using var transpiler = new Transpiler(assembly, Array.Empty<AssemblyReader>());
+        Assert.Empty(transpiler.ReadStaticVoidMain());
+        Assert.False(transpiler.NumericTypes.ContainsKey("main"));
+        var program = transpiler.BuildProgram6502(out _, out _);
+        Assert.NotEmpty(program.ToBytes());
+    }
+
     const string NativeCaller = """
         static extern void native_write();
         native_write();
