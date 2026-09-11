@@ -18,7 +18,7 @@ partial class IL2NESWriter
         int firstArgument = Index - count;
         // Loading the first argument may push an older outer-call operand.
         // That push belongs to the caller, not this replaceable argument span.
-        if (firstArgument > 0 && _numericValues.Outputs[firstArgument - 1].Length != 0)
+        if (_numericValues.Predecessors[firstArgument].Any(p => _numericValues.Outputs[p].Length != 0))
             return false;
         for (int i = Index - count; i < Index; i++)
         {

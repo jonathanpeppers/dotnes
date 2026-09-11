@@ -7,6 +7,37 @@ public class ByteCallExecutionTests(ITestOutputHelper output) : ExecutionTests(o
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
+    public void CapturedCallerForwardsOnlyItsStableContext(bool earlierArgument)
+    {
+        var cpu = ExecuteProgram(
+            $$"""
+            byte captured = 7;
+            Outer(43);
+            test_stop(); while (true) ;
+            static extern void test_stop();
+            static byte Next(byte value) => value;
+            void Outer(byte value)
+            {
+                Consume({{(earlierArgument ? "88, " : "")}}(byte)(Next(value) + 1));
+                byte c = captured;
+                poke(0x6002, c);
+            }
+            void Consume({{(earlierArgument ? "byte first, " : "")}}byte value)
+            {
+                byte c = captured;
+                poke(0x6001, c);
+                byte v = value;
+                poke(0x6000, v);
+                {{(earlierArgument ? "byte a = first; poke(0x6003, a);" : "")}}
+            }
+            """);
+        Assert.Equal(new byte[] { 44, 7, 7, (byte)(earlierArgument ? 88 : 0) }, cpu.Memory[0x6000..0x6004]);
+        Assert.Equal(Cpu6502.SoftwareStackTop, cpu.SoftwareStackPointer);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
     public void ComputedValueCanBePassedToCapturedScalarHelper(bool earlierArgument)
     {
         var cpu = ExecuteProgram(

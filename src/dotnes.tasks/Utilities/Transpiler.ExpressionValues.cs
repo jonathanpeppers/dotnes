@@ -8,6 +8,7 @@ partial class Transpiler
     {
         instructions = MaterializeConditionalValues(instructions, reflection, method);
         var analysis = new ILValueAnalysis(instructions, reflection);
+        var stableAddresses = GetStableClosureArguments(instructions, method);
         var scalar = new bool[instructions.Length];
         var types = GetExpressionValueTypes(instructions, analysis, reflection, method);
         for (int i = 0; i < instructions.Length; i++)
@@ -113,7 +114,8 @@ partial class Transpiler
                     int first = Array.IndexOf(inputs, producer);
                     foreach (int input in inputs.Skip(first))
                     {
-                        if (input < 0 || (!scalar[input] && !ILExpressionSpiller.CanRematerialize(instructions[input]))
+                        if (input < 0 || (!scalar[input] && !ILExpressionSpiller.CanRematerialize(instructions[input])
+                                && !stableAddresses.Contains(input))
                             || arrayOperands.Contains(input))
                         {
                             compatible = false;
