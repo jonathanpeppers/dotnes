@@ -17,6 +17,8 @@ partial class IL2NESWriter
         if (ILBranchTargets.HasEntryAfter(Instructions, producer - 2, Index))
             return false;
         var source = Instructions[producer - 2];
+        if (DeclaredScalarType(source) != PrimitiveTypeCode.UInt16)
+            return false;
         if (source.GetLdlocIndex() is int local)
             return Locals.TryGetValue(local, out var value) && value.IsWord
                 && value.Address != null && value.ArraySize == 0 && value.LabelName == null;

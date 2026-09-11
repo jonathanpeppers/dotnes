@@ -335,6 +335,7 @@ partial class Transpiler : IDisposable
 
         // Pre-allocate user-defined static fields so all methods share the same addresses
         var (staticFields, wordStaticFields, staticFieldBytes, staticArrayFields) = PreAllocateStaticFields(instructions);
+        var numericFieldTypes = GetNumericFieldTypes();
 
         // Detect and set up closure struct support
         if (_closureFieldTypes.Count > 0)
@@ -364,6 +365,7 @@ partial class Transpiler : IDisposable
             TryFinallyRegions = MainExceptionRegions.Length > 0 ? MainExceptionRegions : null,
         };
 
+        writer.ConfigureNumericTypes(NumericTypes, numericFieldTypes);
         writer.StartBlockBuffering();
 
         // Translate IL to 6502 (single pass - sizeOfMain = 0 since we'll calculate later)
@@ -454,6 +456,7 @@ partial class Transpiler : IDisposable
                 ClosureArgIndex = _closureMethodArgIndex.TryGetValue(methodName, out var cai) ? cai : -1,
                 TryFinallyRegions = UserMethodExceptionRegions.TryGetValue(methodName, out var umer) ? umer : null,
             };
+            methodWriter.ConfigureNumericTypes(NumericTypes, numericFieldTypes);
             methodWriter.StartBlockBuffering();
 
             // If method has parameters, emit prologue to push last arg onto cc65 stack

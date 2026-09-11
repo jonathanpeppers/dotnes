@@ -41,6 +41,16 @@ partial class IL2NESWriter
         var value = Instructions[valueIndex];
         if (value.GetLdcValue() is < 0)
             throw new TranspileException("Variable shifts of negative integer constants are not supported.", MethodName);
+        if (value.GetLdlocIndex() is not null || NumericArgIndex(value) is not null ||
+            value.OpCode == ILOpCode.Ldsfld)
+        {
+            var type = DeclaredScalarType(value);
+            if (type is not (PrimitiveTypeCode.Byte or PrimitiveTypeCode.UInt16) ||
+                (NumericArgIndex(value) is not null && type != PrimitiveTypeCode.Byte))
+                throw new TranspileException(
+                    $"Variable shifts require a byte/ushort source and byte scalar parameters; source type '{type?.ToString() ?? "unknown"}' is not supported here.",
+                    MethodName);
+        }
         if (ILBranchTargets.HasEntryAfter(Instructions, valueIndex, Index) ||
             (value.GetLdcValue() is null && value.GetLdlocIndex() is null &&
             value.OpCode is not (ILOpCode.Ldarg_0 or ILOpCode.Ldarg_1 or ILOpCode.Ldarg_2 or ILOpCode.Ldarg_3
