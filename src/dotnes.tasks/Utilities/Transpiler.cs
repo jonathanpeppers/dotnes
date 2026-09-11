@@ -329,6 +329,15 @@ partial class Transpiler : IDisposable
             reflectionCache.RegisterExternMethod(kvp.Key, kvp.Value.argCount, kvp.Value.hasReturnValue);
         }
 
+        // Validate source arithmetic before synthetic narrowing can hide a
+        // wider CLR intermediate from the native-width lowering passes.
+        var numericFields = GetNumericFieldTypes();
+        new NumericRangeAnalysis(instructions, NumericTypes["main"], NumericTypes, reflectionCache, numericFields)
+            .ValidatePromotedArithmetic("main");
+        foreach (var pair in UserMethods)
+            new NumericRangeAnalysis(pair.Value, NumericTypes[pair.Key], NumericTypes, reflectionCache, numericFields)
+                .ValidatePromotedArithmetic(pair.Key);
+
         // Build main program block using label references (addresses resolved later)
         var externNames = new HashSet<string>(ExternMethods.Keys, StringComparer.Ordinal);
         var structLayouts = DetectStructLayouts();

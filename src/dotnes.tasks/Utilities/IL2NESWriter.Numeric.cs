@@ -62,12 +62,14 @@ partial class IL2NESWriter
                     : _numericValues.Inputs[producer].Any(input => WordNumericType(NumericType(input)))
                         ? PrimitiveTypeCode.UInt16 : PrimitiveTypeCode.Byte,
             ILOpCode.Add or ILOpCode.Sub when _numericValues.Inputs[producer].Length == 2
-                && NumericType(_numericValues.Inputs[producer][0]) is PrimitiveTypeCode.Byte or PrimitiveTypeCode.SByte
-                && NumericType(_numericValues.Inputs[producer][1]) is PrimitiveTypeCode.Byte or PrimitiveTypeCode.SByte =>
+                && _numericValues.Inputs[producer].All(input => NumericType(input) is PrimitiveTypeCode.Byte
+                    or PrimitiveTypeCode.SByte or PrimitiveTypeCode.Int16 or PrimitiveTypeCode.UInt16) =>
                     instruction.OpCode == ILOpCode.Sub
                     || SignedNumericType(NumericType(_numericValues.Inputs[producer][0]))
                     || SignedNumericType(NumericType(_numericValues.Inputs[producer][1]))
                         ? PrimitiveTypeCode.Int16 : PrimitiveTypeCode.UInt16,
+            ILOpCode.Shr or ILOpCode.Shr_un when _numericValues.Inputs[producer].Length == 2 =>
+                NumericType(_numericValues.Inputs[producer][0]),
             _ => null,
         };
     }
@@ -184,6 +186,33 @@ partial class IL2NESWriter
             Emit(Opcode.BCC, AddressMode.Relative, 1);
             Emit(Opcode.DEX, AddressMode.Implied);
         }
+    }
+
+    void WriteNumericConversion(ILOpCode code)
+    {
+        int value = Stack.Count > 0 ? Stack.Pop() : 0;
+        switch (code)
+        {
+            case ILOpCode.Conv_i1:
+                Stack.Push(unchecked((sbyte)value));
+                _ushortInAX = false;
+                break;
+            case ILOpCode.Conv_u2:
+            case ILOpCode.Conv_i2:
+                Stack.Push(code == ILOpCode.Conv_i2 ? unchecked((short)value) : unchecked((ushort)value));
+                if (!_ushortInAX)
+                {
+                    int producer = _numericValues != null && _numericValues.Inputs[Index].Length == 1
+                        ? _numericValues.Inputs[Index][0] : -1;
+                    if (producer >= 0 && Instructions![producer].GetLdcValue() is int constant)
+                        Emit(Opcode.LDX, AddressMode.Immediate, (byte)(constant >> 8));
+                    else
+                        EmitNumericExtension(SignedNumericType(NumericType(producer)));
+                    _ushortInAX = true;
+                }
+                break;
+        }
+        _lastStaticFieldAddress = null;
     }
 
     bool TryNumericAddSub(bool isAdd)

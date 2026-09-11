@@ -308,10 +308,12 @@ partial class IL2NESWriter
                 _lastStaticFieldAddress = null;
                 break;
             case ILOpCode.Conv_u2:
-            case ILOpCode.Conv_u4:
-            case ILOpCode.Conv_u8:
             case ILOpCode.Conv_i1:
             case ILOpCode.Conv_i2:
+                WriteNumericConversion(instruction.OpCode);
+                break;
+            case ILOpCode.Conv_u4:
+            case ILOpCode.Conv_u8:
             case ILOpCode.Conv_i4:
                 // No-op: sign/zero extension is irrelevant on 8-bit 6502
                 _lastStaticFieldAddress = null;
