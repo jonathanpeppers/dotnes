@@ -5,6 +5,7 @@ namespace dotnes.tests;
 // Asset-free execution of emitted code, not a NES/device or cycle-accurate emulator.
 internal sealed class Cpu6502
 {
+    public const ushort SoftwareStackTop = 0x0800;
     public byte[] Memory { get; } = new byte[65536];
     public ushort PC { get; private set; }
     public byte A { get; private set; }
@@ -24,7 +25,7 @@ internal sealed class Cpu6502
     {
         code.CopyTo(Memory, origin);
         PC = entry;
-        Memory[0x23] = 7;
+        Memory[0x23] = (byte)(SoftwareStackTop >> 8);
     }
 
     public void RunUntil(ushort stop, int instructionLimit = 100000)
@@ -182,7 +183,7 @@ internal sealed class Cpu6502
     {
         if (address is 0x22 or 0x23)
             SoftwareStackPointerWrites++;
-        else if (address >= SoftwareStackPointer && address < 0x700)
+        else if (address >= SoftwareStackPointer && address < SoftwareStackTop)
             SoftwareStackWrites++;
         Memory[address] = value;
     }

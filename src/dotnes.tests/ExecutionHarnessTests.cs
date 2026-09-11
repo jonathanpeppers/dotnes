@@ -16,7 +16,8 @@ public class ExecutionHarnessTests(ITestOutputHelper output) : ExecutionTests(ou
             static byte Identity(byte value) => value;
             """);
         Assert.Equal(42, cpu.Memory[0x6000]);
-        Assert.Equal(0x700, cpu.SoftwareStackPointer);
+        Assert.Equal(0x800, cpu.SoftwareStackPointer);
+        Assert.Equal(42, cpu.Memory[0x7FF]);
         Assert.Equal(0xFD, cpu.SP); // Only the call to the stop marker remains.
         Assert.True(cpu.InstructionCount > 0);
         Assert.Equal(1, cpu.SoftwareStackWrites);
