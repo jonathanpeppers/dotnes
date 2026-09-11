@@ -7,18 +7,17 @@ partial class Transpiler
 {
     internal Dictionary<string, MethodNumericTypes> NumericTypes { get; } = new(StringComparer.Ordinal);
 
-    Dictionary<string, PrimitiveTypeCode?> GetNumericFieldTypes()
-    {
-        var decoder = new NumericTypeDecoder();
-        return _reader.FieldDefinitions.Select(handle => _reader.GetFieldDefinition(handle))
-            .Where(field => (field.Attributes & System.Reflection.FieldAttributes.Static) != 0)
-            .GroupBy(field => _reader.GetString(field.Name))
-            .ToDictionary(group => group.Key, group =>
+    Dictionary<string, PrimitiveTypeCode?> GetNumericFieldTypes(ISet<string>? ambiguousFields = null) =>
+        _reader.FieldDefinitions.Select(h => _reader.GetFieldDefinition(h))
+            .Where(f => (f.Attributes & System.Reflection.FieldAttributes.Static) != 0)
+            .GroupBy(f => _reader.GetString(f.Name))
+            .ToDictionary(g => g.Key, g =>
             {
-                var types = group.Select(field => field.DecodeSignature(decoder, null)).Distinct().ToArray();
+                var types = g.Select(field => field.DecodeSignature(new NumericTypeDecoder(), null)).Distinct().ToArray();
+                if (types.Length > 1)
+                    ambiguousFields?.Add(g.Key);
                 return types.Length == 1 ? types[0] : null;
             });
-    }
 
     PrimitiveTypeCode?[] GetExpressionValueTypes(ILInstruction[] instructions,
         ILValueAnalysis analysis, ReflectionCache reflection, string method,
@@ -58,6 +57,9 @@ partial class Transpiler
             else if (instruction.OpCode == ILOpCode.Ldsfld && instruction.String is string field
                 && fieldTypes.TryGetValue(field, out var fieldType))
                 type = fieldType;
+            else if (instruction.OpCode == ILOpCode.Ldfld && instruction.String is string closureField
+                && _closureNumericFieldTypes.TryGetValue(closureField, out var closureType))
+                type = closureType;
             else if (instruction.OpCode is ILOpCode.Ceq or ILOpCode.Clt or ILOpCode.Clt_un
                 or ILOpCode.Cgt or ILOpCode.Cgt_un)
                 type = PrimitiveTypeCode.Boolean;
@@ -69,6 +71,11 @@ partial class Transpiler
                 type = PrimitiveTypeCode.SByte;
             else if (instruction.OpCode is ILOpCode.Ldelem_i2 or ILOpCode.Ldind_i2 or ILOpCode.Conv_i2)
                 type = PrimitiveTypeCode.Int16;
+            else if (instruction.OpCode is ILOpCode.Neg or ILOpCode.Not
+                && analysis.Inputs[i].Length == 1 && analysis.Inputs[i][0] >= 0
+                && types[analysis.Inputs[i][0]] != null)
+                type = NumericValueUsage.IsExplicitlyNarrowed(instructions, analysis, i, byteOnly: true)
+                    ? PrimitiveTypeCode.Byte : PrimitiveTypeCode.Int16;
             else if (instruction.OpCode is ILOpCode.Add or ILOpCode.Sub
                 && analysis.Inputs[i].Length == 2
                 && analysis.Inputs[i].All(p => p >= 0 && types[p] is PrimitiveTypeCode.Byte or PrimitiveTypeCode.SByte))

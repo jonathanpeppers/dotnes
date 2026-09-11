@@ -18,7 +18,7 @@ partial class IL2NESWriter
         // A previous branch/return can leave a tracked runtime value in A, causing
         // WriteLdc to defer the address. Remove only code from this argument, never
         // a preceding return jump or the computation of a live caller value.
-        RemoveMemoryArgumentInstructions(Index - 1, address > byte.MaxValue ? 2 : 1);
+        RemoveOperandInstructions(Index - 1, address > byte.MaxValue ? 2 : 1);
         Emit(Opcode.LDA, AddressMode.Absolute, (ushort)address);
         _lastLoadedLocalIndex = null;
         _lastStaticFieldAddress = null;

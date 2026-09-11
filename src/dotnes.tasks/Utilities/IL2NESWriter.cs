@@ -652,6 +652,7 @@ partial class IL2NESWriter : NESWriter
     {
         _numericArgAdjust[ilOffset] = _argStackAdjust;
         PrepareMemoryOperands();
+        _numericWordAtILOffset[ilOffset] = _ushortInAX;
         if (_bufferedBlock != null)
             _blockCountAtILOffset[ilOffset] = GetBufferedBlockCount();
     }

@@ -1,3 +1,4 @@
+using System.Reflection.Metadata;
 using dotnes.ObjectModel;
 using Xunit.Abstractions;
 
@@ -6,6 +7,80 @@ namespace dotnes.tests;
 public class NativeInteropTests : RoslynTests
 {
     public NativeInteropTests(ITestOutputHelper output) : base(output) { }
+
+    [Theory]
+    [InlineData("byte")]
+    [InlineData("sbyte")]
+    [InlineData("short")]
+    [InlineData("ushort")]
+    [InlineData("bool")]
+    public void ScalarByReferenceArgumentsCannotSilentlyOmitTheirAddress(string type)
+    {
+        var error = Assert.Throws<TranspileException>(() => GetProgramBytes($$"""
+            {{type}} value = default;
+            Fill(ref value);
+            while (true);
+            static extern void Fill(ref {{type}} value);
+            """));
+        Assert.Contains("address of scalar local", error.Message);
+        Assert.Contains("by-reference", error.Message);
+        Assert.Contains("byte/sbyte value parameters", error.Message);
+    }
+
+    [Theory]
+    [InlineData(PrimitiveTypeCode.Byte)]
+    [InlineData(PrimitiveTypeCode.SByte)]
+    [InlineData(PrimitiveTypeCode.Int16)]
+    [InlineData(PrimitiveTypeCode.UInt16)]
+    [InlineData(PrimitiveTypeCode.Boolean)]
+    public void HighIndexScalarAddressUsesTheSameActionableDiagnostic(PrimitiveTypeCode type)
+    {
+        foreach (var (opcode, index) in new[] { (ILOpCode.Ldloca_s, 0), (ILOpCode.Ldloca, 256) })
+        {
+            using var stream = new MemoryStream();
+            using var writer = new IL2NESWriter(stream);
+            var locals = new PrimitiveTypeCode?[index + 1];
+            locals[index] = type;
+            writer.ConfigureNumericTypes(new Dictionary<string, MethodNumericTypes>
+            {
+                ["main"] = new([.. locals], [], PrimitiveTypeCode.Void),
+            });
+            var error = Assert.Throws<TranspileException>(() =>
+                writer.Write(new ILInstruction(opcode, 0, index), index));
+            Assert.Contains($"address of scalar local {index}", error.Message);
+            Assert.Contains("by-reference", error.Message);
+            Assert.Contains("byte/sbyte value parameters", error.Message);
+            Assert.Empty(stream.ToArray());
+        }
+    }
+
+    [Theory]
+    [InlineData("short", -300)]
+    [InlineData("ushort", 65535)]
+    public void SupportedExternWordReturnsRetainBothBytes(string type, int value)
+    {
+        WithNativeProgram($$"""
+            {{type}} result = Get();
+            byte low = (byte)result;
+            byte high = (byte)(result >> 8);
+            poke(0x6000, low);
+            poke(0x6001, high);
+            test_stop(); while (true);
+            static extern {{type}} Get();
+            static extern void test_stop();
+            """, $"_Get:\nlda #${unchecked((byte)value):X2}\nldx #${unchecked((byte)(value >> 8)):X2}\nrts",
+            (program, _) =>
+            {
+                const ushort stop = 0x7FF0;
+                program.DefineExternalLabel("_test_stop", stop);
+                var cpu = new Cpu6502(program.ToBytes(), program.BaseAddress, program.GetLabels()["main"]);
+                cpu.RunUntil(stop);
+                Assert.Equal(unchecked((byte)value), cpu.Memory[0x6000]);
+                Assert.Equal(unchecked((byte)(value >> 8)), cpu.Memory[0x6001]);
+                Assert.Equal(Cpu6502.SoftwareStackTop, cpu.SoftwareStackPointer);
+                Assert.Equal(0xFD, cpu.SP);
+            });
+    }
 
     [Theory]
     [InlineData(false, false)]

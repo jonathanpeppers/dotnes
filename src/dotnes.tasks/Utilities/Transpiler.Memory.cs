@@ -6,7 +6,8 @@ namespace dotnes;
 partial class Transpiler
 {
     ILInstruction[] MaterializeSharedMemoryAddresses(ILInstruction[] instructions,
-        ReflectionCache reflection, string methodName)
+        ReflectionCache reflection, string methodName,
+        IReadOnlyDictionary<int, PrimitiveTypeCode>? compactInts = null)
     {
         if (!instructions.Any(i => i.OpCode == ILOpCode.Call
             && i.String is nameof(NESLib.peek) or nameof(NESLib.poke)))
@@ -50,7 +51,7 @@ partial class Transpiler
                 }
             }
         }
-        var types = GetExpressionValueTypes(instructions, analysis, reflection, methodName);
+        var types = GetExpressionValueTypes(instructions, analysis, reflection, methodName, compactInts);
         foreach (int address in addresses)
         {
             NumericStorage.RequireNarrowType(types[address], methodName);

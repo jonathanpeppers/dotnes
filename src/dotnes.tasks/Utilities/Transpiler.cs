@@ -349,16 +349,18 @@ partial class Transpiler : IDisposable
             reflectionCache.RegisterExternMethod(kvp.Key, kvp.Value.argCount, kvp.Value.hasReturnValue);
             program.RegisterExternSymbol(kvp.Key);
         }
-
-        // Validate source arithmetic before synthetic narrowing can hide a
-        // wider CLR intermediate from the native-width lowering passes.
-        var numericFields = GetNumericFieldTypes();
-        if (instructions.Length > 0)
-            new NumericRangeAnalysis(instructions, NumericTypes["main"], NumericTypes, reflectionCache, numericFields)
-                .ValidatePromotedArithmetic("main");
-        foreach (var pair in UserMethods)
-            new NumericRangeAnalysis(pair.Value, NumericTypes[pair.Key], NumericTypes, reflectionCache, numericFields)
-                .ValidatePromotedArithmetic(pair.Key);
+        foreach (var kvp in NumericTypes)
+        {
+            if ((UserMethodMetadata.ContainsKey(kvp.Key) || ExternMethods.ContainsKey(kvp.Key))
+                && kvp.Value.ReturnType is not (null or PrimitiveTypeCode.Void or PrimitiveTypeCode.Boolean
+                    or PrimitiveTypeCode.Byte or PrimitiveTypeCode.SByte or PrimitiveTypeCode.Int16 or PrimitiveTypeCode.UInt16))
+                throw new TranspileException(
+                    $"Return type {kvp.Value.ReturnType} is not supported by the NES user/extern-method calling convention. " +
+                    "Use a supported return type (byte, sbyte, short, ushort, bool or void); only convert explicitly " +
+                    "when the resulting range and truncation semantics are intended.", kvp.Key);
+            if (kvp.Value.ReturnType is PrimitiveTypeCode.Int16 or PrimitiveTypeCode.UInt16)
+                reflectionCache.RegisterWordReturn(kvp.Key);
+        }
 
         // Build main program block using label references (addresses resolved later)
         var externNames = new HashSet<string>(ExternMethods.Keys, StringComparer.Ordinal);
@@ -376,13 +378,18 @@ partial class Transpiler : IDisposable
             PreAllocateClosureFields(ref staticFieldBytes);
         }
 
-        instructions = MaterializeSharedMemoryAddresses(instructions, reflectionCache, "main");
+        // Prove original source ranges before either memory or expression spilling adds conversions.
+        var mainCompactInts = GetCompactIntLocalsForMethod(instructions, reflectionCache, "main");
+        var methodCompactInts = UserMethods.ToDictionary(pair => pair.Key,
+            pair => GetCompactIntLocalsForMethod(pair.Value, reflectionCache, pair.Key));
+        instructions = MaterializeSharedMemoryAddresses(instructions, reflectionCache, "main", mainCompactInts);
         foreach (string methodName in UserMethods.Keys.ToArray())
-            UserMethods[methodName] = MaterializeSharedMemoryAddresses(UserMethods[methodName], reflectionCache, methodName);
+            UserMethods[methodName] = MaterializeSharedMemoryAddresses(UserMethods[methodName], reflectionCache,
+                methodName, methodCompactInts[methodName]);
 
-        instructions = PreserveExpressionValues(instructions, reflectionCache, "main");
+        instructions = PreserveExpressionValues(instructions, reflectionCache, "main", mainCompactInts);
         foreach (var name in UserMethods.Keys.ToArray())
-            UserMethods[name] = PreserveExpressionValues(UserMethods[name], reflectionCache, name);
+            UserMethods[name] = PreserveExpressionValues(UserMethods[name], reflectionCache, name, methodCompactInts[name]);
         var byteParameterCalls = NumericTypes.Where(kvp =>
             UserMethods.ContainsKey(kvp.Key) && kvp.Value.Parameters.Where((p, index) =>
                     !_closureMethodArgIndex.TryGetValue(kvp.Key, out int closure) || index != closure)
@@ -412,7 +419,7 @@ partial class Transpiler : IDisposable
             TryFinallyRegions = MainExceptionRegions.Length > 0 ? MainExceptionRegions : null,
         };
 
-        writer.ConfigureNumericTypes(NumericTypes, numericFieldTypes);
+        writer.ConfigureNumericTypes(NumericTypes, numericFieldTypes, _closureNumericFieldTypes);
         writer.StartBlockBuffering();
 
         // Translate IL to 6502 (single pass - sizeOfMain = 0 since we'll calculate later)
@@ -434,7 +441,7 @@ partial class Transpiler : IDisposable
             
             // Record block count before processing this instruction
             writer.RecordBlockCount(instruction.Offset);
-            if (writer.TryNumericComparison(instruction))
+            if (writer.TryNumericComparison(instruction) || writer.TryNumericShift(instruction))
                 continue;
             
             if (instruction.Integer != null)
@@ -508,7 +515,7 @@ partial class Transpiler : IDisposable
                 ClosureArgIndex = _closureMethodArgIndex.TryGetValue(methodName, out var cai) ? cai : -1,
                 TryFinallyRegions = UserMethodExceptionRegions.TryGetValue(methodName, out var umer) ? umer : null,
             };
-            methodWriter.ConfigureNumericTypes(NumericTypes, numericFieldTypes);
+            methodWriter.ConfigureNumericTypes(NumericTypes, numericFieldTypes, _closureNumericFieldTypes);
             methodWriter.StartBlockBuffering();
 
             // If method has parameters, emit prologue to push last arg onto cc65 stack
@@ -532,8 +539,9 @@ partial class Transpiler : IDisposable
                 if (methodWriter.CurrentBlock != null)
                     methodWriter.CurrentBlock.SetNextLabel(labelName);
                 methodWriter.RecordBlockCount(instruction.Offset);
-                if (methodWriter.TryNumericComparison(instruction))
+                if (methodWriter.TryNumericComparison(instruction) || methodWriter.TryNumericShift(instruction))
                     continue;
+                methodWriter.PrepareNumericReturn(instruction);
 
                 if (instruction.Integer != null)
                     methodWriter.Write(instruction, instruction.Integer.Value);

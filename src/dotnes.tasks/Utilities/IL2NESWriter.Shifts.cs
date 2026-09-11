@@ -41,21 +41,29 @@ partial class IL2NESWriter
         var value = Instructions[valueIndex];
         if (value.GetLdcValue() is < 0)
             throw new TranspileException("Variable shifts of negative integer constants are not supported.", MethodName);
-        if (value.GetLdlocIndex() is not null || NumericArgIndex(value) is not null ||
-            value.OpCode == ILOpCode.Ldsfld)
+        if (value.GetLdlocIndex() is not null || NumericArgIndex(value) is not null
+            || value.OpCode == ILOpCode.Ldsfld)
         {
-            var type = DeclaredScalarType(value);
-            if (type is not (PrimitiveTypeCode.Byte or PrimitiveTypeCode.UInt16) ||
-                (NumericArgIndex(value) is not null && type != PrimitiveTypeCode.Byte))
+            var type = NumericType(valueIndex);
+            bool explicitlyUnsigned = valueIndex < Index - 1
+                && type is PrimitiveTypeCode.SByte or PrimitiveTypeCode.Int16;
+            if (!explicitlyUnsigned && SignedNumericType(type))
                 throw new TranspileException(
-                    $"Variable shifts require a byte/ushort source and byte scalar parameters; source type '{type?.ToString() ?? "unknown"}' is not supported here.",
+                    "Variable shifts of signed values require a constant count. Runtime signed shift counts " +
+                    "are not supported by the NES numeric backend.", MethodName);
+            if (type is not (PrimitiveTypeCode.Byte or PrimitiveTypeCode.Boolean or PrimitiveTypeCode.UInt16)
+                && !explicitlyUnsigned)
+                throw new TranspileException(
+                    $"Variable shifts require a proven byte/ushort source; source type '{type?.ToString() ?? "unknown"}' " +
+                    "is not supported here. Use an explicit supported conversion only if its truncation is intended.",
                     MethodName);
         }
         if (ILBranchTargets.HasEntryAfter(Instructions, valueIndex, Index) ||
             (value.GetLdcValue() is null && value.GetLdlocIndex() is null &&
             value.OpCode is not (ILOpCode.Ldarg_0 or ILOpCode.Ldarg_1 or ILOpCode.Ldarg_2 or ILOpCode.Ldarg_3
                 or ILOpCode.Ldarg_s or ILOpCode.Ldsfld or ILOpCode.Conv_u1) &&
-            !(valueIndex < Index - 1 && HasVerifiedNumericProducer(valueIndex))))
+            !(valueIndex < Index - 1 && HasVerifiedNumericProducer(valueIndex))
+            && !HasVerifiedPromotedNumericProducer(valueIndex)))
             throw new TranspileException(
                 "Variable shifts of promoted arithmetic expressions are not supported. Explicitly truncate to byte, or use supported 16-bit operands before shifting.",
                 MethodName);

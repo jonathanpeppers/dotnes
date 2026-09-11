@@ -324,6 +324,8 @@ get an idea of what is not available:
 * No objects or GC
 * No debugger
 * Strings are ASCII
+* Integer storage is limited to the [supported byte/word numeric model](docs/numeric-model.md);
+  unrestricted 32-bit local arithmetic is not supported.
 
 What we *do* have is a way to express an NES program in a single `Program.cs`.
 

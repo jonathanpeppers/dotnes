@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using System.Reflection.Metadata;
+using dotnes.ObjectModel;
 
 namespace dotnes.tests;
 
@@ -10,7 +11,7 @@ public class NumericProducerProofTests
         writer.ConfigureNumericTypes(
             new Dictionary<string, MethodNumericTypes>
             {
-                ["main"] = new([type], [], PrimitiveTypeCode.Void),
+                ["main"] = new([type, PrimitiveTypeCode.Byte], [], PrimitiveTypeCode.Void),
             },
             new Dictionary<string, PrimitiveTypeCode?> { ["Value"] = type });
     }
@@ -130,6 +131,12 @@ public class NumericProducerProofTests
             writer.Variables.Locals[0] = new(0, 0x325, IsWord: true);
             writer.StaticFieldAddresses["Value"] = 0x325;
             writer.WordStaticFields.Add("Value");
+            if (!field && type is PrimitiveTypeCode.Int32 or PrimitiveTypeCode.UInt32)
+            {
+                var error = Assert.Throws<TranspileException>(() => ConfigureTypes(writer, type));
+                Assert.Contains("local", error.Message, StringComparison.OrdinalIgnoreCase);
+                continue;
+            }
             ConfigureTypes(writer, type);
             writer.StartBlockBuffering();
             writer.RecordBlockCount(0);

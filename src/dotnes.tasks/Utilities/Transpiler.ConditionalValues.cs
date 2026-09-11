@@ -4,7 +4,8 @@ namespace dotnes;
 
 partial class Transpiler
 {
-    ILInstruction[] MaterializeConditionalValues(ILInstruction[] instructions, ReflectionCache reflection, string method)
+    ILInstruction[] MaterializeConditionalValues(ILInstruction[] instructions, ReflectionCache reflection, string method,
+        IReadOnlyDictionary<int, PrimitiveTypeCode>? compactInts = null)
     {
         if (!NumericTypes.TryGetValue(method, out var signature))
             return instructions;
@@ -12,7 +13,7 @@ partial class Transpiler
         while (true)
         {
             var analysis = new ILValueAnalysis(instructions, reflection);
-            var types = GetExpressionValueTypes(instructions, analysis, reflection, method);
+            var types = GetExpressionValueTypes(instructions, analysis, reflection, method, compactInts);
             int join = -1;
             var sources = new HashSet<int>();
             PrimitiveTypeCode? type = null;

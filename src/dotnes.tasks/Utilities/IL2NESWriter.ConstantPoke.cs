@@ -16,9 +16,9 @@ partial class IL2NESWriter
             .Any(i => _numericValues.Predecessors[i].Any(predecessor => predecessor != i - 1));
     }
 
-    void RemoveMemoryArgumentInstructions(int firstArgument, int count)
+    void RemoveOperandInstructions(int firstArgument, int count)
     {
-        if (Instructions is not null
+        if (Instructions is not null && firstArgument >= 0 && firstArgument < Instructions.Length
             && _blockCountAtILOffset.TryGetValue(Instructions[firstArgument].Offset, out int start))
             count = Math.Min(count, GetBufferedBlockCount() - start);
         if (count > 0)
@@ -36,21 +36,24 @@ partial class IL2NESWriter
             ? _lastLoadedLocalIndex : Instructions[Index - 1].GetLdlocIndex();
         bool valueIsLocal = localIndex.HasValue && Locals.TryGetValue(localIndex.Value, out local)
             && local.Address.HasValue;
-        bool valueIsStaticField = _lastStaticFieldAddress.HasValue
-            && (Instructions is null || Instructions[Index - 1].OpCode == ILOpCode.Ldsfld);
+        ushort? staticAddress = Instructions is null ? _lastStaticFieldAddress
+            : Instructions[Index - 1].OpCode == ILOpCode.Ldsfld
+                && Instructions[Index - 1].String is string field
+                && StaticFieldAddresses.TryGetValue(field, out ushort location)
+                    ? location : null;
 
         // Deferred literals may emit nothing. Never remove earlier control flow
         // or infer this call's value from stale accumulator/local bookkeeping.
-        RemoveMemoryArgumentInstructions(Index - 2, address > byte.MaxValue ? 4 : 3);
+        RemoveOperandInstructions(Index - 2, address > byte.MaxValue ? 4 : 3);
         if (valueIsLocal)
         {
             Emit(Opcode.LDA, AddressMode.Absolute, (ushort)local!.Address!.Value);
             _pokeLastValue = null;
             _immediateInA = null;
         }
-        else if (valueIsStaticField)
+        else if (staticAddress.HasValue)
         {
-            Emit(Opcode.LDA, AddressMode.Absolute, _lastStaticFieldAddress!.Value);
+            Emit(Opcode.LDA, AddressMode.Absolute, staticAddress.Value);
             _pokeLastValue = null;
             _immediateInA = null;
         }
@@ -61,6 +64,9 @@ partial class IL2NESWriter
             _immediateInA = (byte)value;
         }
         Emit(Opcode.STA, AddressMode.Absolute, (ushort)address);
+        // Argument pushes removed above cannot remain live after this consumes the whole IL stack.
+        if (Stack.Count == 0)
+            _savedState = SavedValueState.None;
         _lastLoadedLocalIndex = null;
         _lastStaticFieldAddress = null;
     }

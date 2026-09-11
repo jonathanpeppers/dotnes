@@ -10,6 +10,19 @@ namespace dotnes;
 /// </summary>
 partial class Transpiler
 {
+    Dictionary<int, PrimitiveTypeCode> GetCompactIntLocalsForMethod(ILInstruction[] instructions,
+        ReflectionCache reflection, string method, bool validateOperations = true)
+    {
+        if (!NumericTypes.TryGetValue(method, out var types))
+            return new();
+        var ranges = new NumericRangeAnalysis(instructions, types, NumericTypes, reflection,
+            GetNumericFieldTypes(), _closureNumericFieldTypes);
+        var compact = ranges.GetCompactIntLocals(method);
+        if (validateOperations)
+            ranges.ValidatePromotedArithmetic(method);
+        return compact;
+    }
+
     /// <summary>
     /// Pre-scan IL instructions for conv.u2 + stloc patterns to detect ushort locals.
     /// </summary>
@@ -18,15 +31,21 @@ partial class Transpiler
         var result = new HashSet<int>();
         if (NumericTypes.TryGetValue(methodName, out var types))
         {
+            var compactInts = GetCompactIntLocalsForMethod(instructions, reflectionCache ?? new ReflectionCache(), methodName,
+                validateOperations: false);
+            foreach (var entry in compactInts)
+                if (entry.Value is PrimitiveTypeCode.UInt16 or PrimitiveTypeCode.Int16)
+                    result.Add(entry.Key);
             for (int i = 0; i < types.Locals.Length; i++)
-                if (NumericStorage.IsWord(types.Locals[i]))
+                if (types.Locals[i] is PrimitiveTypeCode.UInt16 or PrimitiveTypeCode.Int16)
                 {
-                    // Retain compact storage when every assignment explicitly truncates
-                    // to a byte. The declared word type alone does not require a high byte.
-                    bool byteOnly = true;
+                    // Only unsigned words can reuse byte storage without changing load signedness.
+                    bool byteOnly = types.Locals[i] == PrimitiveTypeCode.UInt16;
                     for (int j = 0; j < instructions.Length; j++)
                         if (instructions[j].GetStlocIndex() == i
-                            && (j == 0 || instructions[j - 1].OpCode != ILOpCode.Conv_u1))
+                            && (j == 0 || instructions[j - 1].OpCode != ILOpCode.Conv_u1)
+                            || instructions[j].OpCode is ILOpCode.Ldloca or ILOpCode.Ldloca_s
+                                && instructions[j].Integer == i)
                             byteOnly = false;
                     if (!byteOnly)
                         result.Add(i);
@@ -252,7 +271,7 @@ partial class Transpiler
     /// Pre-scans main and all user method IL for user-defined static field references
     /// (Stsfld/Ldsfld) and allocates a shared address for each unique field.
     /// This ensures all methods resolve the same field name to the same RAM address.
-    /// Multi-byte fields (int, ushort, short) get 2 bytes of zero page.
+    /// Multi-byte fields (ushort, short) get 2 bytes of RAM.
     /// </summary>
     (Dictionary<string, ushort> addresses, HashSet<string> wordFields, int totalBytes, Dictionary<string, (ushort Address, int ArraySize)> arrayFields) PreAllocateStaticFields(ILInstruction[] mainInstructions)
     {
@@ -280,6 +299,8 @@ partial class Transpiler
 
         // Build field size map from metadata
         var fieldSizes = BuildStaticFieldSizes();
+        var ambiguousFields = new HashSet<string>(StringComparer.Ordinal);
+        var fieldTypes = GetNumericFieldTypes(ambiguousFields);
 
         // Allocate addresses sequentially starting at LocalStackBase,
         // using the correct byte size for each field.
@@ -289,6 +310,17 @@ partial class Transpiler
         int offset = 0;
         foreach (var name in fieldNames.OrderBy(n => n, StringComparer.Ordinal))
         {
+            if (ambiguousFields.Contains(name))
+                throw new TranspileException(
+                    $"Static field '{name}' has conflicting declared types in this assembly. " +
+                    "Rename the same-named fields so the NES backend can determine their storage width unambiguously.");
+            if (fieldTypes.TryGetValue(name, out var type)
+                && type is not (null or PrimitiveTypeCode.Boolean or PrimitiveTypeCode.Byte
+                    or PrimitiveTypeCode.SByte or PrimitiveTypeCode.Int16 or PrimitiveTypeCode.UInt16))
+                throw new TranspileException(
+                    $"Static field '{name}' has unsupported primitive type {type}. " +
+                    "Use an explicitly supported storage type (byte, sbyte, short or ushort) with conversions " +
+                    "only when its range and truncation semantics are intended. Compact Int32 proofs apply to locals only.");
             addresses[name] = (ushort)(NESConstants.LocalStackBase + offset);
             int size = fieldSizes.TryGetValue(name, out var s) ? s : 1;
             if (size < 0)

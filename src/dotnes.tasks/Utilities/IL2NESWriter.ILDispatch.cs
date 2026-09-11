@@ -41,7 +41,7 @@ partial class IL2NESWriter
     public void Write(ILInstruction instruction)
     {
         BeginVariableShiftCount();
-        if (TryNumericLeftShift(instruction)
+        if (TryNumericDivision(instruction) || TryUnsignedWordDivision(instruction) || TryNumericLeftShift(instruction)
             || TryNumericMultiply(instruction) || TryNumericBitwise(instruction))
             return;
         if (instruction.OpCode is ILOpCode.Add or ILOpCode.Sub
@@ -68,6 +68,12 @@ partial class IL2NESWriter
                 // Skip for the final ret (it naturally falls through to the epilogue).
                 if (MethodName != null && Instructions != null && Index < Instructions.Length - 1)
                     EmitWithLabel(Opcode.JMP, AddressMode.Absolute, $"{MethodName}_epilogue");
+                if (WordNumericType(_numericTypes?.ReturnType))
+                {
+                    Stack.Clear();
+                    _accState = AccumulatorState.Empty;
+                    _savedState = SavedValueState.None;
+                }
                 break;
             case ILOpCode.Dup:
                 if (Stack.Count > 0)
@@ -318,7 +324,7 @@ partial class IL2NESWriter
             case ILOpCode.Conv_u4:
             case ILOpCode.Conv_u8:
             case ILOpCode.Conv_i4:
-                // No-op: sign/zero extension is irrelevant on 8-bit 6502
+                // The evaluation value is unchanged by the 32-bit promotion.
                 _lastStaticFieldAddress = null;
                 break;
             case ILOpCode.Stelem_i1:
@@ -349,10 +355,10 @@ partial class IL2NESWriter
                 HandleStindI2();
                 break;
             case ILOpCode.Add:
-                HandleAddSub(isAdd: true);
+                WriteLegacyNumericAddSub(isAdd: true);
                 break;
             case ILOpCode.Sub:
-                HandleAddSub(isAdd: false);
+                WriteLegacyNumericAddSub(isAdd: false);
                 break;
             case ILOpCode.Mul:
                 {
@@ -529,7 +535,7 @@ partial class IL2NESWriter
                             or ILOpCode.Ldc_i4_3 or ILOpCode.Ldc_i4_4 or ILOpCode.Ldc_i4_5
                             or ILOpCode.Ldc_i4_6 or ILOpCode.Ldc_i4_7 or ILOpCode.Ldc_i4_8)
                         {
-                            RemoveLastInstructions(1);
+                           RemoveOperandInstructions(Index - 1, 1);
                         }
 
                         if (_ushortInAX)
@@ -668,12 +674,15 @@ partial class IL2NESWriter
                             or ILOpCode.Ldc_i4_3 or ILOpCode.Ldc_i4_4 or ILOpCode.Ldc_i4_5
                             or ILOpCode.Ldc_i4_6 or ILOpCode.Ldc_i4_7 or ILOpCode.Ldc_i4_8)
                         {
-                            RemoveLastInstructions(1);
+                           RemoveOperandInstructions(Index - 1, 1);
                         }
 
-                        if (divisor > 0 && (divisor & (divisor - 1)) == 0)
+                        var remInputs = _numericValues?.Inputs[Index];
+                        bool capturedDivisor = remInputs?.Length == 2
+                            && CanUseCapturedByteRemainder(remInputs[0], remInputs[1]);
+                        if (!capturedDivisor && divisor > 0 && (divisor & (divisor - 1)) == 0)
                         {
-                            // Power-of-2: x % N == x AND (N-1)
+                            // Power-of-2: x % N == x AND (N-1), only when A holds x.
                             Emit(Opcode.AND, AddressMode.Immediate, (byte)(divisor - 1));
                         }
                         else if (_savedRuntimeToTemp)
@@ -1013,6 +1022,8 @@ partial class IL2NESWriter
                 }
                 break;
             case ILOpCode.Neg:
+                if (TryNumericUnary(instruction))
+                    break;
                 {
                     int value = Stack.Pop();
 
@@ -1035,6 +1046,8 @@ partial class IL2NESWriter
                 }
                 break;
             case ILOpCode.Not:
+                if (TryNumericUnary(instruction))
+                    break;
                 {
                     int value = Stack.Pop();
 
@@ -1780,8 +1793,16 @@ partial class IL2NESWriter
                     _lastStaticFieldAddress = null;
                 }
                 break;
+            case ILOpCode.Ldloca:
             case ILOpCode.Ldloca_s:
                 // Load address of local variable — used for struct field access
+                if (_numericTypes != null && operand < _numericTypes.Locals.Length
+                    && _numericTypes.Locals[operand] is PrimitiveTypeCode.Boolean or PrimitiveTypeCode.Byte
+                        or PrimitiveTypeCode.SByte or PrimitiveTypeCode.Int16 or PrimitiveTypeCode.UInt16)
+                    throw new TranspileException(
+                        $"Taking the address of scalar local {operand} at IL_{instruction.Offset:X4} is not supported. " +
+                        "Generic scalar by-reference access does not have a NES calling convention. " +
+                        "Use byte/sbyte value parameters or explicit native memory interfaces instead.", MethodName);
                 if (ClosureStructLocalIndex >= 0 && operand == ClosureStructLocalIndex
                     && Instructions is not null && ClosureFieldTypes != null)
                 {
