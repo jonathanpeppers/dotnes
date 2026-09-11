@@ -4,6 +4,26 @@ namespace dotnes.tests;
 
 public class ILValueAnalysisTests
 {
+    [Fact]
+    public void OnlyDeclaredContextLoadsAreRematerialized()
+    {
+        var reflection = new ReflectionCache();
+        reflection.RegisterUserMethod("Consume", 2, false);
+        ILInstruction[] il =
+        [
+            new(ILOpCode.Ldarg_0, 0),
+            new(ILOpCode.Ldarg_1, 1),
+            new(ILOpCode.Call, 2, String: "Consume"),
+        ];
+        var analysis = new ILValueAnalysis(il, reflection);
+        var rewritten = ILExpressionSpiller.Rewrite(il, analysis, new HashSet<int> { 0, 1 },
+            stableAddressProducers: new HashSet<int> { 1 });
+        Assert.Single(rewritten, i => i.GetStlocIndex() is not null);
+        Assert.Equal(ILOpCode.Ldloc_s, rewritten[^3].OpCode);
+        Assert.Equal(ILOpCode.Ldarg_1, rewritten[^2].OpCode);
+        Assert.Equal(ILOpCode.Call, rewritten[^1].OpCode);
+    }
+
     [Theory]
     [InlineData(ILOpCode.Ldloca_s)]
     [InlineData(ILOpCode.Ldloca)]

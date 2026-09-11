@@ -26,7 +26,7 @@ static class ArrayOperandLowering
 
     public static ILInstruction[] Rewrite(ILInstruction[] instructions, ReflectionCache reflection,
         IReadOnlyDictionary<string, bool[]> arrayParameters, bool[]? methodArrayParameters = null,
-        ISet<string>? unsupportedArraySignatures = null)
+        ISet<string>? unsupportedArraySignatures = null, int closureArgIndex = -1)
     {
         var analysis = new ILValueAnalysis(instructions, reflection);
         var selected = new HashSet<int>();
@@ -354,7 +354,11 @@ static class ArrayOperandLowering
             }
         } while (changed);
 
-        return ILExpressionSpiller.Rewrite(instructions, analysis, selected);
+        // Only the compiler-managed hidden context is an immutable pointer.
+        // Ordinary argument values must retain their original evaluation time.
+        var contexts = new HashSet<int>(selected.Where(p =>
+            closureArgIndex >= 0 && instructions[p].GetLdargIndex() == closureArgIndex));
+        return ILExpressionSpiller.Rewrite(instructions, analysis, selected, stableAddressProducers: contexts);
 
         void SelectValueExpression(int producer)
         {

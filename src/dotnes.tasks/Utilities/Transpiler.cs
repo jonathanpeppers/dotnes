@@ -333,17 +333,21 @@ partial class Transpiler : IDisposable
         {
             reflectionCache.RegisterExternMethod(kvp.Key, kvp.Value.argCount, kvp.Value.hasReturnValue);
         }
+        var structLayouts = DetectStructLayouts();
+        if (_closureFieldTypes.Count > 0)
+            DetectClosureMethods(reflectionCache);
+
         instructions = ArrayOperandLowering.Rewrite(instructions, reflectionCache, arrayParameters,
             unsupportedArraySignatures: _unsupportedArrayHelperSignatures);
         foreach (var method in UserMethods.Keys.ToArray())
         {
             UserMethods[method] = ArrayOperandLowering.Rewrite(
-                UserMethods[method], reflectionCache, arrayParameters, arrayParameters[method], _unsupportedArrayHelperSignatures);
+                UserMethods[method], reflectionCache, arrayParameters, arrayParameters[method], _unsupportedArrayHelperSignatures,
+                _closureMethodArgIndex.TryGetValue(method, out int context) ? context : -1);
         }
 
         // Build main program block using label references (addresses resolved later)
         var externNames = new HashSet<string>(ExternMethods.Keys, StringComparer.Ordinal);
-        var structLayouts = DetectStructLayouts();
 
         // Pre-allocate user-defined static fields so all methods share the same addresses
         var (staticFields, wordStaticFields, staticFieldBytes, staticArrayFields) = PreAllocateStaticFields(instructions);
@@ -352,7 +356,6 @@ partial class Transpiler : IDisposable
         if (_closureFieldTypes.Count > 0)
         {
             _closureStructLocalIndex = DetectClosureStructLocal(instructions);
-            DetectClosureMethods(reflectionCache);
             PreAllocateClosureFields(ref staticFieldBytes);
         }
 

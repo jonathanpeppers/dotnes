@@ -5,6 +5,37 @@ namespace dotnes.tests;
 
 public class ArrayReviewTests(ITestOutputHelper output) : ExecutionTests(output)
 {
+    [Fact]
+    public void ComputedReadCanForwardACapturedCallersContext()
+    {
+        var cpu = ExecuteProgram(
+            """
+            byte captured = 7;
+            Outer(3);
+            test_stop();
+            while (true) ;
+            static extern void test_stop();
+            void Outer(byte index)
+            {
+                byte c = captured;
+                poke(0x6001, c);
+                byte[] data = new byte[8];
+                data[2] = 44;
+                Consume(data[(byte)(index - 1)]);
+            }
+            void Consume(byte value)
+            {
+                byte c = captured;
+                poke(0x6002, c);
+                byte v = value;
+                poke(0x6000, v);
+            }
+            """);
+        Assert.Equal(new byte[] { 44, 7, 7 }, cpu.Memory[0x6000..0x6003]);
+        Assert.Equal(Cpu6502.SoftwareStackTop, cpu.SoftwareStackPointer);
+        Assert.Equal(0xFD, cpu.SP);
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

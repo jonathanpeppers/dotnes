@@ -10,16 +10,19 @@ namespace dotnes;
 static class ILExpressionSpiller
 {
     // Local/argument slot addresses are stable even when their contents change.
-    static bool CanRematerialize(ILInstruction instruction) =>
+    static bool IsRematerializableInstruction(ILInstruction instruction) =>
         instruction.GetLdcValue() is not null ||
         instruction.OpCode is ILOpCode.Ldloca or ILOpCode.Ldloca_s or ILOpCode.Ldarga or ILOpCode.Ldarga_s;
 
     public static ILInstruction[] Rewrite(
         ILInstruction[] instructions, ILValueAnalysis analysis, ISet<int> producers,
-        ISet<int>? wordProducers = null)
+        ISet<int>? wordProducers = null, ISet<int>? stableAddressProducers = null)
     {
         if (producers.Count == 0)
             return instructions;
+
+        bool CanRematerialize(int producer) =>
+            IsRematerializableInstruction(instructions[producer]) || stableAddressProducers?.Contains(producer) == true;
 
         int nextLocal = instructions.Select(i => i.GetLdlocIndex() ?? i.GetStlocIndex()
             ?? (i.OpCode is ILOpCode.Ldloc or ILOpCode.Ldloca or ILOpCode.Ldloca_s ? i.Integer : null)
@@ -30,7 +33,7 @@ static class ILExpressionSpiller
         {
             if (!analysis.ProducesValue[producer] || analysis.Escapes[producer])
                 throw new InvalidOperationException($"Cannot spill IL value at index {producer} across an unknown control-flow boundary.");
-            if (!CanRematerialize(instructions[producer]))
+            if (!CanRematerialize(producer))
                 locals.Add(producer, nextLocal++);
         }
 
@@ -64,7 +67,7 @@ static class ILExpressionSpiller
                     continue;
                 int offset = first ? instruction.Offset : nextOffset--;
                 first = false;
-                if (CanRematerialize(instructions[producer]))
+                if (CanRematerialize(producer))
                     result.Add(instructions[producer] with { Offset = offset });
                 else
                     result.Add(new ILInstruction(ILOpCode.Ldloc_s, offset, locals[producer]));
@@ -106,7 +109,7 @@ static class ILExpressionSpiller
                     instruction = instruction with { Offset = offset };
             }
 
-            if (producers.Contains(i) && CanRematerialize(instruction))
+            if (producers.Contains(i) && CanRematerialize(i))
             {
                 result.Add(new ILInstruction(ILOpCode.Nop, instruction.Offset));
                 continue;
