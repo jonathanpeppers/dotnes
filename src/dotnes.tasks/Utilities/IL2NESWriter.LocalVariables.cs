@@ -74,6 +74,17 @@ partial class IL2NESWriter
 
         // Storing a local clobbers A/X
         _firstAndAfterPadPoll = false;
+        bool valueIsWord = _ushortInAX;
+        if (local.IsWord && !valueIsWord && _numericValues != null
+            && _numericValues.Inputs[Index].Length == 1
+            && SignedNumericType(NumericType(_numericValues.Inputs[Index][0])))
+        {
+            if (Instructions![_numericValues.Inputs[Index][0]].GetLdcValue() is int constant)
+                Emit(Opcode.LDX, AddressMode.Immediate, (byte)(constant >> 8));
+            else
+                EmitNumericExtension(signed: true);
+            valueIsWord = true;
+        }
         _ushortInAX = false;
 
         // Detect the "two pending IL stack values" pattern produced when
@@ -129,6 +140,8 @@ partial class IL2NESWriter
             {
                 // A=lo, X=hi from a ushort-returning function — store both bytes
                 if (isNewAllocation) LocalCount += 2;
+                if (!valueIsWord)
+                    Emit(Opcode.LDX, AddressMode.Immediate, 0);
                 Emit(Opcode.STA, AddressMode.Absolute, (ushort)local.Address);
                 Emit(Opcode.STX, AddressMode.Absolute, (ushort)(local.Address + 1));
             }
@@ -145,11 +158,18 @@ partial class IL2NESWriter
         else if (local.IsWord)
         {
             if (isNewAllocation) LocalCount += 2;
-            // Word local (e.g. ushort x = 0): store low byte in A, high byte = 0
             Emit(Opcode.STA, AddressMode.Absolute, (ushort)local.Address);
-            Emit(Opcode.LDA, AddressMode.Immediate, 0x00);
-            Emit(Opcode.STA, AddressMode.Absolute, (ushort)(local.Address + 1));
-            _immediateInA = 0x00;
+            if (valueIsWord)
+            {
+                Emit(Opcode.STX, AddressMode.Absolute, (ushort)(local.Address + 1));
+                _immediateInA = null;
+            }
+            else
+            {
+                Emit(Opcode.LDA, AddressMode.Immediate, 0x00);
+                Emit(Opcode.STA, AddressMode.Absolute, (ushort)(local.Address + 1));
+                _immediateInA = 0x00;
+            }
         }
         else if (local.Value <= byte.MaxValue)
         {

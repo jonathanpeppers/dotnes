@@ -4,15 +4,7 @@ namespace dotnes;
 
 partial class IL2NESWriter
 {
-    MethodNumericTypes? _numericTypes;
     IReadOnlyDictionary<string, PrimitiveTypeCode?>? _numericFields;
-
-    internal void ConfigureNumericTypes(IReadOnlyDictionary<string, MethodNumericTypes> methods,
-        IReadOnlyDictionary<string, PrimitiveTypeCode?>? fields = null)
-    {
-        _numericFields = fields;
-        methods.TryGetValue(MethodName ?? "main", out _numericTypes);
-    }
 
     PrimitiveTypeCode? DeclaredScalarType(ILInstruction instruction)
     {
@@ -27,13 +19,4 @@ partial class IL2NESWriter
                 ? type : null;
     }
 
-    internal static int? NumericArgIndex(ILInstruction instruction) => instruction.OpCode switch
-    {
-        ILOpCode.Ldarg_0 => 0,
-        ILOpCode.Ldarg_1 => 1,
-        ILOpCode.Ldarg_2 => 2,
-        ILOpCode.Ldarg_3 => 3,
-        ILOpCode.Ldarg_s or ILOpCode.Ldarg => instruction.Integer,
-        _ => null,
-    };
 }

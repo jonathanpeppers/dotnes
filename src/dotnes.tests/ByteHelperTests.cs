@@ -605,7 +605,8 @@ public class ByteHelperTests(ITestOutputHelper output) : RoslynTests(output)
 
     [Theory]
     [InlineData(NESConstants.MaxLocalBytes - 2, false)]
-    [InlineData(NESConstants.MaxLocalBytes - 4, true)]
+    [InlineData(NESConstants.MaxLocalBytes - 4, false)]
+    [InlineData(NESConstants.MaxLocalBytes - 5, true)]
     public void ParameterHomesRespectPendingArgumentsAndNeighboringStorage(int padding, bool fits)
     {
         string source = $$"""
@@ -627,7 +628,7 @@ public class ByteHelperTests(ITestOutputHelper output) : RoslynTests(output)
         Assert.Equal(10, before.Memory[result]);
         Assert.Equal(10, after.Memory[result]);
         if (fits)
-            Assert.Equal(result + 1, AssertHomeParameter(program, "helper"));
+            Assert.Equal(result + 2, AssertHomeParameter(program, "helper"));
         else
         {
             AssertStackParameter(program, "helper");

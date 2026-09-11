@@ -350,6 +350,10 @@ partial class Transpiler : IDisposable
             program.RegisterExternSymbol(kvp.Key);
         }
 
+        instructions = MaterializeSharedMemoryAddresses(instructions, reflectionCache, "main");
+        foreach (string methodName in UserMethods.Keys.ToArray())
+            UserMethods[methodName] = MaterializeSharedMemoryAddresses(UserMethods[methodName], reflectionCache, methodName);
+
         // Build main program block using label references (addresses resolved later)
         var externNames = new HashSet<string>(ExternMethods.Keys, StringComparer.Ordinal);
         var structLayouts = DetectStructLayouts();
@@ -366,11 +370,20 @@ partial class Transpiler : IDisposable
             PreAllocateClosureFields(ref staticFieldBytes);
         }
 
+        instructions = PreserveExpressionValues(instructions, reflectionCache, "main");
+        foreach (var name in UserMethods.Keys.ToArray())
+            UserMethods[name] = PreserveExpressionValues(UserMethods[name], reflectionCache, name);
+        var byteParameterCalls = new HashSet<string>(NumericTypes.Where(kvp =>
+            UserMethods.ContainsKey(kvp.Key) && kvp.Value.Parameters.All(p => p == PrimitiveTypeCode.Byte)
+                && kvp.Value.ReturnType is PrimitiveTypeCode.Byte or PrimitiveTypeCode.Void)
+            .Select(kvp => kvp.Key));
+
         using var writer = new IL2NESWriter(new MemoryStream(), logger: _logger, reflectionCache: reflectionCache)
         {
             Instructions = instructions,
             UsedMethods = UsedMethods,
             UserMethodNames = new HashSet<string>(UserMethods.Keys, StringComparer.Ordinal),
+            ByteParameterCalls = byteParameterCalls,
             ExternMethodNames = externNames,
             WordLocals = DetectWordLocals(instructions, reflectionCache),
             StructLayouts = structLayouts,
@@ -408,6 +421,8 @@ partial class Transpiler : IDisposable
             
             // Record block count before processing this instruction
             writer.RecordBlockCount(instruction.Offset);
+            if (writer.TryNumericComparison(instruction))
+                continue;
             
             if (instruction.Integer != null)
             {
@@ -461,11 +476,12 @@ partial class Transpiler : IDisposable
                 Instructions = methodIL,
                 UsedMethods = UsedMethods,
                 UserMethodNames = new HashSet<string>(UserMethods.Keys, StringComparer.Ordinal),
+                ByteParameterCalls = byteParameterCalls,
                 ExternMethodNames = externNames,
                 MethodParamCount = paramCount,
                 ParamIsArray = isArrayParam,
                 MethodName = methodName,
-                WordLocals = DetectWordLocals(methodIL, reflectionCache),
+                WordLocals = DetectWordLocals(methodIL, reflectionCache, methodName),
                 StructLayouts = structLayouts,
                 BufferFieldSizes = _bufferFieldSizes,
                 ByteArrayLabelStartIndex = writer.ByteArrays.Count,
@@ -503,6 +519,8 @@ partial class Transpiler : IDisposable
                 if (methodWriter.CurrentBlock != null)
                     methodWriter.CurrentBlock.SetNextLabel(labelName);
                 methodWriter.RecordBlockCount(instruction.Offset);
+                if (methodWriter.TryNumericComparison(instruction))
+                    continue;
 
                 if (instruction.Integer != null)
                     methodWriter.Write(instruction, instruction.Integer.Value);
