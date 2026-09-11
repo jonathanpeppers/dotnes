@@ -11,6 +11,7 @@ partial class IL2NESWriter
         Instructions is not null && ArrayOperandLowering.IndexNeedsPreservation(Instructions, index);
 
     internal Dictionary<string, bool[]> UserMethodArrayParameters { get; init; } = new(StringComparer.Ordinal);
+    internal ISet<string> UnsupportedArrayHelperSignatures { get; init; } = new HashSet<string>();
     readonly Dictionary<int, int> _arrayArgumentAdjustments = new();
 
     int ParameterOffset(int parameter)
@@ -131,6 +132,8 @@ partial class IL2NESWriter
         for (int i = 0; i < parameters.Length; i++)
             if (parameters[i] && TryResolveArrayLocal(Instructions[first + i])?.LabelName is not null)
                 return false;
+        if (UnsupportedArrayHelperSignatures.Contains(method))
+            throw new TranspileException("Fixed RAM array helpers support only byte-sized scalar parameters and return values.", method);
         RemoveArrayArgumentLoads(Instructions[first].Offset);
         for (int i = 0; i < parameters.Length; i++)
         {

@@ -41,6 +41,9 @@ partial class Transpiler : IDisposable
     /// Populated by ReadStaticVoidMain().
     /// </summary>
     public Dictionary<string, (int argCount, bool hasReturnValue, bool[] isArrayParam)> UserMethodMetadata { get; } = new(StringComparer.Ordinal);
+    readonly HashSet<string> _unsupportedArrayHelperSignatures = new(StringComparer.Ordinal);
+    readonly HashSet<string> _byteParameterCalls = new(StringComparer.Ordinal);
+    readonly Dictionary<string, bool[]> _byteParameters = new(StringComparer.Ordinal);
 
     /// <summary>
     /// Extern methods declared with 'static extern' (name -> arg count, has return value).
@@ -358,6 +361,8 @@ partial class Transpiler : IDisposable
             UsedMethods = UsedMethods,
             UserMethodNames = new HashSet<string>(UserMethods.Keys, StringComparer.Ordinal),
             UserMethodArrayParameters = arrayParameters,
+            UnsupportedArrayHelperSignatures = _unsupportedArrayHelperSignatures,
+            ByteParameterCalls = _byteParameterCalls,
             ExternMethodNames = externNames,
             WordLocals = DetectWordLocals(instructions, reflectionCache),
             StructLayouts = structLayouts,
@@ -447,6 +452,9 @@ partial class Transpiler : IDisposable
                 UsedMethods = UsedMethods,
                 UserMethodNames = new HashSet<string>(UserMethods.Keys, StringComparer.Ordinal),
                 UserMethodArrayParameters = arrayParameters,
+                UnsupportedArrayHelperSignatures = _unsupportedArrayHelperSignatures,
+                ByteParameterCalls = _byteParameterCalls,
+                ParamIsByte = _byteParameters.TryGetValue(methodName, out var declaredBytes) ? declaredBytes : [],
                 MethodParamCount = paramCount,
                 ParamIsArray = isArrayParam,
                 MethodName = methodName,

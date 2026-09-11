@@ -108,6 +108,14 @@ partial class Transpiler
                 if (signature.ParameterTypes.Contains(ArraySignatureType.UnsupportedArray))
                     throw new TranspileException("Only existing fixed byte[] arrays can be passed to helpers; other array element types, ranks, and ref array parameters are not supported.", cleanName);
                 bool[] isArrayParam = signature.ParameterTypes.Select(type => type == ArraySignatureType.ByteArray).ToArray();
+                _byteParameters[cleanName] = signature.ParameterTypes.Select(type => type == ArraySignatureType.Byte).ToArray();
+                if (_byteParameters[cleanName].All(isByte => isByte) &&
+                    signature.ReturnType is ArraySignatureType.Byte or ArraySignatureType.Void)
+                    _byteParameterCalls.Add(cleanName);
+                if (isArrayParam.Contains(true) &&
+                    (signature.ParameterTypes.Contains(ArraySignatureType.Other) ||
+                     signature.ReturnType == ArraySignatureType.Other))
+                    _unsupportedArrayHelperSignatures.Add(cleanName);
                 UserMethodMetadata[cleanName] = (paramCount, hasReturnValue, isArrayParam);
             }
         }

@@ -8,6 +8,7 @@ enum ArraySignatureType
     Other,
     Void,
     Byte,
+    ByteScalar,
     ByteArray,
     UnsupportedArray,
 }
@@ -21,6 +22,7 @@ sealed class ArrayTypeDecoder : ISignatureTypeProvider<ArraySignatureType, objec
     public ArraySignatureType GetPrimitiveType(PrimitiveTypeCode code) => code switch
     {
         PrimitiveTypeCode.Byte => ArraySignatureType.Byte,
+        PrimitiveTypeCode.SByte or PrimitiveTypeCode.Boolean => ArraySignatureType.ByteScalar,
         PrimitiveTypeCode.Void => ArraySignatureType.Void,
         _ => ArraySignatureType.Other,
     };
