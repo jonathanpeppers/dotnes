@@ -11,7 +11,8 @@ partial class Transpiler
             throw new InvalidOperationException($"Cannot allocate typed spills without the signature for '{method}'.");
         if (types.Count != instructions.Length)
             throw new ArgumentException("Producer types must correspond to the input IL instructions.", nameof(types));
-        if (selected.Any(i => i < 0 || i >= types.Count || types[i] is null or PrimitiveTypeCode.Void))
+        if (selected.Any(i => i < 0 || i >= types.Count
+            || (types[i] is null or PrimitiveTypeCode.Void && !ILExpressionSpiller.CanRematerialize(instructions[i]))))
             throw new InvalidOperationException($"Cannot spill an untyped expression value in '{method}'.");
 
         var words = new HashSet<int>(selected.Where(i => types[i] is PrimitiveTypeCode.UInt16

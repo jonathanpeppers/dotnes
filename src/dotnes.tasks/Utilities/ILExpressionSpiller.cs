@@ -9,6 +9,11 @@ namespace dotnes;
 /// </summary>
 static class ILExpressionSpiller
 {
+    // Local/argument slot addresses are stable even when their contents change.
+    internal static bool CanRematerialize(ILInstruction instruction) =>
+        instruction.GetLdcValue() is not null ||
+        instruction.OpCode is ILOpCode.Ldloca or ILOpCode.Ldloca_s or ILOpCode.Ldarga or ILOpCode.Ldarga_s;
+
     public static ILInstruction[] Rewrite(
         ILInstruction[] instructions, ILValueAnalysis analysis, ISet<int> producers,
         ISet<int>? wordProducers = null, IDictionary<int, int>? spillLocals = null,
@@ -26,7 +31,7 @@ static class ILExpressionSpiller
         {
             if (!analysis.ProducesValue[producer] || analysis.Escapes[producer])
                 throw new InvalidOperationException($"Cannot spill IL value at index {producer} across an unknown control-flow boundary.");
-            if (instructions[producer].GetLdcValue() == null)
+            if (!CanRematerialize(instructions[producer]))
             {
                 spillLocals?.Add(producer, nextLocal);
                 locals.Add(producer, nextLocal++);
@@ -63,7 +68,7 @@ static class ILExpressionSpiller
                     continue;
                 int offset = first ? instruction.Offset : nextOffset--;
                 first = false;
-                if (instructions[producer].GetLdcValue() != null)
+                if (CanRematerialize(instructions[producer]))
                     result.Add(instructions[producer] with { Offset = offset });
                 else
                     result.Add(new ILInstruction(ILOpCode.Ldloc_s, offset, locals[producer]));
@@ -71,7 +76,7 @@ static class ILExpressionSpiller
             if (!first)
                 instruction = Relocate(instruction, nextOffset--);
 
-            if (producers.Contains(i) && instruction.GetLdcValue() != null)
+            if (producers.Contains(i) && CanRematerialize(instruction))
             {
                 result.Add(new ILInstruction(ILOpCode.Nop, instruction.Offset));
                 continue;

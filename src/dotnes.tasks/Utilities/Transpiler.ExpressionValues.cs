@@ -113,7 +113,8 @@ partial class Transpiler
                     int first = Array.IndexOf(inputs, producer);
                     foreach (int input in inputs.Skip(first))
                     {
-                        if (input < 0 || !scalar[input] || arrayOperands.Contains(input))
+                        if (input < 0 || (!scalar[input] && !ILExpressionSpiller.CanRematerialize(instructions[input]))
+                            || arrayOperands.Contains(input))
                         {
                             compatible = false;
                             break;
