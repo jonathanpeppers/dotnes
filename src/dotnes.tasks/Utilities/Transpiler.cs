@@ -378,15 +378,25 @@ partial class Transpiler : IDisposable
             PreAllocateClosureFields(ref staticFieldBytes);
         }
 
-        instructions = PreserveExpressionValues(instructions, reflectionCache, "main",
-            GetCompactIntLocalsForMethod(instructions, reflectionCache, "main"));
+        // Prove original source ranges before either memory or expression spilling adds conversions.
+        var mainCompactInts = GetCompactIntLocalsForMethod(instructions, reflectionCache, "main");
+        var methodCompactInts = UserMethods.ToDictionary(pair => pair.Key,
+            pair => GetCompactIntLocalsForMethod(pair.Value, reflectionCache, pair.Key));
+        instructions = MaterializeSharedMemoryAddresses(instructions, reflectionCache, "main", mainCompactInts);
+        foreach (string methodName in UserMethods.Keys.ToArray())
+            UserMethods[methodName] = MaterializeSharedMemoryAddresses(UserMethods[methodName], reflectionCache,
+                methodName, methodCompactInts[methodName]);
+
+        instructions = PreserveExpressionValues(instructions, reflectionCache, "main", mainCompactInts);
         foreach (var name in UserMethods.Keys.ToArray())
-            UserMethods[name] = PreserveExpressionValues(UserMethods[name], reflectionCache, name,
-                GetCompactIntLocalsForMethod(UserMethods[name], reflectionCache, name));
-        var byteParameterCalls = new HashSet<string>(NumericTypes.Where(kvp =>
-            UserMethods.ContainsKey(kvp.Key) && kvp.Value.Parameters.All(p => p == PrimitiveTypeCode.Byte)
+            UserMethods[name] = PreserveExpressionValues(UserMethods[name], reflectionCache, name, methodCompactInts[name]);
+        var byteParameterCalls = NumericTypes.Where(kvp =>
+            UserMethods.ContainsKey(kvp.Key) && kvp.Value.Parameters.Where((p, index) =>
+                    !_closureMethodArgIndex.TryGetValue(kvp.Key, out int closure) || index != closure)
+                .All(p => p == PrimitiveTypeCode.Byte)
                 && kvp.Value.ReturnType is PrimitiveTypeCode.Byte or PrimitiveTypeCode.Void)
-            .Select(kvp => kvp.Key));
+            .ToDictionary(kvp => kvp.Key,
+                kvp => _closureMethodArgIndex.TryGetValue(kvp.Key, out int closure) ? closure : -1);
 
         using var writer = new IL2NESWriter(new MemoryStream(), logger: _logger, reflectionCache: reflectionCache)
         {

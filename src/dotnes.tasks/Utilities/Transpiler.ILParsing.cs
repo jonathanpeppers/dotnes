@@ -20,6 +20,7 @@ partial class Transpiler
         _ambiguousByteHelperNames = false;
         GetUsedMethods(_reader);
         var arrayValues = GetArrayValues(_reader);
+        int entryPointToken = _pe.PEHeaders.CorHeader?.EntryPointTokenOrRelativeVirtualAddress ?? 0;
 
         foreach (var h in _reader.MethodDefinitions)
         {
@@ -28,16 +29,18 @@ partial class Transpiler
                 continue;
 
             var methodName = _reader.GetString(methodDef.Name);
+            bool isEntryPoint = MetadataTokens.GetToken(h) == entryPointToken;
 
             // Skip compiler-emitted helper methods in <PrivateImplementationDetails> and similar
             // synthesized types (e.g. C# 12 inline-array helpers: InlineArrayAsSpan,
             // InlineArrayElementRef, InlineArrayFirstElementRef).
+            // The PE entry point itself may be synthesized, as with F# main@.
             var declType = _reader.GetTypeDefinition(methodDef.GetDeclaringType());
             var declTypeName = _reader.GetString(declType.Name);
-            if (declTypeName.StartsWith("<"))
+            if (declTypeName.StartsWith("<") && !isEntryPoint)
                 continue;
 
-            if (methodName == "Main" || methodName == "<Main>$")
+            if (isEntryPoint || methodName == "Main" || methodName == "<Main>$")
             {
                 ReadNumericTypes(methodDef, "main");
                 // Parse exception regions (try/finally) before yielding instructions
@@ -99,6 +102,7 @@ partial class Transpiler
                 ReadNumericTypes(methodDef, cleanName);
                 var instructions = ReadMethodBody(methodDef, arrayValues).ToArray();
                 UserMethods[cleanName] = instructions;
+                _userMethodDefinitions[cleanName] = methodDef;
                 RecordByteHelperDefinition(cleanName, methodDef);
 
                 // Parse exception regions (try/finally) for user methods

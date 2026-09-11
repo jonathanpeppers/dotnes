@@ -259,14 +259,14 @@ public class IntegerSemanticsTests(ITestOutputHelper output) : ExecutionTests(ou
     [Fact]
     public void DeclaredNumericTypesSurviveMetadataParsing()
     {
-        using var transpiler = BuildProgram("""
+        using var transpiler = ReadProgram("""
             ushort word = 0;
             short signedWord = 0;
             sbyte signedByte = 0;
             int counter = 0;
             while (true)
             {
-                word = rand16();
+                word = (ushort)(word + 1);
                 signedWord = (short)word;
                 signedByte = (sbyte)signedWord;
                 counter = peek(0x6010);
@@ -276,7 +276,8 @@ public class IntegerSemanticsTests(ITestOutputHelper output) : ExecutionTests(ou
             }
             static ushort Identity(byte value) => value;
             static extern short ReadSignedWord();
-            """, out _);
+            """);
+        _ = transpiler.ReadStaticVoidMain().ToArray();
         var main = transpiler.NumericTypes["main"];
         Assert.Contains(PrimitiveTypeCode.UInt16, main.Locals);
         Assert.Contains(PrimitiveTypeCode.Int16, main.Locals);

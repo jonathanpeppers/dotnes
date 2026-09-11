@@ -100,13 +100,17 @@ Signed division by a positive power-of-two constant truncates toward zero, inclu
 operands. Other signed divisors and signed remainder produce diagnostics rather
 than using unsigned routines. Unsigned word division and remainder support
 positive constant divisors from 1 through 65535, retaining the full quotient and
-remainder. Nonzero runtime `byte` divisors are also supported for word dividends;
-runtime word divisors produce an actionable diagnostic. A zero runtime byte
-divisor enters a labeled fault loop without producing a result: the NES backend
-does not implement CLR divide-by-zero exceptions. Check the divisor before `/`
-or `%` when zero is possible. A zero constant word divisor is diagnosed.
+remainder. Nonzero runtime `byte` divisors are supported for byte and word
+dividends; runtime word divisors produce an actionable diagnostic. Runtime
+divisors must be nonzero. The backend does not implement CLR divide-by-zero
+exceptions; its full-width division routine traps zero in a labeled fault loop.
+Check the divisor before `/` or `%` when zero is possible. A zero constant word
+divisor is diagnosed.
 Word multiplication preserves both bytes for
 runtime byte operands (255 times 3 is 765), including values held across calls.
+An explicit final `byte` conversion retains the low eight bits. Conditional
+operands and mixed byte/sbyte multiplication preserve the selected values and
+their source signedness before that conversion.
 Explicit word conversions can request the low sixteen bits of a larger product;
 otherwise an observable wider product is diagnosed. Word-width demand also
 propagates through bitwise operations, so `(ushort)((value << 4) | 1)` retains
@@ -122,11 +126,11 @@ actionable diagnostic identifies the operation. Distinct conditional stores to
 byte/word locals remain supported; instruction adjacency alone is never a range
 proof.
 
-For constant-address `poke`, converted local, field and byte-parameter loads
-retain their value and stack balance. A converted compound expression whose
-memory-call lowering cannot be proven produces a diagnostic rather than treating
-a runtime placeholder as a constant. Store that converted result in an explicit
-`byte` local before the memory call.
+Converted local, field and byte-parameter operands of `peek`/`poke` retain their
+source width and signedness through shared argument materialization, including
+compound values held across calls. The original source ranges are checked before
+either memory-address or expression spills introduce synthetic conversions;
+those generated conversions cannot authorize a wider intermediate.
 
 ## `int` is not an arbitrary-width accumulator
 

@@ -154,10 +154,11 @@ partial class IL2NESWriter
     void HandleStfld(string fieldName)
     {
         // Handle closure struct field store
-        if (_pendingStructLocal != null
+        if ((_pendingClosureAccess || _pendingStructLocal != null)
             && ClosureFieldTypes != null
             && ClosureFieldTypes.ContainsKey(fieldName))
         {
+            _pendingClosureAccess = false;
             _pendingStructLocal = null;
             int fieldSize = ClosureFieldTypes[fieldName];
 

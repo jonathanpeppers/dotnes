@@ -565,16 +565,19 @@ public class ByteArithmeticTests(ITestOutputHelper output) : ExecutionTests(outp
     }
 
     [Theory]
-    [InlineData(false, false, 0)]
-    [InlineData(true, false, 0)]
-    [InlineData(false, true, 0)]
-    [InlineData(true, true, 0)]
-    [InlineData(false, false, 1)]
-    [InlineData(true, false, 1)]
-    [InlineData(false, true, 1)]
-    [InlineData(true, true, 1)]
-    public void VariableShiftMaterializesArithmeticFromAlternativeBranch(bool reverse, bool add, int select)
+    [InlineData(false, false, 0, 1)]
+    [InlineData(false, false, 1, 255)]
+    [InlineData(true, false, 0, 255)]
+    [InlineData(true, false, 1, 1)]
+    [InlineData(false, true, 0, 1)]
+    [InlineData(false, true, 1, 0)]
+    [InlineData(true, true, 0, 0)]
+    [InlineData(true, true, 1, 1)]
+    public void VariableShiftMaterializesArithmeticFromAlternativeBranch(bool reverse, bool add, byte select, byte expected)
     {
+        int selected = reverse == (select == 0) ? 65535 : 256;
+        int promoted = add ? unchecked((ushort)(selected + 1)) : selected;
+        Assert.Equal(expected, (byte)(promoted >> 8));
         string choice = reverse
             ? "State.Select == 0 ? State.WordValue : State.ByteValue + 1"
             : "State.Select == 0 ? State.ByteValue + 1 : State.WordValue";
@@ -584,10 +587,11 @@ public class ByteArithmeticTests(ITestOutputHelper output) : ExecutionTests(outp
             State.ByteValue = 255;
             State.WordValue = 65535;
             State.Count = 8;
-            State.Select = {{select}};
+            State.Select = peek(0x6100);
             byte result = (byte)(({{value}}) >> State.Count);
             poke(0x6000, result);
-            test_stop(); while (true);
+            test_stop();
+            while (true) ;
             static extern void test_stop();
             static class State
             {
@@ -596,10 +600,8 @@ public class ByteArithmeticTests(ITestOutputHelper output) : ExecutionTests(outp
                 public static byte Count;
                 public static byte Select;
             }
-            """);
-        int selected = reverse == (select == 0) ? 65535 : 256;
-        int promoted = add ? unchecked((ushort)(selected + 1)) : selected;
-        Assert.Equal((byte)(promoted >> 8), cpu.Memory[0x6000]);
+            """, cpu => cpu.Memory[0x6100] = select);
+        Assert.Equal(expected, cpu.Memory[0x6000]);
         AssertBalanced(cpu);
     }
 

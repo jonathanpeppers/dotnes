@@ -186,7 +186,7 @@ sealed class ILValueAnalysis
             if (!reflection.IsUserMethod(method) && !reflection.IsExternMethod(method)
                 && !nesLibMethods.Contains(method))
                 return false;
-            pop = instruction.CallSignature?.ArgumentCount ?? reflection.GetNumberOfArguments(method);
+            pop = instruction.CallSignature?.ArgumentCount ?? reflection.GetILNumberOfArguments(method);
             push = (instruction.CallSignature?.ReturnsValue ?? reflection.HasReturnValue(method)) ? 1 : 0;
             return true;
         }

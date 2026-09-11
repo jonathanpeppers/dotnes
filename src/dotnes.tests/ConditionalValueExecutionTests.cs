@@ -55,6 +55,9 @@ public class ConditionalValueExecutionTests(ITestOutputHelper output) : Executio
 
     [Theory]
     [InlineData("(short)-1", "(short)255", 0, 0xFFFF)]
+    [InlineData("(short)-300", "(short)300", 0, 0xFED4)]
+    [InlineData("(short)-256", "(short)300", 0, 0xFF00)]
+    [InlineData("(short)-32768", "(short)300", 0, 0x8000)]
     [InlineData("(short)-1", "(short)255", 1, 0x00FF)]
     [InlineData("(short)-1", "(short)128", 1, 0x0080)]
     [InlineData("(short)-1", "(short)256", 0, 0xFFFF)]

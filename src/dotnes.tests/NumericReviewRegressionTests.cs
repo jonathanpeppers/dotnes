@@ -29,15 +29,22 @@ public class NumericReviewRegressionTests(ITestOutputHelper output) : ExecutionT
         Assert.Equal(Cpu6502.SoftwareStackTop, cpu.SoftwareStackPointer);
     }
 
-    [Fact]
-    public void UnprovenConvertedPokeDoesNotUseARuntimePlaceholder()
+    [Theory]
+    [InlineData(0, 2)]
+    [InlineData(127, 129)]
+    [InlineData(128, 130)]
+    [InlineData(255, 1)]
+    public void ConvertedPokeUsesMaterializedRuntimeValue(byte input, byte expected)
     {
-        var error = Assert.Throws<TranspileException>(() => GetProgramBytes("""
+        var cpu = ExecuteProgram("""
             short value = (sbyte)peek(0x6010);
             poke(0x6000, (byte)(value + 2));
-            while (true);
-            """));
-        Assert.Contains("explicit byte local", error.Message);
+            test_stop(); while (true);
+            static extern void test_stop();
+            """, cpu => cpu.Memory[0x6010] = input);
+        Assert.Equal(expected, cpu.Memory[0x6000]);
+        Assert.Equal(Cpu6502.SoftwareStackTop, cpu.SoftwareStackPointer);
+        Assert.Equal(0xFD, cpu.SP);
     }
 
     [Theory]

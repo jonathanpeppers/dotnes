@@ -16,16 +16,19 @@ partial class IL2NESWriter
             Emit(Opcode.STX, AddressMode.ZeroPage, TEMP_HI);
             EmitNumericOperand(right);
         }
-        else if (lhs >= 0 && Instructions![lhs].OpCode == ILOpCode.Call && WordNumericType(NumericType(lhs))
+        else if (lhs >= 0 && Instructions![lhs].OpCode == ILOpCode.Call
+            && (WordNumericType(NumericType(lhs)) || NumericType(lhs) is PrimitiveTypeCode.Byte or PrimitiveTypeCode.SByte)
             && PureNumericOperand(rhs, out int first) && first == lhs + 1 && rhs == Index - 1
             && !_numericValues.Escapes[lhs] && _numericValues.Consumers[lhs].Count == 1
             && !ILBranchTargets.HasEntryAfter(Instructions, lhs, Index)
             && _blockCountAtILOffset.TryGetValue(Instructions[first].Offset, out int blockStart))
         {
-            // Capture the complete word return before re-emitting the adjacent pure operand.
+            // Capture the actual return before re-emitting the adjacent pure operand.
             RemoveLastInstructions(GetBufferedBlockCount() - blockStart);
             _argStackAdjust = _numericArgAdjust[Instructions[first].Offset];
             CurrentBlock!.SetNextLabel(InstructionLabel(Instructions[first].Offset));
+            if (!WordNumericType(NumericType(lhs)))
+                EmitNumericExtension(SignedNumericType(NumericType(lhs)));
             Emit(Opcode.STA, AddressMode.ZeroPage, TEMP);
             Emit(Opcode.STX, AddressMode.ZeroPage, TEMP_HI);
             EmitNumericOperand(rhs);
@@ -52,10 +55,14 @@ partial class IL2NESWriter
     bool TryNumericMultiply(ILInstruction instruction)
     {
         if (instruction.OpCode != ILOpCode.Mul || _numericValues == null
-            || _numericValues.Inputs[Index].Length != 2
-            || !RequiresNumericWord(Index, new HashSet<int>()))
+            || _numericValues.Inputs[Index].Length != 2)
             return false;
         int lhs = _numericValues.Inputs[Index][0], rhs = _numericValues.Inputs[Index][1];
+        bool runtimeBytes = NumericType(lhs) is PrimitiveTypeCode.Byte or PrimitiveTypeCode.SByte
+            && NumericType(rhs) is PrimitiveTypeCode.Byte or PrimitiveTypeCode.SByte
+            && Instructions![rhs].GetLdcValue() == null;
+        if (!runtimeBytes && !RequiresNumericWord(Index, new HashSet<int>()))
+            return false;
         if (rhs >= 0 && Instructions![rhs].GetLdcValue() is > 0 and int factor
             && (factor & (factor - 1)) == 0 && NumericType(lhs) == PrimitiveTypeCode.Byte
             && Index + 1 < Instructions.Length
@@ -125,13 +132,34 @@ partial class IL2NESWriter
         return true;
     }
 
+    bool CanUseCapturedByteRemainder(int lhs, int rhs)
+    {
+        if (!_savedRuntimeToTemp || Instructions == null || lhs < 0 || lhs + 1 != rhs || rhs != Index - 1
+            || Instructions[lhs].OpCode != ILOpCode.Call
+            || Instructions[rhs].GetLdlocIndex() is not int local
+            || !Locals.TryGetValue(local, out var value) || value.IsWord || value.Address == null
+            || ILBranchTargets.HasEntryAfter(Instructions, lhs, Index)
+            || !_blockCountAtILOffset.TryGetValue(Instructions[rhs].Offset, out int start)
+            || CurrentBlock is not { } block || block.Count != start + 2)
+            return false;
+        // This existing byte loop is correct only when TEMP really holds the dividend
+        // and A contains the adjacent divisor load, not a tracked runtime placeholder.
+        return block[start] is { Opcode: Opcode.STA, Mode: AddressMode.ZeroPage, Operand: ImmediateOperand { Value: TEMP } }
+            && block[start + 1] is { Opcode: Opcode.LDA, Mode: AddressMode.Absolute, Operand: AbsoluteOperand address }
+            && address.Address == value.Address;
+    }
+
     bool TryUnsignedWordDivision(ILInstruction instruction)
     {
         if (instruction.OpCode is not (ILOpCode.Div or ILOpCode.Rem) || _numericValues == null
             || _numericValues.Inputs[Index].Length != 2)
             return false;
         int lhs = _numericValues.Inputs[Index][0], rhs = _numericValues.Inputs[Index][1];
-        if (!WordNumericType(NumericType(lhs)) && !WordNumericType(NumericType(rhs)) && !_ushortInAX)
+        bool runtimeBytes = NumericType(lhs) == PrimitiveTypeCode.Byte && NumericType(rhs) == PrimitiveTypeCode.Byte
+            && Instructions![rhs].GetLdcValue() == null;
+        if (!runtimeBytes && !WordNumericType(NumericType(lhs)) && !WordNumericType(NumericType(rhs)) && !_ushortInAX)
+            return false;
+        if (runtimeBytes && instruction.OpCode == ILOpCode.Rem && CanUseCapturedByteRemainder(lhs, rhs))
             return false;
         if (SignedNumericType(NumericType(lhs)) || SignedNumericType(NumericType(rhs)))
             throw new TranspileException(

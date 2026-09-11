@@ -12,6 +12,8 @@ namespace dotnes;
 partial class Transpiler
 {
     readonly Dictionary<string, PrimitiveTypeCode?> _closureNumericFieldTypes = new(StringComparer.Ordinal);
+    readonly Dictionary<string, MethodDefinition> _userMethodDefinitions = new(StringComparer.Ordinal);
+    readonly HashSet<TypeDefinitionHandle> _closureTypes = new();
 
     /// <summary>
     /// Scans the assembly's TypeDefinitions for user-defined value types (structs)
@@ -49,6 +51,7 @@ partial class Transpiler
             // Detect compiler-generated closure structs (display classes)
             if (typeName.Contains("DisplayClass"))
             {
+                _closureTypes.Add(t);
                 // Catalog closure fields instead of throwing — closure support is handled
                 // by rewriting the IL patterns in BuildProgram6502.
                 // Note: field names are keyed by simple name since IL parsing produces
@@ -473,37 +476,28 @@ partial class Transpiler
     }
 
     /// <summary>
-    /// Detects user methods that are closure-capturing functions by scanning their IL
-    /// for ldarg + ldfld patterns that reference closure fields.
+    /// Detects hidden by-reference closure parameters from their metadata, including
+    /// methods that only forward the context or write to captured fields.
     /// Roslyn places the closure struct ref as the LAST parameter, so for a method
     /// with N real params, arg N is the closure ref.
     /// </summary>
     void DetectClosureMethods(ReflectionCache reflectionCache)
     {
+        var decoder = new ClosureParameterDecoder(_closureTypes);
         foreach (var kvp in UserMethods)
         {
             var methodName = kvp.Key;
-            var il = kvp.Value;
+            var parameters = _userMethodDefinitions[methodName].DecodeSignature(decoder, null).ParameterTypes;
 
-            // Check if method accesses closure fields via ldarg + ldfld
             int closureArgIndex = -1;
-            for (int i = 0; i < il.Length - 1; i++)
+            for (int i = 0; i < parameters.Length; i++)
             {
-                // Match any ldarg variant followed by ldfld of a closure field
-                int argIdx = -1;
-                if (il[i].OpCode >= ILOpCode.Ldarg_0 && il[i].OpCode <= ILOpCode.Ldarg_3)
-                    argIdx = il[i].OpCode - ILOpCode.Ldarg_0;
-                else if (il[i].OpCode == ILOpCode.Ldarg_s)
-                    argIdx = il[i].Integer ?? 0;
-
-                if (argIdx >= 0
-                    && il[i + 1].OpCode == ILOpCode.Ldfld
-                    && il[i + 1].String is string fieldName
-                    && _closureFieldTypes.ContainsKey(fieldName))
-                {
-                    closureArgIndex = argIdx;
-                    break;
-                }
+                if (parameters[i] != ClosureParameterKind.ByReference)
+                    continue;
+                if (i != parameters.Length - 1)
+                    throw new TranspileException(
+                        "Only a single trailing closure context parameter is supported.", methodName);
+                closureArgIndex = i;
             }
 
             if (closureArgIndex < 0)

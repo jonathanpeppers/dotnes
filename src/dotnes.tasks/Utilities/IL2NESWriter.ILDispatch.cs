@@ -535,7 +535,7 @@ partial class IL2NESWriter
                             or ILOpCode.Ldc_i4_3 or ILOpCode.Ldc_i4_4 or ILOpCode.Ldc_i4_5
                             or ILOpCode.Ldc_i4_6 or ILOpCode.Ldc_i4_7 or ILOpCode.Ldc_i4_8)
                         {
-                            RemoveLastInstructions(1);
+                           RemoveOperandInstructions(Index - 1, 1);
                         }
 
                         if (_ushortInAX)
@@ -674,7 +674,7 @@ partial class IL2NESWriter
                             or ILOpCode.Ldc_i4_3 or ILOpCode.Ldc_i4_4 or ILOpCode.Ldc_i4_5
                             or ILOpCode.Ldc_i4_6 or ILOpCode.Ldc_i4_7 or ILOpCode.Ldc_i4_8)
                         {
-                            RemoveLastInstructions(1);
+                           RemoveOperandInstructions(Index - 1, 1);
                         }
 
                         if (divisor > 0 && (divisor & (divisor - 1)) == 0)
@@ -1572,6 +1572,8 @@ partial class IL2NESWriter
                     if (Stack.Count > 0)
                         Stack.Pop();
                     _runtimeValueInA = false;
+                    _lastLoadedLocalIndex = null;
+                    _lastStaticFieldAddress = null;
                 }
                 break;
             case ILOpCode.Brtrue_s:
@@ -1592,6 +1594,8 @@ partial class IL2NESWriter
                     if (Stack.Count > 0)
                         Stack.Pop();
                     _runtimeValueInA = false;
+                    _lastLoadedLocalIndex = null;
+                    _lastStaticFieldAddress = null;
                 }
                 break;
             case ILOpCode.Blt_s:
@@ -1760,6 +1764,8 @@ partial class IL2NESWriter
                     if (Stack.Count > 0)
                         Stack.Pop();
                     _runtimeValueInA = false;
+                    _lastLoadedLocalIndex = null;
+                    _lastStaticFieldAddress = null;
                 }
                 break;
             case ILOpCode.Brfalse:
@@ -1780,6 +1786,8 @@ partial class IL2NESWriter
                     if (Stack.Count > 0)
                         Stack.Pop();
                     _runtimeValueInA = false;
+                    _lastLoadedLocalIndex = null;
+                    _lastStaticFieldAddress = null;
                 }
                 break;
             case ILOpCode.Ldloca_s:
@@ -2677,6 +2685,12 @@ partial class IL2NESWriter
                         break;
                     case nameof(NESLib.poke):
                         {
+                            if (_runtimeMemoryCalls.Contains(Index))
+                            {
+                                EmitRuntimePoke();
+                                argsAlreadyPopped = true;
+                                break;
+                            }
                             EmitConstantPoke();
                             argsAlreadyPopped = true;
                         }
@@ -2759,15 +2773,17 @@ partial class IL2NESWriter
                         break;
                     case nameof(NESLib.peek):
                         {
+                            if (_runtimeMemoryCalls.Contains(Index))
+                            {
+                                EmitRuntimePeek();
+                                argsAlreadyPopped = true;
+                                break;
+                            }
                             // peek(ushort addr) -> LDA abs addr
                             if (Stack.Count >= 1)
                             {
                                 int addr = Stack.Pop();
-                                // Remove previously emitted instructions:
-                                // ushort addr: LDX #hi, LDA #lo = 2 instructions
-                                // byte addr:   LDA #lo = 1 instruction
-                                RemoveLastInstructions(addr > byte.MaxValue ? 2 : 1);
-                                Emit(Opcode.LDA, AddressMode.Absolute, (ushort)addr);
+                                EmitConstantPeek(addr);
                                 _runtimeValueInA = true;
                                 _immediateInA = null;
                                 _pokeLastValue = null;

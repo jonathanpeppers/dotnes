@@ -31,6 +31,13 @@ partial class Transpiler
             if (!analysis.ProducesValue[i])
                 continue;
             var instruction = instructions[i];
+            if (IsScalarExpression(instruction.OpCode)
+                && instruction.OpCode is not (ILOpCode.Conv_i1 or ILOpCode.Conv_i2))
+            {
+                foreach (int input in analysis.Inputs[i])
+                    if (input >= 0)
+                        NumericStorage.RequireNarrowType(types[input], method);
+            }
             PrimitiveTypeCode? type = null;
             if (instruction.GetLdlocIndex() is int local && signature != null && local < signature.Locals.Length)
                 type = compactInts != null && compactInts.TryGetValue(local, out var compact) ? compact : signature.Locals[local];
@@ -87,7 +94,7 @@ partial class Transpiler
                 && analysis.Inputs[i].All(p => p >= 0 && types[p] != null && !analysis.Escapes[p]))
                 type = analysis.Inputs[i].Any(p => types[p] is PrimitiveTypeCode.Int16 or PrimitiveTypeCode.SByte)
                     ? PrimitiveTypeCode.Int16
-                    : analysis.Inputs[i].Any(p => types[p] is PrimitiveTypeCode.UInt16 or PrimitiveTypeCode.Int32 or PrimitiveTypeCode.UInt32)
+                    : analysis.Inputs[i].Any(p => types[p] == PrimitiveTypeCode.UInt16)
                         ? PrimitiveTypeCode.UInt16 : PrimitiveTypeCode.Byte;
             types[i] = type;
         }
