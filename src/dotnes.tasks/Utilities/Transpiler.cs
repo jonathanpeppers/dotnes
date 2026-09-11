@@ -312,10 +312,14 @@ partial class Transpiler : IDisposable
         _logger.WriteLine($"Single-pass transpilation...");
         
         var instructions = ReadStaticVoidMain().ToArray();
+        bool nativeRenderer = UsedMethods.Contains(nameof(NESLib.ppu_use_native_renderer));
+        if (nativeRenderer)
+            ValidateNativeRenderer(instructions);
 
         // Create the base program with built-ins
-        var program = Program6502.CreateWithBuiltIns();
+        var program = Program6502.CreateWithBuiltIns(nativeRenderer);
         program.BaseAddress = baseAddress;
+        int preMainSize = program.TotalSize;
 
         // Register user methods with the reflection cache so Call handler knows about them
         var reflectionCache = new ReflectionCache();
@@ -327,6 +331,7 @@ partial class Transpiler : IDisposable
         foreach (var kvp in ExternMethods)
         {
             reflectionCache.RegisterExternMethod(kvp.Key, kvp.Value.argCount, kvp.Value.hasReturnValue);
+            program.RegisterExternSymbol(kvp.Key);
         }
 
         // Build main program block using label references (addresses resolved later)
@@ -437,6 +442,7 @@ partial class Transpiler : IDisposable
                 Instructions = methodIL,
                 UsedMethods = UsedMethods,
                 UserMethodNames = new HashSet<string>(UserMethods.Keys, StringComparer.Ordinal),
+                ExternMethodNames = externNames,
                 MethodParamCount = paramCount,
                 ParamIsArray = isArrayParam,
                 MethodName = methodName,
@@ -615,7 +621,6 @@ partial class Transpiler : IDisposable
         // totalSize is used for donelib/copydata - points past the data tables.
         // All sizes are computed from actual block sizes so the layout adjusts automatically
         // if subroutines change.
-        int preMainSize = Program6502.GetBuiltInSize();
         int finalBuiltInsSize = Program6502.CalculateFinalBuiltInsSize(locals, UsedMethods);
         ushort totalSize = (ushort)(program.BaseAddress + preMainSize + sizeOfMain + finalBuiltInsSize + musicSubroutinesSize + userMethodsTotalSize + externBlocksTotalSize + byteArrayTableSize + stringTableSize);
         

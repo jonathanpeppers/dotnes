@@ -11,6 +11,7 @@ public class Program6502
     private readonly List<Block> _blocks = new();
     private readonly LabelTable _labels = new();
     private readonly Dictionary<string, ushort> _externalLabels = new();
+    private readonly HashSet<string> _externSymbols = new(StringComparer.Ordinal);
     private bool _addressesValid;
 
     /// <summary>
@@ -36,6 +37,13 @@ public class Program6502
     {
         _externalLabels[name] = address;
         _labels.DefineOrUpdate(name, address);
+        _addressesValid = false;
+    }
+
+    internal void RegisterExternSymbol(string name)
+    {
+        _externSymbols.Add(name);
+        _addressesValid = false;
     }
 
     /// <summary>
@@ -255,6 +263,21 @@ public class Program6502
                     }
                 }
             }
+        }
+
+        // Prefer the cc65 spelling, but accept legacy bare native exports/bindings.
+        // Resolve on every layout pass so the alias follows branch relaxation.
+        foreach (var name in _externSymbols)
+        {
+            string canonicalName = $"_{name}";
+            bool hasCanonical = _labels.Labels.TryGetValue(canonicalName, out ushort canonicalAddress);
+            bool hasLegacy = _labels.Labels.TryGetValue(name, out ushort address);
+            if (hasCanonical && hasLegacy && canonicalAddress != address)
+                throw new TranspileException(
+                    $"Conflicting native symbols '{canonicalName}' and '{name}' for extern method '{name}'. " +
+                    "Export one spelling or make both labels aliases of the same address.");
+            if (!hasCanonical && hasLegacy)
+                _labels.Define(canonicalName, address);
         }
 
         PatchPalBrightTables();
@@ -563,6 +586,9 @@ public class Program6502
     /// Call AddFinalBuiltIns() after adding main program to set actual addresses.
     /// </summary>
     public static Program6502 CreateWithBuiltIns()
+        => CreateWithBuiltIns(nativeRenderer: false);
+
+    internal static Program6502 CreateWithBuiltIns(bool nativeRenderer)
     {
         var program = new Program6502 { BaseAddress = 0x8000 };
 
@@ -584,14 +610,14 @@ public class Program6502
         program.AddBlock(BuiltInSubroutines.ClearRAM());
         program.AddBlock(BuiltInSubroutines.WaitSync3());
         program.AddBlock(BuiltInSubroutines.DetectNTSC());
-        program.AddBlock(BuiltInSubroutines.Nmi());
+        program.AddBlock(BuiltInSubroutines.Nmi(nativeRenderer));
         program.AddBlock(BuiltInSubroutines.DoUpdate());
         program.AddBlock(BuiltInSubroutines.UpdPal());
         program.AddBlock(BuiltInSubroutines.UpdVRAM());
         program.AddBlock(BuiltInSubroutines.SkipUpd());
-        program.AddBlock(BuiltInSubroutines.SkipAll());
+        program.AddBlock(BuiltInSubroutines.SkipAll(nativeRenderer));
         program.AddBlock(BuiltInSubroutines.SkipNtsc());
-        program.AddBlock(BuiltInSubroutines.Irq());
+        program.AddBlock(BuiltInSubroutines.Irq(nativeRenderer));
         program.AddBlock(BuiltInSubroutines.NmiSetCallback());
         program.AddBlock(BuiltInSubroutines.PalAll());
         program.AddBlock(BuiltInSubroutines.PalCopy());

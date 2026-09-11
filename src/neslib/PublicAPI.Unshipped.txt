@@ -1,1 +1,2 @@
 #nullable enable
+static NES.NESLib.ppu_use_native_renderer() -> void
