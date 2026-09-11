@@ -408,7 +408,7 @@ public class ByteArithmeticTests(ITestOutputHelper output) : ExecutionTests(outp
             while (true) ;
             static class State { public static ushort Value; public static ushort Count; }
             """));
-        Assert.Contains("promoted arithmetic expressions", error.Message);
+        Assert.Contains("needs a promoted result wider", error.Message);
     }
 
     [Theory]

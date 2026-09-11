@@ -9,8 +9,16 @@ partial class Transpiler
     {
         instructions = MaterializeConditionalValues(instructions, reflection, method);
         var analysis = new ILValueAnalysis(instructions, reflection);
+        var stableAddresses = GetStableClosureArguments(instructions, method);
+        var scalar = new bool[instructions.Length];
         var types = GetExpressionValueTypes(instructions, analysis, reflection, method, compactInts);
-        var scalar = types.Select((type, i) => type is not null && type != PrimitiveTypeCode.Void && !analysis.Escapes[i]).ToArray();
+        for (int i = 0; i < instructions.Length; i++)
+        {
+            if (!analysis.ProducesValue[i])
+                continue;
+            var type = types[i];
+            scalar[i] = type is not null && type != PrimitiveTypeCode.Void && !analysis.Escapes[i];
+        }
 
         var arrayOperands = new HashSet<int>();
         void ProtectArrayOperand(int producer)
@@ -51,7 +59,13 @@ partial class Transpiler
         for (int i = 0; i < instructions.Length; i++)
         {
             var inputs = analysis.Inputs[i];
-            if (!arrayOperands.Contains(i) && IsScalarBinary(instructions[i].OpCode) && inputs.Length == 2
+            if (instructions[i].OpCode is ILOpCode.Mul or ILOpCode.Shl
+                && types[i] is PrimitiveTypeCode.Int16 or PrimitiveTypeCode.UInt16
+                && inputs.Length == 2 && inputs.All(p => p >= 0 && scalar[p])
+                && types[inputs[0]] is PrimitiveTypeCode.Int16 or PrimitiveTypeCode.UInt16
+                && IsScalarExpression(instructions[inputs[0]].OpCode))
+                spills.UnionWith(inputs);
+            if (!arrayOperands.Contains(i) && (IsScalarBinary(instructions[i].OpCode) || instructions[i].OpCode == ILOpCode.Mul) && inputs.Length == 2
                 && inputs.All(p => p >= 0 && scalar[p])
                 && instructions[inputs[1]].GetLdcValue() == null
                 && instructions[inputs[0]].GetLdcValue() == null
@@ -60,6 +74,7 @@ partial class Transpiler
                 // Adjacent loads have a direct memory-operand lowering. A computed
                 // right operand instead needs snapshots before it overwrites A.
                 bool adjacentLoads = inputs[0] == i - 2 && inputs[1] == i - 1
+                    && instructions[i].OpCode != ILOpCode.Mul
                     && instructions[inputs[0]].GetLdlocIndex() != null
                     && instructions[inputs[1]].GetLdlocIndex() != null;
                 bool runtimeThenLoad = inputs[0] == i - 2 && inputs[1] == i - 1
@@ -107,7 +122,9 @@ partial class Transpiler
                     int first = Array.IndexOf(inputs, producer);
                     foreach (int input in inputs.Skip(first))
                     {
-                        if (input < 0 || !scalar[input] || arrayOperands.Contains(input))
+                        if (input < 0 || (!scalar[input] && !ILExpressionSpiller.CanRematerialize(instructions[input])
+                                && !stableAddresses.Contains(input))
+                            || arrayOperands.Contains(input))
                         {
                             compatible = false;
                             break;

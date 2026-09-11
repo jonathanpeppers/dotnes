@@ -350,9 +350,15 @@ partial class Transpiler : IDisposable
             program.RegisterExternSymbol(kvp.Key);
         }
 
-        instructions = MaterializeSharedMemoryAddresses(instructions, reflectionCache, "main");
-        foreach (string methodName in UserMethods.Keys.ToArray())
-            UserMethods[methodName] = MaterializeSharedMemoryAddresses(UserMethods[methodName], reflectionCache, methodName);
+        // Validate source arithmetic before synthetic narrowing can hide a
+        // wider CLR intermediate from the native-width lowering passes.
+        var numericFields = GetNumericFieldTypes();
+        if (instructions.Length > 0)
+            new NumericRangeAnalysis(instructions, NumericTypes["main"], NumericTypes, reflectionCache, numericFields)
+                .ValidatePromotedArithmetic("main");
+        foreach (var pair in UserMethods)
+            new NumericRangeAnalysis(pair.Value, NumericTypes[pair.Key], NumericTypes, reflectionCache, numericFields)
+                .ValidatePromotedArithmetic(pair.Key);
 
         // Build main program block using label references (addresses resolved later)
         var externNames = new HashSet<string>(ExternMethods.Keys, StringComparer.Ordinal);
@@ -370,13 +376,20 @@ partial class Transpiler : IDisposable
             PreAllocateClosureFields(ref staticFieldBytes);
         }
 
+        instructions = MaterializeSharedMemoryAddresses(instructions, reflectionCache, "main");
+        foreach (string methodName in UserMethods.Keys.ToArray())
+            UserMethods[methodName] = MaterializeSharedMemoryAddresses(UserMethods[methodName], reflectionCache, methodName);
+
         instructions = PreserveExpressionValues(instructions, reflectionCache, "main");
         foreach (var name in UserMethods.Keys.ToArray())
             UserMethods[name] = PreserveExpressionValues(UserMethods[name], reflectionCache, name);
-        var byteParameterCalls = new HashSet<string>(NumericTypes.Where(kvp =>
-            UserMethods.ContainsKey(kvp.Key) && kvp.Value.Parameters.All(p => p == PrimitiveTypeCode.Byte)
+        var byteParameterCalls = NumericTypes.Where(kvp =>
+            UserMethods.ContainsKey(kvp.Key) && kvp.Value.Parameters.Where((p, index) =>
+                    !_closureMethodArgIndex.TryGetValue(kvp.Key, out int closure) || index != closure)
+                .All(p => p == PrimitiveTypeCode.Byte)
                 && kvp.Value.ReturnType is PrimitiveTypeCode.Byte or PrimitiveTypeCode.Void)
-            .Select(kvp => kvp.Key));
+            .ToDictionary(kvp => kvp.Key,
+                kvp => _closureMethodArgIndex.TryGetValue(kvp.Key, out int closure) ? closure : -1);
 
         using var writer = new IL2NESWriter(new MemoryStream(), logger: _logger, reflectionCache: reflectionCache)
         {

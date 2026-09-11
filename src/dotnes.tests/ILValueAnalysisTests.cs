@@ -5,6 +5,90 @@ namespace dotnes.tests;
 public class ILValueAnalysisTests
 {
     [Fact]
+    public void OrdinaryArgumentValuesAreCapturedBeforeArgumentMutation()
+    {
+        var reflection = new ReflectionCache();
+        reflection.RegisterUserMethod("Consume", 1, false);
+        ILInstruction[] il =
+        [
+            new(ILOpCode.Ldarg_0, 0),
+            new(ILOpCode.Ldc_i4_1, 1),
+            new(ILOpCode.Starg_s, 2, 0),
+            new(ILOpCode.Call, 4, String: "Consume"),
+        ];
+        var analysis = new ILValueAnalysis(il, reflection);
+        var rewritten = ILExpressionSpiller.Rewrite(il, analysis, new HashSet<int> { 0 });
+        Assert.Equal(ILOpCode.Ldarg_0, rewritten[0].OpCode);
+        Assert.NotNull(rewritten[1].GetStlocIndex());
+        Assert.Single(rewritten, instruction => instruction.GetStlocIndex().HasValue);
+        Assert.NotNull(rewritten[^2].GetLdlocIndex());
+    }
+
+    [Fact]
+    public void NativeOverloadConsumesItsDecodedSourceSignature()
+    {
+        using var dll = Utilities.GetResource("horizmask.release.dll");
+        using var transpiler = new Transpiler(dll, Array.Empty<AssemblyReader>());
+        _ = transpiler.ReadStaticVoidMain().ToArray();
+        var il = transpiler.UserMethods["scroll_demo"];
+        var analysis = new ILValueAnalysis(il, new ReflectionCache());
+        var calls = il.Select((instruction, index) => (instruction, index))
+            .Where(pair => pair.instruction.String is nameof(NESLib.vrambuf_put_vert) or nameof(NESLib.vrambuf_put)).ToArray();
+        Assert.Equal(2, calls.Length);
+        foreach (var (instruction, index) in calls)
+        {
+            Assert.Equal((3, false), instruction.CallSignature);
+            Assert.Equal(3, analysis.Inputs[index].Length);
+            Assert.Empty(analysis.Outputs[index]);
+        }
+    }
+
+    [Theory]
+    [InlineData(ILOpCode.Ldloca_s)]
+    [InlineData(ILOpCode.Ldloca)]
+    [InlineData(ILOpCode.Ldarga_s)]
+    [InlineData(ILOpCode.Ldarga)]
+    public void StableStorageAddressesAreRematerializedInsteadOfScalarSpilled(ILOpCode addressLoad)
+    {
+        var reflection = new ReflectionCache();
+        reflection.RegisterUserMethod("Consume", 2, false);
+        ILInstruction[] il =
+        [
+            new(ILOpCode.Ldc_i4_1, 0),
+            new(addressLoad, 1, 3),
+            new(ILOpCode.Call, 5, String: "Consume"),
+        ];
+        var analysis = new ILValueAnalysis(il, reflection);
+        var rewritten = ILExpressionSpiller.Rewrite(il, analysis, new HashSet<int> { 0, 1 });
+        Assert.DoesNotContain(rewritten, instruction => instruction.GetStlocIndex() is not null);
+        Assert.Equal(ILOpCode.Ldc_i4_1, rewritten[^3].OpCode);
+        Assert.Equal(addressLoad, rewritten[^2].OpCode);
+        Assert.Equal(3, rewritten[^2].Integer);
+        Assert.Equal(ILOpCode.Call, rewritten[^1].OpCode);
+        Assert.Equal(new[] { ILOpCode.Nop, ILOpCode.Nop }, rewritten.Take(2).Select(i => i.OpCode));
+    }
+
+    [Fact]
+    public void SourceAritySurvivesClosureAbiAdjustment()
+    {
+        var reflection = new ReflectionCache();
+        reflection.RegisterUserMethod("Touch", 1, false);
+        reflection.RegisterUserMethod("Touch", 0, false);
+        ILInstruction[] il =
+        [
+            new(ILOpCode.Ldloca_s, 0, 0),
+            new(ILOpCode.Call, 2, String: "Touch"),
+            new(ILOpCode.Ldc_i4_1, 7),
+            new(ILOpCode.Stloc_1, 8),
+        ];
+        var analysis = new ILValueAnalysis(il, reflection);
+        Assert.Equal(0, reflection.GetNumberOfArguments("Touch"));
+        Assert.Equal(1, reflection.GetILNumberOfArguments("Touch"));
+        Assert.Equal(new[] { 0 }, analysis.Inputs[1]);
+        Assert.Empty(analysis.Outputs[1]);
+    }
+
+    [Fact]
     public void ConstantMemoryArgumentAfterLoopHasKnownProducer()
     {
         using var dll = Utilities.GetResource("shoot2.release.dll");

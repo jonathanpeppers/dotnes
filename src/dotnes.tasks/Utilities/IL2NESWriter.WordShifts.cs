@@ -16,7 +16,8 @@ partial class IL2NESWriter
                 or ILOpCode.Ceq or ILOpCode.Clt or ILOpCode.Cgt
                 or ILOpCode.Shr or ILOpCode.Shr_un or ILOpCode.Div or ILOpCode.Rem
             || Instructions[consumer].GetStlocIndex() is int local && WordLocals.Contains(local)
-            || Instructions[consumer].OpCode is ILOpCode.Add or ILOpCode.Sub
+            || Instructions[consumer].OpCode is ILOpCode.Add or ILOpCode.Sub or ILOpCode.Mul
+                or ILOpCode.Shl or ILOpCode.And or ILOpCode.Or or ILOpCode.Xor
                 && RequiresNumericWord(consumer, visiting));
     }
 

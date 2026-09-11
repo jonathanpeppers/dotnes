@@ -41,7 +41,8 @@ partial class IL2NESWriter
     public void Write(ILInstruction instruction)
     {
         BeginVariableShiftCount();
-        if (TryNumericLeftShift(instruction))
+        if (TryNumericLeftShift(instruction)
+            || TryNumericMultiply(instruction) || TryNumericBitwise(instruction))
             return;
         if (instruction.OpCode is ILOpCode.Add or ILOpCode.Sub
             && TryNumericAddSub(instruction.OpCode == ILOpCode.Add))
@@ -310,10 +311,12 @@ partial class IL2NESWriter
                 _lastStaticFieldAddress = null;
                 break;
             case ILOpCode.Conv_u2:
-            case ILOpCode.Conv_u4:
-            case ILOpCode.Conv_u8:
             case ILOpCode.Conv_i1:
             case ILOpCode.Conv_i2:
+                WriteNumericConversion(instruction.OpCode);
+                break;
+            case ILOpCode.Conv_u4:
+            case ILOpCode.Conv_u8:
             case ILOpCode.Conv_i4:
                 // No-op: sign/zero extension is irrelevant on 8-bit 6502
                 _lastStaticFieldAddress = null;
@@ -1559,6 +1562,8 @@ partial class IL2NESWriter
                     if (Stack.Count > 0)
                         Stack.Pop();
                     _runtimeValueInA = false;
+                    _lastLoadedLocalIndex = null;
+                    _lastStaticFieldAddress = null;
                 }
                 break;
             case ILOpCode.Brtrue_s:
@@ -1579,6 +1584,8 @@ partial class IL2NESWriter
                     if (Stack.Count > 0)
                         Stack.Pop();
                     _runtimeValueInA = false;
+                    _lastLoadedLocalIndex = null;
+                    _lastStaticFieldAddress = null;
                 }
                 break;
             case ILOpCode.Blt_s:
@@ -1747,6 +1754,8 @@ partial class IL2NESWriter
                     if (Stack.Count > 0)
                         Stack.Pop();
                     _runtimeValueInA = false;
+                    _lastLoadedLocalIndex = null;
+                    _lastStaticFieldAddress = null;
                 }
                 break;
             case ILOpCode.Brfalse:
@@ -1767,6 +1776,8 @@ partial class IL2NESWriter
                     if (Stack.Count > 0)
                         Stack.Pop();
                     _runtimeValueInA = false;
+                    _lastLoadedLocalIndex = null;
+                    _lastStaticFieldAddress = null;
                 }
                 break;
             case ILOpCode.Ldloca_s:

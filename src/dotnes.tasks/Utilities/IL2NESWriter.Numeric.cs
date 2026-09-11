@@ -32,6 +32,8 @@ partial class IL2NESWriter
         if (NumericArgIndex(instruction) is int argIndex)
             return _numericTypes != null && argIndex < _numericTypes.Parameters.Length
                 ? _numericTypes.Parameters[argIndex] : null;
+        if (instruction.OpCode == ILOpCode.Ldsfld)
+            return DeclaredScalarType(instruction);
         if (instruction.GetLdcValue() is int constant)
             return constant < 0 ? PrimitiveTypeCode.Int16
                 : constant <= 255 ? PrimitiveTypeCode.Byte : PrimitiveTypeCode.UInt16;
@@ -41,7 +43,6 @@ partial class IL2NESWriter
             ILOpCode.Conv_u1 => PrimitiveTypeCode.Byte,
             ILOpCode.Conv_i2 => PrimitiveTypeCode.Int16,
             ILOpCode.Conv_u2 => PrimitiveTypeCode.UInt16,
-            ILOpCode.Ldsfld => DeclaredScalarType(instruction),
             ILOpCode.Call when instruction.String != null
                 && _numericMethods != null && _numericMethods.TryGetValue(instruction.String, out var method) => method.ReturnType,
             ILOpCode.Call when instruction.String != null && _reflectionCache.TryReturns16Bit(instruction.String) => PrimitiveTypeCode.UInt16,
@@ -50,6 +51,29 @@ partial class IL2NESWriter
             ILOpCode.Ldelem_i1 or ILOpCode.Ldind_i1 => PrimitiveTypeCode.SByte,
             ILOpCode.Ldelem_u2 or ILOpCode.Ldind_u2 => PrimitiveTypeCode.UInt16,
             ILOpCode.Ldelem_i2 or ILOpCode.Ldind_i2 => PrimitiveTypeCode.Int16,
+            ILOpCode.Mul or ILOpCode.Shl when _numericValues.Inputs[producer].Length == 2 =>
+                _numericValues.Inputs[producer].Any(input => SignedNumericType(NumericType(input)))
+                    ? PrimitiveTypeCode.Int16 : PrimitiveTypeCode.UInt16,
+            ILOpCode.And when _numericValues.Inputs[producer].Length == 2
+                && _numericValues.Inputs[producer].Any(input => NumericType(input) == PrimitiveTypeCode.Byte) =>
+                    PrimitiveTypeCode.Byte,
+            ILOpCode.And when _numericValues.Inputs[producer].Length == 2
+                && _numericValues.Inputs[producer].Any(input => NumericType(input) == PrimitiveTypeCode.UInt16) =>
+                    PrimitiveTypeCode.UInt16,
+            ILOpCode.And or ILOpCode.Or or ILOpCode.Xor when _numericValues.Inputs[producer].Length == 2 =>
+                _numericValues.Inputs[producer].Any(input => SignedNumericType(NumericType(input)))
+                    ? PrimitiveTypeCode.Int16
+                    : _numericValues.Inputs[producer].Any(input => WordNumericType(NumericType(input)))
+                        ? PrimitiveTypeCode.UInt16 : PrimitiveTypeCode.Byte,
+            ILOpCode.Add or ILOpCode.Sub when _numericValues.Inputs[producer].Length == 2
+                && _numericValues.Inputs[producer].All(input => NumericType(input) is PrimitiveTypeCode.Byte
+                    or PrimitiveTypeCode.SByte or PrimitiveTypeCode.Int16 or PrimitiveTypeCode.UInt16) =>
+                    instruction.OpCode == ILOpCode.Sub
+                    || SignedNumericType(NumericType(_numericValues.Inputs[producer][0]))
+                    || SignedNumericType(NumericType(_numericValues.Inputs[producer][1]))
+                        ? PrimitiveTypeCode.Int16 : PrimitiveTypeCode.UInt16,
+            ILOpCode.Shr or ILOpCode.Shr_un when _numericValues.Inputs[producer].Length == 2 =>
+                NumericType(_numericValues.Inputs[producer][0]),
             _ => null,
         };
     }
@@ -105,6 +129,8 @@ partial class IL2NESWriter
         if (!PureNumericOperand(lhs, out int first)
             || !PureNumericOperand(rhs, out int second)
             || lhs + 1 != second || rhs + 1 != Index)
+            return false;
+        if (ILBranchTargets.HasEntryAfter(Instructions, first, Index))
             return false;
         for (int i = 0; i < first; i++)
             if (_numericValues.Consumers[i].Any(consumer => consumer >= Index)
@@ -180,6 +206,33 @@ partial class IL2NESWriter
             Emit(Opcode.BCC, AddressMode.Relative, 1);
             Emit(Opcode.DEX, AddressMode.Implied);
         }
+    }
+
+    void WriteNumericConversion(ILOpCode code)
+    {
+        int value = Stack.Count > 0 ? Stack.Pop() : 0;
+        switch (code)
+        {
+            case ILOpCode.Conv_i1:
+                Stack.Push(unchecked((sbyte)value));
+                _ushortInAX = false;
+                break;
+            case ILOpCode.Conv_u2:
+            case ILOpCode.Conv_i2:
+                Stack.Push(code == ILOpCode.Conv_i2 ? unchecked((short)value) : unchecked((ushort)value));
+                if (!_ushortInAX)
+                {
+                    int producer = _numericValues != null && _numericValues.Inputs[Index].Length == 1
+                        ? _numericValues.Inputs[Index][0] : -1;
+                    if (producer >= 0 && Instructions![producer].GetLdcValue() is int constant)
+                        Emit(Opcode.LDX, AddressMode.Immediate, (byte)(constant >> 8));
+                    else
+                        EmitNumericExtension(SignedNumericType(NumericType(producer)));
+                    _ushortInAX = true;
+                }
+                break;
+        }
+        _lastStaticFieldAddress = null;
     }
 
     bool TryNumericAddSub(bool isAdd)

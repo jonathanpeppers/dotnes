@@ -628,6 +628,7 @@ public class ByteHelperTests(ITestOutputHelper output) : RoslynTests(output)
         Assert.Equal(10, before.Memory[result]);
         Assert.Equal(10, after.Memory[result]);
         if (fits)
+            // The caller's typed result spill occupies the byte after Result.
             Assert.Equal(result + 2, AssertHomeParameter(program, "helper"));
         else
         {

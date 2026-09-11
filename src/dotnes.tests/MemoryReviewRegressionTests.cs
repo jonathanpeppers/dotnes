@@ -116,9 +116,9 @@ public class MemoryReviewRegressionTests(ITestOutputHelper output) : ExecutionTe
     }
 
     [Theory]
-    [InlineData("int")]
-    [InlineData("uint")]
-    public void WideDeclaredArithmeticRequiresAnExplicitNarrowType(string type)
+    [InlineData("int", "32-bit")]
+    [InlineData("uint", "unproven promoted range")]
+    public void WideDeclaredArithmeticRequiresAnExplicitNarrowType(string type, string diagnostic)
     {
         var error = Assert.Throws<TranspileException>(() => GetProgramBytes($$"""
             {{type}} left = peek(0x6010);
@@ -129,7 +129,7 @@ public class MemoryReviewRegressionTests(ITestOutputHelper output) : ExecutionTe
             poke(0x6000, (byte)result);
             while (true) ;
             """));
-        Assert.Contains("32-bit", error.Message);
+        Assert.Contains(diagnostic, error.Message);
         Assert.Contains("short", error.Message);
     }
 

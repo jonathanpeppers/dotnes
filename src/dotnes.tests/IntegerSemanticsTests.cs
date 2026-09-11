@@ -8,7 +8,7 @@ public class IntegerSemanticsTests(ITestOutputHelper output) : RoslynTests(outpu
     [Fact]
     public void DeclaredNumericTypesSurviveMetadataParsing()
     {
-        using var assembly = CompileAssembly("""
+        using var transpiler = ReadProgram("""
             ushort word = 0;
             short signedWord = 0;
             sbyte signedByte = 0;
@@ -24,7 +24,6 @@ public class IntegerSemanticsTests(ITestOutputHelper output) : RoslynTests(outpu
             static ushort Identity(byte value) => value;
             static extern short ReadSignedWord();
             """);
-        using var transpiler = new Transpiler(assembly, Array.Empty<AssemblyReader>());
         _ = transpiler.ReadStaticVoidMain().ToArray();
         var main = transpiler.NumericTypes["main"];
         Assert.Contains(PrimitiveTypeCode.UInt16, main.Locals);
