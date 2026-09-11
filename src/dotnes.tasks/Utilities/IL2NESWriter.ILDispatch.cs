@@ -41,7 +41,8 @@ partial class IL2NESWriter
     public void Write(ILInstruction instruction)
     {
         BeginVariableShiftCount();
-        if (TryNumericDivision(instruction) || TryNumericLeftShift(instruction))
+        if (TryNumericDivision(instruction) || TryNumericLeftShift(instruction)
+            || TryNumericMultiply(instruction) || TryNumericBitwise(instruction))
             return;
         if (instruction.OpCode is ILOpCode.Add or ILOpCode.Sub
             && TryNumericAddSub(instruction.OpCode == ILOpCode.Add))

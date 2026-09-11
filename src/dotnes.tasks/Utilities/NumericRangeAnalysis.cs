@@ -90,7 +90,8 @@ sealed class NumericRangeAnalysis
                     $"Signed {instructions[i].OpCode} at IL_{instructions[i].Offset:X4} is not supported " +
                     "by the NES numeric backend. Use nonnegative byte/ushort operands only when that " +
                     "range matches the intended computation.", methodName);
-            if (instructions[i].OpCode is not (ILOpCode.Add or ILOpCode.Sub or ILOpCode.Mul or ILOpCode.Shl))
+            if (instructions[i].OpCode is not (ILOpCode.Add or ILOpCode.Sub or ILOpCode.Mul or ILOpCode.Shl
+                or ILOpCode.And or ILOpCode.Or or ILOpCode.Xor))
                 continue;
             var range = ValueRange(i);
             if (instructions[i].OpCode == ILOpCode.Shl && values.Inputs[i].Length == 2
@@ -98,15 +99,6 @@ sealed class NumericRangeAnalysis
                 && (shift & 31) > 15 && InputRange(i, 0) is { } shifted
                 && (shifted.Min != 0 || shifted.Max != 0))
                 range = new(int.MinValue, int.MaxValue);
-            if (instructions[i].OpCode == ILOpCode.Mul
-                && range is not { Min: >= 0, Max: <= byte.MaxValue }
-                && !NumericValueUsage.IsExplicitlyNarrowed(instructions, values, i, byteOnly: true)
-                && !(values.Inputs[i].Length == 2 && values.Inputs[i][1] >= 0
-                    && instructions[values.Inputs[i][1]].GetLdcValue() is > 0 and <= ushort.MaxValue and int factor
-                    && (factor & (factor - 1)) == 0))
-                throw new TranspileException(
-                    $"Word multiplication at IL_{instructions[i].Offset:X4} requires a positive power-of-two " +
-                    "constant factor. General full-width multiplication is not supported by this backend.", methodName);
             if (range == null || range is { Min: >= 0, Max: <= ushort.MaxValue }
                 or { Min: >= short.MinValue, Max: <= short.MaxValue })
                 continue;
@@ -208,9 +200,24 @@ sealed class NumericRangeAnalysis
             ILOpCode.Shl when right.Value.Min == right.Value.Max && (right.Value.Min & 31) <= 15 =>
                 new(left.Value.Min << (int)(right.Value.Min & 31), left.Value.Max << (int)(right.Value.Min & 31)),
             ILOpCode.And when right.Value.Min == right.Value.Max && right.Value.Min >= 0 => new(0, right.Value.Max),
+            ILOpCode.And when left.Value.Min >= 0 => new(0, left.Value.Max),
+            ILOpCode.And when right.Value.Min >= 0 => new(0, right.Value.Max),
+            ILOpCode.And or ILOpCode.Or or ILOpCode.Xor => BitwiseRange(left.Value, right.Value),
             _ => null,
         };
-        return result is { Min: >= int.MinValue, Max: <= int.MaxValue } ? result : null;
+        return result == null || result is { Min: >= int.MinValue, Max: <= int.MaxValue }
+            ? result : new(int.MinValue, int.MaxValue);
+    }
+
+    static Range BitwiseRange(Range left, Range right)
+    {
+        long min = Math.Min(left.Min, right.Min), max = Math.Max(left.Max, right.Max);
+        if (min >= 0)
+            return new(0, max <= byte.MaxValue ? byte.MaxValue : max <= ushort.MaxValue ? ushort.MaxValue : int.MaxValue);
+        if (min >= sbyte.MinValue && max <= sbyte.MaxValue)
+            return new(sbyte.MinValue, sbyte.MaxValue);
+        return min >= short.MinValue && max <= short.MaxValue
+            ? new(short.MinValue, short.MaxValue) : new(int.MinValue, int.MaxValue);
     }
 
     static bool FitsWord(Range range) => range is { Min: >= 0, Max: <= ushort.MaxValue }

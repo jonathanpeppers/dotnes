@@ -55,8 +55,12 @@ an unsupported parameter reports its method, index and type. Word returns retain
 both bytes, including signed extension from a byte-sized source. Signed division
 by a positive power-of-two constant truncates toward zero, including for negative
 operands. Other signed divisors and signed remainder produce diagnostics rather
-than using unsigned routines. Word multiplication supports a positive
-power-of-two constant factor; a general full-width product is diagnosed.
+than using unsigned routines. Word multiplication preserves both bytes for
+runtime byte operands (255 times 3 is 765), including values held across calls.
+Explicit word conversions can request the low sixteen bits of a larger product;
+otherwise an observable wider product is diagnosed. Word-width demand also
+propagates through bitwise operations, so `(ushort)((value << 4) | 1)` retains
+the high byte rather than widening an already truncated byte result.
 This numeric work does not add a general 32-bit arithmetic runtime.
 
 Conditional values are materialized without treating generated temporary

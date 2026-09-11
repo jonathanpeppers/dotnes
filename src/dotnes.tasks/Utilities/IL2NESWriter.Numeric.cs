@@ -76,6 +76,17 @@ partial class IL2NESWriter
             ILOpCode.Mul or ILOpCode.Shl when _numericValues.Inputs[producer].Length == 2 =>
                 _numericValues.Inputs[producer].Any(input => SignedNumericType(NumericType(input)))
                     ? PrimitiveTypeCode.Int16 : PrimitiveTypeCode.UInt16,
+            ILOpCode.And when _numericValues.Inputs[producer].Length == 2
+                && _numericValues.Inputs[producer].Any(input => NumericType(input) == PrimitiveTypeCode.Byte) =>
+                    PrimitiveTypeCode.Byte,
+            ILOpCode.And when _numericValues.Inputs[producer].Length == 2
+                && _numericValues.Inputs[producer].Any(input => NumericType(input) == PrimitiveTypeCode.UInt16) =>
+                    PrimitiveTypeCode.UInt16,
+            ILOpCode.And or ILOpCode.Or or ILOpCode.Xor when _numericValues.Inputs[producer].Length == 2 =>
+                _numericValues.Inputs[producer].Any(input => SignedNumericType(NumericType(input)))
+                    ? PrimitiveTypeCode.Int16
+                    : _numericValues.Inputs[producer].Any(input => WordNumericType(NumericType(input)))
+                        ? PrimitiveTypeCode.UInt16 : PrimitiveTypeCode.Byte,
             ILOpCode.Add or ILOpCode.Sub when _numericValues.Inputs[producer].Length == 2
                 && NumericType(_numericValues.Inputs[producer][0]) is PrimitiveTypeCode.Byte or PrimitiveTypeCode.SByte
                 && NumericType(_numericValues.Inputs[producer][1]) is PrimitiveTypeCode.Byte or PrimitiveTypeCode.SByte =>
