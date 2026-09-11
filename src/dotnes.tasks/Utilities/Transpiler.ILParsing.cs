@@ -39,6 +39,7 @@ partial class Transpiler
 
             if (methodName == "Main" || methodName == "<Main>$")
             {
+                ReadNumericTypes(methodDef, "main");
                 // Parse exception regions (try/finally) before yielding instructions
                 MainExceptionRegions = ParseExceptionRegions(methodDef);
 
@@ -65,6 +66,7 @@ partial class Transpiler
                         }
                     }
                     {
+                        ReadNumericTypes(methodDef, externName);
                         var esig = _reader.GetBlobReader(methodDef.Signature);
                         esig.ReadByte(); // calling convention
                         int eParamCount = esig.ReadCompressedInteger();
@@ -94,6 +96,7 @@ partial class Transpiler
                 }
 
                 // User-defined method: read and store its IL
+                ReadNumericTypes(methodDef, cleanName);
                 var instructions = ReadMethodBody(methodDef, arrayValues).ToArray();
                 UserMethods[cleanName] = instructions;
                 RecordByteHelperDefinition(cleanName, methodDef);

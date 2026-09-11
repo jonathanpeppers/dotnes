@@ -209,9 +209,9 @@ partial class IL2NESWriter
         // Check if next instruction can handle the constant directly with A's current value
         bool nextIsAddSub = Instructions is not null && Index + 1 < Instructions.Length &&
             Instructions[Index + 1].OpCode is ILOpCode.Add or ILOpCode.Sub;
-        if (nextIsAddSub && LastLDA)
+        if (nextIsAddSub && (LastLDA || _ushortInAX))
         {
-            // Keep current A value — the Add/Sub handler will do 16-bit add inline
+            // Keep the current operand in A:X, including word locals ending in LDX.
             Stack.Push(operand);
             return;
         }
