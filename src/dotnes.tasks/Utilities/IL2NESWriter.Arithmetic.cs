@@ -25,12 +25,6 @@ partial class IL2NESWriter
     {
         int compareValue = stackValue + adjustValue;
 
-        // If the combined compare value overflows a byte, the comparison is trivially
-        // true or false (no byte can be >= 256). Return false so the caller can emit
-        // an unconditional branch or skip the branch entirely.
-        if (compareValue > 255 || compareValue < 0)
-            return false;
-
         var block = CurrentBlock!;
         if (block.Count > 0)
         {
@@ -60,10 +54,14 @@ partial class IL2NESWriter
                     // Replace LDA array,X with CMP array,X — A still has value1 from earlier
                     RemoveLastInstructions(1);
                     Emit(Opcode.CMP, AddressMode.AbsoluteX, idxOp.Address);
+                    if (adjustValue != 0)
+                        EmitStrictComparisonCarry();
                 }
                 else
                 {
                     // A holds the runtime value from LDA array,X — compare with the constant
+                    if (compareValue > 255 || compareValue < 0)
+                        return false;
                     Emit(Opcode.CMP, AddressMode.Immediate, (byte)compareValue);
                 }
                 return true;
@@ -88,25 +86,16 @@ partial class IL2NESWriter
                     // Two runtime values: remove second LDA (value2), emit CMP $addr.
                     // A retains value1 from the preceding instruction.
                     RemoveLastInstructions(1);
-                    if (adjustValue == 0)
-                    {
-                        Emit(Opcode.CMP, AddressMode.Absolute, cmpAbsOp.Address);
-                    }
-                    else
-                    {
-                        Emit(Opcode.STA, AddressMode.ZeroPage, TEMP);
-                        Emit(Opcode.LDA, AddressMode.Absolute, cmpAbsOp.Address);
-                        Emit(Opcode.CLC, AddressMode.Implied);
-                        Emit(Opcode.ADC, AddressMode.Immediate, (byte)adjustValue);
-                        Emit(Opcode.STA, AddressMode.ZeroPage, (byte)(TEMP + 1));
-                        Emit(Opcode.LDA, AddressMode.ZeroPage, TEMP);
-                        Emit(Opcode.CMP, AddressMode.ZeroPage, (byte)(TEMP + 1));
-                    }
+                    Emit(Opcode.CMP, AddressMode.Absolute, cmpAbsOp.Address);
+                    if (adjustValue != 0)
+                        EmitStrictComparisonCarry();
                     _savedRuntimeToTemp = false;
                 }
                 else
                 {
                     // Single runtime value + constant: keep the LDA, emit CMP #constant.
+                    if (compareValue > 255 || compareValue < 0)
+                        return false;
                     Emit(Opcode.CMP, AddressMode.Immediate, (byte)compareValue);
                 }
                 return true;
@@ -119,10 +108,15 @@ partial class IL2NESWriter
                 && lastInstr.Operand is ImmediateOperand)
             {
                 // Single runtime value from zero page — keep the LDA, emit CMP #constant.
+                if (compareValue > 255 || compareValue < 0)
+                    return false;
                 Emit(Opcode.CMP, AddressMode.Immediate, (byte)compareValue);
                 return true;
             }
         }
+        if (compareValue > 255 || compareValue < 0)
+            return false;
+
         // Constant comparison: remove last LDA #imm, emit CMP #imm
         // When _runtimeValueInA is true, WriteLdc skips emitting LDA — the last
         // instruction is the actual computation (SBC, ADC, AND, etc.) and must not
@@ -135,6 +129,30 @@ partial class IL2NESWriter
         }
         Emit(Opcode.CMP, AddressMode.Immediate, (byte)compareValue);
         return true;
+    }
+
+    void EmitStrictComparisonCarry()
+    {
+        // CMP sets carry for >=. Clear it on equality to represent > without
+        // incrementing the runtime right operand (which would wrap at 255).
+        Emit(Opcode.BNE, AddressMode.Relative, 1);
+        Emit(Opcode.CLC, AddressMode.Implied);
+    }
+
+    void RefreshByteResultFlags()
+    {
+        var block = CurrentBlock;
+        if (block is null || block.Count == 0)
+            return;
+
+        var last = block[block.Count - 1];
+        // These built-ins explicitly restore A with TXA after stack cleanup.
+        if (last.Opcode == Opcode.JSR && last.Operand is LabelOperand label &&
+            label.Label is nameof(rect_overlap) or nameof(sprite_overlap))
+            return;
+        if (last.Opcode is Opcode.JSR or Opcode.LDX or Opcode.LDY
+            or Opcode.INX or Opcode.INY or Opcode.DEX or Opcode.DEY)
+            Emit(Opcode.CMP, AddressMode.Immediate, 0);
     }
 
     /// <summary>
@@ -481,11 +499,32 @@ partial class IL2NESWriter
         int operand = Stack.Pop(); // The value being added/subtracted (e.g., 1)
         int baseValue = Stack.Pop(); // The base value (from local variable)
 
+        if (!_ushortInAX &&
+            Instructions is not null && Index >= 2 &&
+            Instructions[Index - 1].OpCode == ILOpCode.Ldsfld &&
+            Instructions[Index - 2].GetLdcValue() is >= 0 and <= byte.MaxValue &&
+            CurrentBlock is { Count: >= 2 } fieldBlock &&
+            fieldBlock[fieldBlock.Count - 1] is { Opcode: Opcode.LDA, Mode: AddressMode.Absolute, Operand: AbsoluteOperand fieldAddress } &&
+            fieldBlock[fieldBlock.Count - 2] is { Opcode: Opcode.JSR, Operand: LabelOperand { Label: "pusha" } })
+        {
+            // The left constant is still in A before the field's push/load pair.
+            RemoveLastInstructions(2);
+            Emit(isAdd ? Opcode.CLC : Opcode.SEC, AddressMode.Implied);
+            Emit(isAdd ? Opcode.ADC : Opcode.SBC, AddressMode.Absolute, fieldAddress.Address);
+            _savedConstantViaPusha = false;
+            _runtimeValueInA = true;
+            _lastLoadedLocalIndex = null;
+            Stack.Push(0);
+            return;
+        }
+
         // Check if this is an x++ or x-- pattern:
         // Ldloc_N, Ldc_i4_1, Add/Sub, Conv_u1, Stloc_N (where the two N's match)
         if (_lastLoadedLocalIndex.HasValue && operand == 1 && 
             Locals.TryGetValue(_lastLoadedLocalIndex.Value, out var loadedLocal) && loadedLocal.Address.HasValue &&
-            Instructions is not null && Index + 2 < Instructions.Length)
+            Instructions is not null && Index >= 2 && Index + 2 < Instructions.Length &&
+            Instructions[Index - 1].GetLdcValue() == 1 &&
+            Instructions[Index - 2].GetLdlocIndex() == _lastLoadedLocalIndex)
         {
             var next1 = Instructions[Index + 1];
             var next2 = Instructions[Index + 2];

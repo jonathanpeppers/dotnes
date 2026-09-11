@@ -40,6 +40,7 @@ partial class IL2NESWriter
 
     public void Write(ILInstruction instruction)
     {
+        BeginVariableShiftCount();
         // Clear ldloc byte array label for non-ldloc instructions
         if (instruction.OpCode is not (ILOpCode.Ldloc_0 or ILOpCode.Ldloc_1
             or ILOpCode.Ldloc_2 or ILOpCode.Ldloc_3 or ILOpCode.Ldloc_s))
@@ -703,8 +704,10 @@ partial class IL2NESWriter
             case ILOpCode.Shr:
             case ILOpCode.Shr_un:
                 {
+                    if (EmitVariableShift(left: false))
+                        break;
                     _lastStaticFieldAddress = null;
-                    int shiftCount = Stack.Pop();
+                    int shiftCount = Stack.Pop() & 31;
                     int value = Stack.Count > 0 ? Stack.Pop() : 0;
 
                     bool shrLocalInA = _lastLoadedLocalIndex.HasValue &&
@@ -757,8 +760,10 @@ partial class IL2NESWriter
                 break;
             case ILOpCode.Shl:
                 {
+                    if (EmitVariableShift(left: true))
+                        break;
                     _lastStaticFieldAddress = null;
-                    int shiftCount = Stack.Pop();
+                    int shiftCount = Stack.Pop() & 31;
                     int value = Stack.Count > 0 ? Stack.Pop() : 0;
 
                     bool shlLocalInA = _lastLoadedLocalIndex.HasValue &&
@@ -790,6 +795,17 @@ partial class IL2NESWriter
                     _lastStaticFieldAddress = null;
                     int mask = Stack.Pop();
                     int value = Stack.Count > 0 ? Stack.Pop() : 0;
+
+                    if (_variableShiftIndex == Index + 1)
+                    {
+                        // Only the count's low five bits matter, even for a word local.
+                        Emit(Opcode.AND, AddressMode.Immediate, 31);
+                        _ushortInAX = false;
+                        _runtimeValueInA = true;
+                        _lastLoadedLocalIndex = null;
+                        Stack.Push(0);
+                        break;
+                    }
 
                     // Check if the value came from a local variable load (runtime value)
                     bool localInA = _lastLoadedLocalIndex.HasValue &&
@@ -1202,6 +1218,7 @@ partial class IL2NESWriter
 
     public void Write(ILInstruction instruction, int operand)
     {
+        BeginVariableShiftCount();
         _ldlocByteArrayLabel = null;
         switch (instruction.OpCode)
         {
@@ -1525,6 +1542,8 @@ partial class IL2NESWriter
                         Emit(Opcode.ORA, AddressMode.ZeroPage, TEMP);
                         _ushortInAX = false;
                     }
+                    else
+                        RefreshByteResultFlags();
                     EmitWithLabel(Opcode.BEQ, AddressMode.Relative, labelName);
                     if (Stack.Count > 0)
                         Stack.Pop();
@@ -1543,6 +1562,8 @@ partial class IL2NESWriter
                         Emit(Opcode.ORA, AddressMode.ZeroPage, TEMP);
                         _ushortInAX = false;
                     }
+                    else
+                        RefreshByteResultFlags();
                     EmitWithLabel(Opcode.BNE, AddressMode.Relative, labelName);
                     if (Stack.Count > 0)
                         Stack.Pop();
@@ -1708,6 +1729,8 @@ partial class IL2NESWriter
                         Emit(Opcode.ORA, AddressMode.ZeroPage, TEMP);
                         _ushortInAX = false;
                     }
+                    else
+                        RefreshByteResultFlags();
                     Emit(Opcode.BEQ, AddressMode.Relative, 3); // skip JMP if zero
                     EmitWithLabel(Opcode.JMP, AddressMode.Absolute, labelName);
                     if (Stack.Count > 0)
@@ -1726,6 +1749,8 @@ partial class IL2NESWriter
                         Emit(Opcode.ORA, AddressMode.ZeroPage, TEMP);
                         _ushortInAX = false;
                     }
+                    else
+                        RefreshByteResultFlags();
                     Emit(Opcode.BNE, AddressMode.Relative, 3); // skip JMP if non-zero
                     EmitWithLabel(Opcode.JMP, AddressMode.Absolute, labelName);
                     if (Stack.Count > 0)
@@ -1832,6 +1857,7 @@ partial class IL2NESWriter
 
     public void Write(ILInstruction instruction, string operand)
     {
+        BeginVariableShiftCount();
         switch (instruction.OpCode)
         {
             case ILOpCode.Nop:
