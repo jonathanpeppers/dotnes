@@ -51,7 +51,6 @@ public class ExpressionValueTests(ITestOutputHelper output) : ExecutionTests(out
                 public static byte Next() => 7;
             }
             """);
-        _logger.WriteLine($"{Convert.ToHexString(cpu.Memory[0x8500..0x8564])}");
         Assert.Equal(new byte[] { 0x3B, 0x12 }, cpu.Memory[0x6000..0x6002]);
     }
 
