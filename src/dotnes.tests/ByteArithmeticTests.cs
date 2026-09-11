@@ -625,4 +625,36 @@ public class ByteArithmeticTests(ITestOutputHelper output) : ExecutionTests(outp
             """));
         Assert.Contains("promoted arithmetic expressions", error.Message);
     }
+
+    [Theory]
+    [InlineData(0x8100, 256, true, 8, 130)]
+    [InlineData(0x8100, 256, false, 8, 128)]
+    [InlineData(1, 65535, true, 8, 0)]
+    [InlineData(0, 65535, false, 0, 1)]
+    [InlineData(65535, 1, true, 9, 0)]
+    [InlineData(0, 1, false, 8, 255)]
+    [InlineData(0x7FFF, 256, true, 8, 128)]
+    [InlineData(0x8000, 256, false, 8, 127)]
+    public void WordLocalArithmeticPreservesOperandForWideConstants(ushort input, ushort constant, bool add, byte count, byte expected)
+    {
+        var cpu = ExecuteProgram(
+            $$"""
+            State.Value = {{input}};
+            State.Count = {{count}};
+            ushort value = State.Value;
+            byte frame = 0;
+            while (frame < 1)
+            {
+                byte result = (byte)(((ushort)(value {{(add ? "+" : "-")}} {{constant}})) >> State.Count);
+                poke(0x6000, result);
+                frame++;
+            }
+            test_stop();
+            while (true) ;
+            static extern void test_stop();
+            static class State { public static ushort Value; public static byte Count; }
+            """);
+        Assert.Equal(expected, cpu.Memory[0x6000]);
+        AssertBalanced(cpu);
+    }
 }
