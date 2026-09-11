@@ -344,11 +344,20 @@ partial class Transpiler : IDisposable
             PreAllocateClosureFields(ref staticFieldBytes);
         }
 
+        instructions = PreserveExpressionValues(instructions, reflectionCache, "main");
+        foreach (var name in UserMethods.Keys.ToArray())
+            UserMethods[name] = PreserveExpressionValues(UserMethods[name], reflectionCache, name);
+        var byteParameterCalls = new HashSet<string>(NumericTypes.Where(kvp =>
+            UserMethods.ContainsKey(kvp.Key) && kvp.Value.Parameters.All(p => p == PrimitiveTypeCode.Byte)
+                && kvp.Value.ReturnType is PrimitiveTypeCode.Byte or PrimitiveTypeCode.Void)
+            .Select(kvp => kvp.Key));
+
         using var writer = new IL2NESWriter(new MemoryStream(), logger: _logger, reflectionCache: reflectionCache)
         {
             Instructions = instructions,
             UsedMethods = UsedMethods,
             UserMethodNames = new HashSet<string>(UserMethods.Keys, StringComparer.Ordinal),
+            ByteParameterCalls = byteParameterCalls,
             ExternMethodNames = externNames,
             WordLocals = DetectWordLocals(instructions, reflectionCache),
             StructLayouts = structLayouts,
@@ -437,6 +446,7 @@ partial class Transpiler : IDisposable
                 Instructions = methodIL,
                 UsedMethods = UsedMethods,
                 UserMethodNames = new HashSet<string>(UserMethods.Keys, StringComparer.Ordinal),
+                ByteParameterCalls = byteParameterCalls,
                 MethodParamCount = paramCount,
                 ParamIsArray = isArrayParam,
                 MethodName = methodName,
