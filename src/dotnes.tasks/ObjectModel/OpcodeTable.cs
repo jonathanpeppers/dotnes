@@ -273,7 +273,7 @@ public static class OpcodeTable
     };
 
     // Reverse lookup table built lazily
-    private static Dictionary<byte, (Opcode, AddressMode)>? _decodings;
+    private static readonly Lazy<Dictionary<byte, (Opcode, AddressMode)>> _decodings = new(BuildDecodings);
 
     /// <summary>
     /// Encodes an opcode and addressing mode to its byte representation
@@ -306,8 +306,7 @@ public static class OpcodeTable
     /// </summary>
     public static (Opcode Opcode, AddressMode Mode) Decode(byte encoding)
     {
-        EnsureDecodingsBuilt();
-        if (_decodings!.TryGetValue(encoding, out var result))
+        if (_decodings.Value.TryGetValue(encoding, out var result))
             return result;
         throw new UnknownOpcodeException(encoding);
     }
@@ -317,8 +316,7 @@ public static class OpcodeTable
     /// </summary>
     public static bool TryDecode(byte encoding, out Opcode opcode, out AddressMode mode)
     {
-        EnsureDecodingsBuilt();
-        if (_decodings!.TryGetValue(encoding, out var result))
+        if (_decodings.Value.TryGetValue(encoding, out var result))
         {
             opcode = result.Item1;
             mode = result.Item2;
@@ -361,14 +359,13 @@ public static class OpcodeTable
         return _encodings.ContainsKey((opcode, mode));
     }
 
-    private static void EnsureDecodingsBuilt()
+    private static Dictionary<byte, (Opcode, AddressMode)> BuildDecodings()
     {
-        if (_decodings != null) return;
-
-        _decodings = new();
+        var decodings = new Dictionary<byte, (Opcode, AddressMode)>();
         foreach (var kvp in _encodings)
         {
-            _decodings[kvp.Value] = kvp.Key;
+            decodings[kvp.Value] = kvp.Key;
         }
+        return decodings;
     }
 }
