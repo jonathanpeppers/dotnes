@@ -71,6 +71,7 @@ partial class IL2NESWriter
         _savedState = SavedValueState.None;
         _lastLoadedLocalIndex = null;
         _lastStaticFieldAddress = null;
+        _ldlocByteArrayLabel = null;
     }
 
     void EmitArrayScalar(ILInstruction source, bool index = false)
