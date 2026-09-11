@@ -62,10 +62,10 @@ partial class IL2NESWriter
     };
 
     static bool SignedNumericType(PrimitiveTypeCode? type) =>
-        type is PrimitiveTypeCode.SByte or PrimitiveTypeCode.Int16;
+        NumericStorage.IsSigned(type);
 
     static bool WordNumericType(PrimitiveTypeCode? type) =>
-        type is PrimitiveTypeCode.UInt16 or PrimitiveTypeCode.Int16;
+        NumericStorage.IsWord(type);
 
     bool PureNumericOperand(int producer, out int first)
     {
@@ -175,6 +175,8 @@ partial class IL2NESWriter
             return false;
         var leftType = NumericType(lhs);
         var rightType = NumericType(rhs);
+        NumericStorage.RequireNarrowType(leftType, MethodName);
+        NumericStorage.RequireNarrowType(rightType, MethodName);
         bool signed = SignedNumericType(leftType) || SignedNumericType(rightType);
         bool word = WordNumericType(leftType) || WordNumericType(rightType);
         bool wordResult = Index + 1 < Instructions.Length
@@ -241,6 +243,8 @@ partial class IL2NESWriter
             || _numericValues.Inputs[Index].Length != 2)
             return false;
         int lhs = _numericValues.Inputs[Index][0], rhs = _numericValues.Inputs[Index][1];
+        NumericStorage.RequireNarrowType(NumericType(lhs), MethodName);
+        NumericStorage.RequireNarrowType(NumericType(rhs), MethodName);
         bool signedLeft = SignedNumericType(NumericType(lhs));
         bool signedRight = SignedNumericType(NumericType(rhs));
         if (!signedLeft && !signedRight

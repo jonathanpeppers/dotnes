@@ -14,11 +14,13 @@ partial class Transpiler
         if (selected.Any(i => i < 0 || i >= types.Count || types[i] is null or PrimitiveTypeCode.Void))
             throw new InvalidOperationException($"Cannot spill an untyped expression value in '{method}'.");
 
-        var words = new HashSet<int>(selected.Where(i => types[i] is PrimitiveTypeCode.UInt16
-            or PrimitiveTypeCode.Int16 or PrimitiveTypeCode.Int32 or PrimitiveTypeCode.UInt32));
+        foreach (int producer in selected)
+            NumericStorage.RequireNarrowType(types[producer], method);
+        var words = new HashSet<int>(selected.Where(i => NumericStorage.IsWord(types[i])));
+        var signedWords = new HashSet<int>(words.Where(i => NumericStorage.IsSigned(types[i])));
         var spillLocals = new Dictionary<int, int>();
         var rewritten = ILExpressionSpiller.Rewrite(instructions, analysis, selected, words,
-            spillLocals, signature.Locals.Length);
+            spillLocals, signature.Locals.Length, signedWords);
         if (spillLocals.Count == 0)
             return rewritten;
 

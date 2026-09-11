@@ -19,7 +19,7 @@ partial class Transpiler
         if (NumericTypes.TryGetValue(methodName, out var types))
         {
             for (int i = 0; i < types.Locals.Length; i++)
-                if (types.Locals[i] is PrimitiveTypeCode.UInt16 or PrimitiveTypeCode.Int16)
+                if (NumericStorage.IsWord(types.Locals[i]))
                 {
                     // Retain compact storage when every assignment explicitly truncates
                     // to a byte. The declared word type alone does not require a high byte.

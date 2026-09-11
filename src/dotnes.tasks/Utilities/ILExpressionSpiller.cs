@@ -12,7 +12,7 @@ static class ILExpressionSpiller
     public static ILInstruction[] Rewrite(
         ILInstruction[] instructions, ILValueAnalysis analysis, ISet<int> producers,
         ISet<int>? wordProducers = null, IDictionary<int, int>? spillLocals = null,
-        int minimumLocalIndex = 0)
+        int minimumLocalIndex = 0, ISet<int>? signedWordProducers = null)
     {
         if (producers.Count == 0)
             return instructions;
@@ -80,7 +80,8 @@ static class ILExpressionSpiller
             if (locals.TryGetValue(i, out int local))
             {
                 if (wordProducers?.Contains(i) == true)
-                    result.Add(new ILInstruction(ILOpCode.Conv_u2, nextOffset--));
+                    result.Add(new ILInstruction(signedWordProducers?.Contains(i) == true
+                        ? ILOpCode.Conv_i2 : ILOpCode.Conv_u2, nextOffset--));
                 result.Add(new ILInstruction(ILOpCode.Stloc_s, nextOffset--, local));
             }
         }

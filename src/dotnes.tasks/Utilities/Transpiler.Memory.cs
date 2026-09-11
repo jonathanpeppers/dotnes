@@ -52,7 +52,10 @@ partial class Transpiler
         }
         var types = GetExpressionValueTypes(instructions, analysis, reflection, methodName);
         foreach (int address in addresses)
+        {
+            NumericStorage.RequireNarrowType(types[address], methodName);
             types[address] = PrimitiveTypeCode.UInt16;
+        }
         return RewriteTypedExpressionValues(instructions, analysis, selected, types, methodName);
     }
 }
