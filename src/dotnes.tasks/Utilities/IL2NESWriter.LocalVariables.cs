@@ -75,6 +75,16 @@ partial class IL2NESWriter
         // Storing a local clobbers A/X
         _firstAndAfterPadPoll = false;
         bool valueIsWord = _ushortInAX;
+        if (local.IsWord && !valueIsWord && _numericValues != null
+            && _numericValues.Inputs[Index].Length == 1
+            && SignedNumericType(NumericType(_numericValues.Inputs[Index][0])))
+        {
+            if (Instructions![_numericValues.Inputs[Index][0]].GetLdcValue() is int constant)
+                Emit(Opcode.LDX, AddressMode.Immediate, (byte)(constant >> 8));
+            else
+                EmitNumericExtension(signed: true);
+            valueIsWord = true;
+        }
         _ushortInAX = false;
 
         // Detect the "two pending IL stack values" pattern produced when
