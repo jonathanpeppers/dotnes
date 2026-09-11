@@ -45,6 +45,7 @@ public static class NesCompiler
             mmc3BankedLayout: options.Mmc3BankedLayout)
         {
             LeaveAssemblyReadersOpen = true,
+            OptimizeByteHelpers = options.OptimizeByteHelpers,
         };
         return transpiler.CompileProgram(out _, out _);
     }

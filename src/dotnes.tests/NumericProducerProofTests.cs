@@ -1,15 +1,20 @@
 using System.Collections.Immutable;
 using System.Reflection.Metadata;
+using dotnes.ObjectModel;
 
 namespace dotnes.tests;
 
 public class NumericProducerProofTests
 {
-    static void Configure(IL2NESWriter writer) => writer.ConfigureNumericTypes(
-        new Dictionary<string, MethodNumericTypes>
-        {
-            ["main"] = new([PrimitiveTypeCode.UInt16, PrimitiveTypeCode.Byte], [], PrimitiveTypeCode.Void),
-        }, new Dictionary<string, PrimitiveTypeCode?> { ["Value"] = PrimitiveTypeCode.UInt16 });
+    static void ConfigureTypes(IL2NESWriter writer, PrimitiveTypeCode? type = PrimitiveTypeCode.UInt16)
+    {
+        writer.ConfigureNumericTypes(
+            new Dictionary<string, MethodNumericTypes>
+            {
+                ["main"] = new([type, PrimitiveTypeCode.Byte], [], PrimitiveTypeCode.Void),
+            },
+            new Dictionary<string, PrimitiveTypeCode?> { ["Value"] = type });
+    }
 
     [Theory]
     [InlineData(ILOpCode.Br_s, 0, true)]
@@ -36,8 +41,8 @@ public class NumericProducerProofTests
             control,
         ];
         writer.Index = 4;
-        Configure(writer);
         writer.Variables.Locals[0] = new(0, 0x325, IsWord: true);
+        ConfigureTypes(writer);
         writer.StartBlockBuffering();
         writer.RecordBlockCount(0);
         writer.RecordBlockCount(2);
@@ -61,10 +66,10 @@ public class NumericProducerProofTests
             new(ILOpCode.Conv_u2, 3),
         ];
         writer.Index = 3;
-        Configure(writer);
         writer.Variables.Locals[0] = new(0, 0x325, IsWord: true);
         writer.StaticFieldAddresses["Value"] = 0x325;
         writer.WordStaticFields.Add("Value");
+        ConfigureTypes(writer);
         writer.StartBlockBuffering();
         Assert.False(writer.HasVerifiedNumericProducer(2));
         writer.RecordBlockCount(0);
@@ -95,9 +100,48 @@ public class NumericProducerProofTests
         ];
         writer.Index = 3;
         writer.Variables.Locals[0] = new(0, 0x325, IsWord: true);
+        ConfigureTypes(writer);
         writer.StartBlockBuffering();
         writer.RecordBlockCount(0);
         writer.RecordBlockCount(2);
         Assert.False(writer.HasVerifiedNumericProducer(2));
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData(PrimitiveTypeCode.Byte)]
+    [InlineData(PrimitiveTypeCode.SByte)]
+    [InlineData(PrimitiveTypeCode.Int16)]
+    [InlineData(PrimitiveTypeCode.Int32)]
+    [InlineData(PrimitiveTypeCode.UInt32)]
+    public void WordStorageDoesNotProveAnUnsignedDeclaration(PrimitiveTypeCode? type)
+    {
+        foreach (bool field in new[] { false, true })
+        {
+            using var stream = new MemoryStream();
+            using var writer = new IL2NESWriter(stream);
+            writer.Instructions =
+            [
+                field ? new(ILOpCode.Ldsfld, 0, String: "Value") : new(ILOpCode.Ldloc_0, 0),
+                new(ILOpCode.Ldc_i4_1, 1),
+                new(ILOpCode.Add, 2),
+                new(ILOpCode.Conv_u2, 3),
+            ];
+            writer.Index = 3;
+            writer.Variables.Locals[0] = new(0, 0x325, IsWord: true);
+            writer.StaticFieldAddresses["Value"] = 0x325;
+            writer.WordStaticFields.Add("Value");
+            if (!field && type is PrimitiveTypeCode.Int32 or PrimitiveTypeCode.UInt32)
+            {
+                var error = Assert.Throws<TranspileException>(() => ConfigureTypes(writer, type));
+                Assert.Contains("local", error.Message, StringComparison.OrdinalIgnoreCase);
+                continue;
+            }
+            ConfigureTypes(writer, type);
+            writer.StartBlockBuffering();
+            writer.RecordBlockCount(0);
+            writer.RecordBlockCount(2);
+            Assert.False(writer.HasVerifiedNumericProducer(2));
+        }
     }
 }

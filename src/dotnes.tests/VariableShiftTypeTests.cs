@@ -28,6 +28,9 @@ public class VariableShiftTypeTests(ITestOutputHelper output) : ExecutionTests(o
     [InlineData("ushort", "parameter")]
     public void SignedAndUnsupportedWideSourcesAreDiagnosed(string type, string source)
     {
+        if (type == "sbyte")
+            Assert.Equal(0xC0, unchecked((byte)(unchecked((sbyte)0x80) >> 1)));
+        string initialization = type == "sbyte" ? "State.Value = -128;" : "";
         string body = source switch
         {
             "field" => "byte result = (byte)(State.Value >> State.Count); poke(0x6000, result);",
@@ -47,6 +50,7 @@ public class VariableShiftTypeTests(ITestOutputHelper output) : ExecutionTests(o
         string method = source == "parameter"
             ? $"static byte Shift({type} value, byte count) => (byte)(value >> count);" : "";
         var error = Assert.Throws<TranspileException>(() => GetProgramBytes($$"""
+            {{initialization}}
             State.Count = 1;
             {{body}}
             while (true);
@@ -91,6 +95,43 @@ public class VariableShiftTypeTests(ITestOutputHelper output) : ExecutionTests(o
             static class State { public static byte Count; }
             """, cpu => cpu.Memory[0x6010] = 255);
         Assert.Equal(expected, cpu.Memory[0x6000]);
+        Assert.Equal(Cpu6502.SoftwareStackTop, cpu.SoftwareStackPointer);
+    }
+
+    [Theory]
+    [InlineData("int", "128")]
+    [InlineData("uint", "128")]
+    public void UshortCastDoesNotAuthorizeUnsupportedWideStorage(string type, string value)
+    {
+        var error = Assert.Throws<TranspileException>(() => GetProgramBytes(
+            $$"""
+            State.Value = {{value}};
+            State.Count = 1;
+            byte result = (byte)(((ushort)State.Value) >> State.Count);
+            poke(0x6000, result);
+            while (true) ;
+            static class State { public static {{type}} Value; public static byte Count; }
+            """));
+        Assert.Contains("unsupported primitive type", error.Message);
+    }
+
+    [Fact]
+    public void ExplicitByteCastOfSignedSourceRemainsSupported()
+    {
+        var cpu = ExecuteProgram(
+            """
+            State.Value = -128;
+            State.Count = 1;
+            byte result = Shift(State.Value, State.Count);
+            poke(0x6000, result);
+            test_stop();
+            while (true) ;
+            static extern void test_stop();
+            static byte Shift(sbyte value, byte count) => (byte)(((byte)value) >> count);
+            static class State { public static sbyte Value; public static byte Count; }
+            """);
+        Assert.Equal(0x40, cpu.Memory[0x6000]);
+        Assert.Equal(0xFD, cpu.SP);
         Assert.Equal(Cpu6502.SoftwareStackTop, cpu.SoftwareStackPointer);
     }
 

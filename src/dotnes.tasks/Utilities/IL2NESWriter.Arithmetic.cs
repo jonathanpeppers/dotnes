@@ -17,8 +17,9 @@ partial class IL2NESWriter
     /// Peeks at the last emitted instruction: if it's LDA with Absolute/ZeroPage mode
     /// (runtime variable), uses CMP $addr. Otherwise removes the LDA #imm and uses CMP #imm.
     /// stackValue is the value popped from IL stack (correct for constants, 0 for runtime).
-    /// For &lt;= and &gt; comparisons, pass adjustValue=1 to compare with value+1.
-    /// Returns true if the CMP was emitted normally. Returns false if stackValue+adjustValue
+    /// For &lt;= and &gt; comparisons, pass adjustValue=1 to adjust a constant or make
+    /// the runtime comparison carry represent strict greater-than.
+    /// Returns true if the comparison was emitted. Returns false if stackValue+adjustValue
     /// overflows a byte (&gt; 255), meaning the caller must handle the always-true/false case.
     /// </summary>
     bool EmitBranchCompare(int stackValue, int adjustValue = 0)
@@ -135,6 +136,7 @@ partial class IL2NESWriter
     {
         // CMP sets carry for >=. Clear it on equality to represent > without
         // incrementing the runtime right operand (which would wrap at 255).
+        // Callers consume this adjusted carry with BCS/BCC; CMP's Z/N are unchanged.
         Emit(Opcode.BNE, AddressMode.Relative, 1);
         Emit(Opcode.CLC, AddressMode.Implied);
     }
