@@ -59,8 +59,13 @@ public class ByteHelperMSBuildTests(ITestOutputHelper output) : RoslynTests(outp
             DateTime projectTime = File.GetLastWriteTimeUtc(projectPath);
             const string transpilationMessage = "Single-pass transpilation...";
 
+            Assert.Contains(transpilationMessage, await Build(null));
+            byte[] defaultRom = File.ReadAllBytes(romPath);
+            Assert.Contains("NESOptimizeByteHelpers=", File.ReadAllLines(stampPath));
+
             Assert.Contains(transpilationMessage, await Build(false));
             byte[] baseline = File.ReadAllBytes(romPath);
+            Assert.Equal(defaultRom, baseline);
             string baselineHash = Convert.ToHexString(SHA256.HashData(baseline));
             Assert.Contains("NESOptimizeByteHelpers=false", File.ReadAllText(stampPath));
 
@@ -81,7 +86,7 @@ public class ByteHelperMSBuildTests(ITestOutputHelper output) : RoslynTests(outp
             Assert.Equal(assemblyTime, File.GetLastWriteTimeUtc(targetPath));
             Assert.Equal(projectTime, File.GetLastWriteTimeUtc(projectPath));
 
-            async Task<string> Build(bool optimize)
+            async Task<string> Build(bool? optimize)
             {
                 var startInfo = new ProcessStartInfo("dotnet")
                 {
@@ -96,7 +101,8 @@ public class ByteHelperMSBuildTests(ITestOutputHelper output) : RoslynTests(outp
                 startInfo.ArgumentList.Add("-nologo");
                 startInfo.ArgumentList.Add("-v:normal");
                 startInfo.ArgumentList.Add("-nr:false");
-                startInfo.ArgumentList.Add($"-p:NESOptimizeByteHelpers={optimize.ToString().ToLowerInvariant()}");
+                if (optimize.HasValue)
+                    startInfo.ArgumentList.Add($"-p:NESOptimizeByteHelpers={optimize.Value.ToString().ToLowerInvariant()}");
                 using var process = Process.Start(startInfo);
                 Assert.NotNull(process);
                 Task<string> standardOutput = process.StandardOutput.ReadToEndAsync();

@@ -1,3 +1,5 @@
+using System.Reflection.Metadata;
+using System.Reflection.PortableExecutable;
 using dotnes.ObjectModel;
 using Xunit.Abstractions;
 
@@ -320,7 +322,7 @@ public class ByteHelperTests(ITestOutputHelper output) : RoslynTests(output)
         Assert.DoesNotContain(afterBlock.InstructionsWithLabels, i => i.Instruction.Operand is RelativeByteOperand);
         Assert.Contains(afterBlock.InstructionsWithLabels, i =>
             i.Instruction.Operand is RelativeOperand target
-            && target.Label.StartsWith("helper_bytehelper_target_", StringComparison.Ordinal));
+            && target.Label.StartsWith("@bytehelper_target_", StringComparison.Ordinal));
 
         // The comparison's false path targets cleanup, which is removed; its
         // synthesized branch label must move to RTS rather than disappear.
@@ -351,6 +353,94 @@ public class ByteHelperTests(ITestOutputHelper output) : RoslynTests(output)
             Assert.Equal(before.Memory[NESConstants.LocalStackBase + 1], after.Memory[NESConstants.LocalStackBase + 1]);
             AssertBalancedStacks(before, after);
         }
+    }
+
+    [Fact]
+    public void NumericBranchTargetsCannotCollideWithMethodNames()
+    {
+        const string source = """
+            State.First = helper(State.Input);
+            State.Second = helper_bytehelper_target_7(7);
+            State.Third = helper_bytehelper_target_8(8);
+            while (true) ;
+            static byte helper(byte value) => (byte)(value == 42 ? 1 : 0);
+            static byte helper_bytehelper_target_7(byte value) => (byte)(value ^ 3);
+            static byte helper_bytehelper_target_8(byte value) => (byte)(value ^ 3);
+            static class State { public static byte First, Input, Second, Third; }
+            """;
+        using var baseline = BuildProgram(source, out var original);
+        using var optimized = BuildProgram(source, out var program, optimizeByteHelpers: true);
+        AssertHomeParameter(program, "helper");
+        var block = original.GetBlock("helper")!;
+        int[] offsets = new int[block.Count];
+        for (int i = 1; i < block.Count; i++)
+            offsets[i] = offsets[i - 1] + block[i - 1].Size;
+        Assert.Contains(Enumerable.Range(0, block.Count), i =>
+            block[i].Operand is RelativeByteOperand branch
+            && original.GetBlock($"helper_bytehelper_target_{Array.IndexOf(offsets, offsets[i] + block[i].Size + branch.Offset)}") != null);
+
+        for (int input = 0; input <= byte.MaxValue; input++)
+        {
+            var before = Execute(original, cpu => cpu.Memory[NESConstants.LocalStackBase + 1] = (byte)input);
+            var after = Execute(program, cpu => cpu.Memory[NESConstants.LocalStackBase + 1] = (byte)input);
+            byte[] expected = [(byte)(input == 42 ? 1 : 0), (byte)input, 4, 11];
+            Assert.Equal(expected, before.Memory.AsSpan(NESConstants.LocalStackBase, 4).ToArray());
+            Assert.Equal(expected, after.Memory.AsSpan(NESConstants.LocalStackBase, 4).ToArray());
+            AssertBalancedStacks(before, after);
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void FacadeOnlyLinksSuppliedNativeCodeWhenExternsAreDeclared(bool hasExtern)
+    {
+        using var assembly = CompileAssembly($$"""
+            State.Result = helper(42);
+            while (true) ;
+            static byte helper(byte value) => (byte)(value ^ 3);
+            {{(hasExtern ? "static extern void native_callback();" : "")}}
+            static class State { public static byte Result; }
+            """);
+        using var native = new AssemblyReader(new StringReader("""
+            .segment "CODE"
+            _native_callback:
+                lda #7
+                jsr helper
+                rts
+            .segment "CHARS"
+            .byte $12,$34
+            """));
+        var baseline = NesCompiler.Compile(assembly, assemblyFiles: [native]);
+        assembly.Position = 0;
+        var optimized = NesCompiler.Compile(assembly,
+            new CompilationOptions { OptimizeByteHelpers = true }, [native]);
+        if (hasExtern)
+        {
+            Assert.NotNull(baseline.GetBlock("_native_callback"));
+            Assert.NotNull(optimized.GetBlock("_native_callback"));
+            AssertStackParameter(optimized, "helper");
+            Assert.Equal(baseline.ToBytes(), optimized.ToBytes());
+        }
+        else
+        {
+            Assert.Null(baseline.GetBlock("_native_callback"));
+            Assert.Null(optimized.GetBlock("_native_callback"));
+            AssertHomeParameter(optimized, "helper");
+            foreach (bool optimize in new[] { false, true })
+            {
+                assembly.Position = 0;
+                var withoutSources = NesCompiler.Compile(assembly,
+                    new CompilationOptions { OptimizeByteHelpers = optimize });
+                Assert.Equal(withoutSources.ToBytes(), (optimize ? optimized : baseline).ToBytes());
+            }
+        }
+        Assert.Equal(new byte[] { 0x12, 0x34 }, Assert.Single(native.GetSegments()).Bytes);
+        var before = Execute(baseline);
+        var after = Execute(optimized);
+        Assert.Equal(41, before.Memory[NESConstants.LocalStackBase]);
+        Assert.Equal(41, after.Memory[NESConstants.LocalStackBase]);
+        AssertBalancedStacks(before, after);
     }
 
     [Fact]
@@ -422,6 +512,56 @@ public class ByteHelperTests(ITestOutputHelper output) : RoslynTests(output)
         using var optimized = BuildProgram(source, out var program, optimizeByteHelpers: true);
         AssertStackParameter(program, "helper");
         Assert.Equal(original.ToBytes(), program.ToBytes());
+    }
+
+    [Theory]
+    [InlineData(4)]
+    [InlineData(5)]
+    public void LocalCountBoundaryRetainsBaselineSemantics(int count)
+    {
+        string source = $$"""
+            class Program
+            {
+                static void Main() { State.Result = helper(State.Input); while (true) ; }
+                static byte helper(byte value)
+                {
+                    {{string.Join(Environment.NewLine, Enumerable.Range(0, count).Select(i => $"byte v{i} = (byte)(value ^ {i + 1});"))}}
+                    {{string.Join(Environment.NewLine, Enumerable.Range(0, count - 1).Select(i => $"if (value == {i}) return v{i};"))}}
+                    return v{{count - 1}};
+                }
+            }
+            static class State { public static byte Input, Result; }
+            """;
+        var assembly = CompileAssembly(source);
+        using (var pe = new PEReader(assembly, PEStreamOptions.LeaveOpen))
+        {
+            var metadata = pe.GetMetadataReader();
+            var method = metadata.MethodDefinitions.Select(metadata.GetMethodDefinition)
+                .Single(m => metadata.GetString(m.Name) == "helper");
+            var body = pe.GetMethodBody(method.RelativeVirtualAddress);
+            var signature = metadata.GetBlobReader(metadata.GetStandaloneSignature(body.LocalSignature).Signature);
+            Assert.Equal(0x07, signature.ReadByte());
+            Assert.Equal(count, signature.ReadCompressedInteger());
+        }
+        using var baseline = BuildProgram(source, out var original);
+        using var optimized = BuildProgram(source, out var program, optimizeByteHelpers: true);
+        Assert.True(baseline.UserMethods["helper"].Length <= 64);
+        if (count == 4)
+            AssertHomeParameter(program, "helper");
+        else
+        {
+            AssertStackParameter(program, "helper");
+            Assert.Equal(original.ToBytes(), program.ToBytes());
+        }
+        for (int input = 0; input <= byte.MaxValue; input++)
+        {
+            var before = Execute(original, cpu => cpu.Memory[NESConstants.LocalStackBase] = (byte)input);
+            var after = Execute(program, cpu => cpu.Memory[NESConstants.LocalStackBase] = (byte)input);
+            int expected = input ^ (input < count - 1 ? input + 1 : count);
+            Assert.Equal(expected, before.Memory[NESConstants.LocalStackBase + 1]);
+            Assert.Equal(expected, after.Memory[NESConstants.LocalStackBase + 1]);
+            AssertBalancedStacks(before, after);
+        }
     }
 
     [Theory]

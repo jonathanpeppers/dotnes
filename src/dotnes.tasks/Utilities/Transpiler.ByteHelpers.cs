@@ -176,7 +176,7 @@ partial class Transpiler
                 int targetIndex = Array.IndexOf(offsets, offsets[i] + block[i].Size + branch.Offset);
                 if (targetIndex < 0)
                     return false;
-                targets[targetIndex] = $"{name}_bytehelper_target_{targetIndex}";
+                targets[targetIndex] = $"@bytehelper_target_{targetIndex}";
             }
         }
         return true;
