@@ -41,6 +41,9 @@ partial class IL2NESWriter
     public void Write(ILInstruction instruction)
     {
         if (TryStoreArrayAlias(instruction)) return;
+        if (TryWriteLocalBinary(instruction.OpCode))
+            return;
+
         // Clear ldloc byte array label for non-ldloc instructions
         if (instruction.OpCode is not (ILOpCode.Ldloc_0 or ILOpCode.Ldloc_1
             or ILOpCode.Ldloc_2 or ILOpCode.Ldloc_3 or ILOpCode.Ldloc_s))
