@@ -1835,6 +1835,9 @@ partial class IL2NESWriter
 
     public void Write(ILInstruction instruction, string operand)
     {
+        if (TryWriteByteCall(instruction, operand))
+            return;
+
         switch (instruction.OpCode)
         {
             case ILOpCode.Nop:
