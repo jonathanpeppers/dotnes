@@ -4,6 +4,46 @@ namespace dotnes.tests;
 
 public class ExpressionValueTests(ITestOutputHelper output) : ExecutionTests(output)
 {
+    [Fact]
+    public void ByteReturnReplacesPadPollProvenance()
+    {
+        var cpu = ExecuteProgram(
+            """
+            byte buttons = (byte)pad_poll(0);
+            byte value = Helpers.Choose(21, 43);
+            byte result = (byte)(value & 15);
+            poke(0x6000, result);
+            poke(0x6001, buttons);
+            test_stop(); while (true) ;
+            static extern void test_stop();
+            static class Helpers
+            {
+                public static byte Choose(byte first, byte second) => second;
+            }
+            """);
+        Assert.Equal(new byte[] { 11, 0 }, cpu.Memory[0x6000..0x6002]);
+        Assert.Equal(Cpu6502.SoftwareStackTop, cpu.SoftwareStackPointer);
+    }
+
+    [Fact]
+    public void NestedByteCallPreservesOuterArgument()
+    {
+        var cpu = ExecuteProgram(
+            """
+            byte result = Helpers.Outer(11, Helpers.Inner(22, 33));
+            poke(0x6000, result);
+            test_stop(); while (true) ;
+            static extern void test_stop();
+            static class Helpers
+            {
+                public static byte Inner(byte first, byte second) => (byte)(first + second);
+                public static byte Outer(byte first, byte second) => (byte)(first + second);
+            }
+            """);
+        Assert.Equal(66, cpu.Memory[0x6000]);
+        Assert.Equal(Cpu6502.SoftwareStackTop, cpu.SoftwareStackPointer);
+    }
+
     [Theory]
     [InlineData(0, 17)]
     [InlineData(1, 16)]
