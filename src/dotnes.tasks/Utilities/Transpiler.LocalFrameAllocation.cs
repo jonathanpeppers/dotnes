@@ -10,6 +10,17 @@ namespace dotnes;
 /// </summary>
 partial class Transpiler
 {
+    Dictionary<int, PrimitiveTypeCode> GetCompactIntLocalsForMethod(ILInstruction[] instructions,
+        ReflectionCache reflection, string method)
+    {
+        if (!NumericTypes.TryGetValue(method, out var types))
+            return new();
+        var ranges = new NumericRangeAnalysis(instructions, types, NumericTypes, reflection, GetNumericFieldTypes());
+        var compact = ranges.GetCompactIntLocals(method);
+        ranges.ValidatePromotedArithmetic(method);
+        return compact;
+    }
+
     /// <summary>
     /// Pre-scan IL instructions for conv.u2 + stloc patterns to detect ushort locals.
     /// </summary>
@@ -18,8 +29,7 @@ partial class Transpiler
         var result = new HashSet<int>();
         if (NumericTypes.TryGetValue(methodName, out var types))
         {
-            var compactInts = new NumericRangeAnalysis(instructions, types, NumericTypes,
-                reflectionCache ?? new ReflectionCache()).GetCompactIntLocals(methodName);
+            var compactInts = GetCompactIntLocalsForMethod(instructions, reflectionCache ?? new ReflectionCache(), methodName);
             foreach (var entry in compactInts)
                 if (entry.Value is PrimitiveTypeCode.UInt16 or PrimitiveTypeCode.Int16)
                     result.Add(entry.Key);

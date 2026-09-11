@@ -347,9 +347,11 @@ partial class Transpiler : IDisposable
             PreAllocateClosureFields(ref staticFieldBytes);
         }
 
-        instructions = PreserveExpressionValues(instructions, reflectionCache, "main");
+        instructions = PreserveExpressionValues(instructions, reflectionCache, "main",
+            GetCompactIntLocalsForMethod(instructions, reflectionCache, "main"));
         foreach (var name in UserMethods.Keys.ToArray())
-            UserMethods[name] = PreserveExpressionValues(UserMethods[name], reflectionCache, name);
+            UserMethods[name] = PreserveExpressionValues(UserMethods[name], reflectionCache, name,
+                GetCompactIntLocalsForMethod(UserMethods[name], reflectionCache, name));
         var byteParameterCalls = new HashSet<string>(NumericTypes.Where(kvp =>
             UserMethods.ContainsKey(kvp.Key) && kvp.Value.Parameters.All(p => p == PrimitiveTypeCode.Byte)
                 && kvp.Value.ReturnType is PrimitiveTypeCode.Byte or PrimitiveTypeCode.Void)
@@ -376,7 +378,7 @@ partial class Transpiler : IDisposable
             TryFinallyRegions = MainExceptionRegions.Length > 0 ? MainExceptionRegions : null,
         };
 
-        writer.ConfigureNumericTypes(NumericTypes);
+        writer.ConfigureNumericTypes(NumericTypes, GetNumericFieldTypes());
         writer.StartBlockBuffering();
 
         // Translate IL to 6502 (single pass - sizeOfMain = 0 since we'll calculate later)
@@ -470,7 +472,7 @@ partial class Transpiler : IDisposable
                 ClosureArgIndex = _closureMethodArgIndex.TryGetValue(methodName, out var cai) ? cai : -1,
                 TryFinallyRegions = UserMethodExceptionRegions.TryGetValue(methodName, out var umer) ? umer : null,
             };
-            methodWriter.ConfigureNumericTypes(NumericTypes);
+            methodWriter.ConfigureNumericTypes(NumericTypes, GetNumericFieldTypes());
             methodWriter.StartBlockBuffering();
 
             // If method has parameters, emit prologue to push last arg onto cc65 stack

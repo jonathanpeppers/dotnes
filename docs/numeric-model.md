@@ -35,6 +35,25 @@ Signed right shifts with constant counts preserve the sign. Shift counts use
 the C# low-five-bit mask. Runtime-count signed right shifts produce an actionable
 diagnostic rather than being emitted as logical shifts.
 
+Byte sums preserve their promoted carry before a right shift or division:
+`(byte)((a + b) / 2)` and `(byte)((a + b) >> 1)` both produce 210 for
+runtime bytes 200 and 220. A `ushort + ushort` expression can instead need
+seventeen bits. If those bits remain observable, the compiler diagnoses that
+unsupported result **before** inserting temporary spill storage. A final byte
+cast does not authorize losing carry before a shift or comparison.
+
+User-defined scalar parameters support `byte` and `sbyte`, not word arguments;
+an unsupported parameter reports its method, index and type. Word returns retain
+both bytes, including signed extension from a byte-sized source. Signed division
+and remainder are not provided by this backend and produce diagnostics rather
+than using the unsigned routines. This numeric work does not add a general
+32-bit arithmetic runtime.
+
+When a merged evaluation-stack operand cannot be represented, a diagnostic
+identifies the arithmetic and suggests storing the conditional result in an
+explicitly typed local. Distinct conditional stores to byte/word locals remain
+supported; instruction adjacency alone is never a range proof.
+
 ## `int` is not an arbitrary-width accumulator
 
 The backend does not provide full 32-bit local arithmetic. It accepts `int`

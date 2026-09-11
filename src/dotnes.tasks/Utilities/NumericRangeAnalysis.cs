@@ -14,18 +14,21 @@ sealed class NumericRangeAnalysis
     readonly MethodNumericTypes types;
     readonly IReadOnlyDictionary<string, MethodNumericTypes> methods;
     readonly ReflectionCache reflection;
+    readonly IReadOnlyDictionary<string, PrimitiveTypeCode?>? fields;
     readonly Dictionary<int, Range?> locals = new();
     readonly HashSet<int> visiting = new();
 
     readonly record struct Range(long Min, long Max);
 
     public NumericRangeAnalysis(ILInstruction[] instructions, MethodNumericTypes types,
-        IReadOnlyDictionary<string, MethodNumericTypes> methods, ReflectionCache reflection)
+        IReadOnlyDictionary<string, MethodNumericTypes> methods, ReflectionCache reflection,
+        IReadOnlyDictionary<string, PrimitiveTypeCode?>? fields = null)
     {
         this.instructions = instructions;
         this.types = types;
         this.methods = methods;
         this.reflection = reflection;
+        this.fields = fields;
         values = new(instructions, reflection);
     }
 
@@ -59,32 +62,29 @@ sealed class NumericRangeAnalysis
         return result;
     }
 
-    public bool IsResultNarrowed(int producer, bool byteOnly = false)
+    public void ValidatePromotedArithmetic(string methodName)
     {
-        var visiting = new HashSet<int>();
-        bool Visit(int node)
+        for (int i = 0; i < instructions.Length; i++)
         {
-            if (!visiting.Add(node) || values.Escapes[node])
-                return false;
-            foreach (int consumer in values.Consumers[node])
-            {
-                var instruction = instructions[consumer];
-                if (instruction.OpCode is ILOpCode.Dup or ILOpCode.Conv_u1 or ILOpCode.Conv_i1)
-                    continue;
-                if (!byteOnly && instruction.OpCode is ILOpCode.Conv_u2 or ILOpCode.Conv_i2)
-                    continue;
-                if (instruction.OpCode is ILOpCode.Add or ILOpCode.Sub or ILOpCode.Mul
-                    or ILOpCode.And or ILOpCode.Or or ILOpCode.Xor or ILOpCode.Shl && Visit(consumer))
-                    continue;
-                if (!byteOnly && instruction.GetStlocIndex() is int local
-                    && LocalRange(local) is { Min: >= short.MinValue, Max: <= ushort.MaxValue })
-                    continue;
-                return false;
-            }
-            visiting.Remove(node);
-            return true;
+            if (instructions[i].OpCode is ILOpCode.Div or ILOpCode.Rem
+                && values.Inputs[i].Any(input => ValueRange(input) is { Min: < 0 }))
+                throw new TranspileException(
+                    $"Signed {instructions[i].OpCode} at IL_{instructions[i].Offset:X4} is not supported " +
+                    "by the NES numeric backend. Use nonnegative byte/ushort operands only when that " +
+                    "range matches the intended computation.", methodName);
+            if (instructions[i].OpCode is not (ILOpCode.Add or ILOpCode.Sub))
+                continue;
+            var range = ValueRange(i);
+            if (range == null || range is { Min: >= 0, Max: <= ushort.MaxValue }
+                or { Min: >= short.MinValue, Max: <= short.MaxValue })
+                continue;
+            if (!NumericValueUsage.IsExplicitlyNarrowed(instructions, values, i))
+                throw new TranspileException(
+                    $"Arithmetic at IL_{instructions[i].Offset:X4} needs a promoted result wider than the " +
+                    "supported word representation. An explicit conversion after a comparison or shift cannot " +
+                    "restore a lost carry/sign bit. Narrow before that operation only if word wrapping is intended.",
+                    methodName);
         }
-        return Visit(producer);
     }
 
     Range? LocalRange(int index)
@@ -127,8 +127,13 @@ sealed class NumericRangeAnalysis
             return new(constant, constant);
         if (instruction.GetLdlocIndex() is int local)
             return LocalRange(local);
+        if (IL2NESWriter.NumericArgIndex(instruction) is int argument && argument < types.Parameters.Length)
+            return TypeRange(types.Parameters[argument]);
         switch (instruction.OpCode)
         {
+            case ILOpCode.Ldsfld when instruction.String is string field
+                && fields != null && fields.TryGetValue(field, out var fieldType):
+                return TypeRange(fieldType);
             case ILOpCode.Conv_u1: case ILOpCode.Ldelem_u1: case ILOpCode.Ldind_u1:
                 return new(0, byte.MaxValue);
             case ILOpCode.Conv_i1: case ILOpCode.Ldelem_i1: case ILOpCode.Ldind_i1:
@@ -174,6 +179,7 @@ sealed class NumericRangeAnalysis
         var stores = Enumerable.Range(0, instructions.Length)
             .Where(i => instructions[i].GetStlocIndex() == local).ToArray();
         if (stores.Length != 2 || stores[0] == 0 || stores[1] < 3
+            || values.Inputs[stores[0]].Length != 1 || values.Inputs[stores[0]][0] != stores[0] - 1
             || instructions[stores[0] - 1].GetLdcValue() is not int initial || initial < 0
             || instructions[stores[1] - 3].GetLdlocIndex() != local
             || instructions[stores[1] - 2].GetLdcValue() != 1

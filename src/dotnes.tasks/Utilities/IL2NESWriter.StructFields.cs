@@ -28,6 +28,15 @@ partial class IL2NESWriter
 
         if (isWord)
         {
+            if (!_ushortInAX && _numericValues != null && _numericValues.Inputs[Index].Length == 1
+                && SignedNumericType(NumericType(_numericValues.Inputs[Index][0])))
+            {
+                if (Instructions![_numericValues.Inputs[Index][0]].GetLdcValue() is int constant)
+                    Emit(Opcode.LDX, AddressMode.Immediate, (byte)(constant >> 8));
+                else
+                    EmitNumericExtension(signed: true);
+                _ushortInAX = true;
+            }
             if (_ushortInAX)
             {
                 // 16-bit value in A:X — store both bytes
