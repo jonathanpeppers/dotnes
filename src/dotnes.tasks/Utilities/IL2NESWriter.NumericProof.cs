@@ -14,9 +14,7 @@ partial class IL2NESWriter
             || !_blockCountAtILOffset.ContainsKey(Instructions[producer].Offset)
             || !_blockCountAtILOffset.ContainsKey(Instructions[producer - 2].Offset))
             return false;
-        var interiorOffsets = new HashSet<int>(Instructions.Skip(producer - 1)
-            .Take(Index - producer + 2).Select(instruction => instruction.Offset));
-        if (Instructions.SelectMany(ILBranchTargets.GetTargets).Any(interiorOffsets.Contains))
+        if (ILBranchTargets.HasEntryAfter(Instructions, producer - 2, Index))
             return false;
         var source = Instructions[producer - 2];
         if (source.GetLdlocIndex() is int local)
