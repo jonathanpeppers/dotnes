@@ -58,8 +58,14 @@ User-defined scalar parameters support `byte` and `sbyte`; all other decoded
 primitive parameter types are rejected, even when the method does not read the
 argument. An unsupported parameter reports its method, index and type. Arrays
 and closure references use their separate lowering. Word returns retain
-both bytes, including signed extension from a byte-sized source. Signed division
-by a positive power-of-two constant truncates toward zero, including for negative
+both bytes, including signed extension from a byte-sized source.
+
+User-defined primitive returns support `byte`, `sbyte`, `short`, `ushort`, `bool`
+and `void`. Int32/UInt32 and other unsupported primitive return signatures are
+diagnosed before emission; the compact-range exception for Int32 **locals** does
+not change the user-method return ABI.
+
+Signed division by a positive power-of-two constant truncates toward zero, including for negative
 operands. Other signed divisors and signed remainder produce diagnostics rather
 than using unsigned routines. Unsigned word division and remainder support
 positive constant divisors from 1 through 65535, retaining the full quotient and

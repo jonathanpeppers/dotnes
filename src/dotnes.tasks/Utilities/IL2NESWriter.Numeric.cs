@@ -386,8 +386,23 @@ partial class IL2NESWriter
         bool operandsReloaded = TryNumericOperands(out int left, out int right);
         if (!operandsReloaded)
         {
-            if (!_ushortInAX || Instructions![rhs].GetLdcValue() == null)
-                return false;
+            if (NumericType(lhs) is PrimitiveTypeCode.Byte or PrimitiveTypeCode.SByte
+                && rhs == lhs + 1 && rhs == Index - 1 && Instructions![rhs].GetLdcValue().HasValue
+                && !ILBranchTargets.HasEntryAfter(Instructions, lhs, Index)
+                && _blockCountAtILOffset.TryGetValue(Instructions[rhs].Offset, out int blockStart))
+            {
+                // Keep the original call result; do not re-evaluate it to widen the comparison.
+                RemoveLastInstructions(GetBufferedBlockCount() - blockStart);
+                _argStackAdjust = _numericArgAdjust[Instructions[rhs].Offset];
+                CurrentBlock!.SetNextLabel(InstructionLabel(Instructions[rhs].Offset));
+                EmitNumericExtension(signedLeft);
+                _savedState = SavedValueState.None;
+            }
+            else if (!_ushortInAX || Instructions![rhs].GetLdcValue() == null)
+                throw new TranspileException(
+                    $"Signed/word comparison at IL_{instruction.Offset:X4} needs materialized operands. " +
+                    "Store each operand in an explicitly typed byte, sbyte, short or ushort local before comparing.",
+                    MethodName);
             left = lhs;
             right = rhs;
         }
