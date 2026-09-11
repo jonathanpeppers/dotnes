@@ -356,6 +356,45 @@ public class ByteHelperTests(ITestOutputHelper output) : RoslynTests(output)
     }
 
     [Fact]
+    public void RewritingResolvedBlocksInvalidatesCachedAddresses()
+    {
+        const string source = """
+            State.First = helper(State.Input);
+            State.Second = second(State.Input);
+            while (true) ;
+            static byte helper(byte value) => (byte)(value == 42 ? 1 : 0);
+            static byte second(byte value) => (byte)(value ^ 3);
+            static class State { public static byte First, Input, Second; }
+            """;
+        using var transpiler = BuildProgram(source, out var program);
+        program.DefineExternalLabel("unreferenced_data", 0x6000);
+        byte[] originalBytes = program.ToBytes();
+        ushort originalSecond = program.GetLabels()["second"];
+        var main = transpiler.ReadStaticVoidMain().ToArray();
+
+        Assert.True(transpiler.TryOptimizeByteHelpers(program, main,
+            localHighWater: 3, hasNativeCode: false, out int localBytes));
+        Assert.Equal(5, localBytes);
+        // Emit immediately: no added block or explicit ResolveAddresses may
+        // incidentally invalidate/fix the cache after the internal IR pass.
+        byte[] rewrittenBytes = program.ToBytes();
+        Assert.True(rewrittenBytes.Length < originalBytes.Length);
+        Assert.True(program.GetLabels()["second"] < originalSecond);
+        Assert.Equal(0x6000, program.GetLabels()["unreferenced_data"]);
+        AssertHomeParameter(program, "helper");
+        AssertHomeParameter(program, "second");
+
+        for (int input = 0; input <= byte.MaxValue; input++)
+        {
+            var cpu = Execute(program, cpu => cpu.Memory[NESConstants.LocalStackBase + 1] = (byte)input);
+            Assert.Equal(input == 42 ? 1 : 0, cpu.Memory[NESConstants.LocalStackBase]);
+            Assert.Equal(input ^ 3, cpu.Memory[NESConstants.LocalStackBase + 2]);
+            Assert.Equal(Cpu6502.SoftwareStackTop, cpu.SoftwareStackPointer);
+            Assert.Equal(0xFF, cpu.SP);
+        }
+    }
+
+    [Fact]
     public void NumericBranchTargetsCannotCollideWithMethodNames()
     {
         const string source = """

@@ -111,6 +111,7 @@ partial class Transpiler
             plans.Add((name, block, loads, targets));
         }
 
+        program.InvalidateAddresses();
         foreach (var (name, block, loads, targets) in plans)
         {
             ushort home = (ushort)(NESConstants.LocalStackBase + localBytes++);
