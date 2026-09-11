@@ -73,6 +73,8 @@ partial class IL2NESWriter
             ILOpCode.Div when _numericValues.Inputs[producer].Length == 2 =>
                 SignedNumericType(NumericType(_numericValues.Inputs[producer][0]))
                     ? PrimitiveTypeCode.Int16 : PrimitiveTypeCode.UInt16,
+            ILOpCode.Rem when _numericValues.Inputs[producer].Length == 2 =>
+                NumericType(_numericValues.Inputs[producer][0]),
             ILOpCode.Mul or ILOpCode.Shl when _numericValues.Inputs[producer].Length == 2 =>
                 _numericValues.Inputs[producer].Any(input => SignedNumericType(NumericType(input)))
                     ? PrimitiveTypeCode.Int16 : PrimitiveTypeCode.UInt16,

@@ -59,7 +59,14 @@ an unsupported parameter reports its method, index and type. Word returns retain
 both bytes, including signed extension from a byte-sized source. Signed division
 by a positive power-of-two constant truncates toward zero, including for negative
 operands. Other signed divisors and signed remainder produce diagnostics rather
-than using unsigned routines. Word multiplication preserves both bytes for
+than using unsigned routines. Unsigned word division and remainder support
+positive constant divisors from 1 through 65535, retaining the full quotient and
+remainder. Nonzero runtime `byte` divisors are also supported for word dividends;
+runtime word divisors produce an actionable diagnostic. A zero runtime byte
+divisor enters a labeled fault loop without producing a result: the NES backend
+does not implement CLR divide-by-zero exceptions. Check the divisor before `/`
+or `%` when zero is possible. A zero constant word divisor is diagnosed.
+Word multiplication preserves both bytes for
 runtime byte operands (255 times 3 is 765), including values held across calls.
 Explicit word conversions can request the low sixteen bits of a larger product;
 otherwise an observable wider product is diagnosed. Word-width demand also
