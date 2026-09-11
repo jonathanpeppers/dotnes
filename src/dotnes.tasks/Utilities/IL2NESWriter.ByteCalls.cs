@@ -12,10 +12,13 @@ partial class IL2NESWriter
         if (instruction.OpCode != ILOpCode.Call || !ByteParameterCalls.Contains(method) || Instructions == null)
             return false;
         int count = _reflectionCache.GetNumberOfArguments(method);
-        if (count < 2 || Index < count)
+        if (count < 2 || Index < count || _numericValues == null
+            || !_numericValues.Inputs[Index].SequenceEqual(Enumerable.Range(Index - count, count)))
             return false;
         for (int i = Index - count; i < Index; i++)
         {
+            if (i > Index - count && _numericValues.Predecessors[i].Any(p => p != i - 1))
+                return false;
             var arg = Instructions[i];
             if (arg.GetLdcValue() is int constant && constant is >= 0 and <= 255)
                 continue;

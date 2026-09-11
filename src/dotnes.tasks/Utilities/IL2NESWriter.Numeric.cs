@@ -130,6 +130,8 @@ partial class IL2NESWriter
         if (_numericValues == null || Instructions == null || _numericValues.Inputs[Index].Length != 2)
             return false;
         int lhs = _numericValues.Inputs[Index][0], rhs = _numericValues.Inputs[Index][1];
+        if (lhs < 0 || rhs < 0)
+            return false;
         if (!PureNumericOperand(lhs, out int first)
             || !PureNumericOperand(rhs, out int second)
             || lhs + 1 != second || rhs + 1 != Index)

@@ -44,6 +44,9 @@ partial class Transpiler
             else if (instruction.OpCode == ILOpCode.Ldsfld && instruction.String is string field
                 && fieldTypes.TryGetValue(field, out var fieldType))
                 type = fieldType;
+            else if (instruction.OpCode is ILOpCode.Ceq or ILOpCode.Clt or ILOpCode.Clt_un
+                or ILOpCode.Cgt or ILOpCode.Cgt_un)
+                type = PrimitiveTypeCode.Boolean;
             else if (instruction.OpCode is ILOpCode.Ldelem_u1 or ILOpCode.Ldind_u1 or ILOpCode.Conv_u1)
                 type = PrimitiveTypeCode.Byte;
             else if (instruction.OpCode is ILOpCode.Ldelem_u2 or ILOpCode.Ldind_u2 or ILOpCode.Conv_u2)
