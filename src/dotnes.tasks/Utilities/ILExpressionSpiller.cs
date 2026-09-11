@@ -15,7 +15,9 @@ static class ILExpressionSpiller
         if (producers.Count == 0)
             return instructions;
 
-        int nextLocal = instructions.Select(i => i.GetLdlocIndex() ?? i.GetStlocIndex() ?? -1).DefaultIfEmpty(-1).Max() + 1;
+        int nextLocal = instructions.Select(i => i.GetLdlocIndex() ?? i.GetStlocIndex()
+            ?? (i.OpCode is ILOpCode.Ldloc or ILOpCode.Ldloca or ILOpCode.Ldloca_s ? i.Integer : null)
+            ?? -1).DefaultIfEmpty(-1).Max() + 1;
         int nextOffset = Math.Min(-1, instructions.Min(i => i.Offset) - 1);
         var locals = new Dictionary<int, int>();
         foreach (int producer in producers.OrderBy(i => i))

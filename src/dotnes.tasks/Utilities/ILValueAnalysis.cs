@@ -50,6 +50,17 @@ sealed class ILValueAnalysis
                 }
                 continue;
             }
+            if (instruction.OpCode == ILOpCode.Ret)
+            {
+                Inputs[i] = stack.Count == 1 ? new[] { stack[0] } : Array.Empty<int>();
+                if (stack.Count == 1)
+                {
+                    Consumers[stack[0]].Add(i);
+                    stack.Clear();
+                }
+                EndRegion();
+                continue;
+            }
             if (!TryGetEffect(instruction, reflection, out int pop, out int push))
             {
                 EndRegion();
