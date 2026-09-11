@@ -1793,6 +1793,7 @@ partial class IL2NESWriter
                     _lastStaticFieldAddress = null;
                 }
                 break;
+            case ILOpCode.Ldloca:
             case ILOpCode.Ldloca_s:
                 // Load address of local variable — used for struct field access
                 if (_numericTypes != null && operand < _numericTypes.Locals.Length

@@ -1,3 +1,4 @@
+using System.Reflection.Metadata;
 using dotnes.ObjectModel;
 using Xunit.Abstractions;
 
@@ -24,6 +25,33 @@ public class NativeInteropTests : RoslynTests
         Assert.Contains("address of scalar local", error.Message);
         Assert.Contains("by-reference", error.Message);
         Assert.Contains("byte/sbyte value parameters", error.Message);
+    }
+
+    [Theory]
+    [InlineData(PrimitiveTypeCode.Byte)]
+    [InlineData(PrimitiveTypeCode.SByte)]
+    [InlineData(PrimitiveTypeCode.Int16)]
+    [InlineData(PrimitiveTypeCode.UInt16)]
+    [InlineData(PrimitiveTypeCode.Boolean)]
+    public void HighIndexScalarAddressUsesTheSameActionableDiagnostic(PrimitiveTypeCode type)
+    {
+        foreach (var (opcode, index) in new[] { (ILOpCode.Ldloca_s, 0), (ILOpCode.Ldloca, 256) })
+        {
+            using var stream = new MemoryStream();
+            using var writer = new IL2NESWriter(stream);
+            var locals = new PrimitiveTypeCode?[index + 1];
+            locals[index] = type;
+            writer.ConfigureNumericTypes(new Dictionary<string, MethodNumericTypes>
+            {
+                ["main"] = new([.. locals], [], PrimitiveTypeCode.Void),
+            });
+            var error = Assert.Throws<TranspileException>(() =>
+                writer.Write(new ILInstruction(opcode, 0, index), index));
+            Assert.Contains($"address of scalar local {index}", error.Message);
+            Assert.Contains("by-reference", error.Message);
+            Assert.Contains("byte/sbyte value parameters", error.Message);
+            Assert.Empty(stream.ToArray());
+        }
     }
 
     [Theory]
