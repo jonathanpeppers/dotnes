@@ -58,7 +58,8 @@ partial class Transpiler
         for (int i = 0; i < instructions.Length; i++)
         {
             var inputs = analysis.Inputs[i];
-            if (instructions[i].OpCode == ILOpCode.Mul && types[i] is PrimitiveTypeCode.Int16 or PrimitiveTypeCode.UInt16
+            if (instructions[i].OpCode is ILOpCode.Mul or ILOpCode.Shl
+                && types[i] is PrimitiveTypeCode.Int16 or PrimitiveTypeCode.UInt16
                 && inputs.Length == 2 && inputs.All(p => p >= 0 && scalar[p])
                 && types[inputs[0]] is PrimitiveTypeCode.Int16 or PrimitiveTypeCode.UInt16
                 && IsScalarExpression(instructions[inputs[0]].OpCode))

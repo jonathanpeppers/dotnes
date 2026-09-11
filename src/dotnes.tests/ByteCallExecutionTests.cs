@@ -5,6 +5,43 @@ namespace dotnes.tests;
 public class ByteCallExecutionTests(ITestOutputHelper output) : ExecutionTests(output)
 {
     [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public void CapturedHelperPushesEveryEarlierComputedArgument(bool forwarded, bool threeArguments)
+    {
+        var cpu = ExecuteProgram(
+            $$"""
+            byte captured = 7;
+            {{(forwarded ? "Outer(43, 88);" : $"Consume(Next(43), Next(88){(threeArguments ? ", Next(110)" : "")});")}}
+            test_stop(); while (true) ;
+            static extern void test_stop();
+            static byte Next(byte value) => (byte)(value + 1);
+            {{(forwarded ? $$"""
+            void Outer(byte first, byte second)
+            {
+                Consume(Next(first), Next(second){{(threeArguments ? ", Next(110)" : "")}});
+                byte c = captured;
+                poke(0x6004, c);
+            }
+            """ : "")}}
+            void Consume(byte a, byte b{{(threeArguments ? ", byte d" : "")}})
+            {
+                byte av = a, bv = b, c = captured;
+                poke(0x6000, av);
+                poke(0x6001, bv);
+                poke(0x6002, c);
+                {{(threeArguments ? "byte dv = d; poke(0x6003, dv);" : "")}}
+            }
+            """);
+        Assert.Equal(new byte[] { 44, 89, 7, (byte)(threeArguments ? 111 : 0), (byte)(forwarded ? 7 : 0) },
+            cpu.Memory[0x6000..0x6005]);
+        Assert.Equal(0xFD, cpu.SP);
+        Assert.Equal(Cpu6502.SoftwareStackTop, cpu.SoftwareStackPointer);
+    }
+
+    [Theory]
     [InlineData(false)]
     [InlineData(true)]
     public void CapturedCallerForwardsOnlyItsStableContext(bool earlierArgument)

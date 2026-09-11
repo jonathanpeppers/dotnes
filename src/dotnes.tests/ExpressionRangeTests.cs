@@ -46,6 +46,7 @@ public class ExpressionRangeTests(ITestOutputHelper output) : ExecutionTests(out
 
     [Theory]
     [InlineData("(a + b) * 2", 840)]
+    [InlineData("(a + b) << 4", 6720)]
     [InlineData("a & word", 200)]
     public void WordOperatorsCaptureRealCompoundOperands(string expression, ushort expected)
     {
@@ -64,6 +65,27 @@ public class ExpressionRangeTests(ITestOutputHelper output) : ExecutionTests(out
                 cpu.Memory[0x6010] = 200;
                 cpu.Memory[0x6011] = 220;
             });
+        Assert.Equal(new byte[] { (byte)expected, (byte)(expected >> 8) }, cpu.Memory[0x6000..0x6002]);
+        Assert.Equal(0xFD, cpu.SP);
+        Assert.Equal(Cpu6502.SoftwareStackTop, cpu.SoftwareStackPointer);
+    }
+
+    [Theory]
+    [InlineData("+", 0x1020)]
+    [InlineData("-", 0x0FC0)]
+    public void WordShiftPreservesComputedCallOperand(string operation, ushort expected)
+    {
+        var cpu = ExecuteProgram(
+            $$"""
+            ushort result = (ushort)((Get255() {{operation}} Get3()) << 4);
+            byte low = (byte)result, high = (byte)(result >> 8);
+            poke(0x6000, low);
+            poke(0x6001, high);
+            test_stop(); while (true) ;
+            static extern void test_stop();
+            static byte Get255() => 255;
+            static byte Get3() => 3;
+            """);
         Assert.Equal(new byte[] { (byte)expected, (byte)(expected >> 8) }, cpu.Memory[0x6000..0x6002]);
         Assert.Equal(0xFD, cpu.SP);
         Assert.Equal(Cpu6502.SoftwareStackTop, cpu.SoftwareStackPointer);

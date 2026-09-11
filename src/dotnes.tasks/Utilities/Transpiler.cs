@@ -377,10 +377,13 @@ partial class Transpiler : IDisposable
         instructions = PreserveExpressionValues(instructions, reflectionCache, "main");
         foreach (var name in UserMethods.Keys.ToArray())
             UserMethods[name] = PreserveExpressionValues(UserMethods[name], reflectionCache, name);
-        var byteParameterCalls = new HashSet<string>(NumericTypes.Where(kvp =>
-            UserMethods.ContainsKey(kvp.Key) && kvp.Value.Parameters.All(p => p == PrimitiveTypeCode.Byte)
+        var byteParameterCalls = NumericTypes.Where(kvp =>
+            UserMethods.ContainsKey(kvp.Key) && kvp.Value.Parameters.Where((p, index) =>
+                    !_closureMethodArgIndex.TryGetValue(kvp.Key, out int closure) || index != closure)
+                .All(p => p == PrimitiveTypeCode.Byte)
                 && kvp.Value.ReturnType is PrimitiveTypeCode.Byte or PrimitiveTypeCode.Void)
-            .Select(kvp => kvp.Key));
+            .ToDictionary(kvp => kvp.Key,
+                kvp => _closureMethodArgIndex.TryGetValue(kvp.Key, out int closure) ? closure : -1);
 
         using var writer = new IL2NESWriter(new MemoryStream(), logger: _logger, reflectionCache: reflectionCache)
         {
