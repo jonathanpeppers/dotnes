@@ -62,7 +62,34 @@ static class ILExpressionSpiller
                     result.Add(new ILInstruction(ILOpCode.Ldloc_s, offset, locals[producer]));
             }
             if (!first)
-                instruction = instruction with { Offset = nextOffset-- };
+            {
+                int offset = nextOffset--;
+                if (ILValueAnalysis.GetBranchTarget(instruction) is int target)
+                {
+                    // Synthetic offsets need not be near the target. Promote a
+                    // short branch so its IL displacement is not truncated.
+                    var op = instruction.OpCode switch
+                    {
+                        ILOpCode.Br_s => ILOpCode.Br,
+                        ILOpCode.Brfalse_s => ILOpCode.Brfalse,
+                        ILOpCode.Brtrue_s => ILOpCode.Brtrue,
+                        ILOpCode.Beq_s => ILOpCode.Beq,
+                        ILOpCode.Bne_un_s => ILOpCode.Bne_un,
+                        ILOpCode.Bge_s => ILOpCode.Bge,
+                        ILOpCode.Bgt_s => ILOpCode.Bgt,
+                        ILOpCode.Ble_s => ILOpCode.Ble,
+                        ILOpCode.Blt_s => ILOpCode.Blt,
+                        ILOpCode.Bge_un_s => ILOpCode.Bge_un,
+                        ILOpCode.Bgt_un_s => ILOpCode.Bgt_un,
+                        ILOpCode.Ble_un_s => ILOpCode.Ble_un,
+                        ILOpCode.Blt_un_s => ILOpCode.Blt_un,
+                        _ => instruction.OpCode
+                    };
+                    instruction = instruction with { OpCode = op, Offset = offset, Integer = target - offset - 5 };
+                }
+                else
+                    instruction = instruction with { Offset = offset };
+            }
 
             if (producers.Contains(i) && instruction.GetLdcValue() != null)
             {
