@@ -5,6 +5,30 @@ namespace dotnes.tests;
 
 public class NumericReviewRegressionTests(ITestOutputHelper output) : ExecutionTests(output)
 {
+    [Theory]
+    [InlineData("(short)(sbyte)Get()", 128, 255)]
+    [InlineData("(short)(sbyte)Get()", 255, 255)]
+    [InlineData("(short)Get()", 128, 0)]
+    [InlineData("(short)Get()", 255, 0)]
+    public void WordConversionAcrossCallUsesSourceSignedness(string expression, int input, int high)
+    {
+        var cpu = ExecuteProgram($$"""
+            short value = {{expression}};
+            Ignore();
+            byte low = (byte)value;
+            byte high = (byte)(value >> 8);
+            poke(0x6000, low);
+            poke(0x6001, high);
+            test_stop(); while (true);
+            static extern void test_stop();
+            static byte Get() => peek(0x6010);
+            static void Ignore() => poke(0x6030, 42);
+            """, cpu => cpu.Memory[0x6010] = (byte)input);
+        Assert.Equal(input, cpu.Memory[0x6000]);
+        Assert.Equal(high, cpu.Memory[0x6001]);
+        Assert.Equal(Cpu6502.SoftwareStackTop, cpu.SoftwareStackPointer);
+    }
+
     [Fact]
     public void UnprovenConvertedPokeDoesNotUseARuntimePlaceholder()
     {
