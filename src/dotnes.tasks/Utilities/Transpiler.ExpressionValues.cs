@@ -4,54 +4,15 @@ namespace dotnes;
 
 partial class Transpiler
 {
-    ILInstruction[] PreserveExpressionValues(ILInstruction[] instructions, ReflectionCache reflection, string method)
+    ILInstruction[] PreserveExpressionValues(ILInstruction[] instructions, ReflectionCache reflection, string method,
+        IReadOnlyDictionary<int, PrimitiveTypeCode>? compactInts = null)
     {
         var analysis = new ILValueAnalysis(instructions, reflection);
-        var scalar = new bool[instructions.Length];
-        var types = new PrimitiveTypeCode?[instructions.Length];
-        var words = new HashSet<int>();
-        var fieldTypes = _reader.FieldDefinitions.Select(h => _reader.GetFieldDefinition(h))
-            .Where(f => (f.Attributes & System.Reflection.FieldAttributes.Static) != 0)
-            .GroupBy(f => _reader.GetString(f.Name))
-            .ToDictionary(g => g.Key, g => g.First().DecodeSignature(new NumericTypeDecoder(), null));
         NumericTypes.TryGetValue(method, out var signature);
-        for (int i = 0; i < instructions.Length; i++)
-        {
-            if (!analysis.ProducesValue[i])
-                continue;
-            var instruction = instructions[i];
-            PrimitiveTypeCode? type = null;
-            if (instruction.GetLdlocIndex() is int local && signature != null && local < signature.Locals.Length)
-                type = signature.Locals[local];
-            else if (instruction.OpCode is >= ILOpCode.Ldarg_0 and <= ILOpCode.Ldarg_3
-                && signature != null && instruction.OpCode - ILOpCode.Ldarg_0 < signature.Parameters.Length)
-                type = signature.Parameters[instruction.OpCode - ILOpCode.Ldarg_0];
-            else if (instruction.OpCode is ILOpCode.Ldarg_s or ILOpCode.Ldarg
-                && instruction.Integer is int arg && signature != null && arg < signature.Parameters.Length)
-                type = signature.Parameters[arg];
-            else if (instruction.OpCode == ILOpCode.Call && instruction.String is string name)
-            {
-                if (NumericTypes.TryGetValue(name, out var callee))
-                    type = callee.ReturnType;
-                else if (reflection.HasReturnValue(name))
-                    type = reflection.TryReturns16Bit(name) ? PrimitiveTypeCode.UInt16 : PrimitiveTypeCode.Byte;
-            }
-            else if (instruction.GetLdcValue() is int value)
-                type = value is >= 0 and <= 255 ? PrimitiveTypeCode.Byte : PrimitiveTypeCode.UInt16;
-            else if (instruction.OpCode == ILOpCode.Ldsfld && instruction.String is string field
-                && fieldTypes.TryGetValue(field, out var fieldType))
-                type = fieldType;
-            else if (instruction.OpCode is ILOpCode.Ldelem_u1 or ILOpCode.Ldind_u1 or ILOpCode.Conv_u1)
-                type = PrimitiveTypeCode.Byte;
-            else if (instruction.OpCode is ILOpCode.Ldelem_u2 or ILOpCode.Ldind_u2 or ILOpCode.Conv_u2)
-                type = PrimitiveTypeCode.UInt16;
-            else if (IsScalarExpression(instruction.OpCode) && analysis.Inputs[i].All(p => p >= 0 && scalar[p]))
-                type = analysis.Inputs[i].Any(words.Contains) ? PrimitiveTypeCode.UInt16 : PrimitiveTypeCode.Byte;
-            scalar[i] = type is not null && type != PrimitiveTypeCode.Void && !analysis.Escapes[i];
-            types[i] = type;
-            if (type is PrimitiveTypeCode.UInt16 or PrimitiveTypeCode.Int16 or PrimitiveTypeCode.Int32 or PrimitiveTypeCode.UInt32)
-                words.Add(i);
-        }
+        var types = GetExpressionValueTypes(instructions, analysis, reflection, method, compactInts);
+        var scalar = types.Select((type, i) => type is not null && type != PrimitiveTypeCode.Void && !analysis.Escapes[i]).ToArray();
+        var words = new HashSet<int>(Enumerable.Range(0, types.Length).Where(i =>
+            types[i] is PrimitiveTypeCode.UInt16 or PrimitiveTypeCode.Int16 or PrimitiveTypeCode.Int32 or PrimitiveTypeCode.UInt32));
 
         var arrayOperands = new HashSet<int>();
         void ProtectArrayOperand(int producer)
