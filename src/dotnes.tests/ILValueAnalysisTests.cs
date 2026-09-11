@@ -5,6 +5,26 @@ namespace dotnes.tests;
 public class ILValueAnalysisTests
 {
     [Fact]
+    public void SourceAritySurvivesClosureAbiAdjustment()
+    {
+        var reflection = new ReflectionCache();
+        reflection.RegisterUserMethod("Touch", 1, false);
+        reflection.RegisterUserMethod("Touch", 0, false);
+        ILInstruction[] il =
+        [
+            new(ILOpCode.Ldloca_s, 0, 0),
+            new(ILOpCode.Call, 2, String: "Touch"),
+            new(ILOpCode.Ldc_i4_1, 7),
+            new(ILOpCode.Stloc_1, 8),
+        ];
+        var analysis = new ILValueAnalysis(il, reflection);
+        Assert.Equal(0, reflection.GetNumberOfArguments("Touch"));
+        Assert.Equal(1, reflection.GetILNumberOfArguments("Touch"));
+        Assert.Equal(new[] { 0 }, analysis.Inputs[1]);
+        Assert.Empty(analysis.Outputs[1]);
+    }
+
+    [Fact]
     public void ConstantMemoryArgumentAfterLoopHasKnownProducer()
     {
         using var dll = Utilities.GetResource("shoot2.release.dll");
