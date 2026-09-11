@@ -11,6 +11,7 @@ namespace dotnes;
 /// </summary>
 partial class Transpiler
 {
+    readonly Dictionary<string, PrimitiveTypeCode?> _closureNumericFieldTypes = new(StringComparer.Ordinal);
     readonly Dictionary<string, MethodDefinition> _userMethodDefinitions = new(StringComparer.Ordinal);
     readonly HashSet<TypeDefinitionHandle> _closureTypes = new();
 
@@ -61,6 +62,14 @@ partial class Transpiler
                 {
                     var field = _reader.GetFieldDefinition(f);
                     var fieldName = _reader.GetString(field.Name);
+                    var fieldType = field.DecodeSignature(new NumericTypeDecoder(), null);
+                    if (fieldType is not (null or PrimitiveTypeCode.Boolean or PrimitiveTypeCode.Byte
+                        or PrimitiveTypeCode.SByte or PrimitiveTypeCode.Int16 or PrimitiveTypeCode.UInt16))
+                        throw new TranspileException(
+                            $"Captured variable '{fieldName}' has unsupported primitive type {fieldType}. " +
+                            "Use an explicitly supported storage type (byte, sbyte, short or ushort) with conversions " +
+                            "only when its range and truncation semantics are intended. Compact Int32 local proofs " +
+                            "do not apply to closure fields.");
                     if (_closureFieldTypes.ContainsKey(fieldName))
                     {
                         throw new TranspileException(
@@ -69,6 +78,7 @@ partial class Transpiler
                     }
                     int fieldSize = DecodeFieldSize(field);
                     _closureFieldTypes[fieldName] = fieldSize;
+                    _closureNumericFieldTypes[fieldName] = fieldType;
                 }
                 continue;
             }
@@ -251,6 +261,8 @@ partial class Transpiler
     /// </summary>
     int DecodeFieldSize(FieldDefinition field)
     {
+        if (NumericStorage.IsWord(field.DecodeSignature(new NumericTypeDecoder(), null)))
+            return 2;
         var sig = _reader.GetBlobReader(field.Signature);
         sig.ReadByte(); // field calling convention (0x06)
         byte elementType = sig.ReadByte();

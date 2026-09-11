@@ -17,7 +17,7 @@ partial class IL2NESWriter
                 or ILOpCode.Shr or ILOpCode.Shr_un or ILOpCode.Div or ILOpCode.Rem
             || Instructions[consumer].GetStlocIndex() is int local && WordLocals.Contains(local)
             || Instructions[consumer].OpCode is ILOpCode.Add or ILOpCode.Sub or ILOpCode.Mul
-                or ILOpCode.Shl or ILOpCode.And or ILOpCode.Or or ILOpCode.Xor
+                or ILOpCode.Shl or ILOpCode.And or ILOpCode.Or or ILOpCode.Xor or ILOpCode.Neg or ILOpCode.Not
                 && RequiresNumericWord(consumer, visiting));
     }
 
@@ -27,6 +27,7 @@ partial class IL2NESWriter
         if (Stack.Count > 0) Stack.Pop();
         Stack.Push(0);
         _accState = AccumulatorState.RuntimeUshort;
+        _verifiedWordResults.Add(Index);
         previous = instruction.OpCode;
     }
 

@@ -259,6 +259,8 @@ validation: writes through ROM parameters and unsupported legacy scalar/captured
 call shapes remain outside this contract.
 Fixed static-field aliases can share an allocation established by the caller;
 capturing a helper's parameter-frame pointer in a static alias is not supported.
+These aliases must be initialized on every path before use, including through
+helper calls; a future or conditional-only assignment is not an initialization proof.
 Allocations shared this way are reserved once in persistent RAM before method
 emission, so helper ordering and reuse of other local frames do not change them.
 Supported conditional scalar operands use the shared expression pipeline before
@@ -365,6 +367,8 @@ get an idea of what is not available:
 * No objects or GC
 * No debugger
 * Strings are ASCII
+* Integer storage is limited to the [supported byte/word numeric model](docs/numeric-model.md);
+  unrestricted 32-bit local arithmetic is not supported.
 
 What we *do* have is a way to express an NES program in a single `Program.cs`.
 

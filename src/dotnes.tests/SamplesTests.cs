@@ -132,7 +132,7 @@ public class SamplesTests : RoslynTests
                   0x00,0x10,0x20,0x0,
                   0x06,0x16,0x26
                 };
-                uint num = 32 * 30;
+                ushort num = 32 * 30;
                 pal_bg(PALETTE);
                 vram_adr(NAMETABLE_A);
                 vram_fill(0x16, num);

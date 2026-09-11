@@ -4,7 +4,7 @@ using Xunit.Abstractions;
 
 namespace dotnes.tests;
 
-public class ArithmeticTests : RoslynTests
+public class ArithmeticTests : ExecutionTests
 {
     public ArithmeticTests(ITestOutputHelper output) : base(output) { }
 
@@ -139,20 +139,18 @@ public class ArithmeticTests : RoslynTests
     public void UshortAddSignedByte()
     {
         // actor.yy += actor.yvel/4 — mixing ushort and sbyte
-        var bytes = GetProgramBytes(
+        var cpu = ExecuteProgram(
             """
             ushort yy = 100;
             sbyte vel = -8;
             yy = (ushort)(yy + vel / 4);
-            pal_col(0, (byte)yy);
-            ppu_on_all();
-            while (true) ;
+            byte result = (byte)yy;
+            poke(0x6000, result);
+            test_stop(); while (true);
+            static extern void test_stop();
             """);
-        Assert.NotNull(bytes);
-        Assert.NotEmpty(bytes);
-
-        var hex = Convert.ToHexString(bytes);
-        Assert.Contains("A9F8", hex); // LDA #$F8 (-8)
+        Assert.Equal(98, cpu.Memory[0x6000]);
+        Assert.Equal(Cpu6502.SoftwareStackTop, cpu.SoftwareStackPointer);
     }
 
     [Fact]

@@ -7,18 +7,11 @@ partial class Transpiler
     ILInstruction[] PreserveExpressionValues(ILInstruction[] instructions, ReflectionCache reflection, string method,
         IReadOnlyDictionary<int, PrimitiveTypeCode>? compactInts = null)
     {
-        instructions = MaterializeConditionalValues(instructions, reflection, method);
+        instructions = MaterializeConditionalValues(instructions, reflection, method, compactInts);
         var analysis = new ILValueAnalysis(instructions, reflection);
         var stableAddresses = GetStableClosureArguments(instructions, method);
-        var scalar = new bool[instructions.Length];
         var types = GetExpressionValueTypes(instructions, analysis, reflection, method, compactInts);
-        for (int i = 0; i < instructions.Length; i++)
-        {
-            if (!analysis.ProducesValue[i])
-                continue;
-            var type = types[i];
-            scalar[i] = type is not null && type != PrimitiveTypeCode.Void && !analysis.Escapes[i];
-        }
+        var scalar = types.Select((type, i) => type is not null && type != PrimitiveTypeCode.Void && !analysis.Escapes[i]).ToArray();
 
         var arrayOperands = new HashSet<int>();
         void ProtectArrayOperand(int producer)

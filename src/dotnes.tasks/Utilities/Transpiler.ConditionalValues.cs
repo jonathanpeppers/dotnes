@@ -5,6 +5,7 @@ namespace dotnes;
 partial class Transpiler
 {
     ILInstruction[] MaterializeConditionalValues(ILInstruction[] instructions, ReflectionCache reflection, string method,
+        IReadOnlyDictionary<int, PrimitiveTypeCode>? compactInts = null,
         Func<ILInstruction[], ArrayStorageAnalysis>? arrayAliases = null)
     {
         if (!NumericTypes.TryGetValue(method, out var signature))
@@ -13,7 +14,7 @@ partial class Transpiler
         while (true)
         {
             var analysis = new ILValueAnalysis(instructions, reflection);
-            var types = GetExpressionValueTypes(instructions, analysis, reflection, method);
+            var types = GetExpressionValueTypes(instructions, analysis, reflection, method, compactInts);
             var arrays = arrayAliases?.Invoke(instructions);
             var identities = new HashSet<(ILInstruction[] Method, int Producer)>();
             if (arrays is not null)

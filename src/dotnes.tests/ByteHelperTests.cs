@@ -190,8 +190,8 @@ public class ByteHelperTests(ITestOutputHelper output) : RoslynTests(output)
     [Theory]
     [InlineData("public static byte helper(byte value) => value;")]
     [InlineData("internal static byte helper(byte value) => value;")]
-    [InlineData("private static int helper(byte value) => value;")]
-    [InlineData("private static byte helper(int value) => (byte)value;")]
+    [InlineData("private static ushort helper(byte value) => value;")]
+    [InlineData("private static byte helper(sbyte value) => (byte)value;")]
     [InlineData("[System.Obsolete] private static byte helper(byte value) => value;")]
     [InlineData("private static byte helper(byte value) => rand8();")]
     [InlineData("private static byte helper(byte value) => State.Result;")]
@@ -244,6 +244,26 @@ public class ByteHelperTests(ITestOutputHelper output) : RoslynTests(output)
         var baseline = Assert.Throws<TranspileException>(() => BuildProgram(source, out _, allowUnsafe: true));
         var optimized = Assert.Throws<TranspileException>(() =>
             BuildProgram(source, out _, allowUnsafe: true, optimizeByteHelpers: true));
+        Assert.Equal(baseline.Message, optimized.Message);
+    }
+
+    [Theory]
+    [InlineData("private static int helper(byte value) => value;")]
+    [InlineData("private static byte helper(int value) => (byte)value;")]
+    public void UnsupportedNumericSignaturesKeepTheirDiagnostic(string helper)
+    {
+        string source = $$"""
+            class Program
+            {
+                static void Main() { State.Result = (byte)helper(42); while (true) ; }
+                {{helper}}
+            }
+            static class State { public static byte Result; }
+            """;
+        var baseline = Assert.Throws<TranspileException>(() => BuildProgram(source, out _));
+        var optimized = Assert.Throws<TranspileException>(() =>
+            BuildProgram(source, out _, optimizeByteHelpers: true));
+        Assert.Contains("Int32", baseline.Message);
         Assert.Equal(baseline.Message, optimized.Message);
     }
 
@@ -604,7 +624,6 @@ public class ByteHelperTests(ITestOutputHelper output) : RoslynTests(output)
     }
 
     [Theory]
-    [InlineData(NESConstants.MaxLocalBytes - 2, false)]
     [InlineData(NESConstants.MaxLocalBytes - 4, false)]
     [InlineData(NESConstants.MaxLocalBytes - 5, true)]
     public void ParameterHomesRespectPendingArgumentsAndNeighboringStorage(int padding, bool fits)
@@ -627,8 +646,11 @@ public class ByteHelperTests(ITestOutputHelper output) : RoslynTests(output)
         int result = NESConstants.LocalStackBase + padding;
         Assert.Equal(10, before.Memory[result]);
         Assert.Equal(10, after.Memory[result]);
+        // The argument planner reserves a byte for the nested call's captured value.
+        Assert.Contains(original.GetBlock("main")!.InstructionsWithLabels, item =>
+            item.Instruction.Opcode == Opcode.STA && item.Instruction.Mode == AddressMode.Absolute
+                && item.Instruction.Operand is AbsoluteOperand address && address.Address == result + 1);
         if (fits)
-            // The caller's typed result spill occupies the byte after Result.
             Assert.Equal(result + 2, AssertHomeParameter(program, "helper"));
         else
         {

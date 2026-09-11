@@ -169,36 +169,13 @@ sealed class ILValueAnalysis
                     Consumers[producer].Add(i);
     }
 
-    internal static IEnumerable<int> GetBranchTargets(ILInstruction instruction)
-    {
-        if (GetBranchTarget(instruction) is int target)
-            yield return target;
-        else if (instruction.OpCode == ILOpCode.Switch && instruction.Bytes is { } bytes
-            && instruction.Integer is int count)
-        {
-            int start = instruction.Offset + 5 + count * 4;
-            var targets = bytes.ToArray();
-            for (int i = 0; i < count; i++)
-                yield return start + BitConverter.ToInt32(targets, i * 4);
-        }
-    }
+    internal static IEnumerable<int> GetBranchTargets(ILInstruction instruction) => ILBranchTargets.GetTargets(instruction);
 
     internal static bool IsBranch(ILOpCode code) =>
         opcodes.TryGetValue((ushort)code, out var op)
         && op.FlowControl is FlowControl.Branch or FlowControl.Cond_Branch;
 
-    internal static int? GetBranchTarget(ILInstruction instruction)
-    {
-        if (!IsBranch(instruction.OpCode) || instruction.Integer is not int operand)
-            return null;
-        var op = opcodes[(ushort)instruction.OpCode];
-        return op.OperandType switch
-        {
-            OperandType.ShortInlineBrTarget => instruction.Offset + 2 + unchecked((sbyte)operand),
-            OperandType.InlineBrTarget => instruction.Offset + 5 + operand,
-            _ => null
-        };
-    }
+    internal static int? GetBranchTarget(ILInstruction instruction) => ILBranchTargets.GetTarget(instruction);
 
     static bool TryGetEffect(ILInstruction instruction, ReflectionCache reflection, out int pop, out int push)
     {

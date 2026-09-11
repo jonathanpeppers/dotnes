@@ -98,45 +98,74 @@ public class MemoryReviewRegressionTests(ITestOutputHelper output) : ExecutionTe
         Assert.Equal(0xFD, cpu.SP);
     }
 
-    [Theory]
-    [InlineData("int")]
-    [InlineData("uint")]
-    public void WideDeclaredComparisonsAreRejected(string type)
+    [Fact]
+    public void Unsigned32ComparisonStorageIsRejected()
     {
-        var error = Assert.Throws<TranspileException>(() => GetProgramBytes($$"""
-            {{type}} left = peek(0x6010);
-            {{type}} right = peek(0x6011);
+        var error = Assert.Throws<TranspileException>(() => GetProgramBytes("""
+            uint left = peek(0x6010);
+            uint right = peek(0x6011);
             poke(0x6020, (byte)left);
             poke(0x6021, (byte)right);
             if (left < right)
                 poke(0x6000, 1);
             while (true) ;
             """));
-        Assert.Contains("32-bit", error.Message);
+        Assert.Contains("unsupported primitive type UInt32", error.Message);
     }
 
     [Theory]
-    [InlineData("int", "32-bit")]
-    [InlineData("uint", "unproven promoted range")]
-    public void WideDeclaredArithmeticRequiresAnExplicitNarrowType(string type, string diagnostic)
+    [InlineData(0, 255)]
+    [InlineData(255, 0)]
+    [InlineData(255, 255)]
+    [InlineData(128, 127)]
+    public void BoundedIntComparisonsAndArithmeticRetainTheirProvenRange(byte first, byte second)
     {
-        var error = Assert.Throws<TranspileException>(() => GetProgramBytes($$"""
-            {{type}} left = peek(0x6010);
-            {{type}} right = peek(0x6011);
+        var cpu = ExecuteProgram("""
+            int left = peek(0x6010);
+            int right = peek(0x6011);
             poke(0x6020, (byte)left);
             poke(0x6021, (byte)right);
-            {{type}} result = left + right;
+            byte less = (byte)(left < right ? 1 : 0);
+            poke(0x6002, less);
+            int result = left + right;
+            poke(0x6000, (byte)result);
+            poke(0x6001, (byte)(result >> 8));
+            test_stop(); while (true);
+            static extern void test_stop();
+            """, cpu =>
+            {
+                cpu.Memory[0x6010] = first;
+                cpu.Memory[0x6011] = second;
+            });
+        Assert.Equal(first, cpu.Memory[0x6020]);
+        Assert.Equal(second, cpu.Memory[0x6021]);
+        Assert.Equal((byte)(first + second), cpu.Memory[0x6000]);
+        Assert.Equal((byte)((first + second) >> 8), cpu.Memory[0x6001]);
+        Assert.Equal(first < second ? 1 : 0, cpu.Memory[0x6002]);
+        Assert.Equal(Cpu6502.SoftwareStackTop, cpu.SoftwareStackPointer);
+        Assert.Equal(0xFD, cpu.SP);
+    }
+
+    [Fact]
+    public void Unsigned32ArithmeticStorageIsRejected()
+    {
+        var error = Assert.Throws<TranspileException>(() => GetProgramBytes("""
+            uint left = peek(0x6010);
+            uint right = peek(0x6011);
+            poke(0x6020, (byte)left);
+            poke(0x6021, (byte)right);
+            uint result = left + right;
             poke(0x6000, (byte)result);
             while (true) ;
             """));
-        Assert.Contains(diagnostic, error.Message);
+        Assert.Contains("unsupported primitive type UInt32", error.Message);
         Assert.Contains("short", error.Message);
     }
 
     [Theory]
-    [InlineData("int")]
-    [InlineData("uint")]
-    public void WideDeclaredValuesCannotBeCapturedAcrossACall(string type)
+    [InlineData("int", "Int32")]
+    [InlineData("uint", "UInt32")]
+    public void WideDeclaredValuesCannotBeCapturedAcrossACall(string type, string primitive)
     {
         var error = Assert.Throws<TranspileException>(() => GetProgramBytes($$"""
             {{type}} value = Read();
@@ -145,13 +174,13 @@ public class MemoryReviewRegressionTests(ITestOutputHelper output) : ExecutionTe
             static {{type}} Read() => 123;
             static byte Next() => 1;
             """));
-        Assert.Contains("32-bit", error.Message);
+        Assert.Contains($"Return type {primitive}", error.Message);
     }
 
     [Theory]
-    [InlineData("int")]
-    [InlineData("uint")]
-    public void WideCallArgumentsCannotAllocateSyntheticWordLocals(string type)
+    [InlineData("int", "Int32")]
+    [InlineData("uint", "UInt32")]
+    public void WideCallArgumentsCannotAllocateSyntheticWordLocals(string type, string primitive)
     {
         var error = Assert.Throws<TranspileException>(() => GetProgramBytes($$"""
             Store(Read(), Next());
@@ -164,7 +193,7 @@ public class MemoryReviewRegressionTests(ITestOutputHelper output) : ExecutionTe
                 poke(0x6001, other);
             }
             """));
-        Assert.Contains("32-bit", error.Message);
+        Assert.Contains($"Return type {primitive}", error.Message);
     }
 
     [Fact]

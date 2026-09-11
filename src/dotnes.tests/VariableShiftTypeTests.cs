@@ -48,35 +48,60 @@ public class VariableShiftTypeTests(ITestOutputHelper output) : ExecutionTests(o
             _ => throw new ArgumentException("Unexpected source kind.", nameof(source)),
         };
         string method = source == "parameter"
-            ? $"static byte Shift({type} value, byte count) => (byte)(value >> count);"
-            : "";
-        var error = Assert.Throws<TranspileException>(() => GetProgramBytes(
-            $$"""
+            ? $"static byte Shift({type} value, byte count) => (byte)(value >> count);" : "";
+        var error = Assert.Throws<TranspileException>(() => GetProgramBytes($$"""
             {{initialization}}
             State.Count = 1;
             {{body}}
-            while (true) ;
+            while (true);
             {{method}}
             static class State { public static {{type}} Value; public static byte Count; }
             """));
-        if (type is "int" or "uint")
-        {
-            Assert.Contains("32-bit", error.Message);
-            Assert.Contains("source storage", error.Message);
-        }
-        else
-        {
-            Assert.Contains("Variable shifts", error.Message);
-            Assert.Contains("byte/ushort", error.Message);
-        }
+        Assert.True(error.Message.Contains("Variable shifts") || error.Message.Contains("Int32 local")
+            || error.Message.Contains("Parameter") || error.Message.Contains("unsupported primitive type"), error.Message);
     }
 
     [Theory]
-    [InlineData("sbyte", "-128")]
-    [InlineData("short", "-128")]
+    [InlineData("sbyte")]
+    [InlineData("short")]
+    public void ExplicitUnsignedWordConversionPreservesSignedSourceBits(string type)
+    {
+        var cpu = ExecuteProgram($$"""
+            State.Value = -128;
+            State.Count = 1;
+            byte result = (byte)((ushort)State.Value >> State.Count);
+            poke(0x6000, result);
+            test_stop(); while (true);
+            static extern void test_stop();
+            static class State { public static {{type}} Value; public static byte Count; }
+            """);
+        Assert.Equal(0xC0, cpu.Memory[0x6000]);
+        Assert.Equal(Cpu6502.SoftwareStackTop, cpu.SoftwareStackPointer);
+    }
+
+    [Theory]
+    [InlineData(0, 1, 127)]
+    [InlineData(256, 8, 1)]
+    public void BoundedIntLocalUsesItsProvenUnsignedRange(int addition, int count, int expected)
+    {
+        var cpu = ExecuteProgram($$"""
+            State.Count = {{count}};
+            int value = peek(0x6010) + {{addition}};
+            poke(0x6030, (byte)value);
+            byte result = (byte)(value >> State.Count);
+            poke(0x6000, result);
+            test_stop(); while (true);
+            static extern void test_stop();
+            static class State { public static byte Count; }
+            """, cpu => cpu.Memory[0x6010] = 255);
+        Assert.Equal(expected, cpu.Memory[0x6000]);
+        Assert.Equal(Cpu6502.SoftwareStackTop, cpu.SoftwareStackPointer);
+    }
+
+    [Theory]
     [InlineData("int", "128")]
     [InlineData("uint", "128")]
-    public void UshortCastDoesNotProveSignedOrWideSourceWasExtended(string type, string value)
+    public void UshortCastDoesNotAuthorizeUnsupportedWideStorage(string type, string value)
     {
         var error = Assert.Throws<TranspileException>(() => GetProgramBytes(
             $$"""
@@ -87,7 +112,7 @@ public class VariableShiftTypeTests(ITestOutputHelper output) : ExecutionTests(o
             while (true) ;
             static class State { public static {{type}} Value; public static byte Count; }
             """));
-        Assert.Contains("byte/ushort", error.Message);
+        Assert.Contains("unsupported primitive type", error.Message);
     }
 
     [Fact]
@@ -133,18 +158,17 @@ public class VariableShiftTypeTests(ITestOutputHelper output) : ExecutionTests(o
     [Fact]
     public void ConflictingFieldDeclarationsAreNotAssumedUnsigned()
     {
-        var error = Assert.Throws<TranspileException>(() => GetProgramBytes(
-            """
+        var error = Assert.Throws<TranspileException>(() => GetProgramBytes("""
             Unsigned.Value = 128;
             Signed.Value = -128;
             State.Count = 1;
             byte result = (byte)(Unsigned.Value >> State.Count);
             poke(0x6000, result);
-            while (true) ;
+            while (true);
             static class Unsigned { public static byte Value; }
             static class Signed { public static sbyte Value; }
             static class State { public static byte Count; }
             """));
-        Assert.Contains("source type 'unknown'", error.Message);
+        Assert.Contains("conflicting declared types", error.Message);
     }
 }

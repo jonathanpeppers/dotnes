@@ -13,7 +13,7 @@ partial class Transpiler
             .Select(pair => pair.index));
     }
 
-    ILInstruction[] RewriteTypedExpressionValues(ILInstruction[] instructions, ILValueAnalysis analysis,
+    internal ILInstruction[] RewriteTypedExpressionValues(ILInstruction[] instructions, ILValueAnalysis analysis,
         ISet<int> selected, IReadOnlyList<PrimitiveTypeCode?> types, string method,
         ISet<int>? arrayProducers = null)
     {
