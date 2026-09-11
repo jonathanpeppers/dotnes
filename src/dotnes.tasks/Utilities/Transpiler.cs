@@ -25,6 +25,8 @@ partial class Transpiler : IDisposable
     readonly IReadOnlyList<BankedRomAsset> _prgBankAssets;
     readonly IReadOnlyList<BankedRomAsset> _chrBankAssets;
 
+    internal bool LeaveAssemblyReadersOpen { get; init; }
+
     /// <summary>
     /// A list of methods that were found to be used in the IL code
     /// </summary>
@@ -103,7 +105,15 @@ partial class Transpiler : IDisposable
         IReadOnlyList<BankedRomAsset>? chrBankAssets = null)
     {
         _pe = new PEReader(stream, PEStreamOptions.LeaveOpen);
-        _reader = _pe.GetMetadataReader();
+        try
+        {
+            _reader = _pe.GetMetadataReader();
+        }
+        catch
+        {
+            _pe.Dispose();
+            throw;
+        }
         _assemblyFiles = assemblyFiles;
         _logger = logger ?? new NullLogger();
         _mirroring = mirroring;
@@ -161,10 +171,7 @@ partial class Transpiler : IDisposable
         _logger.WriteLine($"Building program...");
 
         // Build the complete program using single-pass transpilation
-        ushort programAddress = _mmc3BankedLayout
-            ? Mmc3BankLayout.FixedProgramAddress
-            : NESConstants.PrgRomStart;
-        var program = BuildProgram6502(out ushort sizeOfMain, out ushort locals, programAddress);
+        var program = CompileProgram(out ushort sizeOfMain, out ushort locals);
         program.ResolveAndRelaxBranches();
 
         _logger.WriteLine($"Size of main: {sizeOfMain}, locals: {locals}");
@@ -271,6 +278,15 @@ partial class Transpiler : IDisposable
         _logger.WriteLine($"ROM complete. Total size: {stream.Length} bytes");
     }
 
+    internal Program6502 CompileProgram(out ushort sizeOfMain, out ushort locals)
+    {
+        ValidateRomConfiguration();
+        ushort programAddress = _mmc3BankedLayout
+            ? Mmc3BankLayout.FixedProgramAddress
+            : NESConstants.PrgRomStart;
+        return BuildProgram6502(out sizeOfMain, out locals, programAddress);
+    }
+
     void ValidateRomConfiguration()
     {
         if (_mapper < 0 || _mapper > byte.MaxValue)
@@ -312,10 +328,14 @@ partial class Transpiler : IDisposable
         _logger.WriteLine($"Single-pass transpilation...");
         
         var instructions = ReadStaticVoidMain().ToArray();
+        bool nativeRenderer = UsedMethods.Contains(nameof(NESLib.ppu_use_native_renderer));
+        if (nativeRenderer)
+            ValidateNativeRenderer(instructions);
 
         // Create the base program with built-ins
-        var program = Program6502.CreateWithBuiltIns();
+        var program = Program6502.CreateWithBuiltIns(nativeRenderer);
         program.BaseAddress = baseAddress;
+        int preMainSize = program.TotalSize;
 
         // Register user methods with the reflection cache so Call handler knows about them
         var reflectionCache = new ReflectionCache();
@@ -327,6 +347,7 @@ partial class Transpiler : IDisposable
         foreach (var kvp in ExternMethods)
         {
             reflectionCache.RegisterExternMethod(kvp.Key, kvp.Value.argCount, kvp.Value.hasReturnValue);
+            program.RegisterExternSymbol(kvp.Key);
         }
 
         // Validate source arithmetic before synthetic narrowing can hide a
@@ -459,6 +480,7 @@ partial class Transpiler : IDisposable
                 UsedMethods = UsedMethods,
                 UserMethodNames = new HashSet<string>(UserMethods.Keys, StringComparer.Ordinal),
                 ByteParameterCalls = byteParameterCalls,
+                ExternMethodNames = externNames,
                 MethodParamCount = paramCount,
                 ParamIsArray = isArrayParam,
                 MethodName = methodName,
@@ -562,16 +584,13 @@ partial class Transpiler : IDisposable
         {
             foreach (var assemblyFile in _assemblyFiles)
             {
-                if (!File.Exists(assemblyFile.Path))
-                    continue;
-
                 var ca65 = new Ca65Assembler();
-                using (var reader = new StreamReader(assemblyFile.Path))
+                using (var reader = assemblyFile.OpenSource())
                 {
                     var blocks = ca65.Assemble(reader);
                     foreach (var block in blocks)
                     {
-                        program.AddBlock(block);
+                        program.AddNativeBlock(block);
                         externBlocksTotalSize += block.Size;
                         _logger.WriteLine($"Extern block '{block.Label}': {block.Size} bytes");
                     }
@@ -640,7 +659,6 @@ partial class Transpiler : IDisposable
         // totalSize is used for donelib/copydata - points past the data tables.
         // All sizes are computed from actual block sizes so the layout adjusts automatically
         // if subroutines change.
-        int preMainSize = Program6502.GetBuiltInSize();
         int finalBuiltInsSize = Program6502.CalculateFinalBuiltInsSize(locals, UsedMethods);
         ushort totalSize = (ushort)(program.BaseAddress + preMainSize + sizeOfMain + finalBuiltInsSize + musicSubroutinesSize + userMethodsTotalSize + externBlocksTotalSize + byteArrayTableSize + stringTableSize);
         
@@ -689,9 +707,12 @@ partial class Transpiler : IDisposable
 
     public void Dispose()
     {
-        foreach (var assembly in _assemblyFiles)
+        if (!LeaveAssemblyReadersOpen)
         {
-            assembly.Dispose();
+            foreach (var assembly in _assemblyFiles)
+            {
+                assembly.Dispose();
+            }
         }
         _pe.Dispose();
     }

@@ -104,7 +104,7 @@ internal static class BuiltInSubroutines
     /// <summary>
     /// NMI handler - pushes registers and checks PPU_MASK_VAR
     /// </summary>
-    public static Block Nmi()
+    public static Block Nmi(bool nativeRenderer = false)
     {
         // NESWriter: 48 8A 48 98 48 A512 2918 D003 4CE681
         // Note: JMP address (0x81E6) is @skipAll, layout dependent
@@ -113,8 +113,11 @@ internal static class BuiltInSubroutines
              .Emit(TXA())
              .Emit(PHA())
              .Emit(TYA())
-             .Emit(PHA())
-             .Emit(LDA_zpg(PPU_MASK_VAR))
+             .Emit(PHA());
+        if (nativeRenderer)
+            return block.Emit(JMP_abs(nameof(skipAll)));
+
+        block.Emit(LDA_zpg(PPU_MASK_VAR))
              .Emit(AND(0x18))
              .Emit(BNE(3))           // if rendering enabled, continue
              .Emit(JMP_abs(nameof(skipAll)));
@@ -122,11 +125,18 @@ internal static class BuiltInSubroutines
     }
 
     /// <summary>
-    /// IRQ handler - pushes registers and jumps to skipNtsc
+    /// Default IRQ handler: stock mode jumps to skipNtsc; native mode returns immediately.
     /// </summary>
-    public static Block Irq()
+    /// <remarks>
+    /// Native mode cannot acknowledge a mapper-specific IRQ source here. Keep unused sources
+    /// disabled, or register an IRQ callback that acknowledges its source before returning.
+    /// </remarks>
+    public static Block Irq(bool nativeRenderer = false)
     {
         var block = new Block(nameof(_irq));
+        if (nativeRenderer)
+            return block.Emit(RTI());
+
         block.Emit(PHA())
              .Emit(TXA())
              .Emit(PHA())
@@ -2195,12 +2205,14 @@ internal static class BuiltInSubroutines
     /// <summary>
     /// skipAll - Update PPU mask and frame counter
     /// </summary>
-    public static Block SkipAll()
+    public static Block SkipAll(bool nativeRenderer = false)
     {
         var block = new Block(nameof(skipAll));
-        block.Emit(LDA_zpg(PPU_MASK_VAR))
-             .Emit(STA_abs(PPU_MASK))
-             .Emit(INC_zpg(STARTUP))
+        if (!nativeRenderer)
+            block.Emit(LDA_zpg(PPU_MASK_VAR))
+                 .Emit(STA_abs(PPU_MASK));
+
+        block.Emit(INC_zpg(STARTUP))
              .Emit(INC_zpg(NES_PRG_BANKS))
              .Emit(LDA_zpg(NES_PRG_BANKS))
              .Emit(CMP(0x06))

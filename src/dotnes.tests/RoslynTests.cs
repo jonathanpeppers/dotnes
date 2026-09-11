@@ -66,7 +66,7 @@ public abstract class RoslynTests
         return program.GetMainBlock();
     }
 
-    private protected Transpiler ReadProgram(string csharpSource, IList<AssemblyReader>? additionalAssemblyFiles = null, bool allowUnsafe = false)
+    protected Stream CompileAssembly(string csharpSource, bool allowUnsafe = false)
     {
         _stream.SetLength(0);
         csharpSource = $"using NES;using static NES.NESLib;{Environment.NewLine}{csharpSource}";
@@ -89,6 +89,12 @@ public abstract class RoslynTests
         if (!emitResults.Success)
             Assert.Fail(string.Join(Environment.NewLine, emitResults.Diagnostics.Select(d => d.GetMessage())));
         _stream.Seek(0, SeekOrigin.Begin);
+        return _stream;
+    }
+
+    private protected Transpiler ReadProgram(string csharpSource, IList<AssemblyReader>? additionalAssemblyFiles = null, bool allowUnsafe = false)
+    {
+        CompileAssembly(csharpSource, allowUnsafe);
         var assemblyFiles = new List<AssemblyReader> { new AssemblyReader(new StreamReader(Utilities.GetResource("chr_generic.s"))) };
         if (additionalAssemblyFiles != null)
             assemblyFiles.AddRange(additionalAssemblyFiles);
