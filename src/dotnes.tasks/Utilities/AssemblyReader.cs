@@ -12,9 +12,13 @@ public class AssemblyReader : IDisposable
     const string SegmentInstruction = ".segment ";
     const string ByteInstruction = ".byte ";
     readonly TextReader _reader;
+    string? _source;
+    bool _disposed;
 
     public AssemblyReader(TextReader reader)
     {
+        if (reader == null)
+            throw new ArgumentNullException(nameof(reader));
         Path = reader.GetType().ToString();
         _reader = reader;
     }
@@ -30,14 +34,28 @@ public class AssemblyReader : IDisposable
     /// </summary>
     public string Path { get; }
 
+    internal TextReader OpenSource()
+    {
+        if (_disposed)
+            throw new ObjectDisposedException(nameof(AssemblyReader));
+
+        // CHR extraction and native assembly consume the same source independently.
+        _source ??= _reader.ReadToEnd();
+        return new StringReader(_source);
+    }
+
+    /// <summary>
+    /// Reads segments from the cached source. Repeated calls replay the same input.
+    /// </summary>
     public IEnumerable<Segment> GetSegments()
     {
+        using var reader = OpenSource();
         string? name = null;
         var bytes = new List<byte>();
         string line;
         do
         {
-            line = _reader.ReadLine()!;
+            line = reader.ReadLine()!;
 
             // Blank or comments
             if (string.IsNullOrEmpty(line) || line[0] == ';')
@@ -143,7 +161,11 @@ public class AssemblyReader : IDisposable
         return (byte)(hex - (hex < 58 ? 48 : (hex < 97 ? 55 : 87)));
     }
 
-    public void Dispose() => _reader.Dispose();
+    public void Dispose()
+    {
+        _disposed = true;
+        _reader.Dispose();
+    }
 }
 
 /// <summary>

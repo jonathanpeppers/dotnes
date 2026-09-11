@@ -54,6 +54,56 @@ public class ByteHelperTests(ITestOutputHelper output) : RoslynTests(output)
         Assert.True(program.Labels.TryResolve("native_callback", out _));
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void BankPayloadBarrierDistinguishesPrgFromChr(bool isPrg)
+    {
+        using var assembly = CompileAssembly("""
+            State.Result = helper(42);
+            while (true) ;
+            static byte helper(byte value) => value;
+            static class State { public static byte Result; }
+            """);
+        string path = Path.Combine(Path.GetTempPath(), $"dotnes-byte-helper-bank-{Guid.NewGuid():N}.bin");
+        try
+        {
+            File.WriteAllBytes(path, [0x60]);
+            var asset = new BankedRomAsset(path, Bank: 0, Offset: 0, CpuAddress: isPrg ? (ushort)0x8000 : null);
+            var baseline = Build(false);
+            var optimized = Build(true);
+            if (isPrg)
+            {
+                AssertStackParameter(optimized, "helper");
+                Assert.Equal(baseline.ToBytes(), optimized.ToBytes());
+            }
+            else
+            {
+                AssertHomeParameter(optimized, "helper");
+                Assert.True(optimized.GetMainBlock("helper").Length < baseline.GetMainBlock("helper").Length);
+            }
+
+            Program6502 Build(bool optimize)
+            {
+                assembly.Position = 0;
+                using var transpiler = new Transpiler(assembly, [], _logger,
+                    mapper: 4, mmc3BankedLayout: true,
+                    prgBankAssets: isPrg ? [asset] : [],
+                    chrBankAssets: isPrg ? [] : [asset])
+                {
+                    OptimizeByteHelpers = optimize,
+                };
+                var program = transpiler.BuildProgram6502(out _, out _);
+                Assert.Empty(transpiler.ExternMethods);
+                return program;
+            }
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
     [Fact]
     public void NestedHelpersHaveDistinctHomes()
     {

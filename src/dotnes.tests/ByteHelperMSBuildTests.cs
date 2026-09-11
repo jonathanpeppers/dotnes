@@ -1,12 +1,11 @@
 using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Xml.Linq;
-using Microsoft.CodeAnalysis;
-using Microsoft.CodeAnalysis.CSharp;
+using Xunit.Abstractions;
 
 namespace dotnes.tests;
 
-public class ByteHelperMSBuildTests
+public class ByteHelperMSBuildTests(ITestOutputHelper output) : RoslynTests(output)
 {
     [Fact]
     public async Task PropertyChangesRebuildAndRestoreBaselineRom()
@@ -16,26 +15,15 @@ public class ByteHelperMSBuildTests
         try
         {
             string targetPath = Path.Combine(directory, "helpers.dll");
-            var syntaxTree = CSharpSyntaxTree.ParseText("""
+            using (var assembly = CompileAssembly("""
                 NES.NESLib.poke(0x2001, 0);
                 State.Result = helper(42);
                 while (true) ;
                 static byte helper(byte value) => (byte)(value ^ 3);
                 static class State { public static byte Result; }
-                """);
-            string frameworkDirectory = Path.GetDirectoryName(typeof(object).Assembly.Location)!;
-            var compilation = CSharpCompilation.Create("helpers", [syntaxTree],
-                references:
-                [
-                    MetadataReference.CreateFromFile(typeof(object).Assembly.Location),
-                    MetadataReference.CreateFromFile(Path.Combine(frameworkDirectory, "netstandard.dll")),
-                    MetadataReference.CreateFromFile(Path.Combine(frameworkDirectory, "System.Runtime.dll")),
-                    MetadataReference.CreateFromFile(typeof(NES.NESLib).Assembly.Location),
-                ],
-                options: new CSharpCompilationOptions(OutputKind.ConsoleApplication,
-                    optimizationLevel: OptimizationLevel.Release, deterministic: true));
-            var emitResult = compilation.Emit(targetPath);
-            Assert.True(emitResult.Success, string.Join(Environment.NewLine, emitResult.Diagnostics));
+                """))
+            using (var destination = File.Create(targetPath))
+                assembly.CopyTo(destination);
 
             string chrPath = Path.Combine(directory, "chr_generic.s");
             using (var source = Utilities.GetResource("chr_generic.s"))
