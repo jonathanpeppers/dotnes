@@ -4,7 +4,7 @@ using Xunit.Abstractions;
 
 namespace dotnes.tests;
 
-public class LocalsTests : RoslynTests
+public class LocalsTests : ExecutionTests
 {
     public LocalsTests(ITestOutputHelper output) : base(output) { }
 
@@ -482,52 +482,18 @@ public class LocalsTests : RoslynTests
     [Fact]
     public void TwoLocals_AddModulo_AssignBack()
     {
-        // Regression test: nx = (byte)((x1 + y1) % 32); x1 = nx;
-        // When Roslyn optimizes away stloc/ldloc for x1 and nx, the runtime
-        // arithmetic result stays in A. WriteLdloc saves it to TEMP before
-        // loading y. The NTADR handler must recognize this _savedRuntimeToTemp
-        // pattern: TEMP = x (runtime result), A = y (loaded from local).
-        var bytes = GetProgramBytes("""
+        var cpu = ExecuteProgram("""
             byte y1 = 2;
             byte x1 = 5;
             byte nx;
             nx = (byte)((x1 + y1) % 32);
             x1 = nx;
             vrambuf_put(NTADR_A(x1, y1), "B");
-            while (true) ;
+            test_stop(); while (true);
+            static extern void test_stop();
             """);
-        var hex = Convert.ToHexString(bytes);
-
-        // CLC (18) + ADC $0325 (6D2503) for runtime addition
-        Assert.Contains("186D2503", hex);
-
-        // AND #$1F (291F) for % 32 (power-of-2 modulo)
-        Assert.Contains("291F", hex);
-
-        // STA TEMP ($17) to save runtime result before loading y
-        // 8517 = STA $17 (zero page)
-        Assert.Contains("8517", hex);
-
-        // STA TEMP2 ($19) — NTADR result lo byte stored after nametable_a returns
-        Assert.Contains("8519", hex);
-
-        // Verify the runtime-NTADR sequence: STA TEMP must be immediately
-        // followed by LDA absolute (AD) loading y from its local address,
-        // and a JSR (20) for nametable_a must appear between the TEMP and
-        // TEMP2 stores. This catches regressions where the NTADR handler
-        // emits the wrong instruction sequence (e.g., popa instead of using
-        // the already-saved TEMP, producing a wrong-position address).
-        int tempIdx = hex.IndexOf("8517");
-        int temp2Idx = hex.IndexOf("8519");
-        Assert.True(tempIdx >= 0, "Expected STA TEMP (8517) in output.");
-        Assert.True(temp2Idx > tempIdx, "TEMP2 store should occur after TEMP store.");
-
-        // STA TEMP (8517) immediately followed by LDA absolute (AD) for y.
-        Assert.Equal("AD", hex.Substring(tempIdx + 4, 2));
-
-        // JSR (20) between TEMP and TEMP2 stores — the nametable_a call.
-        string between = hex.Substring(tempIdx, temp2Idx - tempIdx);
-        Assert.Contains("20", between);
+        Assert.Equal(new byte[] { 0x60, 0x47, 1, (byte)'B', 0xFF }, cpu.Memory[0x100..0x105]);
+        Assert.Equal(Cpu6502.SoftwareStackTop, cpu.SoftwareStackPointer);
     }
 
     [Fact]
@@ -536,10 +502,10 @@ public class LocalsTests : RoslynTests
         // Regression test from issue #516:
         // ushort intermediates nx/ny, both byte locals reassigned in sequence.
         // Roslyn optimizes away `stloc ny` and keeps ny on the IL evaluation
-        // stack across the next `stloc x1`. The transpiler must recover ny
-        // from TEMP for the subsequent `stloc y1`, otherwise y1 gets the
+        // stack across the next `stloc x1`. The transpiler must preserve ny
+        // for the subsequent `stloc y1`, otherwise y1 gets the
         // value of nx (producing position (2,2) instead of (2,3)).
-        var bytes = GetProgramBytes("""
+        var cpu = ExecuteProgram("""
             byte y1 = 1;
             byte x1 = 1;
             ushort nx;
@@ -549,17 +515,13 @@ public class LocalsTests : RoslynTests
             x1 = (byte)nx;
             y1 = (byte)ny;
             vrambuf_put(NTADR_A(x1, y1), "B");
+            poke(0x6000, x1);
+            poke(0x6001, y1);
+            test_stop();
             while (true) ;
+            static extern void test_stop();
             """);
-        var hex = Convert.ToHexString(bytes);
-
-        // ny computation must save its runtime result to TEMP ($17): 8517
-        Assert.Contains("8517", hex);
-
-        // After storing x1=nx (STA $0326 = 8D2603), the next stloc must
-        // LDA TEMP (A517) to recover ny before STA y1 (8D2503).
-        // This is the exact sequence that the fix introduces.
-        Assert.Contains("8D2603A5178D2503", hex);
+        Assert.Equal(new byte[] { 2, 3 }, cpu.Memory[0x6000..0x6002]);
     }
 
     [Fact]
@@ -567,9 +529,8 @@ public class LocalsTests : RoslynTests
     {
         // Same pattern but using byte intermediates instead of ushort. The
         // fix should generalize: when Roslyn keeps a runtime value on the
-        // IL stack across an intervening stloc, the next stloc must recover
-        // it from TEMP.
-        var bytes = GetProgramBytes("""
+        // IL stack across an intervening stloc, the next stloc must recover it.
+        var cpu = ExecuteProgram("""
             byte y1 = 1;
             byte x1 = 1;
             byte nx;
@@ -579,13 +540,13 @@ public class LocalsTests : RoslynTests
             x1 = nx;
             y1 = ny;
             vrambuf_put(NTADR_A(x1, y1), "B");
+            poke(0x6000, x1);
+            poke(0x6001, y1);
+            test_stop();
             while (true) ;
+            static extern void test_stop();
             """);
-        var hex = Convert.ToHexString(bytes);
-        // Anchored recovery sequence: STA $0326 (x1=nx) → LDA $17 (recover ny)
-        // → STA $0325 (y1=ny). Matching the full sequence avoids false
-        // positives from STA/LDA $17 inside built-in subroutines.
-        Assert.Contains("8D2603A5178D2503", hex);
+        Assert.Equal(new byte[] { 2, 3 }, cpu.Memory[0x6000..0x6002]);
     }
 
     [Fact]
@@ -594,7 +555,7 @@ public class LocalsTests : RoslynTests
         // Same pattern without NTADR_A — verify the fix is independent of
         // the call site. After the dual assignment, x1+y1 should be 5
         // (nx=2, ny=3 → x1=2, y1=3 → 2+3=5), so pal_col(2, 5) is emitted.
-        var bytes = GetProgramBytes("""
+        var cpu = ExecuteProgram("""
             byte y1 = 1;
             byte x1 = 1;
             ushort nx;
@@ -604,11 +565,12 @@ public class LocalsTests : RoslynTests
             x1 = (byte)nx;
             y1 = (byte)ny;
             pal_col(x1, y1);
+            poke(0x6000, x1);
+            poke(0x6001, y1);
+            test_stop();
             while (true) ;
+            static extern void test_stop();
             """);
-        var hex = Convert.ToHexString(bytes);
-        // Anchored recovery sequence around the two byte local stores,
-        // independent of the call site (pal_col instead of NTADR_A).
-        Assert.Contains("8D2603A5178D2503", hex);
+        Assert.Equal(new byte[] { 2, 3 }, cpu.Memory[0x6000..0x6002]);
     }
 }

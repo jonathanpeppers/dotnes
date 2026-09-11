@@ -45,9 +45,11 @@ cast does not authorize losing carry before a shift or comparison.
 User-defined scalar parameters support `byte` and `sbyte`, not word arguments;
 an unsupported parameter reports its method, index and type. Word returns retain
 both bytes, including signed extension from a byte-sized source. Signed division
-and remainder are not provided by this backend and produce diagnostics rather
-than using the unsigned routines. This numeric work does not add a general
-32-bit arithmetic runtime.
+by a positive power-of-two constant truncates toward zero, including for negative
+operands. Other signed divisors and signed remainder produce diagnostics rather
+than using unsigned routines. Word multiplication supports a positive
+power-of-two constant factor; a general full-width product is diagnosed.
+This numeric work does not add a general 32-bit arithmetic runtime.
 
 When a merged evaluation-stack operand cannot be represented, a diagnostic
 identifies the arithmetic and suggests storing the conditional result in an

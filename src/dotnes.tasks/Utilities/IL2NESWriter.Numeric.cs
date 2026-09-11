@@ -70,6 +70,9 @@ partial class IL2NESWriter
             ILOpCode.Ldelem_i1 or ILOpCode.Ldind_i1 => PrimitiveTypeCode.SByte,
             ILOpCode.Ldelem_u2 or ILOpCode.Ldind_u2 => PrimitiveTypeCode.UInt16,
             ILOpCode.Ldelem_i2 or ILOpCode.Ldind_i2 => PrimitiveTypeCode.Int16,
+            ILOpCode.Div when _numericValues.Inputs[producer].Length == 2 =>
+                SignedNumericType(NumericType(_numericValues.Inputs[producer][0]))
+                    ? PrimitiveTypeCode.Int16 : PrimitiveTypeCode.UInt16,
             ILOpCode.Add or ILOpCode.Sub when _numericValues.Inputs[producer].Length == 2
                 && NumericType(_numericValues.Inputs[producer][0]) is PrimitiveTypeCode.Byte or PrimitiveTypeCode.SByte
                 && NumericType(_numericValues.Inputs[producer][1]) is PrimitiveTypeCode.Byte or PrimitiveTypeCode.SByte =>
@@ -261,12 +264,6 @@ partial class IL2NESWriter
                     "byte, sbyte, short or ushort local before the arithmetic.", MethodName);
             return false;
         }
-        if (word && !NumericResultIsNarrowed(Index, new HashSet<int>()))
-            throw new TranspileException(
-                $"Arithmetic at IL_{Instructions[Index].Offset:X4} needs a promoted result wider than the " +
-                "supported word representation. An explicit conversion after a comparison or shift cannot " +
-                "restore a lost carry/sign bit. Narrow before that operation only if word wrapping is intended.",
-                MethodName);
         bool wordResult = RequiresNumericWord(Index, new HashSet<int>());
         if (!signed && isAdd && leftType == PrimitiveTypeCode.Byte
             && Instructions[rhs].GetLdcValue() is > byte.MaxValue)
@@ -284,20 +281,6 @@ partial class IL2NESWriter
                 _ushortInAX = true;
             }
             return false;
-        }
-
-        bool RequiresNumericWord(int producer, HashSet<int> visiting)
-        {
-            if (!visiting.Add(producer))
-                return false;
-            return _numericValues!.Consumers[producer].Any(consumer =>
-                ILValueAnalysis.IsBranch(Instructions![consumer].OpCode)
-                || Instructions[consumer].OpCode is ILOpCode.Conv_u2 or ILOpCode.Conv_i2
-                    or ILOpCode.Ceq or ILOpCode.Clt or ILOpCode.Cgt
-                    or ILOpCode.Shr or ILOpCode.Shr_un or ILOpCode.Div or ILOpCode.Rem
-                || Instructions[consumer].GetStlocIndex() is int local && WordLocals.Contains(local)
-                || Instructions[consumer].OpCode is ILOpCode.Add or ILOpCode.Sub
-                    && RequiresNumericWord(consumer, visiting));
         }
 
         EmitNumericOperand(left);
@@ -329,28 +312,6 @@ partial class IL2NESWriter
         if (Stack.Count > 0) Stack.Pop();
         Stack.Push(0);
         _accState = AccumulatorState.RuntimeUshort;
-        return true;
-    }
-
-    bool NumericResultIsNarrowed(int producer, HashSet<int> visiting)
-    {
-        if (!visiting.Add(producer) || _numericValues!.Escapes[producer])
-            return false;
-        foreach (int consumer in _numericValues.Consumers[producer])
-        {
-            var instruction = Instructions![consumer];
-            if (instruction.OpCode is ILOpCode.Dup or ILOpCode.Conv_u1 or ILOpCode.Conv_i1
-                or ILOpCode.Conv_u2 or ILOpCode.Conv_i2)
-                continue;
-            if (instruction.GetStlocIndex() is int target && _compactIntLocals.ContainsKey(target))
-                continue;
-            if (instruction.OpCode is ILOpCode.Add or ILOpCode.Sub or ILOpCode.Mul
-                or ILOpCode.And or ILOpCode.Or or ILOpCode.Xor or ILOpCode.Shl
-                && NumericResultIsNarrowed(consumer, visiting))
-                continue;
-            return false;
-        }
-        visiting.Remove(producer);
         return true;
     }
 
@@ -476,7 +437,14 @@ partial class IL2NESWriter
             throw new TranspileException(
                 $"Signed right shift at IL_{instruction.Offset:X4} needs a materialized scalar operand. " +
                 "Store the expression in a short or sbyte local before shifting.", MethodName);
-        for (int i = 0; i < Math.Min(count & 31, 16); i++)
+        EmitSignedRightShift(Math.Min(count & 31, 16));
+        FinishNumericBinary(instruction);
+        return true;
+    }
+
+    void EmitSignedRightShift(int count)
+    {
+        for (int i = 0; i < count; i++)
         {
             Emit(Opcode.STX, AddressMode.ZeroPage, TEMP);
             Emit(Opcode.CPX, AddressMode.Immediate, 0x80);
@@ -484,11 +452,49 @@ partial class IL2NESWriter
             Emit(Opcode.ROR, AddressMode.Accumulator);
             Emit(Opcode.LDX, AddressMode.ZeroPage, TEMP);
         }
-        if (Stack.Count > 0) Stack.Pop();
-        if (Stack.Count > 0) Stack.Pop();
-        Stack.Push(0);
-        _accState = AccumulatorState.RuntimeUshort;
-        previous = instruction.OpCode;
+    }
+
+    bool TryNumericDivision(ILInstruction instruction)
+    {
+        if (instruction.OpCode != ILOpCode.Div || _numericValues == null
+            || _numericValues.Inputs[Index].Length != 2)
+            return false;
+        int lhs = _numericValues.Inputs[Index][0], rhs = _numericValues.Inputs[Index][1];
+        if (!SignedNumericType(NumericType(lhs)))
+            return false;
+        if (rhs < 0 || Instructions![rhs].GetLdcValue() is not int divisor || divisor <= 0
+            || divisor > 32768 || (divisor & (divisor - 1)) != 0)
+            throw new TranspileException(
+                $"Signed division at IL_{instruction.Offset:X4} requires a positive power-of-two constant divisor.", MethodName);
+        if (TryNumericOperands(out int left, out _))
+            EmitNumericOperand(left);
+        else if (lhs == Index - 2 && PureNumericOperand(lhs, out _))
+            EmitNumericOperand(lhs);
+        else if (_runtimeValueInA)
+        {
+            if (!_ushortInAX)
+                EmitNumericExtension(signed: true);
+        }
+        else
+            throw new TranspileException(
+                $"Signed division at IL_{instruction.Offset:X4} needs a materialized scalar operand.", MethodName);
+        string shift = $"{MethodName ?? "main"}_divide_{instruction.Offset:X4}";
+        Emit(Opcode.CPX, AddressMode.Immediate, 0x80);
+        EmitWithLabel(Opcode.BCC, AddressMode.Relative, shift);
+        // Bias negative values so arithmetic shifting truncates toward zero.
+        Emit(Opcode.CLC, AddressMode.Implied);
+        Emit(Opcode.ADC, AddressMode.Immediate, (byte)(divisor - 1));
+        Emit(Opcode.STA, AddressMode.ZeroPage, TEMP);
+        Emit(Opcode.TXA, AddressMode.Implied);
+        Emit(Opcode.ADC, AddressMode.Immediate, (byte)((divisor - 1) >> 8));
+        Emit(Opcode.TAX, AddressMode.Implied);
+        Emit(Opcode.LDA, AddressMode.ZeroPage, TEMP);
+        CurrentBlock!.SetNextLabel(shift);
+        int count = 0;
+        for (int value = divisor; value > 1; value >>= 1) count++;
+        EmitSignedRightShift(count);
+        FinishNumericBinary(instruction);
         return true;
     }
+
 }

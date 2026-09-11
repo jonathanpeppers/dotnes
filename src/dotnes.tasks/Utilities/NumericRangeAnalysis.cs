@@ -67,14 +67,26 @@ sealed class NumericRangeAnalysis
         for (int i = 0; i < instructions.Length; i++)
         {
             if (instructions[i].OpCode is ILOpCode.Div or ILOpCode.Rem
-                && values.Inputs[i].Any(input => ValueRange(input) is { Min: < 0 }))
+                && values.Inputs[i].Any(input => ValueRange(input) is { Min: < 0 })
+                && !(instructions[i].OpCode == ILOpCode.Div && values.Inputs[i].Length == 2
+                    && values.Inputs[i][1] >= 0 && instructions[values.Inputs[i][1]].GetLdcValue() is > 0 and int divisor
+                    && divisor <= 32768 && (divisor & (divisor - 1)) == 0))
                 throw new TranspileException(
                     $"Signed {instructions[i].OpCode} at IL_{instructions[i].Offset:X4} is not supported " +
                     "by the NES numeric backend. Use nonnegative byte/ushort operands only when that " +
                     "range matches the intended computation.", methodName);
-            if (instructions[i].OpCode is not (ILOpCode.Add or ILOpCode.Sub))
+            if (instructions[i].OpCode is not (ILOpCode.Add or ILOpCode.Sub or ILOpCode.Mul or ILOpCode.Shl))
                 continue;
             var range = ValueRange(i);
+            if (instructions[i].OpCode == ILOpCode.Mul
+                && range is not { Min: >= 0, Max: <= byte.MaxValue }
+                && !NumericValueUsage.IsExplicitlyNarrowed(instructions, values, i, byteOnly: true)
+                && !(values.Inputs[i].Length == 2 && values.Inputs[i][1] >= 0
+                    && instructions[values.Inputs[i][1]].GetLdcValue() is > 0 and <= ushort.MaxValue and int factor
+                    && (factor & (factor - 1)) == 0))
+                throw new TranspileException(
+                    $"Word multiplication at IL_{instructions[i].Offset:X4} requires a positive power-of-two " +
+                    "constant factor. General full-width multiplication is not supported by this backend.", methodName);
             if (range == null || range is { Min: >= 0, Max: <= ushort.MaxValue }
                 or { Min: >= short.MinValue, Max: <= short.MaxValue })
                 continue;
@@ -168,6 +180,13 @@ sealed class NumericRangeAnalysis
         {
             ILOpCode.Add => new(left.Value.Min + right.Value.Min, left.Value.Max + right.Value.Max),
             ILOpCode.Sub => new(left.Value.Min - right.Value.Max, left.Value.Max - right.Value.Min),
+            ILOpCode.Mul => new(
+                new[] { left.Value.Min * right.Value.Min, left.Value.Min * right.Value.Max,
+                    left.Value.Max * right.Value.Min, left.Value.Max * right.Value.Max }.Min(),
+                new[] { left.Value.Min * right.Value.Min, left.Value.Min * right.Value.Max,
+                    left.Value.Max * right.Value.Min, left.Value.Max * right.Value.Max }.Max()),
+            ILOpCode.Shl when right.Value.Min == right.Value.Max && (right.Value.Min & 31) <= 15 =>
+                new(left.Value.Min << (int)(right.Value.Min & 31), left.Value.Max << (int)(right.Value.Min & 31)),
             ILOpCode.And when right.Value.Min == right.Value.Max && right.Value.Min >= 0 => new(0, right.Value.Max),
             _ => null,
         };

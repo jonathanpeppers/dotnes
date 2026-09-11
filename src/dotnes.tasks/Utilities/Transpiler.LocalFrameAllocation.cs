@@ -11,13 +11,14 @@ namespace dotnes;
 partial class Transpiler
 {
     Dictionary<int, PrimitiveTypeCode> GetCompactIntLocalsForMethod(ILInstruction[] instructions,
-        ReflectionCache reflection, string method)
+        ReflectionCache reflection, string method, bool validateOperations = true)
     {
         if (!NumericTypes.TryGetValue(method, out var types))
             return new();
         var ranges = new NumericRangeAnalysis(instructions, types, NumericTypes, reflection, GetNumericFieldTypes());
         var compact = ranges.GetCompactIntLocals(method);
-        ranges.ValidatePromotedArithmetic(method);
+        if (validateOperations)
+            ranges.ValidatePromotedArithmetic(method);
         return compact;
     }
 
@@ -29,7 +30,8 @@ partial class Transpiler
         var result = new HashSet<int>();
         if (NumericTypes.TryGetValue(methodName, out var types))
         {
-            var compactInts = GetCompactIntLocalsForMethod(instructions, reflectionCache ?? new ReflectionCache(), methodName);
+            var compactInts = GetCompactIntLocalsForMethod(instructions, reflectionCache ?? new ReflectionCache(), methodName,
+                validateOperations: false);
             foreach (var entry in compactInts)
                 if (entry.Value is PrimitiveTypeCode.UInt16 or PrimitiveTypeCode.Int16)
                     result.Add(entry.Key);
