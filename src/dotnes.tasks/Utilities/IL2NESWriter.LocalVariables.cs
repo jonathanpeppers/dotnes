@@ -277,16 +277,18 @@ partial class IL2NESWriter
             // Check if the next instruction can handle A:X directly
             bool nextIsShift = Instructions is not null && Index + 1 < Instructions.Length &&
                 Instructions[Index + 1].OpCode is ILOpCode.Shr or ILOpCode.Shr_un or ILOpCode.Shl;
-            // When A:X holds a ushort, the next Add/Sub/Div/Rem should operate on
+            // When A:X holds a ushort, the next Add/Sub/Mul/Div/Rem should operate on
             // A:X directly — no need to push to the C stack first. This matches the
             // behavior of WriteLdc(ushort) which also skips pushax for Add/Sub.
             bool nextIsAddSub = Instructions is not null && Index + 1 < Instructions.Length &&
                 Instructions[Index + 1].OpCode is ILOpCode.Add or ILOpCode.Sub;
             bool nextIsDivRem = Instructions is not null && Index + 1 < Instructions.Length &&
                 Instructions[Index + 1].OpCode is ILOpCode.Div or ILOpCode.Rem;
+            bool nextIsMultiply = Instructions is not null && Index + 1 < Instructions.Length &&
+                Instructions[Index + 1].OpCode == ILOpCode.Mul;
             bool nextIsBitwise = Instructions is not null && Index + 1 < Instructions.Length &&
                 Instructions[Index + 1].OpCode is ILOpCode.And or ILOpCode.Or or ILOpCode.Xor;
-            if (nextIsShift || nextIsAddSub || nextIsDivRem || nextIsBitwise || NextIsBranchComparison())
+            if (nextIsShift || nextIsAddSub || nextIsMultiply || nextIsDivRem || nextIsBitwise || NextIsBranchComparison())
             {
                 // Keep A:X intact — the operator/branch will handle the 16-bit value
                 Stack.Push(operand);
@@ -633,6 +635,7 @@ partial class IL2NESWriter
         {
             Emit(Opcode.LDY, AddressMode.Immediate, (byte)offset);
             Emit(Opcode.LDA, AddressMode.IndirectIndexed, (byte)sp);
+            _ushortInAX = false;
         }
         _immediateInA = null;
         _runtimeValueInA = true;
