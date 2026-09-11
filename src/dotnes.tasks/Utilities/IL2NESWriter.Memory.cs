@@ -13,25 +13,6 @@ partial class IL2NESWriter
     readonly HashSet<int> _memoryBranchTargets = new();
     bool _memoryCallsPrepared;
 
-    bool CanReuseConstantPokeValue(byte value)
-    {
-        if (_pokeLastValue != value || Instructions is null || Index < 3
-            || Instructions[Index - 3].OpCode != ILOpCode.Call
-            || Instructions[Index - 3].String != nameof(NESLib.poke))
-            return false;
-        return !Instructions.Skip(Index - 2).Take(3)
-            .Any(i => _memoryBranchTargets.Contains(i.Offset));
-    }
-
-    void RemoveMemoryArgumentInstructions(int firstArgument, int count)
-    {
-        if (Instructions is not null
-            && _blockCountAtILOffset.TryGetValue(Instructions[firstArgument].Offset, out int start))
-            count = Math.Min(count, GetBufferedBlockCount() - start);
-        if (count > 0)
-            RemoveLastInstructions(count);
-    }
-
     void EmitConstantPeek(int address)
     {
         // A previous branch/return can leave a tracked runtime value in A, causing

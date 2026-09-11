@@ -2646,51 +2646,7 @@ partial class IL2NESWriter
                                 argsAlreadyPopped = true;
                                 break;
                             }
-                            // poke(ushort addr, byte value) -> LDA #value, STA abs addr
-                            if (Stack.Count >= 2)
-                            {
-                                int value = Stack.Pop();
-                                int addr = Stack.Pop();
-
-                                // Check if the value is from a runtime local variable
-                                Local? pokeLocal = null;
-                                int? valueLocalIndex = Instructions is null
-                                    ? _lastLoadedLocalIndex : Instructions[Index - 1].GetLdlocIndex();
-                                bool valueIsLocal = valueLocalIndex.HasValue &&
-                                    Locals.TryGetValue(valueLocalIndex.Value, out pokeLocal) &&
-                                    pokeLocal.Address.HasValue;
-
-                                // Check if the value is from a static field
-                                bool valueIsStaticField = _lastStaticFieldAddress.HasValue
-                                    && (Instructions is null || Instructions[Index - 1].OpCode == ILOpCode.Ldsfld);
-
-                                // Remove previously emitted instructions:
-                                // ushort addr: LDX #hi, LDA #lo, JSR pushax, LDA #value = 4 instructions
-                                // byte addr:   LDA #lo, JSR pusha, LDA #value = 3 instructions
-                                RemoveMemoryArgumentInstructions(Index - 2, addr > byte.MaxValue ? 4 : 3);
-
-                                if (valueIsLocal)
-                                {
-                                    Emit(Opcode.LDA, AddressMode.Absolute, (ushort)pokeLocal!.Address!.Value);
-                                    _pokeLastValue = null;
-                                    _immediateInA = null;
-                                }
-                                else if (valueIsStaticField)
-                                {
-                                    Emit(Opcode.LDA, AddressMode.Absolute, _lastStaticFieldAddress!.Value);
-                                    _pokeLastValue = null;
-                                    _immediateInA = null;
-                                }
-                                else if (!CanReuseConstantPokeValue((byte)value))
-                                {
-                                    Emit(Opcode.LDA, AddressMode.Immediate, (byte)value);
-                                    _pokeLastValue = (byte)value;
-                                    _immediateInA = (byte)value;
-                                }
-                                Emit(Opcode.STA, AddressMode.Absolute, (ushort)addr);
-                            }
-                            _lastLoadedLocalIndex = null;
-                            _lastStaticFieldAddress = null;
+                            EmitConstantPoke();
                             argsAlreadyPopped = true;
                         }
                         break;
