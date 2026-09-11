@@ -971,8 +971,13 @@ public class Program6502
     }
 
     /// <summary>
-    /// Calculates the total size of all built-in subroutines (without main program).
+    /// Gets the size of the default stock-renderer blocks created by <see cref="CreateWithBuiltIns()"/>.
     /// </summary>
+    /// <remarks>
+    /// Retained for compatibility. This does not include application code or final built-ins,
+    /// and does not describe native-renderer layouts. Use the actual program's
+    /// <see cref="TotalSize"/> when computing layout-dependent sizes.
+    /// </remarks>
     public static int GetBuiltInSize()
     {
         var program = CreateWithBuiltIns();

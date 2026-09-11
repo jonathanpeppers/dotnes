@@ -125,8 +125,12 @@ internal static class BuiltInSubroutines
     }
 
     /// <summary>
-    /// IRQ handler - pushes registers and jumps to skipNtsc
+    /// Default IRQ handler: stock mode jumps to skipNtsc; native mode returns immediately.
     /// </summary>
+    /// <remarks>
+    /// Native mode cannot acknowledge a mapper-specific IRQ source here. Keep unused sources
+    /// disabled, or register an IRQ callback that acknowledges its source before returning.
+    /// </remarks>
     public static Block Irq(bool nativeRenderer = false)
     {
         var block = new Block(nameof(_irq));

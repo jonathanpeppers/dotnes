@@ -91,9 +91,18 @@ are unchanged. With it:
   returns with RTI, without advancing frame counters or invoking the NMI callback.
   Without an IRQ callback the native-mode default IRQ handler just returns;
   it does not acknowledge hardware, so leave unused IRQ sources disabled.
+  A level-triggered source left asserted can immediately re-enter IRQ after RTI,
+  starving foreground code.
 - `ppu_wait_nmi`, `ppu_wait_frame`, `delay`, `nesclock`, and `get_frame_count`
   remain available. The waits require NMI generation to be enabled and do not
   publish/flush native graphics work for you.
+
+For object-model consumers, `Program6502.GetBuiltInSize()` remains available for
+compatibility, but describes only the default stock-renderer blocks from
+`CreateWithBuiltIns()`. It excludes application code and final built-ins. Use the
+actual program's `TotalSize` for native or otherwise layout-dependent size
+calculations; the transpiler measures its selected built-ins before adding
+application code.
 
 Stock rendering operations produce `TranspileException` when combined with this
 directive, including references in helpers: `ppu_off`, `ppu_on_*`, `ppu_mask`,
