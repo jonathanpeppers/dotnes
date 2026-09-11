@@ -42,6 +42,14 @@ seventeen bits. If those bits remain observable, the compiler diagnoses that
 unsupported result **before** inserting temporary spill storage. A final byte
 cast does not authorize losing carry before a shift or comparison.
 
+Runtime-count unsigned right shifts also preserve a proven byte sum's ninth bit.
+An explicit word conversion before the shift defines wrapping: for example,
+`(byte)((ushort)(value + 1) >> count)` produces 128 for byte `value = 255`
+and `count = 1`. Every arithmetic stage must preserve the required word bits;
+an already-truncated intermediate cannot be widened afterward to recover them.
+Promoted left shifts whose observable results need more than a word are diagnosed,
+including a later right shift that would bring those bits back into a byte.
+
 User-defined scalar parameters support `byte` and `sbyte`, not word arguments;
 an unsupported parameter reports its method, index and type. Word returns retain
 both bytes, including signed extension from a byte-sized source. Signed division
@@ -51,10 +59,14 @@ than using unsigned routines. Word multiplication supports a positive
 power-of-two constant factor; a general full-width product is diagnosed.
 This numeric work does not add a general 32-bit arithmetic runtime.
 
-When a merged evaluation-stack operand cannot be represented, a diagnostic
-identifies the arithmetic and suggests storing the conditional result in an
-explicitly typed local. Distinct conditional stores to byte/word locals remain
-supported; instruction adjacency alone is never a range proof.
+Conditional values are materialized without treating generated temporary
+conversions as source-requested truncation. Their original incoming ranges still
+govern arithmetic. A mixed signed/unsigned conditional can need seventeen bits
+even when each arm separately fits a word; narrow explicitly before observing it
+only if wrapping is intended. When a merged operand cannot be represented, an
+actionable diagnostic identifies the operation. Distinct conditional stores to
+byte/word locals remain supported; instruction adjacency alone is never a range
+proof.
 
 ## `int` is not an arbitrary-width accumulator
 

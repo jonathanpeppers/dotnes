@@ -26,6 +26,7 @@ partial class IL2NESWriter
         if (Stack.Count > 0) Stack.Pop();
         Stack.Push(0);
         _accState = AccumulatorState.RuntimeUshort;
+        _verifiedWordResults.Add(Index);
         previous = instruction.OpCode;
     }
 

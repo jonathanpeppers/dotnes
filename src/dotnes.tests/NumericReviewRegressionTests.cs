@@ -5,6 +5,128 @@ namespace dotnes.tests;
 
 public class NumericReviewRegressionTests(ITestOutputHelper output) : ExecutionTests(output)
 {
+    [Fact]
+    public void ConditionalNormalizationCannotHideASeventeenBitSum()
+    {
+        var error = Assert.Throws<TranspileException>(() => GetProgramBytes("""
+            State.Word = 65535;
+            byte result = (byte)((State.Word + (peek(0x6010) == 0 ? 1 : 2)) >> 16);
+            poke(0x6000, result);
+            while (true);
+            static class State { public static ushort Word; }
+            """));
+        Assert.Contains("promoted result wider", error.Message);
+    }
+
+    [Fact]
+    public void MixedSignedAndUnsignedConditionalRequiresARepresentableRange()
+    {
+        var error = Assert.Throws<TranspileException>(() => GetProgramBytes("""
+            State.Signed = -1;
+            State.Unsigned = 32768;
+            byte result = (byte)((peek(0x6010) == 0 ? State.Signed : State.Unsigned) >> 8);
+            poke(0x6000, result);
+            while (true);
+            static class State { public static short Signed; public static ushort Unsigned; }
+            """));
+        Assert.Contains("Conditional operand", error.Message);
+        Assert.Contains("promoted result wider", error.Message);
+    }
+
+    [Theory]
+    [InlineData(0, 255)]
+    [InlineData(1, 128)]
+    public void ExplicitWordConversionDefinesMixedConditionalWrapping(int selector, int expected)
+    {
+        var cpu = ExecuteProgram("""
+            State.Signed = -1;
+            State.Unsigned = 32768;
+            byte result = (byte)((ushort)(peek(0x6010) == 0 ? (int)State.Signed : State.Unsigned) >> 8);
+            poke(0x6000, result);
+            test_stop(); while (true);
+            static extern void test_stop();
+            static class State { public static short Signed; public static ushort Unsigned; }
+            """, cpu => cpu.Memory[0x6010] = (byte)selector);
+        Assert.Equal(expected, cpu.Memory[0x6000]);
+        Assert.Equal(Cpu6502.SoftwareStackTop, cpu.SoftwareStackPointer);
+    }
+
+    [Theory]
+    [InlineData(0, -128)]
+    [InlineData(1, -300)]
+    public void ConditionalSignedReturnPreservesEveryArm(int selector, int expected)
+    {
+        var cpu = ExecuteProgram("""
+            short result = Get(peek(0x6010));
+            byte low = (byte)result;
+            byte high = (byte)(result >> 8);
+            poke(0x6000, low);
+            poke(0x6001, high);
+            test_stop(); while (true);
+            static extern void test_stop();
+            static short Get(byte selector) => selector == 0 ? (sbyte)peek(0x6011) : (short)-300;
+            """, cpu =>
+            {
+                cpu.Memory[0x6010] = (byte)selector;
+                cpu.Memory[0x6011] = 128;
+            });
+        Assert.Equal(unchecked((byte)expected), cpu.Memory[0x6000]);
+        Assert.Equal(unchecked((byte)(expected >> 8)), cpu.Memory[0x6001]);
+        Assert.Equal(Cpu6502.SoftwareStackTop, cpu.SoftwareStackPointer);
+    }
+
+    [Theory]
+    [InlineData(128, 248)]
+    [InlineData(255, 255)]
+    [InlineData(127, 7)]
+    public void PromotedLeftShiftRetainsSignedType(int input, int expected)
+    {
+        var cpu = ExecuteProgram("""
+            sbyte value = (sbyte)peek(0x6010);
+            byte result = (byte)((value << 8) >> 12);
+            poke(0x6000, result);
+            test_stop(); while (true);
+            static extern void test_stop();
+            """, cpu => cpu.Memory[0x6010] = (byte)input);
+        Assert.Equal(expected, cpu.Memory[0x6000]);
+        Assert.Equal(Cpu6502.SoftwareStackTop, cpu.SoftwareStackPointer);
+    }
+
+    [Theory]
+    [InlineData(200, 220, 1)]
+    [InlineData(255, 255, 1)]
+    [InlineData(255, 255, 8)]
+    [InlineData(255, 255, 32)]
+    public void ProvenByteSumSupportsVariableShift(int left, int right, int count)
+    {
+        var cpu = ExecuteProgram($$"""
+            State.Left = {{left}};
+            State.Right = {{right}};
+            State.Count = {{count}};
+            byte result = (byte)((State.Left + State.Right) >> State.Count);
+            poke(0x6000, result);
+            test_stop(); while (true);
+            static extern void test_stop();
+            static class State { public static byte Left; public static byte Right; public static byte Count; }
+            """);
+        Assert.Equal((byte)((left + right) >> count), cpu.Memory[0x6000]);
+        Assert.Equal(Cpu6502.SoftwareStackTop, cpu.SoftwareStackPointer);
+    }
+
+    [Theory]
+    [InlineData(16)]
+    [InlineData(24)]
+    public void PromotedBitsCannotBeLostBeforeASecondShift(int count)
+    {
+        var error = Assert.Throws<TranspileException>(() => GetProgramBytes($$"""
+            byte value = peek(0x6010);
+            byte result = (byte)((value << {{count}}) >> {{count}});
+            poke(0x6000, result);
+            while (true);
+            """));
+        Assert.Contains("promoted result wider", error.Message);
+    }
+
     [Theory]
     [InlineData("/")]
     [InlineData("%")]
@@ -129,18 +251,25 @@ public class NumericReviewRegressionTests(ITestOutputHelper output) : ExecutionT
         Assert.Equal(Cpu6502.SoftwareStackTop, cpu.SoftwareStackPointer);
     }
 
-    [Fact]
-    public void UnknownWordOperandProducesActionableDiagnostic()
+    [Theory]
+    [InlineData(0, 301)]
+    [InlineData(1, 302)]
+    public void ConditionalWordOperandIsMaterializedBeforeArithmetic(int condition, int expected)
     {
-        var error = Assert.Throws<TranspileException>(() => GetProgramBytes("""
+        var cpu = ExecuteProgram("""
             ushort left = 300;
             poke(0x6020, (byte)left);
             ushort result = (ushort)(left + (peek(0x6010) == 0 ? 1 : 2));
-            poke(0x6000, (byte)result);
-            while (true);
-            """));
-        Assert.Contains("merged operand", error.Message);
-        Assert.Contains("explicitly typed", error.Message);
+            byte low = (byte)result;
+            byte high = (byte)(result >> 8);
+            poke(0x6000, low);
+            poke(0x6001, high);
+            test_stop(); while (true);
+            static extern void test_stop();
+            """, cpu => cpu.Memory[0x6010] = (byte)condition);
+        Assert.Equal((byte)expected, cpu.Memory[0x6000]);
+        Assert.Equal((byte)(expected >> 8), cpu.Memory[0x6001]);
+        Assert.Equal(Cpu6502.SoftwareStackTop, cpu.SoftwareStackPointer);
     }
 
     [Theory]

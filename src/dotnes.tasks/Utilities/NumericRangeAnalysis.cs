@@ -66,8 +66,23 @@ sealed class NumericRangeAnalysis
     {
         for (int i = 0; i < instructions.Length; i++)
         {
+            for (int operand = 0; operand < values.Inputs[i].Length; operand++)
+            {
+                if (values.Inputs[i][operand] >= 0 || InputRange(i, operand) is not { } merged
+                    || FitsWord(merged)
+                    || instructions[i].OpCode is ILOpCode.Conv_u1 or ILOpCode.Conv_i1 or ILOpCode.Conv_u2 or ILOpCode.Conv_i2)
+                    continue;
+                if (instructions[i].OpCode is ILOpCode.Add or ILOpCode.Sub or ILOpCode.Mul
+                    or ILOpCode.Shl or ILOpCode.And or ILOpCode.Or or ILOpCode.Xor
+                    && NumericValueUsage.IsExplicitlyNarrowed(instructions, values, i))
+                    continue;
+                throw new TranspileException(
+                    $"Conditional operand at IL_{instructions[i].Offset:X4} needs a promoted result wider " +
+                    "than the supported word representation. Narrow the conditional value explicitly before " +
+                    "using it only if word wrapping is intended.", methodName);
+            }
             if (instructions[i].OpCode is ILOpCode.Div or ILOpCode.Rem
-                && values.Inputs[i].Any(input => ValueRange(input) is { Min: < 0 })
+                && Enumerable.Range(0, values.Inputs[i].Length).Any(input => InputRange(i, input) is { Min: < 0 })
                 && !(instructions[i].OpCode == ILOpCode.Div && values.Inputs[i].Length == 2
                     && values.Inputs[i][1] >= 0 && instructions[values.Inputs[i][1]].GetLdcValue() is > 0 and int divisor
                     && divisor <= 32768 && (divisor & (divisor - 1)) == 0))
@@ -78,6 +93,11 @@ sealed class NumericRangeAnalysis
             if (instructions[i].OpCode is not (ILOpCode.Add or ILOpCode.Sub or ILOpCode.Mul or ILOpCode.Shl))
                 continue;
             var range = ValueRange(i);
+            if (instructions[i].OpCode == ILOpCode.Shl && values.Inputs[i].Length == 2
+                && values.Inputs[i][1] >= 0 && instructions[values.Inputs[i][1]].GetLdcValue() is int shift
+                && (shift & 31) > 15 && InputRange(i, 0) is { } shifted
+                && (shifted.Min != 0 || shifted.Max != 0))
+                range = new(int.MinValue, int.MaxValue);
             if (instructions[i].OpCode == ILOpCode.Mul
                 && range is not { Min: >= 0, Max: <= byte.MaxValue }
                 && !NumericValueUsage.IsExplicitlyNarrowed(instructions, values, i, byteOnly: true)
@@ -115,7 +135,7 @@ sealed class NumericRangeAnalysis
             foreach (int store in Enumerable.Range(0, instructions.Length)
                 .Where(i => instructions[i].GetStlocIndex() == index))
             {
-                var assigned = values.Inputs[store].Length == 1 ? ValueRange(values.Inputs[store][0]) : null;
+                var assigned = values.Inputs[store].Length == 1 ? InputRange(store, 0) : null;
                 if (assigned == null)
                 {
                     result = null;
@@ -172,8 +192,8 @@ sealed class NumericRangeAnalysis
         if (instruction.OpCode == ILOpCode.And && rhs >= 0
             && instructions[rhs].GetLdcValue() is >= 0 and int mask)
             return new(0, mask);
-        var left = ValueRange(values.Inputs[producer][0]);
-        var right = ValueRange(values.Inputs[producer][1]);
+        var left = InputRange(producer, 0);
+        var right = InputRange(producer, 1);
         if (left == null || right == null)
             return null;
         Range? result = instruction.OpCode switch
@@ -191,6 +211,47 @@ sealed class NumericRangeAnalysis
             _ => null,
         };
         return result is { Min: >= int.MinValue, Max: <= int.MaxValue } ? result : null;
+    }
+
+    static bool FitsWord(Range range) => range is { Min: >= 0, Max: <= ushort.MaxValue }
+        or { Min: >= short.MinValue, Max: <= short.MaxValue };
+
+    Range? InputRange(int consumer, int operand)
+    {
+        int producer = values.Inputs[consumer][operand];
+        return producer >= 0 ? ValueRange(producer)
+            : IncomingRange(consumer, values.Inputs[consumer].Length - operand - 1, new());
+    }
+
+    Range? IncomingRange(int consumer, int depth, HashSet<(int, int)> path)
+    {
+        if (!path.Add((consumer, depth)))
+            return null;
+        Range? result = null;
+        foreach (int predecessor in values.Predecessors[consumer])
+        {
+            int slot = values.Outputs[predecessor].Length - depth - 1;
+            if (slot < 0)
+                return null;
+            int producer = values.Outputs[predecessor][slot];
+            Range? incoming;
+            if (producer >= 0)
+                incoming = ValueRange(producer);
+            else
+            {
+                // Trace only a carried stack slot, not a newly computed value.
+                int beforeDepth = instructions[predecessor].OpCode == ILOpCode.Dup
+                    ? Math.Max(0, depth - 1)
+                    : depth + values.Inputs[predecessor].Length - (values.ProducesValue[predecessor] ? 1 : 0);
+                incoming = IncomingRange(predecessor, beforeDepth, path);
+            }
+            if (incoming == null)
+                return null;
+            result = result == null ? incoming
+                : new Range(Math.Min(result.Value.Min, incoming.Value.Min), Math.Max(result.Value.Max, incoming.Value.Max));
+        }
+        path.Remove((consumer, depth));
+        return result;
     }
 
     Range? CounterRange(int local)

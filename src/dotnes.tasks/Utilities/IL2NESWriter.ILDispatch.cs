@@ -348,10 +348,10 @@ partial class IL2NESWriter
                 HandleStindI2();
                 break;
             case ILOpCode.Add:
-                HandleAddSub(isAdd: true);
+                WriteLegacyNumericAddSub(isAdd: true);
                 break;
             case ILOpCode.Sub:
-                HandleAddSub(isAdd: false);
+                WriteLegacyNumericAddSub(isAdd: false);
                 break;
             case ILOpCode.Mul:
                 {

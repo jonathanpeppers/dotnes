@@ -408,7 +408,7 @@ public class ByteArithmeticTests(ITestOutputHelper output) : ExecutionTests(outp
             while (true) ;
             static class State { public static ushort Value; public static ushort Count; }
             """));
-        Assert.Contains("promoted arithmetic expressions", error.Message);
+        Assert.Contains("promoted result wider", error.Message);
     }
 
     [Theory]
@@ -466,7 +466,7 @@ public class ByteArithmeticTests(ITestOutputHelper output) : ExecutionTests(outp
     [InlineData("0 - State.Value", 1, 8, 255)]
     [InlineData("(State.Value + 1) + 256", 255, 1, 0)]
     [InlineData("State.Value - 256", 1, 8, 255)]
-    public void ByteArithmeticCastToUshortBeforeVariableShiftIsRejected(string expression, byte value, byte count, byte expected)
+    public void ByteArithmeticCastToUshortBeforeVariableShiftPreservesWidth(string expression, byte value, byte count, byte expected)
     {
         int promoted = expression switch
         {
@@ -477,16 +477,18 @@ public class ByteArithmeticTests(ITestOutputHelper output) : ExecutionTests(outp
             _ => throw new ArgumentException("Unexpected test expression.", nameof(expression)),
         };
         Assert.Equal(expected, unchecked((byte)((ushort)promoted >> count)));
-        var error = Assert.Throws<TranspileException>(() => GetProgramBytes(
+        var cpu = ExecuteProgram(
             $$"""
             State.Value = {{value}};
             State.Count = {{count}};
             byte result = (byte)(((ushort)({{expression}})) >> State.Count);
             poke(0x6000, result);
-            while (true) ;
+            test_stop(); while (true);
+            static extern void test_stop();
             static class State { public static byte Value; public static byte Count; }
-            """));
-        Assert.Contains("promoted arithmetic expressions", error.Message);
+            """);
+        Assert.Equal(expected, cpu.Memory[0x6000]);
+        AssertBalanced(cpu);
     }
 
     [Fact]
@@ -563,25 +565,30 @@ public class ByteArithmeticTests(ITestOutputHelper output) : ExecutionTests(outp
     }
 
     [Theory]
-    [InlineData(false, false)]
-    [InlineData(true, false)]
-    [InlineData(false, true)]
-    [InlineData(true, true)]
-    public void VariableShiftRejectsArithmeticFromAlternativeBranch(bool reverse, bool add)
+    [InlineData(false, false, 0)]
+    [InlineData(true, false, 0)]
+    [InlineData(false, true, 0)]
+    [InlineData(true, true, 0)]
+    [InlineData(false, false, 1)]
+    [InlineData(true, false, 1)]
+    [InlineData(false, true, 1)]
+    [InlineData(true, true, 1)]
+    public void VariableShiftMaterializesArithmeticFromAlternativeBranch(bool reverse, bool add, int select)
     {
         string choice = reverse
             ? "State.Select == 0 ? State.WordValue : State.ByteValue + 1"
             : "State.Select == 0 ? State.ByteValue + 1 : State.WordValue";
         string value = add ? $"(ushort)(({choice}) + 1)" : $"({choice})";
-        var error = Assert.Throws<TranspileException>(() => GetProgramBytes(
+        var cpu = ExecuteProgram(
             $$"""
             State.ByteValue = 255;
             State.WordValue = 65535;
             State.Count = 8;
-            State.Select = 0;
+            State.Select = {{select}};
             byte result = (byte)(({{value}}) >> State.Count);
             poke(0x6000, result);
-            while (true) ;
+            test_stop(); while (true);
+            static extern void test_stop();
             static class State
             {
                 public static byte ByteValue;
@@ -589,18 +596,21 @@ public class ByteArithmeticTests(ITestOutputHelper output) : ExecutionTests(outp
                 public static byte Count;
                 public static byte Select;
             }
-            """));
-        Assert.Contains("promoted arithmetic expressions", error.Message);
+            """);
+        int selected = reverse == (select == 0) ? 65535 : 256;
+        int promoted = add ? unchecked((ushort)(selected + 1)) : selected;
+        Assert.Equal((byte)(promoted >> 8), cpu.Memory[0x6000]);
+        AssertBalanced(cpu);
     }
 
     [Theory]
     [InlineData(0, 0)]
     [InlineData(1, 64)]
-    public void InterleavedAliasShiftRemainsAnEvaluationStackDependency(byte select, byte expected)
+    public void InterleavedAliasShiftPreservesTheCapturedValue(byte select, byte expected)
     {
         ushort value = select == 0 ? ushort.MaxValue : (ushort)0x8100;
         Assert.Equal(expected, unchecked((byte)((ushort)(value + 1) >> 9)));
-        var error = Assert.Throws<TranspileException>(() => GetProgramBytes(
+        var cpu = ExecuteProgram(
             $$"""
             State.Value = 65535;
             State.Other = 0x8100;
@@ -614,7 +624,8 @@ public class ByteArithmeticTests(ITestOutputHelper output) : ExecutionTests(outp
             State.Other = 0;
             byte result = (byte)(((ushort)(alias + 1)) >> State.Count);
             poke(0x6000, result);
-            while (true) ;
+            test_stop(); while (true);
+            static extern void test_stop();
             static class State
             {
                 public static ushort Value;
@@ -622,8 +633,9 @@ public class ByteArithmeticTests(ITestOutputHelper output) : ExecutionTests(outp
                 public static byte Count;
                 public static byte Select;
             }
-            """));
-        Assert.Contains("promoted arithmetic expressions", error.Message);
+            """);
+        Assert.Equal(expected, cpu.Memory[0x6000]);
+        AssertBalanced(cpu);
     }
 
     [Theory]

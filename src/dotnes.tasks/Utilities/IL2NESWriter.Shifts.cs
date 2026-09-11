@@ -45,7 +45,8 @@ partial class IL2NESWriter
             (value.GetLdcValue() is null && value.GetLdlocIndex() is null &&
             value.OpCode is not (ILOpCode.Ldarg_0 or ILOpCode.Ldarg_1 or ILOpCode.Ldarg_2 or ILOpCode.Ldarg_3
                 or ILOpCode.Ldarg_s or ILOpCode.Ldsfld or ILOpCode.Conv_u1) &&
-            !(valueIndex < Index - 1 && HasVerifiedNumericProducer(valueIndex))))
+            !(valueIndex < Index - 1 && HasVerifiedNumericProducer(valueIndex))
+            && !HasVerifiedPromotedNumericProducer(valueIndex)))
             throw new TranspileException(
                 "Variable shifts of promoted arithmetic expressions are not supported. Explicitly truncate to byte, or use supported 16-bit operands before shifting.",
                 MethodName);

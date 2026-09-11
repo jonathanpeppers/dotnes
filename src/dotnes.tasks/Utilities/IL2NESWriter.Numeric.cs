@@ -73,6 +73,9 @@ partial class IL2NESWriter
             ILOpCode.Div when _numericValues.Inputs[producer].Length == 2 =>
                 SignedNumericType(NumericType(_numericValues.Inputs[producer][0]))
                     ? PrimitiveTypeCode.Int16 : PrimitiveTypeCode.UInt16,
+            ILOpCode.Mul or ILOpCode.Shl when _numericValues.Inputs[producer].Length == 2 =>
+                _numericValues.Inputs[producer].Any(input => SignedNumericType(NumericType(input)))
+                    ? PrimitiveTypeCode.Int16 : PrimitiveTypeCode.UInt16,
             ILOpCode.Add or ILOpCode.Sub when _numericValues.Inputs[producer].Length == 2
                 && NumericType(_numericValues.Inputs[producer][0]) is PrimitiveTypeCode.Byte or PrimitiveTypeCode.SByte
                 && NumericType(_numericValues.Inputs[producer][1]) is PrimitiveTypeCode.Byte or PrimitiveTypeCode.SByte =>
@@ -314,7 +317,23 @@ partial class IL2NESWriter
         if (Stack.Count > 0) Stack.Pop();
         Stack.Push(0);
         _accState = AccumulatorState.RuntimeUshort;
+        _verifiedWordResults.Add(Index);
+        if (leftType is PrimitiveTypeCode.Byte or PrimitiveTypeCode.SByte
+            && rightType is PrimitiveTypeCode.Byte or PrimitiveTypeCode.SByte)
+            _verifiedPromotedResults.Add(Index);
         return true;
+    }
+
+    void WriteLegacyNumericAddSub(bool isAdd)
+    {
+        bool verified = _ushortInAX && _numericValues != null && Instructions != null
+            && _numericValues.Inputs[Index].Length == 2
+            && _verifiedWordResults.Contains(_numericValues.Inputs[Index][0])
+            && _numericValues.Inputs[Index][1] is >= 0 and int right
+            && Instructions[right].GetLdcValue() is >= 0 and <= ushort.MaxValue;
+        HandleAddSub(isAdd);
+        if (verified && _ushortInAX)
+            _verifiedWordResults.Add(Index);
     }
 
     internal bool TryNumericComparison(ILInstruction instruction)
