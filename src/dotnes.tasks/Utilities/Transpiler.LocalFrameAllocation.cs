@@ -13,12 +13,28 @@ partial class Transpiler
     /// <summary>
     /// Pre-scan IL instructions for conv.u2 + stloc patterns to detect ushort locals.
     /// </summary>
-    static HashSet<int> DetectWordLocals(ILInstruction[] instructions, ReflectionCache? reflectionCache = null)
+    HashSet<int> DetectWordLocals(ILInstruction[] instructions, ReflectionCache? reflectionCache = null, string methodName = "main")
     {
         var result = new HashSet<int>();
+        if (NumericTypes.TryGetValue(methodName, out var types))
+        {
+            for (int i = 0; i < types.Locals.Length; i++)
+                if (types.Locals[i] is PrimitiveTypeCode.UInt16 or PrimitiveTypeCode.Int16)
+                {
+                    // Retain compact storage when every assignment explicitly truncates
+                    // to a byte. The declared word type alone does not require a high byte.
+                    bool byteOnly = true;
+                    for (int j = 0; j < instructions.Length; j++)
+                        if (instructions[j].GetStlocIndex() == i
+                            && (j == 0 || instructions[j - 1].OpCode != ILOpCode.Conv_u1))
+                            byteOnly = false;
+                    if (!byteOnly)
+                        result.Add(i);
+                }
+        }
         for (int i = 0; i < instructions.Length - 1; i++)
         {
-            bool isConvU2 = instructions[i].OpCode == ILOpCode.Conv_u2;
+            bool isConvU2 = instructions[i].OpCode is ILOpCode.Conv_u2 or ILOpCode.Conv_i2;
             bool is16BitCall = instructions[i].OpCode == ILOpCode.Call
                 && instructions[i].String is not null
                 && reflectionCache is not null
@@ -161,7 +177,7 @@ partial class Transpiler
     /// Methods called by other user methods get offsets that avoid overlapping
     /// with their callers' locals. Methods not in any call chain use the base offset.
     /// </summary>
-    static Dictionary<string, int> ComputeMethodFrameOffsets(
+    Dictionary<string, int> ComputeMethodFrameOffsets(
         Dictionary<string, ILInstruction[]> userMethods,
         ReflectionCache? reflectionCache,
         int baseOffset,
@@ -173,7 +189,7 @@ partial class Transpiler
         var localByteCounts = new Dictionary<string, int>(StringComparer.Ordinal);
         foreach (var kvp in userMethods)
         {
-            var wordLocals = DetectWordLocals(kvp.Value, reflectionCache);
+            var wordLocals = DetectWordLocals(kvp.Value, reflectionCache, kvp.Key);
             localByteCounts[kvp.Key] = EstimateMethodLocalBytes(kvp.Value, wordLocals, structLayouts,
                 closureStructLocalIndex, closureFieldTypes);
         }

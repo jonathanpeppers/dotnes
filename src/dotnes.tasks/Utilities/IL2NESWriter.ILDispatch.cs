@@ -335,10 +335,12 @@ partial class IL2NESWriter
                 HandleStindI2();
                 break;
             case ILOpCode.Add:
-                HandleAddSub(isAdd: true);
+                if (!TryNumericAddSub(isAdd: true))
+                    HandleAddSub(isAdd: true);
                 break;
             case ILOpCode.Sub:
-                HandleAddSub(isAdd: false);
+                if (!TryNumericAddSub(isAdd: false))
+                    HandleAddSub(isAdd: false);
                 break;
             case ILOpCode.Mul:
                 {
