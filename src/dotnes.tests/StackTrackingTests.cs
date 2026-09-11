@@ -4,7 +4,7 @@ using Xunit.Abstractions;
 
 namespace dotnes.tests;
 
-public class StackTrackingTests : RoslynTests
+public class StackTrackingTests : ExecutionTests
 {
     public StackTrackingTests(ITestOutputHelper output) : base(output) { }
 
@@ -87,7 +87,7 @@ public class StackTrackingTests : RoslynTests
     }
 
     [Fact]
-    public void DupCascade_InterveningStloc_ReloadsFromTemp()
+    public void DupCascade_InterveningStloc_PreservesState()
     {
         // Regression: In the climber sample, the pattern:
         //   byte st = actor_state[ai]; byte isEnemy = actor_name[ai];
@@ -96,12 +96,16 @@ public class StackTrackingTests : RoslynTests
         // dup cascade. HandleLdelemU1 saves st to TEMP ($17), but then stloc (for
         // isEnemy) clears _runtimeValueInA. Without the fix, the dup handler can't
         // start the cascade and CMP compares isEnemy instead of st.
-        var bytes = GetProgramBytes(
+        var cpu = ExecuteProgram(
             """
             byte[] states = new byte[8];
             byte[] names = new byte[8];
             states[0] = 1;
             names[0] = 5;
+            states[1] = 2;
+            names[1] = 7;
+            byte first = 0;
+            byte second = 0;
             for (byte i = 0; i < 4; i++)
             {
                 byte st = states[i];
@@ -109,30 +113,21 @@ public class StackTrackingTests : RoslynTests
                 if (st == 1)
                 {
                     pal_col(0, nm);
+                    first = nm;
                 }
                 if (st == 2)
                 {
                     pal_col(1, nm);
+                    second = nm;
                 }
             }
-            ppu_on_all();
+            poke(0x6000, first);
+            poke(0x6001, second);
+            test_stop();
             while (true) ;
+            static extern void test_stop();
             """);
-
-        Assert.NotNull(bytes);
-        Assert.NotEmpty(bytes);
-
-        var hex = Convert.ToHexString(bytes);
-        _logger.WriteLine($"DupCascade hex: {hex}");
-
-        // STA $17 (85 17) — save st to TEMP before nm load clobbers A
-        Assert.Contains("8517", hex);
-
-        // LDA $17 (A5 17) — reload st from TEMP before the cascade comparison
-        Assert.Contains("A517", hex);
-
-        // The sequence LDA $17 → CMP #$01 must appear (reload st, then compare)
-        Assert.Contains("A517C901", hex);
+        Assert.Equal(new byte[] { 5, 7 }, cpu.Memory[0x6000..0x6002]);
     }
 
     [Fact]
@@ -183,39 +178,29 @@ public class StackTrackingTests : RoslynTests
         Assert.False(bodyHex.StartsWith("A9"), "Bug: local-to-local copy emitted LDA #constant instead of LDA $address");
     }
 
-    [Fact]
-    public void DupShr_UshortLoHiByteExtraction()
+    [Theory]
+    [InlineData(0)]
+    [InlineData(37)]
+    [InlineData(255)]
+    public void DupShr_UshortLoHiByteExtraction(byte input)
     {
         // Regression test: dup + conv_u1 + stloc (lo byte) + ldc_i4 8 + shr + conv_u1 + stloc (hi byte)
-        // The transpiler must emit TXA (8A) for the hi byte (>> 8) instead of 8 LSR instructions
-        // or LDA #$00. The ushort result of mul*8+16 has lo in A and hi in X.
-        var bytes = GetProgramBytes("""
-            byte pf = (byte)pad_poll(0);
+        // Both bytes of the original value must survive the low-byte store.
+        var cpu = ExecuteProgram("""
+            byte pf = peek(0x6010);
             ushort floor_yy = (ushort)(pf * 8 + 16);
             byte fyy_lo = (byte)floor_yy;
             byte fyy_hi = (byte)(floor_yy >> 8);
             pal_col(0, fyy_lo);
             pal_col(1, fyy_hi);
+            poke(0x6000, fyy_lo);
+            poke(0x6001, fyy_hi);
+            test_stop();
             while (true) ;
-            """);
-
-        Assert.NotNull(bytes);
-        Assert.NotEmpty(bytes);
-
-        var hex = Convert.ToHexString(bytes);
-        _logger.WriteLine($"DupShr hex: {hex}");
-
-        // After the 16-bit mul (ASL/ROL) + ADC #$10 + BCC/INX sequence,
-        // the lo byte is stored with STA $addr1, then TXA (8A) transfers
-        // the hi byte from X to A, followed by STA $addr2.
-        // Pattern: STA abs (8D xx xx) + TXA (8A) + STA abs (8D xx xx)
-        int txaIdx = hex.IndexOf("8A8D");
-        Assert.True(txaIdx >= 0, "TXA + STA pattern not found — hi byte extraction may be wrong");
-
-        // The 3 bytes before TXA should be STA Absolute (8D xx xx)
-        Assert.True(txaIdx >= 6, "Not enough bytes before TXA");
-        string beforeTxa = hex.Substring(txaIdx - 6, 2);
-        Assert.Equal("8D", beforeTxa); // STA Absolute before TXA
+            static extern void test_stop();
+            """, initialize: cpu => cpu.Memory[0x6010] = input);
+        int expected = input * 8 + 16;
+        Assert.Equal(new byte[] { (byte)expected, (byte)(expected >> 8) }, cpu.Memory[0x6000..0x6002]);
     }
 
     [Fact]
