@@ -35,12 +35,10 @@ partial class Transpiler
                         break;
                     }
                     int source = values[height - 1];
-                    // Each arm must finish by producing the value, optionally
-                    // followed by its unconditional jump directly to the join.
-                    bool direct = predecessor == source && predecessor + 1 == i;
-                    bool jumped = predecessor == source + 1
-                        && instructions[predecessor].OpCode is ILOpCode.Br or ILOpCode.Br_s;
-                    if ((!direct && !jumped) || analysis.Consumers[source].Count != 0
+                    bool direct = predecessor + 1 == i
+                        && !ILValueAnalysis.GetBranchTargets(instructions[predecessor]).Contains(instructions[i].Offset);
+                    bool jumped = instructions[predecessor].OpCode is ILOpCode.Br or ILOpCode.Br_s;
+                    if ((!direct && !jumped)
                         || types[source] is not (PrimitiveTypeCode.Byte or PrimitiveTypeCode.SByte
                             or PrimitiveTypeCode.Boolean or PrimitiveTypeCode.Int16 or PrimitiveTypeCode.UInt16))
                     {
@@ -68,6 +66,21 @@ partial class Transpiler
                 ?? (i.OpCode is ILOpCode.Ldloc or ILOpCode.Ldloca or ILOpCode.Ldloca_s ? i.Integer : null) ?? -1) + 1);
             int offset = Math.Min(-1, instructions.Min(i => i.Offset) - 1);
             var rewritten = new List<ILInstruction>();
+            var edges = analysis.Predecessors[join].ToDictionary(
+                predecessor => predecessor, predecessor => analysis.Outputs[predecessor].Last());
+            void StoreArm(int source, int storeOffset)
+            {
+                // Consume the arm value on its edge, not at its definition.
+                // The ordinary spill pass can then preserve all other uses,
+                // including a postfix increment between the definition and edge.
+                if (type is PrimitiveTypeCode.Int16 or PrimitiveTypeCode.UInt16)
+                {
+                    bool signed = types[source] is PrimitiveTypeCode.SByte or PrimitiveTypeCode.Int16;
+                    rewritten.Add(new(signed ? ILOpCode.Conv_i2 : ILOpCode.Conv_u2, storeOffset));
+                    storeOffset = offset--;
+                }
+                rewritten.Add(new(ILOpCode.Stloc_s, storeOffset, local));
+            }
             for (int i = 0; i < instructions.Length; i++)
             {
                 var instruction = instructions[i];
@@ -76,12 +89,18 @@ partial class Transpiler
                     rewritten.Add(new(ILOpCode.Ldloc_s, instruction.Offset, local));
                     instruction = ILExpressionSpiller.Relocate(instruction, offset--);
                 }
-                rewritten.Add(instruction);
-                if (sources.Contains(i))
+                if (edges.TryGetValue(i, out int source)
+                    && instruction.OpCode is ILOpCode.Br or ILOpCode.Br_s)
                 {
-                    if (type is PrimitiveTypeCode.Int16 or PrimitiveTypeCode.UInt16)
-                        rewritten.Add(new(type == PrimitiveTypeCode.Int16 ? ILOpCode.Conv_i2 : ILOpCode.Conv_u2, offset--));
-                    rewritten.Add(new(ILOpCode.Stloc_s, offset--, local));
+                    StoreArm(source, instruction.Offset);
+                    instruction = ILExpressionSpiller.Relocate(instruction, offset--);
+                    rewritten.Add(instruction);
+                }
+                else
+                {
+                    rewritten.Add(instruction);
+                    if (edges.TryGetValue(i, out source))
+                        StoreArm(source, offset--);
                 }
             }
             var locals = signature.Locals.ToBuilder();
