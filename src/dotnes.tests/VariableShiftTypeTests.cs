@@ -128,6 +128,6 @@ public class VariableShiftTypeTests(ITestOutputHelper output) : ExecutionTests(o
             static class Signed { public static sbyte Value; }
             static class State { public static byte Count; }
             """));
-        Assert.Contains("source type 'unknown'", error.Message);
+        Assert.Contains("conflicting declared types", error.Message);
     }
 }

@@ -5,6 +5,29 @@ namespace dotnes.tests;
 
 public class NumericCallReviewTests(ITestOutputHelper output) : ExecutionTests(output)
 {
+    [Theory]
+    [InlineData(0)]
+    [InlineData(127)]
+    [InlineData(128)]
+    [InlineData(255)]
+    public void SignedBitwiseResultRetainsItsSignAcrossCall(int input)
+    {
+        var cpu = ExecuteProgram("""
+            short value = (short)(((sbyte)peek(0x6010) | (sbyte)peek(0x6011)) + Next());
+            byte low = (byte)value;
+            byte high = (byte)(value >> 8);
+            poke(0x6000, low);
+            poke(0x6001, high);
+            test_stop(); while (true);
+            static extern void test_stop();
+            static byte Next() => 0;
+            """, cpu => cpu.Memory[0x6010] = (byte)input);
+        Assert.Equal(input, cpu.Memory[0x6000]);
+        Assert.Equal(input >= 128 ? 0xFF : 0, cpu.Memory[0x6001]);
+        Assert.Equal(Cpu6502.SoftwareStackTop, cpu.SoftwareStackPointer);
+        Assert.Equal(0xFD, cpu.SP);
+    }
+
     public static IEnumerable<object[]> SignedComparisons()
     {
         foreach (int input in new[] { -128, -1, 0, 127 })

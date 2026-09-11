@@ -139,6 +139,10 @@ sealed class NumericRangeAnalysis
             return null;
         if (types.Locals[index] != PrimitiveTypeCode.Int32)
             return TypeRange(types.Locals[index]);
+        // Direct stores and loop bounds cannot constrain writes through an exposed address.
+        if (instructions.Any(instruction => instruction.OpCode is ILOpCode.Ldloca or ILOpCode.Ldloca_s
+            && instruction.Integer == index))
+            return null;
         if (locals.TryGetValue(index, out var known))
             return known;
         if (!visiting.Add(index))

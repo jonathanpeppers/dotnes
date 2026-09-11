@@ -297,7 +297,8 @@ partial class Transpiler
 
         // Build field size map from metadata
         var fieldSizes = BuildStaticFieldSizes();
-        var fieldTypes = GetNumericFieldTypes();
+        var ambiguousFields = new HashSet<string>(StringComparer.Ordinal);
+        var fieldTypes = GetNumericFieldTypes(ambiguousFields);
 
         // Allocate addresses sequentially starting at LocalStackBase,
         // using the correct byte size for each field.
@@ -307,6 +308,10 @@ partial class Transpiler
         int offset = 0;
         foreach (var name in fieldNames.OrderBy(n => n, StringComparer.Ordinal))
         {
+            if (ambiguousFields.Contains(name))
+                throw new TranspileException(
+                    $"Static field '{name}' has conflicting declared types in this assembly. " +
+                    "Rename the same-named fields so the NES backend can determine their storage width unambiguously.");
             if (fieldTypes.TryGetValue(name, out var type)
                 && type is not (null or PrimitiveTypeCode.Boolean or PrimitiveTypeCode.Byte
                     or PrimitiveTypeCode.SByte or PrimitiveTypeCode.Int16 or PrimitiveTypeCode.UInt16))

@@ -7,13 +7,15 @@ partial class Transpiler
 {
     internal Dictionary<string, MethodNumericTypes> NumericTypes { get; } = new(StringComparer.Ordinal);
 
-    Dictionary<string, PrimitiveTypeCode?> GetNumericFieldTypes() =>
+    Dictionary<string, PrimitiveTypeCode?> GetNumericFieldTypes(ISet<string>? ambiguousFields = null) =>
         _reader.FieldDefinitions.Select(h => _reader.GetFieldDefinition(h))
             .Where(f => (f.Attributes & System.Reflection.FieldAttributes.Static) != 0)
             .GroupBy(f => _reader.GetString(f.Name))
             .ToDictionary(g => g.Key, g =>
             {
                 var types = g.Select(field => field.DecodeSignature(new NumericTypeDecoder(), null)).Distinct().ToArray();
+                if (types.Length > 1)
+                    ambiguousFields?.Add(g.Key);
                 return types.Length == 1 ? types[0] : null;
             });
 

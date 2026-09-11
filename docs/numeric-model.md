@@ -14,9 +14,11 @@ silently become an eight-bit accumulator, nor does choosing this target redefine
 | `short` | -32768 to 32767 | Two bytes, signed |
 | `int` local | A statically proven byte/word range | Compact storage only when the range is proven |
 
-Used unsupported primitive locals and static fields are diagnosed before storage
-allocation. In particular, `uint` does not implicitly become a word, and static
-`int` fields do not inherit the compact-range exception for Int32 locals. A later
+Used unsupported primitive locals, static fields and captured variables are
+diagnosed before storage allocation. In particular, `uint` does not implicitly
+become a word, and static or closure `int` fields do not inherit the compact-range
+exception for Int32 locals. Conflicting same-name static field types are diagnosed
+rather than guessing their storage width; rename the fields to disambiguate them. A later
 explicit conversion cannot repair bytes already lost in unsupported storage.
 Boolean locals and static fields retain their one-byte logical representation.
 
@@ -116,7 +118,9 @@ for (int index = 0; index < 10; index++)
 ```
 
 Unknown or cyclic assignments without a supported bound do not establish such a
-proof. For example, the following must not silently lose the carry from 250 + 20:
+proof. Taking an Int32 local's address also prevents compaction: an initializer
+or loop bound does not constrain indirect writes through `ref`/`out`.
+For example, the following must not silently lose the carry from 250 + 20:
 
 ```csharp
 int total = 0;
