@@ -8,6 +8,9 @@ namespace dotnes;
 /// </summary>
 static class ArrayOperandLowering
 {
+    internal const string UnsupportedSignatureMessage =
+        "Fixed RAM array helpers support only byte-sized scalar parameters and return values; captured/by-reference helper contexts are not supported.";
+
     internal static bool IndexNeedsPreservation(ILInstruction[] instructions, int elementAddress)
     {
         for (int i = elementAddress + 1; i < instructions.Length; i++)
@@ -21,7 +24,8 @@ static class ArrayOperandLowering
     }
 
     public static ILInstruction[] Rewrite(ILInstruction[] instructions, ReflectionCache reflection,
-        IReadOnlyDictionary<string, bool[]> arrayParameters, bool[]? methodArrayParameters = null)
+        IReadOnlyDictionary<string, bool[]> arrayParameters, bool[]? methodArrayParameters = null,
+        ISet<string>? unsupportedArraySignatures = null)
     {
         var analysis = new ILValueAnalysis(instructions, reflection);
         var selected = new HashSet<int>();
@@ -38,12 +42,50 @@ static class ArrayOperandLowering
             return producer;
         }
 
-        bool ConstantFirstIndex(int producer)
+        // Retain only the compact forms the legacy emitter reconstructs exactly.
+        // Other forms use producer snapshots rather than guessing their values.
+        bool LegacyIndex(int producer)
         {
             producer = Unwrap(producer);
-            return producer >= 0 && instructions[producer].OpCode == ILOpCode.Add &&
-                analysis.Inputs[producer][0] >= 0 &&
-                instructions[analysis.Inputs[producer][0]].GetLdcValue() is not null;
+            if (Simple(producer)) return true;
+            if (producer < 0 || instructions[producer].OpCode != ILOpCode.Add) return false;
+            var inputs = analysis.Inputs[producer];
+            return inputs[0] >= 0 && instructions[inputs[0]].GetLdlocIndex() is not null &&
+                inputs[1] >= 0 && Simple(inputs[1]);
+        }
+
+        bool LegacyMaskedCallIndex(int producer)
+        {
+            producer = Unwrap(producer);
+            while (instructions[producer].OpCode == ILOpCode.And &&
+                instructions[analysis.Inputs[producer][1]].GetLdcValue() is not null)
+                producer = Unwrap(analysis.Inputs[producer][0]);
+            return instructions[producer].OpCode == ILOpCode.Call && analysis.Inputs[producer].Length == 0;
+        }
+
+        bool LegacyArrayIndex(int producer)
+        {
+            producer = Unwrap(producer);
+            if (instructions[producer].OpCode == ILOpCode.Add &&
+                instructions[analysis.Inputs[producer][1]].GetLdcValue() is not null)
+                producer = analysis.Inputs[producer][0];
+            if (instructions[producer].OpCode == ILOpCode.Mul &&
+                instructions[analysis.Inputs[producer][1]].GetLdcValue() is int scale &&
+                scale > 0 && (scale & (scale - 1)) == 0)
+                producer = analysis.Inputs[producer][0];
+            return instructions[producer].OpCode == ILOpCode.Ldelem_u1 &&
+                analysis.Inputs[producer].All(p => instructions[p].GetLdlocIndex() is not null);
+        }
+
+        bool LegacyArrayIndexValue(int producer)
+        {
+            producer = Unwrap(producer);
+            // The array-derived-index emitter supports local + immediate, then OR.
+            foreach (var op in new[] { ILOpCode.Or, ILOpCode.Add })
+                if (instructions[producer].OpCode == op &&
+                    instructions[analysis.Inputs[producer][1]].GetLdcValue() is not null)
+                    producer = Unwrap(analysis.Inputs[producer][0]);
+            return Simple(producer);
         }
 
         bool IsRomArray(int producer)
@@ -56,15 +98,6 @@ static class ArrayOperandLowering
                 instructions[i].GetStlocIndex() == local && instructions[i - 1].OpCode == ILOpCode.Ldtoken);
         }
 
-        bool HasRuntimeCall(int producer)
-        {
-            if (producer < 0) return false;
-            if (instructions[producer].OpCode == ILOpCode.Call &&
-                analysis.Inputs[producer].Any(p => p < 0 || instructions[p].GetLdcValue() is null))
-                return true;
-            return analysis.Inputs[producer].Any(HasRuntimeCall);
-        }
-
         bool SameValue(int left, int right)
         {
             if (left < 0 || right < 0) return false;
@@ -75,14 +108,6 @@ static class ArrayOperandLowering
             if (a.GetLdlocIndex() is int local) return b.GetLdlocIndex() == local;
             if (a.GetLdargIndex() is int arg) return b.GetLdargIndex() == arg;
             return false;
-        }
-
-        bool HasDifferentReadIndex(int producer, int targetIndex)
-        {
-            if (producer < 0) return false;
-            if (instructions[producer].OpCode == ILOpCode.Ldelem_u1)
-                return !SameValue(analysis.Inputs[producer][1], targetIndex);
-            return analysis.Inputs[producer].Any(p => HasDifferentReadIndex(p, targetIndex));
         }
 
         bool HasStaticField(int producer) => producer >= 0 &&
@@ -104,6 +129,66 @@ static class ArrayOperandLowering
                 _ => false,
             };
         }
+
+        bool LegacyDynamicValue(int producer, int targetArray, int targetIndex)
+        {
+            producer = Unwrap(producer);
+            if (Simple(producer)) return true;
+            var instruction = instructions[producer];
+            var inputs = analysis.Inputs[producer];
+            bool Local(int p) => instructions[Unwrap(p)].GetLdlocIndex() is not null;
+            bool Read(int p) => instructions[Unwrap(p)].OpCode == ILOpCode.Ldelem_u1 &&
+                Local(analysis.Inputs[Unwrap(p)][0]) && Local(analysis.Inputs[Unwrap(p)][1]) &&
+                !IsRomArray(analysis.Inputs[Unwrap(p)][0]);
+
+            if (instruction.OpCode == ILOpCode.Call)
+                return inputs.All(p => instructions[p].GetLdcValue() is not null);
+            if (instruction.OpCode == ILOpCode.Ldelem_u1)
+                return Read(producer) && !(SameValue(inputs[0], targetArray) && SameValue(inputs[1], targetIndex));
+            if (inputs.Length != 2) return false;
+            if (instruction.OpCode is ILOpCode.Add or ILOpCode.Sub && inputs.All(Local))
+                return true;
+            if (instruction.OpCode == ILOpCode.Add && inputs.All(Read))
+                return inputs.All(p => SameValue(analysis.Inputs[Unwrap(p)][1], targetIndex));
+            if (instructions[inputs[1]].GetLdcValue() is not int immediate)
+                return false;
+            if (instruction.OpCode is ILOpCode.Shr or ILOpCode.Shr_un)
+                return Local(inputs[0]) && immediate > 0;
+            if (instruction.OpCode == ILOpCode.Mul)
+                return (Local(inputs[0]) || instructions[Unwrap(inputs[0])].OpCode == ILOpCode.Call) &&
+                    immediate > 0 && (immediate & (immediate - 1)) == 0 &&
+                    LegacyDynamicValue(inputs[0], targetArray, targetIndex);
+            bool sameElement = Read(inputs[0]) &&
+                SameValue(analysis.Inputs[Unwrap(inputs[0])][0], targetArray) &&
+                SameValue(analysis.Inputs[Unwrap(inputs[0])][1], targetIndex);
+            return instruction.OpCode is ILOpCode.Add or ILOpCode.Sub or ILOpCode.And or ILOpCode.Or &&
+                ValueLeaves(inputs[0]).Distinct().Count() == 1 &&
+                ValueLeaves(inputs[0]).Where(p => instructions[p].OpCode == ILOpCode.Ldelem_u1)
+                    .All(p => SameValue(analysis.Inputs[p][1], targetIndex)) &&
+                (sameElement || LegacyDynamicValue(inputs[0], targetArray, targetIndex));
+        }
+
+        HashSet<int> OperandClosure(IEnumerable<int> producers)
+        {
+            var closure = new HashSet<int>();
+            void Visit(int producer)
+            {
+                if (producer < 0)
+                    throw new ObjectModel.TranspileException("Array operands crossing unsupported control flow cannot be materialized.");
+                if (!closure.Add(producer)) return;
+                foreach (int input in analysis.Inputs[producer])
+                    Visit(input);
+            }
+            foreach (int producer in producers)
+                Visit(producer);
+            return closure;
+        }
+
+        bool HasIndependentEffect(int consumer, HashSet<int> closure, int start) =>
+            Enumerable.Range(start, consumer - start).Any(p =>
+                !closure.Contains(p) && (instructions[p].GetStlocIndex() is not null ||
+                    instructions[p].OpCode is ILOpCode.Call or ILOpCode.Stsfld or ILOpCode.Stfld
+                        or ILOpCode.Stelem_i1 or ILOpCode.Stind_i1));
 
         void SelectInputs(int consumer)
         {
@@ -149,28 +234,35 @@ static class ArrayOperandLowering
             var inputs = analysis.Inputs[i];
             if (instruction.OpCode == ILOpCode.Stelem_i1 && inputs.Length == 3)
             {
-                if (inputs.Any(p => Unwrap(p) < 0))
-                    throw new ObjectModel.TranspileException("Array operands crossing unsupported control flow cannot be materialized.");
-                // Keep compact, already supported stores unchanged. Constant-index
-                // stores and computed indexes otherwise lose their RHS provenance.
-                bool complexIndex = ConstantFirstIndex(inputs[1]) || HasRuntimeCall(inputs[1]) ||
-                    instructions[Unwrap(inputs[1])].OpCode == ILOpCode.Call;
-                bool complexConstantStore = instructions[inputs[1]].GetLdcValue() is not null &&
-                    !LegacyConstantValue(inputs[2]);
-                var leaves = ValueLeaves(inputs[2]).Distinct().ToArray();
-                bool helperValue = HasRuntimeCall(inputs[2]) ||
-                    (leaves.Length > 1 && leaves.Any(p => instructions[p].OpCode == ILOpCode.Call));
-                bool differingIndexes = instructions[Unwrap(inputs[2])].OpCode != ILOpCode.Ldelem_u1 &&
-                    HasDifferentReadIndex(inputs[2], inputs[1]);
-                if (complexIndex || complexConstantStore || helperValue || differingIndexes || HasStaticField(inputs[2]))
+                var closure = OperandClosure(inputs);
+                bool constantIndex = instructions[inputs[1]].GetLdcValue() is not null;
+                bool legacyValue = constantIndex ? LegacyConstantValue(inputs[2]) : LegacyDynamicValue(inputs[2], inputs[0], inputs[1]);
+                bool legacyIndex = LegacyIndex(inputs[1]) ||
+                    (instructions[Unwrap(inputs[2])].GetLdcValue() is not null && LegacyMaskedCallIndex(inputs[1])) ||
+                    (LegacyArrayIndex(inputs[1]) && LegacyArrayIndexValue(inputs[2]));
+                // Reconstruction can erase postfix stores or other side effects
+                // even when the yielded index/value is a simple local load.
+                int firstScalar = OperandClosure(inputs.Skip(1)).Min();
+                bool independentEffect = HasIndependentEffect(i, closure, firstScalar);
+                if (!legacyIndex || !legacyValue || independentEffect || HasStaticField(inputs[2]))
                 {
                     SelectInputs(i);
+                    SelectValueExpression(inputs[1]);
                     SelectValueExpression(inputs[2]);
                 }
             }
-            else if (instruction.OpCode == ILOpCode.Ldelem_u1 &&
-                inputs.Length == 2 && ConstantFirstIndex(inputs[1]))
-                SelectInputs(i);
+            else if (instruction.OpCode == ILOpCode.Ldelem_u1 && inputs.Length == 2)
+            {
+                var closure = OperandClosure(inputs);
+                int index = Unwrap(inputs[1]);
+                bool constantFirst = instructions[index].OpCode == ILOpCode.Add &&
+                    instructions[analysis.Inputs[index][0]].GetLdcValue() is not null;
+                if (constantFirst || HasIndependentEffect(i, closure, OperandClosure([inputs[1]]).Min()))
+                {
+                    SelectInputs(i);
+                    SelectValueExpression(inputs[1]);
+                }
+            }
             else if (instruction.OpCode == ILOpCode.Ldelema && instruction.String == "Byte" &&
                 inputs.Length == 2 && (!Simple(inputs[1]) || IndexNeedsPreservation(instructions, i)))
                 SelectInputs(i);
@@ -191,7 +283,11 @@ static class ArrayOperandLowering
                         throw new ObjectModel.TranspileException("Mixing RAM and read-only ROM array arguments in one helper call is not supported.");
                 }
                 else
+                {
+                    if (unsupportedArraySignatures?.Contains(method) == true)
+                        throw new ObjectModel.TranspileException(UnsupportedSignatureMessage, method);
                     SelectInputs(i);
+                }
             }
 
             if (instruction.OpCode is ILOpCode.Ldelem_u1 or ILOpCode.Stelem_i1 or ILOpCode.Ldelema &&

@@ -72,7 +72,11 @@ partial class IL2NESWriter
     void EmitArrayScalar(ILInstruction source, bool index = false)
     {
         if (source.GetLdcValue() is int constant)
-            Emit(index ? Opcode.LDX : Opcode.LDA, AddressMode.Immediate, checked((byte)constant));
+        {
+            if (constant < (index ? 0 : sbyte.MinValue) || constant > byte.MaxValue)
+                throw new TranspileException("Byte-array scalar operands must fit in one byte.", MethodName);
+            Emit(index ? Opcode.LDX : Opcode.LDA, AddressMode.Immediate, unchecked((byte)constant));
+        }
         else if (source.GetLdlocIndex() is int localIndex && Locals[localIndex].Address is int address)
             Emit(index ? Opcode.LDX : Opcode.LDA, AddressMode.Absolute, checked((ushort)address));
         else if (source.GetLdargIndex() is int parameter)
@@ -133,7 +137,7 @@ partial class IL2NESWriter
             if (parameters[i] && TryResolveArrayLocal(Instructions[first + i])?.LabelName is not null)
                 return false;
         if (UnsupportedArrayHelperSignatures.Contains(method))
-            throw new TranspileException("Fixed RAM array helpers support only byte-sized scalar parameters and return values.", method);
+            throw new TranspileException(ArrayOperandLowering.UnsupportedSignatureMessage, method);
         RemoveArrayArgumentLoads(Instructions[first].Offset);
         for (int i = 0; i < parameters.Length; i++)
         {

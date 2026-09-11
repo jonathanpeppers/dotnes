@@ -333,11 +333,12 @@ partial class Transpiler : IDisposable
         {
             reflectionCache.RegisterExternMethod(kvp.Key, kvp.Value.argCount, kvp.Value.hasReturnValue);
         }
-        instructions = ArrayOperandLowering.Rewrite(instructions, reflectionCache, arrayParameters);
+        instructions = ArrayOperandLowering.Rewrite(instructions, reflectionCache, arrayParameters,
+            unsupportedArraySignatures: _unsupportedArrayHelperSignatures);
         foreach (var method in UserMethods.Keys.ToArray())
         {
             UserMethods[method] = ArrayOperandLowering.Rewrite(
-                UserMethods[method], reflectionCache, arrayParameters, arrayParameters[method]);
+                UserMethods[method], reflectionCache, arrayParameters, arrayParameters[method], _unsupportedArrayHelperSignatures);
         }
 
         // Build main program block using label references (addresses resolved later)

@@ -7,6 +7,7 @@ partial class IL2NESWriter
 {
     internal ISet<string> ByteParameterCalls { get; init; } = new HashSet<string>();
     internal bool[] ParamIsByte { get; init; } = [];
+    ILValueAnalysis? _byteCallValues;
 
     bool TryWriteByteCall(ILInstruction instruction, string method)
     {
@@ -15,8 +16,15 @@ partial class IL2NESWriter
         int count = _reflectionCache.GetNumberOfArguments(method);
         if (count < 2 || Index < count)
             return false;
+        _byteCallValues ??= new ILValueAnalysis(Instructions, _reflectionCache);
+        int first = Index - count;
+        if (!_byteCallValues.Inputs[Index].SequenceEqual(Enumerable.Range(first, count)) ||
+            _byteCallValues.Predecessors[first].Any(p => _byteCallValues.Outputs[p].Length > 0))
+            return false;
         for (int i = Index - count; i < Index; i++)
         {
+            if (i > first && _byteCallValues.Predecessors[i].Any(p => p != i - 1))
+                return false;
             var arg = Instructions[i];
             if (arg.GetLdcValue() is int constant && constant is >= 0 and <= 255)
                 continue;
@@ -54,7 +62,10 @@ partial class IL2NESWriter
         _ushortInAX = false;
         _runtimeValueInA = _reflectionCache.HasReturnValue(method);
         if (_runtimeValueInA)
+        {
             Stack.Push(0);
+            _padPollResultAvailable = false;
+        }
         _lastLoadedLocalIndex = null;
         _lastStaticFieldAddress = null;
         _savedRuntimeToTemp = false;

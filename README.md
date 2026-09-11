@@ -235,7 +235,8 @@ static void Update(byte[] actors, byte index)
 This uses the existing fixed-allocation model, not managed allocation or GC.
 Array-reference returns, `ref` array parameters, and helper parameters with
 other array element types or ranks are not supported. Array indexes and scalar
-arguments in this byte-array path are byte-sized. An alias must keep the same
+arguments in this byte-array path are byte-sized; captured/by-reference helper
+contexts are not supported. An alias must keep the same
 array identity; assigning a different array to it is diagnosed. Mixing RAM
 arrays and read-only ROM tables in one helper call is also diagnosed rather
 than treating a ROM table as writable RAM. Existing ROM-only helper calls keep
