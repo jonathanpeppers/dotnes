@@ -48,7 +48,9 @@ partial class IL2NESWriter
 
                 int[] inputs = analysis.Inputs[call];
                 if (inputs.Length == 0 || inputs.Any(i => i < 0))
-                    throw new TranspileException("Unable to identify the evaluation-stack operands of peek/poke.", MethodName);
+                    throw new TranspileException(
+                        $"Unable to identify the evaluation-stack operands of {instruction.String} at IL_{instruction.Offset:X4} ({string.Join(", ", inputs)}).",
+                        MethodName);
                 int address = inputs[0];
                 int value = inputs.Length == 2 ? inputs[1] : call;
                 bool constantAddress = address == value - 1
