@@ -7,6 +7,7 @@ partial class Transpiler
     ILInstruction[] PreserveExpressionValues(ILInstruction[] instructions, ReflectionCache reflection, string method,
         IReadOnlyDictionary<int, PrimitiveTypeCode>? compactInts = null)
     {
+        instructions = MaterializeConditionalValues(instructions, reflection, method);
         var analysis = new ILValueAnalysis(instructions, reflection);
         NumericTypes.TryGetValue(method, out var signature);
         var types = GetExpressionValueTypes(instructions, analysis, reflection, method, compactInts);

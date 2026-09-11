@@ -69,41 +69,7 @@ static class ILExpressionSpiller
                     result.Add(new ILInstruction(ILOpCode.Ldloc_s, offset, locals[producer]));
             }
             if (!first)
-            {
-                int offset = nextOffset--;
-                if (instruction.OpCode == ILOpCode.Switch && instruction.Integer is int count)
-                {
-                    var bytes = ILValueAnalysis.GetBranchTargets(instruction)
-                        .SelectMany(target => BitConverter.GetBytes(target - offset - 5 - count * 4))
-                        .ToImmutableArray();
-                    instruction = instruction with { Offset = offset, Bytes = bytes };
-                }
-                else if (ILValueAnalysis.GetBranchTarget(instruction) is int target)
-                {
-                    // Synthetic offsets need not be near the target. Promote a
-                    // short branch so its IL displacement is not truncated.
-                    var op = instruction.OpCode switch
-                    {
-                        ILOpCode.Br_s => ILOpCode.Br,
-                        ILOpCode.Brfalse_s => ILOpCode.Brfalse,
-                        ILOpCode.Brtrue_s => ILOpCode.Brtrue,
-                        ILOpCode.Beq_s => ILOpCode.Beq,
-                        ILOpCode.Bne_un_s => ILOpCode.Bne_un,
-                        ILOpCode.Bge_s => ILOpCode.Bge,
-                        ILOpCode.Bgt_s => ILOpCode.Bgt,
-                        ILOpCode.Ble_s => ILOpCode.Ble,
-                        ILOpCode.Blt_s => ILOpCode.Blt,
-                        ILOpCode.Bge_un_s => ILOpCode.Bge_un,
-                        ILOpCode.Bgt_un_s => ILOpCode.Bgt_un,
-                        ILOpCode.Ble_un_s => ILOpCode.Ble_un,
-                        ILOpCode.Blt_un_s => ILOpCode.Blt_un,
-                        _ => instruction.OpCode
-                    };
-                    instruction = instruction with { OpCode = op, Offset = offset, Integer = target - offset - 5 };
-                }
-                else
-                    instruction = instruction with { Offset = offset };
-            }
+                instruction = Relocate(instruction, nextOffset--);
 
             if (producers.Contains(i) && instruction.GetLdcValue() != null)
             {
@@ -119,5 +85,40 @@ static class ILExpressionSpiller
             }
         }
         return result.ToArray();
+    }
+
+    internal static ILInstruction Relocate(ILInstruction instruction, int offset)
+    {
+        if (instruction.OpCode == ILOpCode.Switch && instruction.Integer is int count)
+        {
+            var bytes = ILValueAnalysis.GetBranchTargets(instruction)
+                .SelectMany(target => BitConverter.GetBytes(target - offset - 5 - count * 4))
+                .ToImmutableArray();
+            return instruction with { Offset = offset, Bytes = bytes };
+        }
+        if (ILValueAnalysis.GetBranchTarget(instruction) is not int target)
+            return instruction with { Offset = offset };
+
+        // Synthetic offsets need not be near the target. Promote a short
+        // branch so its IL displacement is not truncated.
+        var op = instruction.OpCode switch
+        {
+            ILOpCode.Br_s => ILOpCode.Br,
+            ILOpCode.Brfalse_s => ILOpCode.Brfalse,
+            ILOpCode.Brtrue_s => ILOpCode.Brtrue,
+            ILOpCode.Beq_s => ILOpCode.Beq,
+            ILOpCode.Bne_un_s => ILOpCode.Bne_un,
+            ILOpCode.Bge_s => ILOpCode.Bge,
+            ILOpCode.Bgt_s => ILOpCode.Bgt,
+            ILOpCode.Ble_s => ILOpCode.Ble,
+            ILOpCode.Blt_s => ILOpCode.Blt,
+            ILOpCode.Bge_un_s => ILOpCode.Bge_un,
+            ILOpCode.Bgt_un_s => ILOpCode.Bgt_un,
+            ILOpCode.Ble_un_s => ILOpCode.Ble_un,
+            ILOpCode.Blt_un_s => ILOpCode.Blt_un,
+            ILOpCode.Leave_s => ILOpCode.Leave,
+            _ => instruction.OpCode
+        };
+        return instruction with { OpCode = op, Offset = offset, Integer = target - offset - 5 };
     }
 }
