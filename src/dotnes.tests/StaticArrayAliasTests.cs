@@ -37,14 +37,16 @@ public class StaticArrayAliasTests(ITestOutputHelper output) : ExecutionTests(ou
     [InlineData("State.Data = data;")]
     [InlineData("State.Data = State.Alias = data;")]
     [InlineData("byte[] alias = data; State.Data = State.Alias = alias;")]
+    [InlineData("State.Data = State.Alias = flag != 0 ? data : data;")]
+    [InlineData("byte[] alias = flag != 0 ? data : data; State.Data = State.Alias = alias;")]
     public void StaticAliasCannotCaptureAHelperFramePointer(string assignment)
     {
         var exception = Assert.Throws<TranspileException>(() => GetProgramBytes(
             $$"""
             byte[] data = new byte[8];
-            Capture(data);
+            Capture(data, 0);
             while (true) ;
-            static void Capture(byte[] data) { {{assignment}} }
+            static void Capture(byte[] data, byte flag) { {{assignment}} }
             static class State { public static byte[] Data; public static byte[] Alias; }
             """));
         Assert.Contains("static array alias", exception.Message);
@@ -147,14 +149,15 @@ public class StaticArrayAliasTests(ITestOutputHelper output) : ExecutionTests(ou
             byte branch = {{flag}};
             State.Data = data;
             State.Data = branch != 0 ? data : data;
-            Update(State.Data);
+            State.Alias = State.Data;
+            Update(State.Alias);
             byte result = data[3];
             poke(0x6000, result);
             test_stop();
             while (true) ;
             static extern void test_stop();
             static void Update(byte[] data) { data[3]++; }
-            static class State { public static byte[] Data; }
+            static class State { public static byte[] Data; public static byte[] Alias; }
             """);
         Assert.Equal(22, cpu.Memory[0x6000]);
         Assert.Equal(Cpu6502.SoftwareStackTop, cpu.SoftwareStackPointer);

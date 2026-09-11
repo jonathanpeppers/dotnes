@@ -9,10 +9,11 @@ partial class Transpiler
     static (Dictionary<string, Local> Aliases, Dictionary<ILInstruction[], Dictionary<int, Local>> Allocations,
         Dictionary<ILInstruction[], HashSet<int>> ProvenStores)
         PreAllocateArrayAliases(IEnumerable<ILInstruction[]> methods, ReflectionCache reflection, ref int staticBytes,
-            IReadOnlyDictionary<string, (ushort Address, int ArraySize)> staticArrays)
+            IReadOnlyDictionary<string, (ushort Address, int ArraySize)> staticArrays,
+            IReadOnlyDictionary<ILInstruction[], bool[]> arrayParameters)
     {
         var bodies = methods.ToArray();
-        var storage = new ArrayStorageAnalysis(bodies, reflection);
+        var storage = new ArrayStorageAnalysis(bodies, reflection, arrayParameters);
         var bindings = new Dictionary<string, (ILInstruction[] Method, int Producer)>(StringComparer.Ordinal);
         var shared = new HashSet<(ILInstruction[] Method, int Producer)>();
         var provenStores = new Dictionary<ILInstruction[], HashSet<int>>();
@@ -27,6 +28,8 @@ partial class Transpiler
                     continue;
                 var origins = new HashSet<(ILInstruction[] Method, int Producer)>();
                 var kind = storage.GetInputStorage(il, i, 0, origins);
+                if ((kind & ArrayStorage.Parameter) != 0)
+                    throw new TranspileException("A static array alias must reference a fixed allocation, not a helper parameter.");
                 if ((kind & ArrayStorage.Ram) != 0 && kind != ArrayStorage.Ram)
                     throw new TranspileException("A static array alias cannot change identity across unsupported control flow.");
                 if (kind != ArrayStorage.Ram)

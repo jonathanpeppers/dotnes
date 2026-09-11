@@ -387,7 +387,8 @@ partial class Transpiler : IDisposable
         }
 
         var (staticArrayAliases, fixedArrayAllocations, provenStaticArrayStores) = PreAllocateArrayAliases(
-            UserMethods.Values.Prepend(instructions), reflectionCache, ref staticFieldBytes, staticArrayFields);
+            UserMethods.Values.Prepend(instructions), reflectionCache, ref staticFieldBytes, staticArrayFields,
+            UserMethods.ToDictionary(pair => pair.Value, pair => arrayParameters[pair.Key]));
         using var writer = new IL2NESWriter(new MemoryStream(), logger: _logger, reflectionCache: reflectionCache)
         {
             Instructions = instructions,
