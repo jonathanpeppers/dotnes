@@ -15,6 +15,11 @@ partial class IL2NESWriter
         if (count < 2 || Index < count || _numericValues == null
             || !_numericValues.Inputs[Index].SequenceEqual(Enumerable.Range(Index - count, count)))
             return false;
+        int firstArgument = Index - count;
+        // Loading the first argument may push an older outer-call operand.
+        // That push belongs to the caller, not this replaceable argument span.
+        if (firstArgument > 0 && _numericValues.Outputs[firstArgument - 1].Length != 0)
+            return false;
         for (int i = Index - count; i < Index; i++)
         {
             if (i > Index - count && _numericValues.Predecessors[i].Any(p => p != i - 1))
@@ -56,7 +61,10 @@ partial class IL2NESWriter
         _ushortInAX = false;
         _runtimeValueInA = _reflectionCache.HasReturnValue(method);
         if (_runtimeValueInA)
+        {
+            _padPollResultAvailable = false;
             Stack.Push(0);
+        }
         _lastLoadedLocalIndex = null;
         _lastStaticFieldAddress = null;
         _savedRuntimeToTemp = false;
