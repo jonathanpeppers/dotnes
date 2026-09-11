@@ -5,6 +5,30 @@ namespace dotnes.tests;
 public class ILValueAnalysisTests
 {
     [Fact]
+    public void EmptyTypedSpillPlanDoesNotRequireAMethodSignature()
+    {
+        using var dll = Utilities.GetResource("hello.release.dll");
+        using var transpiler = new Transpiler(dll, Array.Empty<AssemblyReader>());
+        ILInstruction[] il = [];
+        var analysis = new ILValueAnalysis(il, new ReflectionCache());
+        var rewritten = transpiler.RewriteTypedExpressionValues(il, analysis, new HashSet<int>(), [], "main");
+        Assert.Same(il, rewritten);
+        Assert.Empty(transpiler.NumericTypes);
+    }
+
+    [Fact]
+    public void ActualTypedSpillStillRequiresAMethodSignature()
+    {
+        using var dll = Utilities.GetResource("hello.release.dll");
+        using var transpiler = new Transpiler(dll, Array.Empty<AssemblyReader>());
+        ILInstruction[] il = [new(ILOpCode.Ldc_i4_1, 0)];
+        var analysis = new ILValueAnalysis(il, new ReflectionCache());
+        var error = Assert.Throws<InvalidOperationException>(() => transpiler.RewriteTypedExpressionValues(
+            il, analysis, new HashSet<int> { 0 }, [PrimitiveTypeCode.Byte], "main"));
+        Assert.Contains("without the signature", error.Message);
+    }
+
+    [Fact]
     public void ConstantMemoryArgumentAfterLoopHasKnownProducer()
     {
         using var dll = Utilities.GetResource("shoot2.release.dll");

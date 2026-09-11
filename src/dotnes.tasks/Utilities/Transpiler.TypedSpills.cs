@@ -4,9 +4,11 @@ namespace dotnes;
 
 partial class Transpiler
 {
-    ILInstruction[] RewriteTypedExpressionValues(ILInstruction[] instructions, ILValueAnalysis analysis,
+    internal ILInstruction[] RewriteTypedExpressionValues(ILInstruction[] instructions, ILValueAnalysis analysis,
         ISet<int> selected, IReadOnlyList<PrimitiveTypeCode?> types, string method)
     {
+        if (selected.Count == 0)
+            return instructions;
         if (!NumericTypes.TryGetValue(method, out var signature))
             throw new InvalidOperationException($"Cannot allocate typed spills without the signature for '{method}'.");
         if (types.Count != instructions.Length)
