@@ -5,6 +5,12 @@ namespace dotnes.tests;
 
 public class NumericProducerProofTests
 {
+    static void Configure(IL2NESWriter writer) => writer.ConfigureNumericTypes(
+        new Dictionary<string, MethodNumericTypes>
+        {
+            ["main"] = new([PrimitiveTypeCode.UInt16, PrimitiveTypeCode.Byte], [], PrimitiveTypeCode.Void),
+        }, new Dictionary<string, PrimitiveTypeCode?> { ["Value"] = PrimitiveTypeCode.UInt16 });
+
     [Theory]
     [InlineData(ILOpCode.Br_s, 0, true)]
     [InlineData(ILOpCode.Br, 0, true)]
@@ -30,6 +36,7 @@ public class NumericProducerProofTests
             control,
         ];
         writer.Index = 4;
+        Configure(writer);
         writer.Variables.Locals[0] = new(0, 0x325, IsWord: true);
         writer.StartBlockBuffering();
         writer.RecordBlockCount(0);
@@ -54,6 +61,7 @@ public class NumericProducerProofTests
             new(ILOpCode.Conv_u2, 3),
         ];
         writer.Index = 3;
+        Configure(writer);
         writer.Variables.Locals[0] = new(0, 0x325, IsWord: true);
         writer.StaticFieldAddresses["Value"] = 0x325;
         writer.WordStaticFields.Add("Value");

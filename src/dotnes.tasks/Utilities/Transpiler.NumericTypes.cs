@@ -11,7 +11,11 @@ partial class Transpiler
         _reader.FieldDefinitions.Select(h => _reader.GetFieldDefinition(h))
             .Where(f => (f.Attributes & System.Reflection.FieldAttributes.Static) != 0)
             .GroupBy(f => _reader.GetString(f.Name))
-            .ToDictionary(g => g.Key, g => g.First().DecodeSignature(new NumericTypeDecoder(), null));
+            .ToDictionary(g => g.Key, g =>
+            {
+                var types = g.Select(field => field.DecodeSignature(new NumericTypeDecoder(), null)).Distinct().ToArray();
+                return types.Length == 1 ? types[0] : null;
+            });
 
     PrimitiveTypeCode?[] GetExpressionValueTypes(ILInstruction[] instructions,
         ILValueAnalysis analysis, ReflectionCache reflection, string method,

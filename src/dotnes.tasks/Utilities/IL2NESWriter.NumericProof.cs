@@ -7,9 +7,18 @@ partial class IL2NESWriter
     readonly HashSet<int> _verifiedWordResults = new();
     readonly HashSet<int> _verifiedPromotedResults = new();
 
-    internal bool HasVerifiedPromotedNumericProducer(int producer) =>
-        _verifiedPromotedResults.Contains(producer) && Instructions != null && producer < Index
-        && !ILBranchTargets.HasEntryAfter(Instructions, producer, Index);
+    internal bool HasVerifiedPromotedNumericProducer(int producer)
+    {
+        if (Instructions == null || producer < 0 || producer >= Index
+            || ILBranchTargets.HasEntryAfter(Instructions, producer, Index))
+            return false;
+        return _verifiedPromotedResults.Contains(producer)
+            || _verifiedWordResults.Contains(producer) && _numericValues != null
+                && (Instructions[producer].OpCode == ILOpCode.Mul
+                    && _numericValues.Inputs[producer].All(input => NumericType(input) == PrimitiveTypeCode.Byte)
+                    || Instructions[producer].OpCode is ILOpCode.And or ILOpCode.Or or ILOpCode.Xor
+                        && NumericType(producer) is PrimitiveTypeCode.Byte or PrimitiveTypeCode.UInt16);
+    }
 
     // This proves only the existing word-load +/- nonnegative-constant lowering,
     // not an arbitrary expression that happens to leave A:X marked as a word.
@@ -26,6 +35,8 @@ partial class IL2NESWriter
         if (ILBranchTargets.HasEntryAfter(Instructions, producer - 2, Index))
             return false;
         var source = Instructions[producer - 2];
+        if (!WordNumericType(NumericType(producer - 2)))
+            return false;
         if (source.GetLdlocIndex() is int local)
             return Locals.TryGetValue(local, out var value) && value.IsWord
                 && value.Address != null && value.ArraySize == 0 && value.LabelName == null;
