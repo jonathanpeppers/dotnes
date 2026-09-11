@@ -79,12 +79,12 @@ partial class IL2NESWriter
             || Index + 1 < Instructions!.Length && _numericValues.Inputs[Index + 1].Length == 2
                 && _numericValues.Inputs[Index + 1][1] == Index
                 && Instructions[Index + 1].OpCode is ILOpCode.Shl or ILOpCode.Shr or ILOpCode.Shr_un
-            || NumericType(Index) == PrimitiveTypeCode.Byte
             || !RequiresNumericWord(Index, new HashSet<int>()))
             return false;
         int lhs = _numericValues.Inputs[Index][0], rhs = _numericValues.Inputs[Index][1];
         if (!WordNumericType(NumericType(lhs)) && !WordNumericType(NumericType(rhs))
-            && !SignedNumericType(NumericType(lhs)) && !SignedNumericType(NumericType(rhs)))
+            && (NumericType(Index) == PrimitiveTypeCode.Byte
+                || !SignedNumericType(NumericType(lhs)) && !SignedNumericType(NumericType(rhs))))
             return false;
         var opcode = instruction.OpCode switch
         {
