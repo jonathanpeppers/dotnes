@@ -5,6 +5,45 @@ namespace dotnes.tests;
 public class ILValueAnalysisTests
 {
     [Fact]
+    public void RomInitializationLeavesOneArrayValue()
+    {
+        ILInstruction[] il =
+        [
+            new(ILOpCode.Ldc_i4_4, 0),
+            new(ILOpCode.Newarr, 1, String: "Byte"),
+            new(ILOpCode.Dup, 2),
+            new(ILOpCode.Ldtoken, 3, Bytes: System.Collections.Immutable.ImmutableArray.Create<byte>(1, 2, 3, 4)),
+            new(ILOpCode.Stloc_0, 4),
+            new(ILOpCode.Ldloc_0, 5),
+            new(ILOpCode.Pop, 6),
+            new(ILOpCode.Ret, 7),
+        ];
+        var analysis = new ILValueAnalysis(il, new ReflectionCache());
+        Assert.Equal(new[] { 3 }, analysis.Outputs[3]);
+        Assert.Empty(analysis.Outputs[4]);
+        Assert.Empty(analysis.Outputs[6]);
+    }
+
+    [Fact]
+    public void NativeOverloadConsumesItsDecodedSourceSignature()
+    {
+        using var dll = Utilities.GetResource("horizmask.release.dll");
+        using var transpiler = new Transpiler(dll, Array.Empty<AssemblyReader>());
+        _ = transpiler.ReadStaticVoidMain().ToArray();
+        var il = transpiler.UserMethods["scroll_demo"];
+        var analysis = new ILValueAnalysis(il, new ReflectionCache());
+        var calls = il.Select((instruction, index) => (instruction, index))
+            .Where(pair => pair.instruction.String is nameof(NESLib.vrambuf_put_vert) or nameof(NESLib.vrambuf_put)).ToArray();
+        Assert.Equal(2, calls.Length);
+        foreach (var (instruction, index) in calls)
+        {
+            Assert.Equal((3, false), instruction.CallSignature);
+            Assert.Equal(3, analysis.Inputs[index].Length);
+            Assert.Empty(analysis.Outputs[index]);
+        }
+    }
+
+    [Fact]
     public void OnlyDeclaredContextLoadsAreRematerialized()
     {
         var reflection = new ReflectionCache();

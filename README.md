@@ -247,9 +247,12 @@ other array element types or ranks are not supported. Array indexes and scalar
 arguments in this byte-array path are byte-sized; captured/by-reference helper
 contexts are not supported. An alias must keep the same
 array identity; assigning a different array to it is diagnosed. Mixing RAM
-arrays and read-only ROM tables in one helper call is also diagnosed rather
-than treating a ROM table as writable RAM. Existing ROM-only helper calls keep
-their previous behavior.
+arrays and read-only ROM tables in one helper call is also diagnosed, including
+through local and static-field aliases, rather than treating a ROM table as
+writable RAM. Existing ROM-only helper calls keep their previous behavior.
+General conditional scalar-expression lowering is separate from this fixed-array
+ABI: unsupported merged scalar operands are diagnosed rather than replaced by
+an adjacent load from the wrong branch.
 
 Down the road, I might think about support for:
 

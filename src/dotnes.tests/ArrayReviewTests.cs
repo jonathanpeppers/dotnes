@@ -5,6 +5,120 @@ namespace dotnes.tests;
 
 public class ArrayReviewTests(ITestOutputHelper output) : ExecutionTests(output)
 {
+    [Theory]
+    [InlineData("meta_spr_2x2", false)]
+    [InlineData("meta_spr_2x2", true)]
+    [InlineData("meta_spr_2x2_flip", false)]
+    [InlineData("meta_spr_2x2_flip", true)]
+    public void MixedIntrinsicRomAliasesAreDiagnosed(string intrinsic, bool reverse)
+    {
+        var exception = Assert.Throws<TranspileException>(() => GetProgramBytes(
+            $$"""
+            byte[] ram = new byte[8];
+            byte[] table = {{intrinsic}}(44, 55, 66, 77);
+            byte[] alias = table;
+            Copy({{(reverse ? "alias, ram" : "ram, alias")}}, 2);
+            while (true) ;
+            static void Copy(byte[] target, byte[] source, byte index)
+            {
+                target[index] = source[index];
+            }
+            """));
+        Assert.Contains("RAM and read-only ROM", exception.Message);
+    }
+
+    [Theory]
+    [InlineData("meta_spr_2x2")]
+    [InlineData("meta_spr_2x2_flip")]
+    public void IntrinsicRomAliasesKeepExistingReadBehavior(string intrinsic)
+    {
+        var cpu = ExecuteProgram(
+            $$"""
+            byte[] table = {{intrinsic}}(44, 55, 66, 77);
+            byte[] alias = table;
+            byte frame = 0;
+            while (frame < 1)
+            {
+                byte result = alias[2];
+                poke(0x6000, result);
+                byte next = table[6];
+                poke(0x6001, next);
+                frame++;
+            }
+            test_stop();
+            while (true) ;
+            static extern void test_stop();
+            """);
+        Assert.Equal(44, cpu.Memory[0x6000]);
+        Assert.Equal(55, cpu.Memory[0x6001]);
+        Assert.Equal(Cpu6502.SoftwareStackTop, cpu.SoftwareStackPointer);
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public void TwoComputedReadsReachCapturedScalarParameters(bool forwarded, bool thirdArgument)
+    {
+        string arguments = thirdArgument ? ", 99" : "";
+        string caller = $$"""
+            byte[] data = new byte[8];
+            data[2] = 44;
+            data[3] = 89;
+            byte index = 3;
+            Consume(data[(byte)(index - 1)], data[(byte)(index ^ 0)]{{arguments}});
+            """;
+        var cpu = ExecuteProgram(
+            $$"""
+            byte captured = 7;
+            {{(forwarded ? "Outer();" : caller)}}
+            test_stop();
+            while (true) ;
+            static extern void test_stop();
+            {{(forwarded ? "void Outer() { byte c = captured; poke(0x6004, c); " + caller + " }" : "")}}
+            void Consume(byte first, byte second{{(thirdArgument ? ", byte third" : "")}})
+            {
+                byte a = first;
+                byte b = second;
+                byte c = captured;
+                poke(0x6000, a);
+                poke(0x6001, b);
+                poke(0x6002, c);
+                {{(thirdArgument ? "byte d = third; poke(0x6003, d);" : "")}}
+            }
+            """);
+        Assert.Equal(new byte[] { 44, 89, 7, (byte)(thirdArgument ? 99 : 0) }, cpu.Memory[0x6000..0x6004]);
+        Assert.Equal(Cpu6502.SoftwareStackTop, cpu.SoftwareStackPointer);
+    }
+
+    [Theory]
+    [InlineData("byte[] alias = table; byte[] alias2 = alias;", "alias2", "")]
+    [InlineData("State.Table = table; byte[] alias2 = State.Table;", "alias2", "static class State { public static byte[] Table; }")]
+    [InlineData("byte[] alias = table; State.Table = alias;", "State.Table", "static class State { public static byte[] Table; }")]
+    public void MixedRomAliasesAreDiagnosed(string aliases, string argument, string types)
+    {
+        var exception = Assert.Throws<TranspileException>(() => GetProgramBytes(
+            $$"""
+            byte[] ram = new byte[8];
+            byte[] table = new byte[] { 1, 2, 3, 44 };
+            {{aliases}}
+            byte frame = 0;
+            while (frame < 1)
+            {
+                Copy(ram, {{argument}}, 3);
+                frame++;
+            }
+            while (true) ;
+            static void Copy(byte[] target, byte[] source, byte index)
+            {
+                target[index] = source[index];
+            }
+            {{types}}
+            """));
+        Assert.Contains("RAM and read-only ROM", exception.Message);
+    }
+
     [Fact]
     public void ComputedReadCanForwardACapturedCallersContext()
     {

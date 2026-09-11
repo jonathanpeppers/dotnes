@@ -124,6 +124,12 @@ sealed class ILValueAnalysis
             }
             else
             {
+                // The reader omits RuntimeHelpers.InitializeArray; its RVA
+                // ldtoken represents the initialized array, not a third value.
+                if (instruction.OpCode == ILOpCode.Ldtoken && instruction.Bytes != null &&
+                    i >= 2 && instructions[i - 1].OpCode == ILOpCode.Dup &&
+                    instructions[i - 2].OpCode == ILOpCode.Newarr)
+                    pop = 2;
                 var inputs = new int[pop];
                 for (int j = pop - 1; j >= 0; j--)
                 {
@@ -209,8 +215,8 @@ sealed class ILValueAnalysis
             if (!reflection.IsUserMethod(method) && !reflection.IsExternMethod(method)
                 && !nesLibMethods.Contains(method))
                 return false;
-            pop = reflection.GetILNumberOfArguments(method);
-            push = reflection.HasReturnValue(method) ? 1 : 0;
+            pop = instruction.CallSignature?.ArgumentCount ?? reflection.GetILNumberOfArguments(method);
+            push = (instruction.CallSignature?.ReturnsValue ?? reflection.HasReturnValue(method)) ? 1 : 0;
             return true;
         }
         if (!opcodes.TryGetValue((ushort)instruction.OpCode, out var opcode))

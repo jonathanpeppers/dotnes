@@ -44,7 +44,7 @@ partial class Transpiler : IDisposable
     /// </summary>
     public Dictionary<string, (int argCount, bool hasReturnValue, bool[] isArrayParam)> UserMethodMetadata { get; } = new(StringComparer.Ordinal);
     readonly HashSet<string> _unsupportedArrayHelperSignatures = new(StringComparer.Ordinal);
-    readonly HashSet<string> _byteParameterCalls = new(StringComparer.Ordinal);
+    readonly HashSet<string> _byteReturnMethods = new(StringComparer.Ordinal);
     readonly Dictionary<string, bool[]> _byteParameters = new(StringComparer.Ordinal);
 
     /// <summary>
@@ -358,13 +358,19 @@ partial class Transpiler : IDisposable
         if (_closureFieldTypes.Count > 0)
             DetectClosureMethods(reflectionCache);
 
+        var byteParameterCalls = _byteParameters.Where(pair =>
+                _byteReturnMethods.Contains(pair.Key) && pair.Value.Where((_, index) =>
+                    !_closureMethodArgIndex.TryGetValue(pair.Key, out int context) || index != context).All(isByte => isByte))
+            .ToDictionary(pair => pair.Key, pair => _closureMethodArgIndex.TryGetValue(pair.Key, out int context) ? context : -1);
+
+        var arrayStorage = new ArrayStorageAnalysis(UserMethods.Values.Prepend(instructions), reflectionCache);
         instructions = ArrayOperandLowering.Rewrite(instructions, reflectionCache, arrayParameters,
-            unsupportedArraySignatures: _unsupportedArrayHelperSignatures);
+            unsupportedArraySignatures: _unsupportedArrayHelperSignatures, storage: arrayStorage);
         foreach (var method in UserMethods.Keys.ToArray())
         {
             UserMethods[method] = ArrayOperandLowering.Rewrite(
                 UserMethods[method], reflectionCache, arrayParameters, arrayParameters[method], _unsupportedArrayHelperSignatures,
-                _closureMethodArgIndex.TryGetValue(method, out int context) ? context : -1);
+                _closureMethodArgIndex.TryGetValue(method, out int context) ? context : -1, arrayStorage);
         }
 
         // Build main program block using label references (addresses resolved later)
@@ -387,7 +393,7 @@ partial class Transpiler : IDisposable
             UserMethodNames = new HashSet<string>(UserMethods.Keys, StringComparer.Ordinal),
             UserMethodArrayParameters = arrayParameters,
             UnsupportedArrayHelperSignatures = _unsupportedArrayHelperSignatures,
-            ByteParameterCalls = _byteParameterCalls,
+            ByteParameterCalls = byteParameterCalls,
             ExternMethodNames = externNames,
             WordLocals = DetectWordLocals(instructions, reflectionCache),
             StructLayouts = structLayouts,
@@ -478,7 +484,7 @@ partial class Transpiler : IDisposable
                 UserMethodNames = new HashSet<string>(UserMethods.Keys, StringComparer.Ordinal),
                 UserMethodArrayParameters = arrayParameters,
                 UnsupportedArrayHelperSignatures = _unsupportedArrayHelperSignatures,
-                ByteParameterCalls = _byteParameterCalls,
+                ByteParameterCalls = byteParameterCalls,
                 ParamIsByte = _byteParameters.TryGetValue(methodName, out var declaredBytes) ? declaredBytes : [],
                 ExternMethodNames = externNames,
                 MethodParamCount = paramCount,

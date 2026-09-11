@@ -26,9 +26,10 @@ static class ArrayOperandLowering
 
     public static ILInstruction[] Rewrite(ILInstruction[] instructions, ReflectionCache reflection,
         IReadOnlyDictionary<string, bool[]> arrayParameters, bool[]? methodArrayParameters = null,
-        ISet<string>? unsupportedArraySignatures = null, int closureArgIndex = -1)
+        ISet<string>? unsupportedArraySignatures = null, int closureArgIndex = -1, ArrayStorageAnalysis? storage = null)
     {
         var analysis = new ILValueAnalysis(instructions, reflection);
+        storage ??= new ArrayStorageAnalysis([instructions], reflection);
         var selected = new HashSet<int>();
 
         bool Simple(int producer) => producer >= 0 &&
@@ -89,15 +90,7 @@ static class ArrayOperandLowering
             return Simple(producer);
         }
 
-        bool IsRomArray(int producer)
-        {
-            if (producer >= 0 && instructions[producer].OpCode == ILOpCode.Ldtoken)
-                return true;
-            if (producer < 0 || instructions[producer].GetLdlocIndex() is not int local)
-                return false;
-            return Enumerable.Range(1, instructions.Length - 1).Any(i =>
-                instructions[i].GetStlocIndex() == local && instructions[i - 1].OpCode == ILOpCode.Ldtoken);
-        }
+        bool IsRomArray(int producer) => (storage.GetStorage(instructions, producer) & ArrayStorage.Rom) != 0;
 
         bool SameValue(int left, int right)
         {
@@ -300,7 +293,7 @@ static class ArrayOperandLowering
                 var arrayInputs = inputs.Where((_, argument) => parameters[argument]).ToArray();
                 if (arrayInputs.Any(IsRomArray))
                 {
-                    if (!arrayInputs.All(IsRomArray))
+                    if (!arrayInputs.All(p => storage.GetStorage(instructions, p) == ArrayStorage.Rom))
                         throw new ObjectModel.TranspileException("Mixing RAM and read-only ROM array arguments in one helper call is not supported.");
                 }
                 else
