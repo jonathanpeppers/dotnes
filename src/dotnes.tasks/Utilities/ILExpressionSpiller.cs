@@ -11,14 +11,15 @@ static class ILExpressionSpiller
 {
     public static ILInstruction[] Rewrite(
         ILInstruction[] instructions, ILValueAnalysis analysis, ISet<int> producers,
-        ISet<int>? wordProducers = null)
+        ISet<int>? wordProducers = null, IDictionary<int, int>? spillLocals = null,
+        int minimumLocalIndex = 0)
     {
         if (producers.Count == 0)
             return instructions;
 
-        int nextLocal = instructions.Select(i => i.GetLdlocIndex() ?? i.GetStlocIndex()
+        int nextLocal = Math.Max(minimumLocalIndex, instructions.Select(i => i.GetLdlocIndex() ?? i.GetStlocIndex()
             ?? (i.OpCode is ILOpCode.Ldloc or ILOpCode.Ldloca or ILOpCode.Ldloca_s ? i.Integer : null)
-            ?? -1).DefaultIfEmpty(-1).Max() + 1;
+            ?? -1).DefaultIfEmpty(-1).Max() + 1);
         int nextOffset = Math.Min(-1, instructions.Min(i => i.Offset) - 1);
         var locals = new Dictionary<int, int>();
         foreach (int producer in producers.OrderBy(i => i))
@@ -26,7 +27,10 @@ static class ILExpressionSpiller
             if (!analysis.ProducesValue[producer] || analysis.Escapes[producer])
                 throw new InvalidOperationException($"Cannot spill IL value at index {producer} across an unknown control-flow boundary.");
             if (instructions[producer].GetLdcValue() == null)
+            {
+                spillLocals?.Add(producer, nextLocal);
                 locals.Add(producer, nextLocal++);
+            }
         }
 
         var result = new List<ILInstruction>();

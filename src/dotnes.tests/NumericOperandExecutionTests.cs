@@ -29,7 +29,7 @@ public class NumericOperandExecutionTests(ITestOutputHelper output) : ExecutionT
             """);
         Assert.Equal((byte)(address + input), cpu.Memory[0x6000]);
         Assert.Equal((byte)((address + input) >> 8), cpu.Memory[0x6001]);
-        Assert.Equal(0x0800, cpu.SoftwareStackPointer);
+        Assert.Equal(Cpu6502.SoftwareStackTop, cpu.SoftwareStackPointer);
     }
 
     [Theory]

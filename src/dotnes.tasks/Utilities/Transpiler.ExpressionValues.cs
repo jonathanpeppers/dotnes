@@ -8,6 +8,7 @@ partial class Transpiler
     {
         var analysis = new ILValueAnalysis(instructions, reflection);
         var scalar = new bool[instructions.Length];
+        var types = new PrimitiveTypeCode?[instructions.Length];
         var words = new HashSet<int>();
         var fieldTypes = _reader.FieldDefinitions.Select(h => _reader.GetFieldDefinition(h))
             .Where(f => (f.Attributes & System.Reflection.FieldAttributes.Static) != 0)
@@ -47,6 +48,7 @@ partial class Transpiler
             else if (IsScalarExpression(instruction.OpCode) && analysis.Inputs[i].All(p => p >= 0 && scalar[p]))
                 type = analysis.Inputs[i].Any(words.Contains) ? PrimitiveTypeCode.UInt16 : PrimitiveTypeCode.Byte;
             scalar[i] = type is not null && type != PrimitiveTypeCode.Void && !analysis.Escapes[i];
+            types[i] = type;
             if (type is PrimitiveTypeCode.UInt16 or PrimitiveTypeCode.Int16 or PrimitiveTypeCode.Int32 or PrimitiveTypeCode.UInt32)
                 words.Add(i);
         }
@@ -147,7 +149,21 @@ partial class Transpiler
             if (compatible)
                 closedSpills.UnionWith(closure);
         }
-        return ILExpressionSpiller.Rewrite(instructions, analysis, closedSpills, words);
+        var spillLocals = new Dictionary<int, int>();
+        var rewritten = ILExpressionSpiller.Rewrite(instructions, analysis, closedSpills, words,
+            spillLocals, signature?.Locals.Length ?? 0);
+        if (signature != null && spillLocals.Count > 0)
+        {
+            var locals = signature.Locals.ToBuilder();
+            foreach (var pair in spillLocals)
+            {
+                while (locals.Count <= pair.Value)
+                    locals.Add(null);
+                locals[pair.Value] = types[pair.Key];
+            }
+            NumericTypes[method] = signature with { Locals = locals.ToImmutable() };
+        }
+        return rewritten;
     }
 
     static bool IsScalarBinary(ILOpCode op) => op is ILOpCode.Add or ILOpCode.Sub
