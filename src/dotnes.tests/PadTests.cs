@@ -353,8 +353,8 @@ public class PadTests : RoslynTests
         // Both Y direction masks
         Assert.Contains("2910", hex); // PAD.UP
         Assert.Contains("2920", hex); // PAD.DOWN
-        // x + pad_dpad_x(pad) must use CLC; ADC TEMP ($17), not ADC #$00
-        Assert.Contains("186517", hex); // CLC; ADC $17 (TEMP)
+        // Add the captured runtime direction, not its compile-time placeholder.
+        Assert.Contains("186D", hex); // CLC; ADC absolute (snapshot)
         Assert.DoesNotContain("186900", hex); // CLC; ADC #$00 would be wrong
     }
 
@@ -388,8 +388,7 @@ public class PadTests : RoslynTests
         // Should contain LDA #$FF (-1) and LDA #$01 (+1)
         Assert.Contains("A9FF", hex);
         Assert.Contains("A901", hex);
-        // x + pad_dpad_x(state) must use CLC; ADC TEMP ($17), not ADC #$00
-        Assert.Contains("186517", hex); // CLC; ADC $17 (TEMP)
+        Assert.Contains("186D", hex); // CLC; ADC absolute (snapshot)
     }
 
     [Fact]

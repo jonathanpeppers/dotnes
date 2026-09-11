@@ -651,6 +651,8 @@ partial class IL2NESWriter : NESWriter
     /// </summary>
     public void RecordBlockCount(int ilOffset)
     {
+        _numericArgAdjust[ilOffset] = _argStackAdjust;
+        PrepareMemoryOperands();
         if (_bufferedBlock != null)
             _blockCountAtILOffset[ilOffset] = GetBufferedBlockCount();
         _arrayArgumentAdjustments[ilOffset] = _argStackAdjust;

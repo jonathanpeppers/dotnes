@@ -25,6 +25,26 @@ public class ILValueAnalysisTests
     }
 
     [Fact]
+    public void OrdinaryArgumentValuesAreCapturedBeforeArgumentMutation()
+    {
+        var reflection = new ReflectionCache();
+        reflection.RegisterUserMethod("Consume", 1, false);
+        ILInstruction[] il =
+        [
+            new(ILOpCode.Ldarg_0, 0),
+            new(ILOpCode.Ldc_i4_1, 1),
+            new(ILOpCode.Starg_s, 2, 0),
+            new(ILOpCode.Call, 4, String: "Consume"),
+        ];
+        var analysis = new ILValueAnalysis(il, reflection);
+        var rewritten = ILExpressionSpiller.Rewrite(il, analysis, new HashSet<int> { 0 });
+        Assert.Equal(ILOpCode.Ldarg_0, rewritten[0].OpCode);
+        Assert.NotNull(rewritten[1].GetStlocIndex());
+        Assert.Single(rewritten, instruction => instruction.GetStlocIndex().HasValue);
+        Assert.NotNull(rewritten[^2].GetLdlocIndex());
+    }
+
+    [Fact]
     public void NativeOverloadConsumesItsDecodedSourceSignature()
     {
         using var dll = Utilities.GetResource("horizmask.release.dll");

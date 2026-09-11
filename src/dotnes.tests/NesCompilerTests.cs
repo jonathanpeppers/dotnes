@@ -8,6 +8,30 @@ namespace dotnes.tests;
 
 public class NesCompilerTests(ITestOutputHelper output) : RoslynTests(output)
 {
+    [Fact]
+    public void NoRecognizedEntryPointDoesNotRequireSyntheticLocalMetadata()
+    {
+        var compilation = CSharpCompilation.Create(
+            "AlternateLanguageEntry",
+            [CSharpSyntaxTree.ParseText("public static class Entry { public static void AlternateMain() { NES.NESLib.ppu_off(); } }")],
+            [
+                MetadataReference.CreateFromFile(typeof(object).Assembly.Location),
+                MetadataReference.CreateFromFile(Path.Combine(Path.GetDirectoryName(typeof(object).Assembly.Location)!, "System.Runtime.dll")),
+                MetadataReference.CreateFromFile(Path.Combine(Path.GetDirectoryName(typeof(object).Assembly.Location)!, "netstandard.dll")),
+                MetadataReference.CreateFromFile(typeof(NESLib).Assembly.Location),
+            ],
+            new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+        using var assembly = new MemoryStream();
+        var emitted = compilation.Emit(assembly);
+        Assert.True(emitted.Success, string.Join(Environment.NewLine, emitted.Diagnostics));
+        assembly.Position = 0;
+        using var transpiler = new Transpiler(assembly, Array.Empty<AssemblyReader>());
+        Assert.Empty(transpiler.ReadStaticVoidMain());
+        Assert.False(transpiler.NumericTypes.ContainsKey("main"));
+        var program = transpiler.BuildProgram6502(out _, out _);
+        Assert.NotEmpty(program.ToBytes());
+    }
+
     const string NativeCaller = """
         static extern void native_write();
         native_write();
@@ -38,7 +62,7 @@ public class NesCompilerTests(ITestOutputHelper output) : RoslynTests(output)
                 public static Program6502 Compile(Stream assembly, TextReader source, ILogger logger)
                 {
                     using var native = new AssemblyReader(source);
-                    var options = new CompilationOptions { Mapper = 4, Mmc3BankedLayout = true };
+                    var options = new CompilationOptions { Mapper = 4, Mmc3BankedLayout = true, OptimizeByteHelpers = true };
                     var program = NesCompiler.Compile(assembly, options, new[] { native }, logger);
                     program.DefineExternalLabel("_device_write", 0x6000);
                     program.ToBytes();
@@ -93,6 +117,56 @@ public class NesCompilerTests(ITestOutputHelper output) : RoslynTests(output)
         Assert.Equal(0x8000, program.BaseAddress);
         Assert.Contains("A9428D0060", Convert.ToHexString(program.GetMainBlock()));
         Assert.NotEmpty(program.ToBytes());
+    }
+
+    [Fact]
+    public void ByteHelperOptimizationRequiresExplicitOptIn()
+    {
+        using var assembly = CompileAssembly("""
+            State.Result = helper(42);
+            while (true) ;
+            static byte helper(byte value) => (byte)(value ^ 3);
+            static class State { public static byte Result; }
+            """);
+        Assert.False(new CompilationOptions().OptimizeByteHelpers);
+        var baseline = NesCompiler.Compile(assembly);
+        assembly.Position = 0;
+        var optimized = NesCompiler.Compile(assembly, new CompilationOptions { OptimizeByteHelpers = true });
+        Assert.Equal(0x20, baseline.GetMainBlock("helper")[0]); // JSR pusha
+        Assert.Equal(0x8D, optimized.GetMainBlock("helper")[0]); // STA home
+        Assert.True(optimized.GetMainBlock("helper").Length < baseline.GetMainBlock("helper").Length);
+        assembly.Position = 0;
+        var disabled = NesCompiler.Compile(assembly, new CompilationOptions { OptimizeByteHelpers = false });
+        Assert.Equal(baseline.ToBytes(), disabled.ToBytes());
+    }
+
+    [Fact]
+    public void NativeCodeRetainsByteHelperStackConventionWhenEnabled()
+    {
+        using var assembly = CompileAssembly("""
+            static extern void native_callback();
+            native_callback();
+            State.Result = helper(42);
+            while (true) ;
+            static byte helper(byte value) => value;
+            static class State { public static byte Result; }
+            """);
+        using var native = new AssemblyReader(new StringReader("""
+            .segment "CODE"
+            _native_callback:
+                lda #7
+                jsr helper
+                rts
+            """));
+        var baseline = NesCompiler.Compile(assembly, assemblyFiles: [native]);
+        assembly.Position = 0;
+        var optimized = NesCompiler.Compile(assembly,
+            new CompilationOptions { OptimizeByteHelpers = true }, [native]);
+        Assert.Equal(0x20, optimized.GetMainBlock("helper")[0]);
+        Assert.Equal(baseline.ToBytes(), optimized.ToBytes());
+        ushort helper = optimized.GetLabels()["helper"];
+        Assert.Equal(new byte[] { 0x20, (byte)helper, (byte)(helper >> 8) },
+            optimized.GetMainBlock("_native_callback")[2..5]);
     }
 
     [Fact]

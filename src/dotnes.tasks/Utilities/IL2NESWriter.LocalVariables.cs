@@ -74,6 +74,17 @@ partial class IL2NESWriter
 
         // Storing a local clobbers A/X
         _firstAndAfterPadPoll = false;
+        bool valueIsWord = _ushortInAX;
+        if (local.IsWord && !valueIsWord && _numericValues != null
+            && _numericValues.Inputs[Index].Length == 1
+            && SignedNumericType(NumericType(_numericValues.Inputs[Index][0])))
+        {
+            if (Instructions![_numericValues.Inputs[Index][0]].GetLdcValue() is int constant)
+                Emit(Opcode.LDX, AddressMode.Immediate, (byte)(constant >> 8));
+            else
+                EmitNumericExtension(signed: true);
+            valueIsWord = true;
+        }
         _ushortInAX = false;
 
         // Detect the "two pending IL stack values" pattern produced when
@@ -129,6 +140,8 @@ partial class IL2NESWriter
             {
                 // A=lo, X=hi from a ushort-returning function — store both bytes
                 if (isNewAllocation) LocalCount += 2;
+                if (!valueIsWord)
+                    Emit(Opcode.LDX, AddressMode.Immediate, 0);
                 Emit(Opcode.STA, AddressMode.Absolute, (ushort)local.Address);
                 Emit(Opcode.STX, AddressMode.Absolute, (ushort)(local.Address + 1));
             }
@@ -145,11 +158,18 @@ partial class IL2NESWriter
         else if (local.IsWord)
         {
             if (isNewAllocation) LocalCount += 2;
-            // Word local (e.g. ushort x = 0): store low byte in A, high byte = 0
             Emit(Opcode.STA, AddressMode.Absolute, (ushort)local.Address);
-            Emit(Opcode.LDA, AddressMode.Immediate, 0x00);
-            Emit(Opcode.STA, AddressMode.Absolute, (ushort)(local.Address + 1));
-            _immediateInA = 0x00;
+            if (valueIsWord)
+            {
+                Emit(Opcode.STX, AddressMode.Absolute, (ushort)(local.Address + 1));
+                _immediateInA = null;
+            }
+            else
+            {
+                Emit(Opcode.LDA, AddressMode.Immediate, 0x00);
+                Emit(Opcode.STA, AddressMode.Absolute, (ushort)(local.Address + 1));
+                _immediateInA = 0x00;
+            }
         }
         else if (local.Value <= byte.MaxValue)
         {
@@ -209,9 +229,9 @@ partial class IL2NESWriter
         // Check if next instruction can handle the constant directly with A's current value
         bool nextIsAddSub = Instructions is not null && Index + 1 < Instructions.Length &&
             Instructions[Index + 1].OpCode is ILOpCode.Add or ILOpCode.Sub;
-        if (nextIsAddSub && LastLDA)
+        if (nextIsAddSub && (LastLDA || _ushortInAX))
         {
-            // Keep current A value — the Add/Sub handler will do 16-bit add inline
+            // Keep the current operand in A:X, including word locals ending in LDX.
             Stack.Push(operand);
             return;
         }
@@ -257,16 +277,18 @@ partial class IL2NESWriter
             // Check if the next instruction can handle A:X directly
             bool nextIsShift = Instructions is not null && Index + 1 < Instructions.Length &&
                 Instructions[Index + 1].OpCode is ILOpCode.Shr or ILOpCode.Shr_un or ILOpCode.Shl;
-            // When A:X holds a ushort, the next Add/Sub/Div/Rem should operate on
+            // When A:X holds a ushort, the next Add/Sub/Mul/Div/Rem should operate on
             // A:X directly — no need to push to the C stack first. This matches the
             // behavior of WriteLdc(ushort) which also skips pushax for Add/Sub.
             bool nextIsAddSub = Instructions is not null && Index + 1 < Instructions.Length &&
                 Instructions[Index + 1].OpCode is ILOpCode.Add or ILOpCode.Sub;
             bool nextIsDivRem = Instructions is not null && Index + 1 < Instructions.Length &&
                 Instructions[Index + 1].OpCode is ILOpCode.Div or ILOpCode.Rem;
+            bool nextIsMultiply = Instructions is not null && Index + 1 < Instructions.Length &&
+                Instructions[Index + 1].OpCode == ILOpCode.Mul;
             bool nextIsBitwise = Instructions is not null && Index + 1 < Instructions.Length &&
                 Instructions[Index + 1].OpCode is ILOpCode.And or ILOpCode.Or or ILOpCode.Xor;
-            if (nextIsShift || nextIsAddSub || nextIsDivRem || nextIsBitwise || NextIsBranchComparison())
+            if (nextIsShift || nextIsAddSub || nextIsMultiply || nextIsDivRem || nextIsBitwise || NextIsBranchComparison())
             {
                 // Keep A:X intact — the operator/branch will handle the 16-bit value
                 Stack.Push(operand);
@@ -613,6 +635,7 @@ partial class IL2NESWriter
         {
             Emit(Opcode.LDY, AddressMode.Immediate, (byte)offset);
             Emit(Opcode.LDA, AddressMode.IndirectIndexed, (byte)sp);
+            _ushortInAX = false;
         }
         _immediateInA = null;
         _runtimeValueInA = true;

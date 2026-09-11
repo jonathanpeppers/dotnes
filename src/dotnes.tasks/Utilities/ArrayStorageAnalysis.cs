@@ -45,7 +45,7 @@ sealed class ArrayStorageAnalysis
         Query(instructions, producer, null, allocations);
 
     public ArrayStorage GetInputStorage(ILInstruction[] instructions, int consumer, int argument,
-        ISet<(ILInstruction[] Method, int Producer)> allocations) =>
+        ISet<(ILInstruction[] Method, int Producer)>? allocations = null) =>
         Query(instructions, consumer, argument, allocations);
 
     ArrayStorage Query(ILInstruction[] instructions, int instruction, int? argument,

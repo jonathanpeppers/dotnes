@@ -279,18 +279,33 @@ public class ArrayReviewTests(ITestOutputHelper output) : ExecutionTests(output)
         Assert.Equal(Cpu6502.SoftwareStackTop, cpu.SoftwareStackPointer);
     }
 
-    [Fact]
-    public void ConditionalCompoundValueIsDiagnosed()
+    [Theory]
+    [InlineData(0, 18)]
+    [InlineData(1, 29)]
+    public void ConditionalCompoundValueExecutesBothArms(byte flag, byte expected)
     {
-        var exception = Assert.Throws<TranspileException>(() => GetProgramBytes(
+        var cpu = ExecuteProgram(
             """
             byte[] data = new byte[8];
+            data[2] = 41;
+            data[3] = 7;
+            data[4] = 99;
             byte index = 3;
-            byte flag = (byte)pad_poll(0);
+            byte flag = peek(0x600F);
             data[index] += (byte)(flag == 0 ? 11 : 22);
+            byte left = data[2];
+            byte result = data[3];
+            byte right = data[4];
+            poke(0x6000, left);
+            poke(0x6001, result);
+            poke(0x6002, right);
+            test_stop();
             while (true) ;
-            """));
-        Assert.Contains("unsupported control flow", exception.Message);
+            static extern void test_stop();
+            """, cpu => cpu.Memory[0x600F] = flag);
+        Assert.Equal(new byte[] { 41, expected, 99 }, cpu.Memory[0x6000..0x6003]);
+        Assert.Equal(Cpu6502.SoftwareStackTop, cpu.SoftwareStackPointer);
+        Assert.Equal(0xFD, cpu.SP);
     }
 
     [Theory]
@@ -701,7 +716,9 @@ public class ArrayReviewTests(ITestOutputHelper output) : ExecutionTests(output)
                 data[3] = (byte)(value >> 8);
             }
             """));
-        Assert.Contains("scalar", exception.Message);
+        Assert.Contains(type == "int"
+            ? "32-bit values are not supported by typed expression lowering"
+            : "scalar", exception.Message);
     }
 
     [Fact]
@@ -722,19 +739,34 @@ public class ArrayReviewTests(ITestOutputHelper output) : ExecutionTests(output)
     }
 
     [Theory]
-    [InlineData("3", "flag == 0 ? (byte)11 : (byte)22")]
-    [InlineData("index", "(byte)((flag == 0 ? 11 : 22) + 5)")]
-    public void ConditionalStoreValueIsDiagnosed(string index, string value)
+    [InlineData("3", "flag == 0 ? (byte)11 : (byte)22", 0, 11)]
+    [InlineData("3", "flag == 0 ? (byte)11 : (byte)22", 1, 22)]
+    [InlineData("index", "(byte)((flag == 0 ? 11 : 22) + 5)", 0, 16)]
+    [InlineData("index", "(byte)((flag == 0 ? 11 : 22) + 5)", 1, 27)]
+    public void ConditionalStoreValueExecutesBothArms(string index, string value, byte flag, byte expected)
     {
-        var exception = Assert.Throws<TranspileException>(() => GetProgramBytes(
+        var cpu = ExecuteProgram(
             $$"""
             byte[] data = new byte[8];
-            byte flag = (byte)pad_poll(0);
+            data[2] = 41;
+            data[3] = 7;
+            data[4] = 99;
+            byte flag = peek(0x600F);
             byte index = 3;
             data[{{index}}] = {{value}};
+            byte left = data[2];
+            byte result = data[3];
+            byte right = data[4];
+            poke(0x6000, left);
+            poke(0x6001, result);
+            poke(0x6002, right);
+            test_stop();
             while (true) ;
-            """));
-        Assert.Contains("unsupported control flow", exception.Message);
+            static extern void test_stop();
+            """, cpu => cpu.Memory[0x600F] = flag);
+        Assert.Equal(new byte[] { 41, expected, 99 }, cpu.Memory[0x6000..0x6003]);
+        Assert.Equal(Cpu6502.SoftwareStackTop, cpu.SoftwareStackPointer);
+        Assert.Equal(0xFD, cpu.SP);
     }
 
     [Fact]

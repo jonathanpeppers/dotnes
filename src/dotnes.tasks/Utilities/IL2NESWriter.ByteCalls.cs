@@ -6,45 +6,47 @@ namespace dotnes;
 partial class IL2NESWriter
 {
     internal IReadOnlyDictionary<string, int> ByteParameterCalls { get; init; } = new Dictionary<string, int>();
-    internal bool[] ParamIsByte { get; init; } = [];
     ILValueAnalysis? _byteCallValues;
 
     bool TryWriteByteCall(ILInstruction instruction, string method)
     {
-        if (instruction.OpCode != ILOpCode.Call || !ByteParameterCalls.TryGetValue(method, out int context) || Instructions == null)
+        if (instruction.OpCode != ILOpCode.Call || !ByteParameterCalls.TryGetValue(method, out int context)
+            || Instructions == null)
             return false;
         int count = _reflectionCache.GetNumberOfArguments(method);
         int logicalCount = count + (context >= 0 ? 1 : 0);
-        if (count < 2 || Index < logicalCount)
+        if (count < 2 || Index < logicalCount || _numericValues == null
+            || !_numericValues.Inputs[Index].SequenceEqual(Enumerable.Range(Index - logicalCount, logicalCount)))
             return false;
-        _byteCallValues ??= new ILValueAnalysis(Instructions, _reflectionCache);
-        int first = Index - logicalCount;
-        if (!_byteCallValues.Inputs[Index].SequenceEqual(Enumerable.Range(first, logicalCount)) ||
-            _byteCallValues.Predecessors[first].Any(p => _byteCallValues.Outputs[p].Length > 0))
+        int firstArgument = Index - logicalCount;
+        var physicalArguments = Enumerable.Range(firstArgument, logicalCount)
+            .Where(i => i - firstArgument != context).ToArray();
+        // Loading the first argument may push an older outer-call operand.
+        // That push belongs to the caller, not this replaceable argument span.
+        if (_numericValues.Predecessors[firstArgument].Any(p => _numericValues.Outputs[p].Length != 0))
             return false;
-        var physicalArguments = Enumerable.Range(first, logicalCount).Where(i => i - first != context).ToArray();
-        for (int i = first; i < Index; i++)
+        for (int i = firstArgument; i < Index; i++)
         {
-            if (i > first && _byteCallValues.Predecessors[i].Any(p => p != i - 1))
+            if (i > firstArgument && _numericValues.Predecessors[i].Any(p => p != i - 1))
                 return false;
             var arg = Instructions[i];
-            if (i - first == context)
+            if (i - firstArgument == context)
             {
-                if (arg.OpCode is ILOpCode.Ldloca or ILOpCode.Ldloca_s or ILOpCode.Ldarga or ILOpCode.Ldarga_s ||
-                    ClosureArgIndex >= 0 && arg.GetLdargIndex() == ClosureArgIndex)
+                if (arg.OpCode is ILOpCode.Ldloca or ILOpCode.Ldloca_s or ILOpCode.Ldarga or ILOpCode.Ldarga_s
+                    || ClosureArgIndex >= 0 && NumericArgIndex(arg) == ClosureArgIndex)
                     continue;
                 return false;
             }
             if (arg.GetLdcValue() is int constant && constant is >= 0 and <= 255)
                 continue;
-            if (arg.GetLdargIndex() is int parameter && parameter < ParamIsByte.Length && ParamIsByte[parameter])
+            if (NumericArgIndex(arg) != null && NumericType(i) == PrimitiveTypeCode.Byte)
                 continue;
             if (arg.GetLdlocIndex() is not int index || !Locals.TryGetValue(index, out var value)
                 || value.Address == null || value.IsWord || value.ArraySize != 0 || value.LabelName != null)
                 return false;
         }
-        int start = _blockCountAtILOffset[Instructions[first].Offset];
-        int argumentAdjustment = _arrayArgumentAdjustments[Instructions[first].Offset];
+        int start = _blockCountAtILOffset[Instructions[firstArgument].Offset];
+        int argumentAdjustment = _numericArgAdjust[Instructions[firstArgument].Offset];
         RemoveLastInstructions(GetBufferedBlockCount() - start);
         for (int physical = 0; physical < physicalArguments.Length; physical++)
         {
@@ -52,7 +54,7 @@ partial class IL2NESWriter
             var arg = Instructions[i];
             if (arg.GetLdcValue() is int constant)
                 Emit(Opcode.LDA, AddressMode.Immediate, (byte)constant);
-            else if (arg.GetLdargIndex() is int argument)
+            else if (NumericArgIndex(arg) is int argument)
             {
                 int offset = argumentAdjustment + physical;
                 for (int j = argument + 1; j < MethodParamCount; j++)
@@ -76,8 +78,8 @@ partial class IL2NESWriter
         _runtimeValueInA = _reflectionCache.HasReturnValue(method);
         if (_runtimeValueInA)
         {
-            Stack.Push(0);
             _padPollResultAvailable = false;
+            Stack.Push(0);
         }
         _lastLoadedLocalIndex = null;
         if (context >= 0)

@@ -259,9 +259,10 @@ Fixed static-field aliases can share an allocation established by the caller;
 capturing a helper's parameter-frame pointer in a static alias is not supported.
 Allocations shared this way are reserved once in persistent RAM before method
 emission, so helper ordering and reuse of other local frames do not change them.
-General conditional scalar-expression lowering is separate from this fixed-array
-ABI: unsupported merged scalar operands are diagnosed rather than replaced by
-an adjacent load from the wrong branch.
+Supported conditional scalar operands use the shared expression pipeline before
+array operand capture. This fixed-array ABI does not expand scalar operator
+support; any remaining unlowered merged operand is diagnosed rather than guessed
+from an adjacent load.
 
 Down the road, I might think about support for:
 

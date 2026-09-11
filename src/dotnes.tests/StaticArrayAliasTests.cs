@@ -5,6 +5,37 @@ namespace dotnes.tests;
 
 public class StaticArrayAliasTests(ITestOutputHelper output) : ExecutionTests(output)
 {
+    [Fact]
+    public void ArrayIdentityLocalsDoNotReserveScalarFrameBytes()
+    {
+        var cpu = ExecuteProgram(
+            """
+            byte[] data = new byte[8];
+            Outer(data);
+            test_stop();
+            while (true) ;
+            static extern void test_stop();
+            static void Outer(byte[] data)
+            {
+                byte[] alias = data;
+                alias[3] = 21;
+                Inner(alias);
+                alias[3] = 22;
+            }
+            static void Inner(byte[] data)
+            {
+                byte value = 77;
+                poke(0x6000, value);
+                poke(0x6001, value);
+                data[4] = 99;
+            }
+            """);
+        Assert.Equal(new byte[] { 0, 0, 0, 22, 99, 0, 0, 0, 77 },
+            cpu.Memory[NESConstants.LocalStackBase..(NESConstants.LocalStackBase + 9)]);
+        Assert.Equal(new byte[] { 77, 77 }, cpu.Memory[0x6000..0x6002]);
+        Assert.Equal(Cpu6502.SoftwareStackTop, cpu.SoftwareStackPointer);
+    }
+
     [Theory]
     [InlineData(0)]
     [InlineData(1)]

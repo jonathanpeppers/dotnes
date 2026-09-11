@@ -209,18 +209,9 @@ public class PpuTests : RoslynTests
 
         var hex = Convert.ToHexString(bytes);
         _logger.WriteLine($"NtadrWithBothVariableArgs hex: {hex}");
-        // Required generated sequence at the NTADR_A call site, in order
-        // (Roslyn eliminates x1; y1 is the only local at $0325):
-        //   LDA #$02    A902     — x constant
-        //   STA $17     8517     — STA TEMP (x), emitted first so the
-        //                          NTADR call's pending label anchors here
-        //   LDA #$02    A902     — y init value
-        //   STA $0325   8D2503   — stloc y1
-        //   LDA $0325   AD2503   — ldloc y1 (NTADR's y arg)
-        // Asserting the full ordered substring guarantees the stloc is
-        // preserved AND that the subsequent ldloc reads the same address
-        // it was just stored to.
-        Assert.Contains("A9028517A9028D2503AD2503", hex);
+        // Initialize y, capture its argument value, then rematerialize x
+        // without replaying or removing the original store.
+        Assert.Contains("A9028D2503AD25038D2603A9028517AD2603", hex);
     }
 
     [Fact]

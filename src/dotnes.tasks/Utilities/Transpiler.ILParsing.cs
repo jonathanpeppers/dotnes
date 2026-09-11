@@ -16,8 +16,11 @@ partial class Transpiler
     /// </summary>
     public IEnumerable<ILInstruction> ReadStaticVoidMain()
     {
+        _byteHelperDefinitions.Clear();
+        _ambiguousByteHelperNames = false;
         GetUsedMethods(_reader);
         var arrayValues = GetArrayValues(_reader);
+        int entryPointToken = _pe.PEHeaders.CorHeader?.EntryPointTokenOrRelativeVirtualAddress ?? 0;
 
         foreach (var h in _reader.MethodDefinitions)
         {
@@ -26,17 +29,20 @@ partial class Transpiler
                 continue;
 
             var methodName = _reader.GetString(methodDef.Name);
+            bool isEntryPoint = MetadataTokens.GetToken(h) == entryPointToken;
 
             // Skip compiler-emitted helper methods in <PrivateImplementationDetails> and similar
             // synthesized types (e.g. C# 12 inline-array helpers: InlineArrayAsSpan,
             // InlineArrayElementRef, InlineArrayFirstElementRef).
+            // The PE entry point itself may be synthesized, as with F# main@.
             var declType = _reader.GetTypeDefinition(methodDef.GetDeclaringType());
             var declTypeName = _reader.GetString(declType.Name);
-            if (declTypeName.StartsWith("<"))
+            if (declTypeName.StartsWith("<") && !isEntryPoint)
                 continue;
 
-            if (methodName == "Main" || methodName == "<Main>$")
+            if (isEntryPoint || methodName == "Main" || methodName == "<Main>$")
             {
+                ReadNumericTypes(methodDef, "main");
                 // Parse exception regions (try/finally) before yielding instructions
                 MainExceptionRegions = ParseExceptionRegions(methodDef);
 
@@ -63,6 +69,7 @@ partial class Transpiler
                         }
                     }
                     {
+                        ReadNumericTypes(methodDef, externName);
                         var esig = _reader.GetBlobReader(methodDef.Signature);
                         esig.ReadByte(); // calling convention
                         int eParamCount = esig.ReadCompressedInteger();
@@ -92,8 +99,11 @@ partial class Transpiler
                 }
 
                 // User-defined method: read and store its IL
+                ReadNumericTypes(methodDef, cleanName);
                 var instructions = ReadMethodBody(methodDef, arrayValues).ToArray();
                 UserMethods[cleanName] = instructions;
+                _userMethodDefinitions[cleanName] = methodDef;
+                RecordByteHelperDefinition(cleanName, methodDef);
 
                 // Parse exception regions (try/finally) for user methods
                 var userRegions = ParseExceptionRegions(methodDef);
@@ -108,9 +118,6 @@ partial class Transpiler
                 if (signature.ParameterTypes.Contains(ArraySignatureType.UnsupportedArray))
                     throw new TranspileException("Only existing fixed byte[] arrays can be passed to helpers; other array element types, ranks, and ref array parameters are not supported.", cleanName);
                 bool[] isArrayParam = signature.ParameterTypes.Select(type => type == ArraySignatureType.ByteArray).ToArray();
-                _byteParameters[cleanName] = signature.ParameterTypes.Select(type => type == ArraySignatureType.Byte).ToArray();
-                if (signature.ReturnType is ArraySignatureType.Byte or ArraySignatureType.Void)
-                    _byteReturnMethods.Add(cleanName);
                 if (isArrayParam.Contains(true) &&
                     (signature.ParameterTypes.Contains(ArraySignatureType.Other) ||
                      signature.ReturnType == ArraySignatureType.Other))
@@ -166,7 +173,7 @@ partial class Transpiler
             string? stringValue = null;
             int? intValue = null;
             ImmutableArray<byte>? byteValue = null;
-            MethodSignature<ArraySignatureType>? callSignature = null;
+            MethodSignature<PrimitiveTypeCode?>? callSignature = null;
 
             switch (operandType)
             {
@@ -189,7 +196,7 @@ partial class Transpiler
                         case HandleKind.MethodDefinition:
                             var method = _reader.GetMethodDefinition((MethodDefinitionHandle)entity);
                             if (opCode == ILOpCode.Call)
-                                callSignature = method.DecodeSignature(new ArrayTypeDecoder(), null);
+                                callSignature = method.DecodeSignature(new NumericTypeDecoder(), null);
                             stringValue = _reader.GetString(method.Name);
                             // Clean up compiler-generated local function names
                             // Pattern: <<Main>$>g__fade_in|0_0 → fade_in
@@ -208,7 +215,7 @@ partial class Transpiler
                             var member = _reader.GetMemberReference((MemberReferenceHandle)entity);
                             stringValue = GetQualifiedMemberName(member);
                             if (opCode == ILOpCode.Call)
-                                callSignature = member.DecodeMethodSignature(new ArrayTypeDecoder(), null);
+                                callSignature = member.DecodeMethodSignature(new NumericTypeDecoder(), null);
                             if (stringValue is "InitializeArray" or "RuntimeHelpers.InitializeArray")
                             {
                                 // HACK: skip for now
@@ -223,14 +230,14 @@ partial class Transpiler
                                 stringValue = GetQualifiedMemberName(_reader.GetMemberReference((MemberReferenceHandle)methodSpec.Method));
                                 if (opCode == ILOpCode.Call)
                                     callSignature = _reader.GetMemberReference((MemberReferenceHandle)methodSpec.Method)
-                                        .DecodeMethodSignature(new ArrayTypeDecoder(), null);
+                                        .DecodeMethodSignature(new NumericTypeDecoder(), null);
                             }
                             else if (methodSpec.Method.Kind == HandleKind.MethodDefinition)
                             {
                                 stringValue = _reader.GetString(_reader.GetMethodDefinition((MethodDefinitionHandle)methodSpec.Method).Name);
                                 if (opCode == ILOpCode.Call)
                                     callSignature = _reader.GetMethodDefinition((MethodDefinitionHandle)methodSpec.Method)
-                                        .DecodeSignature(new ArrayTypeDecoder(), null);
+                                        .DecodeSignature(new NumericTypeDecoder(), null);
                             }
                             break;
                         case HandleKind.FieldDefinition:
@@ -326,7 +333,7 @@ partial class Transpiler
             {
                 CallSignature = opCode == ILOpCode.Call && callSignature is { } signature
                     ? (signature.ParameterTypes.Length + (signature.Header.IsInstance ? 1 : 0),
-                        signature.ReturnType != ArraySignatureType.Void) : null
+                        signature.ReturnType != PrimitiveTypeCode.Void) : null
             };
         }
     }

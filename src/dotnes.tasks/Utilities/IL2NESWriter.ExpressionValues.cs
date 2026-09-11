@@ -13,7 +13,7 @@ partial class IL2NESWriter
                 ILOpCode.Shl or ILOpCode.Shr or ILOpCode.Shr_un))
             return false;
 
-        _byteCallValues ??= new ILValueAnalysis(Instructions, _reflectionCache);
+        _byteCallValues ??= _numericValues ?? new ILValueAnalysis(Instructions, _reflectionCache);
         if (_byteCallValues.Inputs[Index].Any(p => p < 0))
             throw new TranspileException("Merged scalar expression operands require typed conditional-value lowering, which is not supported by this compiler path.", MethodName);
 
