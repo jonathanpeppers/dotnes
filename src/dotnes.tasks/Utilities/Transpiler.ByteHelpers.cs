@@ -217,6 +217,8 @@ partial class Transpiler
 
     internal sealed class ByteHelperStackAnalysis(Program6502 program, int localEnd)
     {
+        const int MaxByteHelperCallDepth = 128;
+
         readonly Dictionary<string, ByteHelperStackEffect> _effects = new(StringComparer.Ordinal);
         readonly HashSet<string> _active = new(StringComparer.Ordinal);
 
@@ -237,7 +239,8 @@ partial class Transpiler
             if (_effects.TryGetValue(name, out effect))
                 return true;
             var block = program.GetBlock(name);
-            if (block is null || block.IsDataBlock || block.Count == 0 || _active.Count >= 128 || !_active.Add(name))
+            if (block is null || block.IsDataBlock || block.Count == 0
+                || _active.Count >= MaxByteHelperCallDepth || !_active.Add(name))
                 return false;
             bool success = AnalyzeBlock(block, out effect);
             _active.Remove(name);

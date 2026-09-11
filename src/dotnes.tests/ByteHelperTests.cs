@@ -244,6 +244,60 @@ public class ByteHelperTests(ITestOutputHelper output) : RoslynTests(output)
         }
     }
 
+    [Theory]
+    [InlineData("==", 42)]
+    [InlineData("<", 128)]
+    [InlineData(">", 127)]
+    public void NumericRelativeBranchesPreserveEveryByteResult(string comparison, int threshold)
+    {
+        string source = $$"""
+            State.Result = helper(State.Input);
+            while (true) ;
+            static byte helper(byte value) => (byte)(value {{comparison}} {{threshold}} ? 1 : 0);
+            static class State { public static byte Input, Result; }
+            """;
+        using var baseline = BuildProgram(source, out var original);
+        using var optimized = BuildProgram(source, out var program, optimizeByteHelpers: true);
+        AssertHomeParameter(program, "helper");
+        var beforeBlock = original.GetBlock("helper")!;
+        var afterBlock = program.GetBlock("helper")!;
+        Assert.Contains(beforeBlock.InstructionsWithLabels, i => i.Instruction.Operand is RelativeByteOperand);
+        Assert.DoesNotContain(afterBlock.InstructionsWithLabels, i => i.Instruction.Operand is RelativeByteOperand);
+        Assert.Contains(afterBlock.InstructionsWithLabels, i =>
+            i.Instruction.Operand is RelativeOperand target
+            && target.Label.StartsWith("helper_bytehelper_target_", StringComparison.Ordinal));
+
+        // The comparison's false path targets cleanup, which is removed; its
+        // synthesized branch label must move to RTS rather than disappear.
+        int offset = 0;
+        int cleanupOffset = beforeBlock.Size - beforeBlock[beforeBlock.Count - 1].Size
+            - beforeBlock[beforeBlock.Count - 2].Size;
+        bool targetsCleanup = false;
+        foreach (var (instruction, _) in beforeBlock.InstructionsWithLabels)
+        {
+            if (instruction.Operand is RelativeByteOperand branch)
+                targetsCleanup |= offset + instruction.Size + branch.Offset == cleanupOffset;
+            offset += instruction.Size;
+        }
+        Assert.True(targetsCleanup);
+
+        for (int input = 0; input <= byte.MaxValue; input++)
+        {
+            var before = Execute(original, cpu => cpu.Memory[NESConstants.LocalStackBase] = (byte)input);
+            var after = Execute(program, cpu => cpu.Memory[NESConstants.LocalStackBase] = (byte)input);
+            bool expected = comparison switch
+            {
+                "==" => input == threshold,
+                "<" => input < threshold,
+                ">" => input > threshold,
+                _ => throw new ArgumentOutOfRangeException(nameof(comparison)),
+            };
+            Assert.Equal(expected ? 1 : 0, before.Memory[NESConstants.LocalStackBase + 1]);
+            Assert.Equal(before.Memory[NESConstants.LocalStackBase + 1], after.Memory[NESConstants.LocalStackBase + 1]);
+            AssertBalancedStacks(before, after);
+        }
+    }
+
     [Fact]
     public void FlagDependentCallResultsKeepStandardStorage()
     {
