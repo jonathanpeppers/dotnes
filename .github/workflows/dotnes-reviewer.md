@@ -7,23 +7,22 @@ on:
 permissions:
   contents: read
   pull-requests: read
+strict: false
 engine:
   id: copilot
   model: gpt-5.6-sol
-network:
-  allowed:
-    - defaults
-    - dotnet
-    - github
-    - "aka.ms"
-    - "microsoft.com"
+features:
+  dangerously-disable-sandbox-agent: true
+sandbox:
+  agent: false
 tools:
-  bash: ["az"]
+  bash: [":*"]
   cli-proxy: false
   github:
     toolsets: [pull_requests, repos]
     min-integrity: none
 safe-outputs:
+  threat-detection: false
   create-pull-request-review-comment:
     max: 50
   submit-pull-request-review:

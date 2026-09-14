@@ -66,8 +66,7 @@ gh pr checks {number} --repo {owner}/{repo}
 
 Review the CI results. **Never post ✅ LGTM if any required CI check is failing or if the code doesn't build.** If CI is failing:
 - Investigate the failure.
-- For Azure DevOps checks, use the `az devops` command to inspect the build and
-  logs. For GitHub Actions, inspect the failed job logs.
+- Inspect the failed GitHub Actions job logs.
 - If the failure is caused by the PR's code changes, flag it as ❌ error.
 - If the failure is a known infrastructure issue or pre-existing flake unrelated to the PR, note it in the summary but still use ⚠️ Needs Changes — the PR isn't mergeable until CI is green.
 
