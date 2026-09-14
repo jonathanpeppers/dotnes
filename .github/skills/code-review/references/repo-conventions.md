@@ -43,11 +43,16 @@ Understanding the transpilation pipeline is essential for reviewing changes.
 | Check | What to look for |
 |-------|-----------------|
 | **Use existing utilities** | Check `Transpiler`, `NESWriter`, `IL2NESWriter`, `AssemblyReader`, `NESConstants` before writing new helpers. |
+| **Use structured process arguments** | Pass external-tool arguments as separate values through `ArgumentList` or an existing process helper. Do not compose a command line with interpolation, especially when paths or user input are involved. |
 | **Return `!Log.HasLoggedErrors`** | The MSBuild task `TranspileToNES.Execute()` must return `!Log.HasLoggedErrors`, not `true`/`false` directly. |
 | **`ILogger` for diagnostics** | Use `ILogger` (the project's own interface), not `Console.WriteLine` or `Debug.WriteLine`. Diagnostic output is controlled by `NESDiagnosticLogging`. |
 | **Comments explain "why", not "what"** | `// increment i` adds nothing. `// skip the NES header — 16 bytes` explains intent. |
 | **Track TODOs as issues** | A `// TODO` hidden in code will be forgotten. File an issue and reference it in the comment. |
 | **Remove stale comments** | If the code changed, update the comment. Comments describing old behavior are misleading. |
+| **Method names match behavior** | A method named `Create*` should not silently return an existing object. Use `Get*` or `GetOrCreate*` when caching or reuse is part of the contract. |
+| **Document mutable collection ownership** | If an API returns a cached mutable array or collection rather than a copy, document that callers must not mutate it or expose a read-only shape. |
+| **Link imported source to its origin** | Vendored or ported source should identify its upstream URL and commit so future reviewers can compare behavior and licensing. |
+| **Avoid unchanged file writes** | Generated files should only be rewritten when content changes. Timestamp-only writes break incremental builds and trigger unnecessary downstream work. |
 | **Update `docs/msbuild-properties.md`** | When adding new public MSBuild properties, always add documentation with property name, type, default value, description, and an XML example. |
 | **Don't commit to `main`** | All changes must go through pull requests — no direct pushes to `main`. |
 
