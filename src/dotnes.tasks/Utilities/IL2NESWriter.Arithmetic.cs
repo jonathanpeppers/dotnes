@@ -119,9 +119,6 @@ partial class IL2NESWriter
             return false;
 
         // Constant comparison: remove last LDA #imm, emit CMP #imm
-        // When _runtimeValueInA is true, WriteLdc skips emitting LDA — the last
-        // instruction is the actual computation (SBC, ADC, AND, etc.) and must not
-        // be removed.
         if (block.Count > 0)
         {
             var last = block[block.Count - 1];

@@ -522,7 +522,7 @@ public class DecompilerTests
     public void Decompiler_Shoot2_RecoverPadMasking()
     {
         // shoot2 uses LDA $0380 / AND #$01 / BEQ → if ((var_0380 & PAD.A) != 0)
-        // and LDA $0380 / AND #$40 / BEQ → if ((var_0380 & PAD.LEFT) != 0)
+        // and pad_dpad_x emits AND #$80 → if ((var_0380 & PAD.RIGHT) != 0)
         var romBytes = GetVerifiedRom("shoot2");
         var rom = new NESRomReader(romBytes);
         var decompiler = new Decompiler(rom, _logger);
@@ -531,8 +531,8 @@ public class DecompilerTests
 
         // PAD.A masking (AND #$01)
         Assert.Contains("if ((var_0380 & PAD.A) != 0)", code);
-        // PAD.LEFT masking (AND #$40)
-        Assert.Contains("if ((var_0380 & PAD.LEFT) != 0)", code);
+        // PAD.RIGHT masking (AND #$80)
+        Assert.Contains("if ((var_0380 & PAD.RIGHT) != 0)", code);
     }
 
     [Fact]
