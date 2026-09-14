@@ -5,6 +5,7 @@ on:
     events: [pull_request_comment]
   roles: [admin, maintainer, write]
 permissions:
+  actions: read
   contents: read
   pull-requests: read
 strict: false
@@ -19,7 +20,7 @@ tools:
   bash: [":*"]
   cli-proxy: false
   github:
-    toolsets: [pull_requests, repos]
+    toolsets: [actions, pull_requests, repos]
     min-integrity: none
 safe-outputs:
   threat-detection: false
