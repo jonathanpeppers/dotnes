@@ -6,16 +6,22 @@ class ReflectionCache
 {
     readonly Dictionary<string, MethodInfo> _cache = new(StringComparer.Ordinal);
     readonly Dictionary<string, (int argCount, bool hasReturnValue)> _userMethods = new(StringComparer.Ordinal);
+    readonly Dictionary<string, int> _ilArgumentCounts = new(StringComparer.Ordinal);
     readonly HashSet<string> _externMethods = new(StringComparer.Ordinal);
+    readonly HashSet<string> _wordReturns = new(StringComparer.Ordinal);
+
+    public void RegisterWordReturn(string name) => _wordReturns.Add(name);
 
     public void RegisterUserMethod(string name, int argCount, bool hasReturnValue)
     {
+        if (!_ilArgumentCounts.ContainsKey(name))
+            _ilArgumentCounts.Add(name, argCount);
         _userMethods[name] = (argCount, hasReturnValue);
     }
 
     public void RegisterExternMethod(string name, int argCount, bool hasReturnValue)
     {
-        _userMethods[name] = (argCount, hasReturnValue);
+        RegisterUserMethod(name, argCount, hasReturnValue);
         _externMethods.Add(name);
     }
 
@@ -61,6 +67,9 @@ class ReflectionCache
         return GetMethod(name).GetParameters().Length;
     }
 
+    public int GetILNumberOfArguments(string name) =>
+        _ilArgumentCounts.TryGetValue(name, out int count) ? count : GetNumberOfArguments(name);
+
     public bool HasReturnValue(string name)
     {
         if (_userMethods.TryGetValue(name, out var info))
@@ -71,7 +80,7 @@ class ReflectionCache
     public bool Returns16Bit(string name)
     {
         if (_userMethods.ContainsKey(name))
-            return false; // User methods currently only return byte
+            return _wordReturns.Contains(name);
         var returnType = GetMethod(name).ReturnType;
         return returnType == typeof(ushort) || returnType == typeof(short) || returnType == typeof(int);
     }

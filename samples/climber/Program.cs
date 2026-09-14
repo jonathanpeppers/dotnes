@@ -480,10 +480,8 @@ while (true)
         // --- Player movement ---
         PAD joy = pad_poll(0);
         byte jump = (byte)(joy & PAD.A);
-        byte dpadX = 0;
-        byte dpadY = 0;
-        dpadX = (byte)(dpadX + pad_dpad_x(joy));
-        dpadY = (byte)(dpadY + pad_dpad_y(joy));
+        byte dpadX = (byte)pad_dpad_x(joy);
+        byte dpadY = (byte)pad_dpad_y(joy);
         {
             byte pi = 0;
             byte pf = actor_floor[pi];

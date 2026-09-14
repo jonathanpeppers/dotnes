@@ -8,6 +8,8 @@ namespace dotnes;
 /// </summary>
 record ILInstruction(ILOpCode OpCode, int Offset = 0, int? Integer = null, string? String = null, ImmutableArray<byte>? Bytes = null)
 {
+    internal (int ArgumentCount, bool ReturnsValue)? CallSignature { get; init; }
+
     /// <summary>
     /// Gets the local index for a Stloc opcode, or null if not a Stloc.
     /// </summary>
@@ -30,7 +32,17 @@ record ILInstruction(ILOpCode OpCode, int Offset = 0, int? Integer = null, strin
         ILOpCode.Ldloc_1 => 1,
         ILOpCode.Ldloc_2 => 2,
         ILOpCode.Ldloc_3 => 3,
-        ILOpCode.Ldloc_s => Integer,
+        ILOpCode.Ldloc_s or ILOpCode.Ldloc => Integer,
+        _ => null
+    };
+
+    public int? GetLdargIndex() => OpCode switch
+    {
+        ILOpCode.Ldarg_0 => 0,
+        ILOpCode.Ldarg_1 => 1,
+        ILOpCode.Ldarg_2 => 2,
+        ILOpCode.Ldarg_3 => 3,
+        ILOpCode.Ldarg_s or ILOpCode.Ldarg => Integer,
         _ => null
     };
 
@@ -49,7 +61,8 @@ record ILInstruction(ILOpCode OpCode, int Offset = 0, int? Integer = null, strin
         ILOpCode.Ldc_i4_6 => 6,
         ILOpCode.Ldc_i4_7 => 7,
         ILOpCode.Ldc_i4_8 => 8,
-        ILOpCode.Ldc_i4_s or ILOpCode.Ldc_i4 => Integer,
+        ILOpCode.Ldc_i4_s => Integer is int value ? (sbyte)(byte)value : null,
+        ILOpCode.Ldc_i4 => Integer,
         _ => null
     };
 }

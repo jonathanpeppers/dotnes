@@ -85,8 +85,7 @@ while (true)
     {
         // read direction input (use global to avoid AND cascade bug)
         trig = pad_trigger(0);
-        byte dpad = 0;
-        dpad = (byte)(dpad + pad_dpad_x(trig));
+        byte dpad = (byte)pad_dpad_x(trig);
         if (dpad == 1)
         {
             if (dir != DIR_LEFT) dir = DIR_RIGHT;
@@ -95,8 +94,7 @@ while (true)
         {
             if (dir != DIR_RIGHT) dir = DIR_LEFT;
         }
-        dpad = 0;
-        dpad = (byte)(dpad + pad_dpad_y(trig));
+        dpad = (byte)pad_dpad_y(trig);
         if (dpad == 0xff)
         {
             if (dir != DIR_DOWN) dir = DIR_UP;

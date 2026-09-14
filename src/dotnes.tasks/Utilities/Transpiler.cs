@@ -25,6 +25,8 @@ partial class Transpiler : IDisposable
     readonly IReadOnlyList<BankedRomAsset> _prgBankAssets;
     readonly IReadOnlyList<BankedRomAsset> _chrBankAssets;
 
+    internal bool LeaveAssemblyReadersOpen { get; init; }
+
     /// <summary>
     /// A list of methods that were found to be used in the IL code
     /// </summary>
@@ -41,6 +43,7 @@ partial class Transpiler : IDisposable
     /// Populated by ReadStaticVoidMain().
     /// </summary>
     public Dictionary<string, (int argCount, bool hasReturnValue, bool[] isArrayParam)> UserMethodMetadata { get; } = new(StringComparer.Ordinal);
+    readonly HashSet<string> _unsupportedArrayHelperSignatures = new(StringComparer.Ordinal);
 
     /// <summary>
     /// Extern methods declared with 'static extern' (name -> arg count, has return value).
@@ -103,7 +106,15 @@ partial class Transpiler : IDisposable
         IReadOnlyList<BankedRomAsset>? chrBankAssets = null)
     {
         _pe = new PEReader(stream, PEStreamOptions.LeaveOpen);
-        _reader = _pe.GetMetadataReader();
+        try
+        {
+            _reader = _pe.GetMetadataReader();
+        }
+        catch
+        {
+            _pe.Dispose();
+            throw;
+        }
         _assemblyFiles = assemblyFiles;
         _logger = logger ?? new NullLogger();
         _mirroring = mirroring;
@@ -161,10 +172,7 @@ partial class Transpiler : IDisposable
         _logger.WriteLine($"Building program...");
 
         // Build the complete program using single-pass transpilation
-        ushort programAddress = _mmc3BankedLayout
-            ? Mmc3BankLayout.FixedProgramAddress
-            : NESConstants.PrgRomStart;
-        var program = BuildProgram6502(out ushort sizeOfMain, out ushort locals, programAddress);
+        var program = CompileProgram(out ushort sizeOfMain, out ushort locals);
         program.ResolveAndRelaxBranches();
 
         _logger.WriteLine($"Size of main: {sizeOfMain}, locals: {locals}");
@@ -271,6 +279,15 @@ partial class Transpiler : IDisposable
         _logger.WriteLine($"ROM complete. Total size: {stream.Length} bytes");
     }
 
+    internal Program6502 CompileProgram(out ushort sizeOfMain, out ushort locals)
+    {
+        ValidateRomConfiguration();
+        ushort programAddress = _mmc3BankedLayout
+            ? Mmc3BankLayout.FixedProgramAddress
+            : NESConstants.PrgRomStart;
+        return BuildProgram6502(out sizeOfMain, out locals, programAddress);
+    }
+
     void ValidateRomConfiguration()
     {
         if (_mapper < 0 || _mapper > byte.MaxValue)
@@ -312,10 +329,14 @@ partial class Transpiler : IDisposable
         _logger.WriteLine($"Single-pass transpilation...");
         
         var instructions = ReadStaticVoidMain().ToArray();
+        bool nativeRenderer = UsedMethods.Contains(nameof(NESLib.ppu_use_native_renderer));
+        if (nativeRenderer)
+            ValidateNativeRenderer(instructions);
 
         // Create the base program with built-ins
-        var program = Program6502.CreateWithBuiltIns();
+        var program = Program6502.CreateWithBuiltIns(nativeRenderer);
         program.BaseAddress = baseAddress;
+        int preMainSize = program.TotalSize;
 
         // Register user methods with the reflection cache so Call handler knows about them
         var reflectionCache = new ReflectionCache();
@@ -323,10 +344,25 @@ partial class Transpiler : IDisposable
         {
             reflectionCache.RegisterUserMethod(kvp.Key, kvp.Value.argCount, kvp.Value.hasReturnValue);
         }
+        var arrayParameters = UserMethodMetadata.ToDictionary(
+            kvp => kvp.Key, kvp => kvp.Value.isArrayParam, StringComparer.Ordinal);
         // Register extern methods so Call handler can look up arg counts
         foreach (var kvp in ExternMethods)
         {
             reflectionCache.RegisterExternMethod(kvp.Key, kvp.Value.argCount, kvp.Value.hasReturnValue);
+            program.RegisterExternSymbol(kvp.Key);
+        }
+        foreach (var kvp in NumericTypes)
+        {
+            if ((UserMethodMetadata.ContainsKey(kvp.Key) || ExternMethods.ContainsKey(kvp.Key))
+                && kvp.Value.ReturnType is not (null or PrimitiveTypeCode.Void or PrimitiveTypeCode.Boolean
+                    or PrimitiveTypeCode.Byte or PrimitiveTypeCode.SByte or PrimitiveTypeCode.Int16 or PrimitiveTypeCode.UInt16))
+                throw new TranspileException(
+                    $"Return type {kvp.Value.ReturnType} is not supported by the NES user/extern-method calling convention. " +
+                    "Use a supported return type (byte, sbyte, short, ushort, bool or void); only convert explicitly " +
+                    "when the resulting range and truncation semantics are intended.", kvp.Key);
+            if (kvp.Value.ReturnType is PrimitiveTypeCode.Int16 or PrimitiveTypeCode.UInt16)
+                reflectionCache.RegisterWordReturn(kvp.Key);
         }
 
         // Build main program block using label references (addresses resolved later)
@@ -335,6 +371,7 @@ partial class Transpiler : IDisposable
 
         // Pre-allocate user-defined static fields so all methods share the same addresses
         var (staticFields, wordStaticFields, staticFieldBytes, staticArrayFields) = PreAllocateStaticFields(instructions);
+        var numericFieldTypes = GetNumericFieldTypes();
 
         // Detect and set up closure struct support
         if (_closureFieldTypes.Count > 0)
@@ -344,11 +381,78 @@ partial class Transpiler : IDisposable
             PreAllocateClosureFields(ref staticFieldBytes);
         }
 
+        // Prove original source ranges before either memory or expression spilling adds conversions.
+        var mainCompactInts = GetCompactIntLocalsForMethod(instructions, reflectionCache, "main");
+        var methodCompactInts = UserMethods.ToDictionary(pair => pair.Key,
+            pair => GetCompactIntLocalsForMethod(pair.Value, reflectionCache, pair.Key));
+        instructions = MaterializeSharedMemoryAddresses(instructions, reflectionCache, "main", mainCompactInts);
+        foreach (string methodName in UserMethods.Keys.ToArray())
+            UserMethods[methodName] = MaterializeSharedMemoryAddresses(UserMethods[methodName], reflectionCache,
+                methodName, methodCompactInts[methodName]);
+
+        instructions = PreserveExpressionValues(instructions, reflectionCache, "main", mainCompactInts);
+        foreach (var name in UserMethods.Keys.ToArray())
+            UserMethods[name] = PreserveExpressionValues(UserMethods[name], reflectionCache, name, methodCompactInts[name]);
+
+        ArrayStorageAnalysis ArrayAliasesFor(ILInstruction[] body, string name)
+        {
+            var parameters = UserMethods.Where(pair => pair.Key != name)
+                .ToDictionary(pair => pair.Value, pair => arrayParameters[pair.Key]);
+            if (name != "main")
+                parameters.Add(body, arrayParameters[name]);
+            return new ArrayStorageAnalysis(parameters.Keys.Prepend(name == "main" ? body : instructions),
+                reflectionCache, parameters);
+        }
+        instructions = MaterializeConditionalValues(instructions, reflectionCache, "main", mainCompactInts,
+            body => ArrayAliasesFor(body, "main"));
+        foreach (var name in UserMethods.Keys.ToArray())
+            UserMethods[name] = MaterializeConditionalValues(UserMethods[name], reflectionCache, name, methodCompactInts[name],
+                body => ArrayAliasesFor(body, name));
+
+        var arrayStorage = new ArrayStorageAnalysis(UserMethods.Values.Prepend(instructions), reflectionCache,
+            UserMethods.ToDictionary(pair => pair.Value, pair => arrayParameters[pair.Key]));
+        ILInstruction[] RewriteArrays(ILInstruction[] body, string name)
+        {
+            return ArrayOperandLowering.Rewrite(body, reflectionCache, arrayParameters,
+                arrayParameters.TryGetValue(name, out var parameters) ? parameters : null,
+                _unsupportedArrayHelperSignatures,
+                _closureMethodArgIndex.TryGetValue(name, out int context) ? context : -1,
+                arrayStorage, (analysis, selected) =>
+                {
+                    var types = GetExpressionValueTypes(body, analysis, reflectionCache, name,
+                        name == "main" ? mainCompactInts : methodCompactInts[name]);
+                    var references = new HashSet<int>(selected.Where(p => types[p] is null &&
+                        arrayStorage.GetStorage(body, p) is ArrayStorage.Ram or ArrayStorage.Rom or ArrayStorage.Parameter));
+                    return RewriteTypedExpressionValues(body, analysis, selected, types, name, references);
+                });
+        }
+        instructions = RewriteArrays(instructions, "main");
+        foreach (var name in UserMethods.Keys.ToArray())
+            UserMethods[name] = RewriteArrays(UserMethods[name], name);
+
+        arrayStorage = new ArrayStorageAnalysis(UserMethods.Values.Prepend(instructions), reflectionCache,
+            UserMethods.ToDictionary(pair => pair.Value, pair => arrayParameters[pair.Key]));
+        var (staticArrayAliases, fixedArrayAllocations, provenStaticArrayStores) = PreAllocateArrayAliases(
+            UserMethods.Values.Prepend(instructions), reflectionCache, ref staticFieldBytes, staticArrayFields,
+            UserMethods.ToDictionary(pair => pair.Value, pair => arrayParameters[pair.Key]));
+        ValidateStaticArrayInitialization(instructions, UserMethods, reflectionCache, staticArrayAliases.Keys, provenStaticArrayStores);
+
+        var byteParameterCalls = NumericTypes.Where(kvp =>
+            UserMethods.ContainsKey(kvp.Key) && kvp.Value.Parameters.Where((p, index) =>
+                    !_closureMethodArgIndex.TryGetValue(kvp.Key, out int closure) || index != closure)
+                .All(p => p == PrimitiveTypeCode.Byte)
+                && kvp.Value.ReturnType is PrimitiveTypeCode.Byte or PrimitiveTypeCode.Void)
+            .ToDictionary(kvp => kvp.Key,
+                kvp => _closureMethodArgIndex.TryGetValue(kvp.Key, out int closure) ? closure : -1);
+
         using var writer = new IL2NESWriter(new MemoryStream(), logger: _logger, reflectionCache: reflectionCache)
         {
             Instructions = instructions,
             UsedMethods = UsedMethods,
             UserMethodNames = new HashSet<string>(UserMethods.Keys, StringComparer.Ordinal),
+            UserMethodArrayParameters = arrayParameters,
+            UnsupportedArrayHelperSignatures = _unsupportedArrayHelperSignatures,
+            ByteParameterCalls = byteParameterCalls,
             ExternMethodNames = externNames,
             WordLocals = DetectWordLocals(instructions, reflectionCache),
             StructLayouts = structLayouts,
@@ -357,6 +461,9 @@ partial class Transpiler : IDisposable
             WordStaticFields = wordStaticFields,
             LocalCount = staticFieldBytes,
             StaticArrayFields = staticArrayFields,
+            StaticArrayAliases = staticArrayAliases,
+            FixedArrayAllocations = fixedArrayAllocations.TryGetValue(instructions, out var mainAllocations) ? mainAllocations : new(),
+            ProvenStaticArrayStores = provenStaticArrayStores.TryGetValue(instructions, out var mainStores) ? mainStores : new(),
             ClosureFieldTypes = _closureFieldTypes.Count > 0 ? _closureFieldTypes : null,
             ClosureFieldLabels = _closureFieldLabels,
             ClosureFieldAddresses = _closureFieldAddresses,
@@ -364,6 +471,7 @@ partial class Transpiler : IDisposable
             TryFinallyRegions = MainExceptionRegions.Length > 0 ? MainExceptionRegions : null,
         };
 
+        writer.ConfigureNumericTypes(NumericTypes, numericFieldTypes, _closureNumericFieldTypes);
         writer.StartBlockBuffering();
 
         // Translate IL to 6502 (single pass - sizeOfMain = 0 since we'll calculate later)
@@ -385,6 +493,8 @@ partial class Transpiler : IDisposable
             
             // Record block count before processing this instruction
             writer.RecordBlockCount(instruction.Offset);
+            if (writer.TryNumericComparison(instruction) || writer.TryNumericShift(instruction))
+                continue;
             
             if (instruction.Integer != null)
             {
@@ -424,8 +534,11 @@ partial class Transpiler : IDisposable
         // Each method's locals must use unique addresses to prevent collisions in nested calls
         int mainLocalCount = writer.LocalCount;
         var methodFrameOffsets = ComputeMethodFrameOffsets(UserMethods, reflectionCache, mainLocalCount, structLayouts,
-            _closureStructLocalIndex, _closureFieldTypes.Count > 0 ? _closureFieldTypes : null);
+            _closureStructLocalIndex, _closureFieldTypes.Count > 0 ? _closureFieldTypes : null,
+            UserMethods.ToDictionary(pair => pair.Key, pair => fixedArrayAllocations.TryGetValue(pair.Value, out var allocations)
+                ? new HashSet<int>(allocations.Keys) : new HashSet<int>(), StringComparer.Ordinal), arrayStorage);
         int userMethodsTotalSize = 0;
+        int localHighWater = mainLocalCount;
         foreach (var kvp in UserMethods.OrderBy(x => x.Key, StringComparer.Ordinal))
         {
             var methodName = kvp.Key;
@@ -437,10 +550,14 @@ partial class Transpiler : IDisposable
                 Instructions = methodIL,
                 UsedMethods = UsedMethods,
                 UserMethodNames = new HashSet<string>(UserMethods.Keys, StringComparer.Ordinal),
+                UserMethodArrayParameters = arrayParameters,
+                UnsupportedArrayHelperSignatures = _unsupportedArrayHelperSignatures,
+                ByteParameterCalls = byteParameterCalls,
+                ExternMethodNames = externNames,
                 MethodParamCount = paramCount,
                 ParamIsArray = isArrayParam,
                 MethodName = methodName,
-                WordLocals = DetectWordLocals(methodIL, reflectionCache),
+                WordLocals = DetectWordLocals(methodIL, reflectionCache, methodName),
                 StructLayouts = structLayouts,
                 BufferFieldSizes = _bufferFieldSizes,
                 ByteArrayLabelStartIndex = writer.ByteArrays.Count,
@@ -448,12 +565,17 @@ partial class Transpiler : IDisposable
                 LocalCount = methodFrameOffsets[methodName],
                 StaticFieldAddresses = staticFields,
                 WordStaticFields = wordStaticFields,
+                StaticArrayFields = staticArrayFields,
+                StaticArrayAliases = staticArrayAliases,
+                FixedArrayAllocations = fixedArrayAllocations.TryGetValue(methodIL, out var methodAllocations) ? methodAllocations : new(),
+                ProvenStaticArrayStores = provenStaticArrayStores.TryGetValue(methodIL, out var methodStores) ? methodStores : new(),
                 ClosureFieldTypes = _closureFieldTypes.Count > 0 ? _closureFieldTypes : null,
                 ClosureFieldLabels = _closureFieldLabels,
                 ClosureFieldAddresses = _closureFieldAddresses,
                 ClosureArgIndex = _closureMethodArgIndex.TryGetValue(methodName, out var cai) ? cai : -1,
                 TryFinallyRegions = UserMethodExceptionRegions.TryGetValue(methodName, out var umer) ? umer : null,
             };
+            methodWriter.ConfigureNumericTypes(NumericTypes, numericFieldTypes, _closureNumericFieldTypes);
             methodWriter.StartBlockBuffering();
 
             // If method has parameters, emit prologue to push last arg onto cc65 stack
@@ -477,6 +599,9 @@ partial class Transpiler : IDisposable
                 if (methodWriter.CurrentBlock != null)
                     methodWriter.CurrentBlock.SetNextLabel(labelName);
                 methodWriter.RecordBlockCount(instruction.Offset);
+                if (methodWriter.TryNumericComparison(instruction) || methodWriter.TryNumericShift(instruction))
+                    continue;
+                methodWriter.PrepareNumericReturn(instruction);
 
                 if (instruction.Integer != null)
                     methodWriter.Write(instruction, instruction.Integer.Value);
@@ -529,24 +654,24 @@ partial class Transpiler : IDisposable
                 writer.MergeStringTableEntry(label, data);
             foreach (var bytes in methodWriter.ByteArrays)
                 writer.MergeByteArray(bytes);
+            localHighWater = Math.Max(localHighWater, methodWriter.LocalCount);
         }
 
         // Parse and add extern code blocks from .s assembly files using ca65 assembler
         int externBlocksTotalSize = 0;
+        bool hasNativeCode = _prgBankAssets.Count > 0;
         if (ExternMethods.Count > 0)
         {
             foreach (var assemblyFile in _assemblyFiles)
             {
-                if (!File.Exists(assemblyFile.Path))
-                    continue;
-
                 var ca65 = new Ca65Assembler();
-                using (var reader = new StreamReader(assemblyFile.Path))
+                using (var reader = assemblyFile.OpenSource())
                 {
                     var blocks = ca65.Assemble(reader);
                     foreach (var block in blocks)
                     {
-                        program.AddBlock(block);
+                        program.AddNativeBlock(block);
+                        hasNativeCode = true;
                         externBlocksTotalSize += block.Size;
                         _logger.WriteLine($"Extern block '{block.Label}': {block.Size} bytes");
                     }
@@ -563,6 +688,11 @@ partial class Transpiler : IDisposable
 
         // Get local count from writer
         locals = (ushort)writer.LocalCount;
+        if (OptimizeByteHelpers && TryOptimizeByteHelpers(program, instructions, localHighWater, hasNativeCode, out int optimizedLocals))
+        {
+            locals = (ushort)optimizedLocals;
+            userMethodsTotalSize = UserMethods.Keys.Sum(name => program.GetBlock(name)!.Size);
+        }
 
         // Store named ushort[] arrays (note tables) as interleaved 16-bit data (cc65 compatible)
         var noteTableData = new List<(string label, byte[] data)>();
@@ -615,7 +745,6 @@ partial class Transpiler : IDisposable
         // totalSize is used for donelib/copydata - points past the data tables.
         // All sizes are computed from actual block sizes so the layout adjusts automatically
         // if subroutines change.
-        int preMainSize = Program6502.GetBuiltInSize();
         int finalBuiltInsSize = Program6502.CalculateFinalBuiltInsSize(locals, UsedMethods);
         ushort totalSize = (ushort)(program.BaseAddress + preMainSize + sizeOfMain + finalBuiltInsSize + musicSubroutinesSize + userMethodsTotalSize + externBlocksTotalSize + byteArrayTableSize + stringTableSize);
         
@@ -664,9 +793,12 @@ partial class Transpiler : IDisposable
 
     public void Dispose()
     {
-        foreach (var assembly in _assemblyFiles)
+        if (!LeaveAssemblyReadersOpen)
         {
-            assembly.Dispose();
+            foreach (var assembly in _assemblyFiles)
+            {
+                assembly.Dispose();
+            }
         }
         _pe.Dispose();
     }

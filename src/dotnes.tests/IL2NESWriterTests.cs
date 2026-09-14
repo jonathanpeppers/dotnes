@@ -603,9 +603,9 @@ public class IL2NESWriterTests
         // Set up Instructions array so WriteLdc lookahead detects Div
         var instructions = new ILInstruction[]
         {
-            new(ILOpCode.Call),
-            new(ILOpCode.Ldc_i4_4),
-            new(ILOpCode.Div),
+            new(ILOpCode.Call, String: nameof(rand16)),
+            new(ILOpCode.Ldc_i4_4, Offset: 5),
+            new(ILOpCode.Div, Offset: 6),
         };
         writer.Instructions = instructions;
 
@@ -645,9 +645,9 @@ public class IL2NESWriterTests
         // Set up Instructions array so WriteLdc(ushort) lookahead detects Div
         var instructions = new ILInstruction[]
         {
-            new(ILOpCode.Call),
-            new(ILOpCode.Ldc_i4, Integer: 256),
-            new(ILOpCode.Div),
+            new(ILOpCode.Call, String: nameof(rand16)),
+            new(ILOpCode.Ldc_i4, Integer: 256, Offset: 5),
+            new(ILOpCode.Div, Offset: 10),
         };
         writer.Instructions = instructions;
 
@@ -655,7 +655,7 @@ public class IL2NESWriterTests
         writer.Index = 0;
         writer.Write(instructions[0], nameof(rand16));
         writer.Index = 1;
-        writer.Write(new ILInstruction(ILOpCode.Ldc_i4), 256);
+        writer.Write(instructions[1], 256);
         writer.Index = 2;
         writer.Write(instructions[2]);
 
@@ -687,9 +687,9 @@ public class IL2NESWriterTests
         // Set up Instructions array so WriteLdc lookahead detects Div
         var instructions = new ILInstruction[]
         {
-            new(ILOpCode.Call),
-            new(ILOpCode.Ldc_i4_s),
-            new(ILOpCode.Div),
+            new(ILOpCode.Call, String: nameof(rand16)),
+            new(ILOpCode.Ldc_i4_s, Integer: 10, Offset: 5),
+            new(ILOpCode.Div, Offset: 7),
         };
         writer.Instructions = instructions;
 
@@ -697,7 +697,7 @@ public class IL2NESWriterTests
         writer.Index = 0;
         writer.Write(instructions[0], nameof(rand16));
         writer.Index = 1;
-        writer.Write(new ILInstruction(ILOpCode.Ldc_i4_s), 10);
+        writer.Write(instructions[1], 10);
         writer.Index = 2;
         writer.Write(instructions[2]);
 

@@ -322,10 +322,8 @@ while (true)
             if (keys != keys_changed)
             {
                 has_changed = 0;
-                byte dpadX = 0;
-                byte dpadY = 0;
-                dpadX = (byte)(dpadX + pad_dpad_x((PAD)keys_changed));
-                dpadY = (byte)(dpadY + pad_dpad_y((PAD)keys_changed));
+                byte dpadX = (byte)pad_dpad_x((PAD)keys_changed);
+                byte dpadY = (byte)pad_dpad_y((PAD)keys_changed);
 
                 // Copy map to prev_map before any move
                 if (dpadX != 0 || dpadY != 0)

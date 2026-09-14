@@ -20,7 +20,10 @@ Always loaded during reviews.
 | **Adding implementations to NESLib.cs** | AI tries to add real method bodies to `NESLib.cs`. Every method there must be `=> throw null!` — the transpiler maps method names to 6502 subroutines, it never runs the C# body. |
 | **Unused parameters** | AI adds `CancellationToken` or other parameters but never observes them. If a parameter is accepted, it must be used. |
 | **Confidently wrong 6502 facts** | AI makes authoritative claims about 6502 behavior (addressing modes, flag effects, cycle counts) that are wrong. Always verify 6502 claims against the [instruction set reference](https://www.masswerk.at/6502/6502_instruction_set.html). |
+| **Confidently wrong framework facts** | AI assumes an API exists on every target framework or that a helper behaves as its name suggests. Check the project's oldest target framework and trace helpers to their final consumers before commenting. |
 | **Docs describe intent not reality** | AI doc comments often describe what the code *should* do, not what it *actually* does. Review doc comments against the implementation. |
+| **Over-mocking** | AI replaces useful end-to-end coverage with mocks that only confirm configured behavior. Preserve integration coverage for the transpilation pipeline and external tool boundaries. |
+| **Typos in user-visible diagnostics** | Build errors and diagnostics are copied into issue reports. Verify spelling, identifiers, and actionable context. |
 | **Filler words in docs** | "So" at the start of a sentence adds nothing. "Basically" and "essentially" are padding. Be direct. |
 | **`git commit --amend`** | AI uses `--amend` on commits. Always create new commits — the maintainer will squash as needed. |
 | **Modifying `.verified.bin` files** | AI updates snapshot files to make tests pass after a code change. The `.verified.bin` files are the source of truth — if a code change produces different bytes for an unchanged sample, the code is wrong, not the snapshot. Only update snapshots when the sample's `Program.cs` itself changed. |

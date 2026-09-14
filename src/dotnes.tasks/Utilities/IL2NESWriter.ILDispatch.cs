@@ -40,6 +40,20 @@ partial class IL2NESWriter
 
     public void Write(ILInstruction instruction)
     {
+        if (TryStoreArrayAlias(instruction)) return;
+        BeginVariableShiftCount();
+        if (TryNumericDivision(instruction) || TryUnsignedWordDivision(instruction) || TryNumericLeftShift(instruction)
+            || TryNumericMultiply(instruction) || TryNumericBitwise(instruction))
+            return;
+        if (instruction.OpCode is ILOpCode.Add or ILOpCode.Sub
+            && TryNumericAddSub(instruction.OpCode == ILOpCode.Add))
+        {
+            previous = instruction.OpCode;
+            return;
+        }
+        if (TryWriteLocalBinary(instruction.OpCode))
+            return;
+
         // Clear ldloc byte array label for non-ldloc instructions
         if (instruction.OpCode is not (ILOpCode.Ldloc_0 or ILOpCode.Ldloc_1
             or ILOpCode.Ldloc_2 or ILOpCode.Ldloc_3 or ILOpCode.Ldloc_s))
@@ -55,6 +69,12 @@ partial class IL2NESWriter
                 // Skip for the final ret (it naturally falls through to the epilogue).
                 if (MethodName != null && Instructions != null && Index < Instructions.Length - 1)
                     EmitWithLabel(Opcode.JMP, AddressMode.Absolute, $"{MethodName}_epilogue");
+                if (WordNumericType(_numericTypes?.ReturnType))
+                {
+                    Stack.Clear();
+                    _accState = AccumulatorState.Empty;
+                    _savedState = SavedValueState.None;
+                }
                 break;
             case ILOpCode.Dup:
                 if (Stack.Count > 0)
@@ -289,6 +309,8 @@ partial class IL2NESWriter
                 }
                 break;
             case ILOpCode.Conv_u1:
+                if (Stack.Count > 0)
+                    Stack.Push(unchecked((byte)Stack.Pop()));
                 // When truncating from ushort to byte, discard high byte
                 if (_ushortInAX)
                     _ushortInAX = false;
@@ -296,12 +318,14 @@ partial class IL2NESWriter
                 _lastStaticFieldAddress = null;
                 break;
             case ILOpCode.Conv_u2:
-            case ILOpCode.Conv_u4:
-            case ILOpCode.Conv_u8:
             case ILOpCode.Conv_i1:
             case ILOpCode.Conv_i2:
+                WriteNumericConversion(instruction.OpCode);
+                break;
+            case ILOpCode.Conv_u4:
+            case ILOpCode.Conv_u8:
             case ILOpCode.Conv_i4:
-                // No-op: sign/zero extension is irrelevant on 8-bit 6502
+                // The evaluation value is unchanged by the 32-bit promotion.
                 _lastStaticFieldAddress = null;
                 break;
             case ILOpCode.Stelem_i1:
@@ -317,6 +341,7 @@ partial class IL2NESWriter
             case ILOpCode.Ldind_u1:
                 // ldind.u1: load byte through pointer (from ldelema System.Byte)
                 HandleLdindU1();
+                _ushortInAX = false;
                 break;
             case ILOpCode.Ldind_u2:
             case ILOpCode.Ldind_i2:
@@ -332,10 +357,10 @@ partial class IL2NESWriter
                 HandleStindI2();
                 break;
             case ILOpCode.Add:
-                HandleAddSub(isAdd: true);
+                WriteLegacyNumericAddSub(isAdd: true);
                 break;
             case ILOpCode.Sub:
-                HandleAddSub(isAdd: false);
+                WriteLegacyNumericAddSub(isAdd: false);
                 break;
             case ILOpCode.Mul:
                 {
@@ -512,7 +537,7 @@ partial class IL2NESWriter
                             or ILOpCode.Ldc_i4_3 or ILOpCode.Ldc_i4_4 or ILOpCode.Ldc_i4_5
                             or ILOpCode.Ldc_i4_6 or ILOpCode.Ldc_i4_7 or ILOpCode.Ldc_i4_8)
                         {
-                            RemoveLastInstructions(1);
+                           RemoveOperandInstructions(Index - 1, 1);
                         }
 
                         if (_ushortInAX)
@@ -651,12 +676,15 @@ partial class IL2NESWriter
                             or ILOpCode.Ldc_i4_3 or ILOpCode.Ldc_i4_4 or ILOpCode.Ldc_i4_5
                             or ILOpCode.Ldc_i4_6 or ILOpCode.Ldc_i4_7 or ILOpCode.Ldc_i4_8)
                         {
-                            RemoveLastInstructions(1);
+                           RemoveOperandInstructions(Index - 1, 1);
                         }
 
-                        if (divisor > 0 && (divisor & (divisor - 1)) == 0)
+                        var remInputs = _numericValues?.Inputs[Index];
+                        bool capturedDivisor = remInputs?.Length == 2
+                            && CanUseCapturedByteRemainder(remInputs[0], remInputs[1]);
+                        if (!capturedDivisor && divisor > 0 && (divisor & (divisor - 1)) == 0)
                         {
-                            // Power-of-2: x % N == x AND (N-1)
+                            // Power-of-2: x % N == x AND (N-1), only when A holds x.
                             Emit(Opcode.AND, AddressMode.Immediate, (byte)(divisor - 1));
                         }
                         else if (_savedRuntimeToTemp)
@@ -701,8 +729,10 @@ partial class IL2NESWriter
             case ILOpCode.Shr:
             case ILOpCode.Shr_un:
                 {
+                    if (EmitVariableShift(left: false))
+                        break;
                     _lastStaticFieldAddress = null;
-                    int shiftCount = Stack.Pop();
+                    int shiftCount = Stack.Pop() & 31;
                     int value = Stack.Count > 0 ? Stack.Pop() : 0;
 
                     bool shrLocalInA = _lastLoadedLocalIndex.HasValue &&
@@ -755,8 +785,10 @@ partial class IL2NESWriter
                 break;
             case ILOpCode.Shl:
                 {
+                    if (EmitVariableShift(left: true))
+                        break;
                     _lastStaticFieldAddress = null;
-                    int shiftCount = Stack.Pop();
+                    int shiftCount = Stack.Pop() & 31;
                     int value = Stack.Count > 0 ? Stack.Pop() : 0;
 
                     bool shlLocalInA = _lastLoadedLocalIndex.HasValue &&
@@ -788,6 +820,17 @@ partial class IL2NESWriter
                     _lastStaticFieldAddress = null;
                     int mask = Stack.Pop();
                     int value = Stack.Count > 0 ? Stack.Pop() : 0;
+
+                    if (_variableShiftIndex == Index + 1)
+                    {
+                        // Only the count's low five bits matter, even for a word local.
+                        Emit(Opcode.AND, AddressMode.Immediate, 31);
+                        _ushortInAX = false;
+                        _runtimeValueInA = true;
+                        _lastLoadedLocalIndex = null;
+                        Stack.Push(0);
+                        break;
+                    }
 
                     // Check if the value came from a local variable load (runtime value)
                     bool localInA = _lastLoadedLocalIndex.HasValue &&
@@ -925,6 +968,15 @@ partial class IL2NESWriter
                     _lastStaticFieldAddress = null;
                     int xorVal2 = Stack.Pop();
                     int xorVal1 = Stack.Count > 0 ? Stack.Pop() : 0;
+                    int? xorLiteral = null;
+                    if (Instructions != null)
+                    {
+                        _byteCallValues ??= new ILValueAnalysis(Instructions, _reflectionCache);
+                        var inputs = _byteCallValues.Inputs[Index];
+                        foreach (int producer in inputs)
+                            if (producer >= 0 && Instructions[producer].GetLdcValue() is int literal)
+                                xorLiteral = literal;
+                    }
 
                     bool xorLocalInA = _lastLoadedLocalIndex.HasValue &&
                         Locals.TryGetValue(_lastLoadedLocalIndex.Value, out var xorLocal) && xorLocal.Address != null;
@@ -932,8 +984,8 @@ partial class IL2NESWriter
                     // 16-bit XOR: runtime ushort in A:X with immediate mask
                     if (_ushortInAX && (_runtimeValueInA || xorLocalInA))
                     {
-                        int xorConst = xorVal2;
-                        if (xorVal2 == 0 && xorVal1 != 0)
+                        int xorConst = xorLiteral ?? xorVal2;
+                        if (xorLiteral == null && xorVal2 == 0 && xorVal1 != 0)
                             xorConst = xorVal1;
                         if (!_runtimeValueInA && xorLocalInA)
                             RemoveLastInstructions(2);
@@ -964,9 +1016,9 @@ partial class IL2NESWriter
                                 RemoveLastInstructions(1);
                             }
 
-                            // XOR is commutative: pick the non-zero operand as constant
-                            int xorConst = xorVal2;
-                            if (xorVal2 == 0 && xorVal1 != 0)
+                            // A literal zero is a value, not a runtime placeholder.
+                            int xorConst = xorLiteral ?? xorVal2;
+                            if (xorLiteral == null && xorVal2 == 0 && xorVal1 != 0)
                                 xorConst = xorVal1;
 
                             Emit(Opcode.EOR, AddressMode.Immediate, checked((byte)xorConst));
@@ -981,6 +1033,8 @@ partial class IL2NESWriter
                 }
                 break;
             case ILOpCode.Neg:
+                if (TryNumericUnary(instruction))
+                    break;
                 {
                     int value = Stack.Pop();
 
@@ -1003,6 +1057,8 @@ partial class IL2NESWriter
                 }
                 break;
             case ILOpCode.Not:
+                if (TryNumericUnary(instruction))
+                    break;
                 {
                     int value = Stack.Pop();
 
@@ -1128,6 +1184,7 @@ partial class IL2NESWriter
                 // ldelem.u1: pop array ref and index, push array[index]
                 // Pattern: Ldloc_N (array), Ldloc_M (index), Ldelem_u1
                 HandleLdelemU1();
+                _ushortInAX = false;
                 break;
             case ILOpCode.Ldelem_u2:
             case ILOpCode.Ldelem_i2:
@@ -1200,6 +1257,8 @@ partial class IL2NESWriter
 
     public void Write(ILInstruction instruction, int operand)
     {
+        if (TryStoreArrayAlias(instruction)) return;
+        BeginVariableShiftCount();
         _ldlocByteArrayLabel = null;
         switch (instruction.OpCode)
         {
@@ -1523,10 +1582,14 @@ partial class IL2NESWriter
                         Emit(Opcode.ORA, AddressMode.ZeroPage, TEMP);
                         _ushortInAX = false;
                     }
+                    else
+                        RefreshByteResultFlags();
                     EmitWithLabel(Opcode.BEQ, AddressMode.Relative, labelName);
                     if (Stack.Count > 0)
                         Stack.Pop();
                     _runtimeValueInA = false;
+                    _lastLoadedLocalIndex = null;
+                    _lastStaticFieldAddress = null;
                 }
                 break;
             case ILOpCode.Brtrue_s:
@@ -1541,10 +1604,14 @@ partial class IL2NESWriter
                         Emit(Opcode.ORA, AddressMode.ZeroPage, TEMP);
                         _ushortInAX = false;
                     }
+                    else
+                        RefreshByteResultFlags();
                     EmitWithLabel(Opcode.BNE, AddressMode.Relative, labelName);
                     if (Stack.Count > 0)
                         Stack.Pop();
                     _runtimeValueInA = false;
+                    _lastLoadedLocalIndex = null;
+                    _lastStaticFieldAddress = null;
                 }
                 break;
             case ILOpCode.Blt_s:
@@ -1706,11 +1773,15 @@ partial class IL2NESWriter
                         Emit(Opcode.ORA, AddressMode.ZeroPage, TEMP);
                         _ushortInAX = false;
                     }
+                    else
+                        RefreshByteResultFlags();
                     Emit(Opcode.BEQ, AddressMode.Relative, 3); // skip JMP if zero
                     EmitWithLabel(Opcode.JMP, AddressMode.Absolute, labelName);
                     if (Stack.Count > 0)
                         Stack.Pop();
                     _runtimeValueInA = false;
+                    _lastLoadedLocalIndex = null;
+                    _lastStaticFieldAddress = null;
                 }
                 break;
             case ILOpCode.Brfalse:
@@ -1724,15 +1795,27 @@ partial class IL2NESWriter
                         Emit(Opcode.ORA, AddressMode.ZeroPage, TEMP);
                         _ushortInAX = false;
                     }
+                    else
+                        RefreshByteResultFlags();
                     Emit(Opcode.BNE, AddressMode.Relative, 3); // skip JMP if non-zero
                     EmitWithLabel(Opcode.JMP, AddressMode.Absolute, labelName);
                     if (Stack.Count > 0)
                         Stack.Pop();
                     _runtimeValueInA = false;
+                    _lastLoadedLocalIndex = null;
+                    _lastStaticFieldAddress = null;
                 }
                 break;
+            case ILOpCode.Ldloca:
             case ILOpCode.Ldloca_s:
                 // Load address of local variable — used for struct field access
+                if (_numericTypes != null && operand < _numericTypes.Locals.Length
+                    && _numericTypes.Locals[operand] is PrimitiveTypeCode.Boolean or PrimitiveTypeCode.Byte
+                        or PrimitiveTypeCode.SByte or PrimitiveTypeCode.Int16 or PrimitiveTypeCode.UInt16)
+                    throw new TranspileException(
+                        $"Taking the address of scalar local {operand} at IL_{instruction.Offset:X4} is not supported. " +
+                        "Generic scalar by-reference access does not have a NES calling convention. " +
+                        "Use byte/sbyte value parameters or explicit native memory interfaces instead.", MethodName);
                 if (ClosureStructLocalIndex >= 0 && operand == ClosureStructLocalIndex
                     && Instructions is not null && ClosureFieldTypes != null)
                 {
@@ -1830,13 +1913,18 @@ partial class IL2NESWriter
 
     public void Write(ILInstruction instruction, string operand)
     {
+        if (TryStoreArrayAlias(instruction))
+            return;
+        BeginVariableShiftCount();
+        if (TryWriteByteCall(instruction, operand))
+            return;
+
         switch (instruction.OpCode)
         {
             case ILOpCode.Nop:
                 break;
             case ILOpCode.Ldftn:
-                // Function pointer: store the method name for the callback handler
-                _lastLdftnMethod = operand;
+                // A direct function address is consumed by the following callback setter.
                 break;
             case ILOpCode.Ldstr:
                 // Deduplicate: reuse label if same string was already seen
@@ -2487,21 +2575,19 @@ partial class IL2NESWriter
                         EmitWithLabel(Opcode.JSR, AddressMode.Absolute, operand);
                         _immediateInA = null;
                         break;
+                    case nameof(NESLib.ppu_use_native_renderer):
+                        // Whole-program selection is handled before emitting any IL.
+                        break;
                     case nameof(NESLib.nmi_set_callback):
                     case nameof(NESLib.irq_set_callback):
                         {
-                            // Function pointer path: ldftn already gave us the method name
-                            string? labelName = _lastLdftnMethod;
-                            _lastLdftnMethod = null;
+                            string labelName = GetDirectCallbackMethod(operand);
 
-                            if (labelName != null)
-                            {
-                                // User-defined methods use their name as-is; extern methods use _ prefix (cc65 convention)
-                                bool isUserMethod = UserMethodNames != null && UserMethodNames.Contains(labelName);
-                                string label = isUserMethod ? labelName : $"_{labelName}";
-                                EmitWithLabel(Opcode.LDA, AddressMode.Immediate_LowByte, label);
-                                EmitWithLabel(Opcode.LDX, AddressMode.Immediate_HighByte, label);
-                            }
+                            // User-defined methods use their name as-is; extern methods use _ prefix (cc65 convention)
+                            bool isUserMethod = UserMethodNames != null && UserMethodNames.Contains(labelName);
+                            string label = isUserMethod ? labelName : $"_{labelName}";
+                            EmitWithLabel(Opcode.LDA, AddressMode.Immediate_LowByte, label);
+                            EmitWithLabel(Opcode.LDX, AddressMode.Immediate_HighByte, label);
                             EmitWithLabel(Opcode.JSR, AddressMode.Absolute, operand);
                             if (operand == nameof(NESLib.nmi_set_callback))
                                 UsedMethods?.Add("nmi_set_callback");
@@ -2618,48 +2704,13 @@ partial class IL2NESWriter
                         break;
                     case nameof(NESLib.poke):
                         {
-                            // poke(ushort addr, byte value) -> LDA #value, STA abs addr
-                            if (Stack.Count >= 2)
+                            if (_runtimeMemoryCalls.Contains(Index))
                             {
-                                int value = Stack.Pop();
-                                int addr = Stack.Pop();
-
-                                // Check if the value is from a runtime local variable
-                                Local? pokeLocal = null;
-                                bool valueIsLocal = _lastLoadedLocalIndex.HasValue &&
-                                    Locals.TryGetValue(_lastLoadedLocalIndex.Value, out pokeLocal) &&
-                                    pokeLocal.Address.HasValue;
-
-                                // Check if the value is from a static field
-                                bool valueIsStaticField = _lastStaticFieldAddress.HasValue;
-
-                                // Remove previously emitted instructions:
-                                // ushort addr: LDX #hi, LDA #lo, JSR pushax, LDA #value = 4 instructions
-                                // byte addr:   LDA #lo, JSR pusha, LDA #value = 3 instructions
-                                RemoveLastInstructions(addr > byte.MaxValue ? 4 : 3);
-
-                                if (valueIsLocal)
-                                {
-                                    Emit(Opcode.LDA, AddressMode.Absolute, (ushort)pokeLocal!.Address!.Value);
-                                    _pokeLastValue = null;
-                                    _immediateInA = null;
-                                }
-                                else if (valueIsStaticField)
-                                {
-                                    Emit(Opcode.LDA, AddressMode.Absolute, _lastStaticFieldAddress!.Value);
-                                    _pokeLastValue = null;
-                                    _immediateInA = null;
-                                }
-                                else if (_pokeLastValue != (byte)value)
-                                {
-                                    Emit(Opcode.LDA, AddressMode.Immediate, (byte)value);
-                                    _pokeLastValue = (byte)value;
-                                    _immediateInA = (byte)value;
-                                }
-                                Emit(Opcode.STA, AddressMode.Absolute, (ushort)addr);
+                                EmitRuntimePoke();
+                                argsAlreadyPopped = true;
+                                break;
                             }
-                            _lastLoadedLocalIndex = null;
-                            _lastStaticFieldAddress = null;
+                            EmitConstantPoke();
                             argsAlreadyPopped = true;
                         }
                         break;
@@ -2741,15 +2792,17 @@ partial class IL2NESWriter
                         break;
                     case nameof(NESLib.peek):
                         {
+                            if (_runtimeMemoryCalls.Contains(Index))
+                            {
+                                EmitRuntimePeek();
+                                argsAlreadyPopped = true;
+                                break;
+                            }
                             // peek(ushort addr) -> LDA abs addr
                             if (Stack.Count >= 1)
                             {
                                 int addr = Stack.Pop();
-                                // Remove previously emitted instructions:
-                                // ushort addr: LDX #hi, LDA #lo = 2 instructions
-                                // byte addr:   LDA #lo = 1 instruction
-                                RemoveLastInstructions(addr > byte.MaxValue ? 2 : 1);
-                                Emit(Opcode.LDA, AddressMode.Absolute, (ushort)addr);
+                                EmitConstantPeek(addr);
                                 _runtimeValueInA = true;
                                 _immediateInA = null;
                                 _pokeLastValue = null;
@@ -3273,6 +3326,8 @@ partial class IL2NESWriter
                         argsAlreadyPopped = true;
                         break;
                     default:
+                        if (TryEmitArrayParameterCall(operand))
+                            break;
                         // Handle byte array locals loaded via ldloc (pushax pattern).
                         // Fastcall functions (pal_bg, pal_spr, pal_all, vram_unrle) expect
                         // pointer in A:X, not on cc65 stack. Replace pushax+size with just LDA/LDX.

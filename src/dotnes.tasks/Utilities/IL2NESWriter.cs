@@ -360,12 +360,6 @@ partial class IL2NESWriter : NESWriter
     bool _dupPreservedUshortHi;
 
     /// <summary>
-    /// Set by ldftn handler with the method name. Consumed by nmi_set_callback/irq_set_callback
-    /// to resolve the callback label from a function pointer instead of a string literal.
-    /// </summary>
-    string? _lastLdftnMethod;
-
-    /// <summary>
     /// Set by HandleLdsfld with the static field's RAM address.
     /// Used by poke/shared_set handlers to detect static field values
     /// (similar to _lastLoadedLocalIndex for local variables).
@@ -464,10 +458,9 @@ partial class IL2NESWriter : NESWriter
 
     /// <summary>
     /// Pending byte array element access state from ldelema System.Byte.
-    /// Null when no byte array ldelema is pending.
-    /// Used for compound assignments: arr[i]++, arr[i] += expr, etc.
+    /// Nested compound assignments retain each outer reference until its stind.
     /// </summary>
-    PendingByteArrayElement? _pendingByteArrayElement;
+    readonly Stack<PendingByteArrayElement> _pendingByteArrayElements = new();
 
     /// <summary>
     /// Pending ushort array element access state from ldelema System.UInt16.
@@ -495,7 +488,9 @@ partial class IL2NESWriter : NESWriter
         /// <summary>Array base address for AbsoluteX addressing (runtime index).</summary>
         ushort ArrayBase,
         /// <summary>Element address for constant-index access; null for runtime-index.</summary>
-        ushort? ConstantElementAddress
+        ushort? ConstantElementAddress,
+        Local? ParameterArray = null,
+        ILInstruction? SavedIndex = null
     );
 
     /// <summary>
@@ -656,8 +651,12 @@ partial class IL2NESWriter : NESWriter
     /// </summary>
     public void RecordBlockCount(int ilOffset)
     {
+        _numericArgAdjust[ilOffset] = _argStackAdjust;
+        PrepareMemoryOperands();
+        _numericWordAtILOffset[ilOffset] = _ushortInAX;
         if (_bufferedBlock != null)
             _blockCountAtILOffset[ilOffset] = GetBufferedBlockCount();
+        _arrayArgumentAdjustments[ilOffset] = _argStackAdjust;
     }
 
     /// <summary>

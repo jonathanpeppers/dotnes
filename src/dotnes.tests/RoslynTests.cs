@@ -66,7 +66,7 @@ public abstract class RoslynTests
         return program.GetMainBlock();
     }
 
-    private protected Transpiler BuildProgram(string csharpSource, out Program6502 program, IList<AssemblyReader>? additionalAssemblyFiles = null, bool allowUnsafe = false)
+    protected Stream CompileAssembly(string csharpSource, bool allowUnsafe = false)
     {
         _stream.SetLength(0);
         csharpSource = $"using NES;using static NES.NESLib;{Environment.NewLine}{csharpSource}";
@@ -89,10 +89,24 @@ public abstract class RoslynTests
         if (!emitResults.Success)
             Assert.Fail(string.Join(Environment.NewLine, emitResults.Diagnostics.Select(d => d.GetMessage())));
         _stream.Seek(0, SeekOrigin.Begin);
+        return _stream;
+    }
+
+    private protected Transpiler ReadProgram(string csharpSource, IList<AssemblyReader>? additionalAssemblyFiles = null, bool allowUnsafe = false, bool optimizeByteHelpers = false)
+    {
+        CompileAssembly(csharpSource, allowUnsafe);
         var assemblyFiles = new List<AssemblyReader> { new AssemblyReader(new StreamReader(Utilities.GetResource("chr_generic.s"))) };
         if (additionalAssemblyFiles != null)
             assemblyFiles.AddRange(additionalAssemblyFiles);
-        var transpiler = new Transpiler(_stream, assemblyFiles, _logger);
+        return new Transpiler(_stream, assemblyFiles, _logger)
+        {
+            OptimizeByteHelpers = optimizeByteHelpers,
+        };
+    }
+
+    private protected Transpiler BuildProgram(string csharpSource, out Program6502 program, IList<AssemblyReader>? additionalAssemblyFiles = null, bool allowUnsafe = false, bool optimizeByteHelpers = false)
+    {
+        var transpiler = ReadProgram(csharpSource, additionalAssemblyFiles, allowUnsafe, optimizeByteHelpers);
         try
         {
             program = transpiler.BuildProgram6502(out _, out _);

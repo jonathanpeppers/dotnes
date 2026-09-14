@@ -75,16 +75,14 @@ while (true)
     {
         // poll controller 0 (player 1 controls actor 0)
         PAD pad = pad_poll(0);
-        byte dpadX0 = 0;
-        dpadX0 = (byte)(dpadX0 + pad_dpad_x(pad));
+        byte dpadX0 = (byte)pad_dpad_x(pad);
         if (dpadX0 == 0xff)
             actor_dx[0] = 254; // -2 as unsigned byte
         else if (dpadX0 == 1)
             actor_dx[0] = 2;
         else
             actor_dx[0] = 0;
-        byte dpadY0 = 0;
-        dpadY0 = (byte)(dpadY0 + pad_dpad_y(pad));
+        byte dpadY0 = (byte)pad_dpad_y(pad);
         if (dpadY0 == 0xff)
             actor_dy[0] = 254; // -2
         else if (dpadY0 == 1)
@@ -94,16 +92,14 @@ while (true)
 
         // poll controller 1 (player 2 controls actor 1)
         pad = pad_poll(1);
-        byte dpadX1 = 0;
-        dpadX1 = (byte)(dpadX1 + pad_dpad_x(pad));
+        byte dpadX1 = (byte)pad_dpad_x(pad);
         if (dpadX1 == 0xff)
             actor_dx[1] = 254;
         else if (dpadX1 == 1)
             actor_dx[1] = 2;
         else
             actor_dx[1] = 0;
-        byte dpadY1 = 0;
-        dpadY1 = (byte)(dpadY1 + pad_dpad_y(pad));
+        byte dpadY1 = (byte)pad_dpad_y(pad);
         if (dpadY1 == 0xff)
             actor_dy[1] = 254;
         else if (dpadY1 == 1)
