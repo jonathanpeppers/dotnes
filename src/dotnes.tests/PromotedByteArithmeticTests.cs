@@ -65,26 +65,36 @@ public class PromotedByteArithmeticTests(ITestOutputHelper output) : ExecutionTe
     [InlineData("ushort", "byte", 0, 1, "-", 65535)]
     [InlineData("short", "byte", 32767, 1, "+", -32768)]
     [InlineData("short", "byte", -32768, 1, "-", 32767)]
-    public void SignedAndWordOperandsKeepGenericEmission(string leftType, string rightType,
+    public void PureSignedAndWordOperandsKeepGenericEmission(string leftType, string rightType,
         int left, int right, string operation, int expected)
     {
         string source =
             $$"""
-            {{leftType}} left = Left();
-            {{rightType}} right = Right();
-            {{leftType}} result = ({{leftType}})(left {{operation}} right);
+            State.Left = unchecked(({{leftType}}){{left}});
+            State.Right = unchecked(({{rightType}}){{right}});
+            {{leftType}} result = ({{leftType}})(State.Left {{operation}} State.Right);
             byte low = (byte)result, high = (byte)(result >> 8);
             poke(0x6000, low); poke(0x6001, high);
             test_stop(); while (true) ;
             static extern void test_stop();
-            static {{leftType}} Left() => unchecked(({{leftType}}){{left}});
-            static {{rightType}} Right() => unchecked(({{rightType}}){{right}});
+            static class State
+            {
+                public static {{leftType}} Left;
+                public static {{rightType}} Right;
+            }
             """;
         // Signed byte results explicitly wrap at their declared storage boundary.
         if (leftType == "sbyte")
             expected = unchecked((sbyte)expected);
-        var cpu = ExecuteProgram(source);
+        using var transpiler = BuildProgram(source, out var program);
+        program.DefineExternalLabel("_test_stop", 0x7FF0);
+        // Generic A:X capture, not a rejection caused by impure call operands.
+        Assert.Contains("85-17-86-19", BitConverter.ToString(program.GetMainBlock()));
+        Assert.True(program.Labels.TryResolve("main", out ushort entry));
+        var cpu = new Cpu6502(program.ToBytes(), program.BaseAddress, entry);
+        cpu.RunUntil(0x7FF0);
         Assert.Equal(new byte[] { (byte)expected, (byte)(expected >> 8) }, cpu.Memory[0x6000..0x6002]);
+        Assert.Equal(Cpu6502.SoftwareStackTop, cpu.SoftwareStackPointer);
     }
 
     [Fact]
