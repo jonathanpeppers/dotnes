@@ -50,7 +50,6 @@ Program6502 program = NesCompiler.Compile(assembly, options);
 | `Mapper` | `0` | iNES mapper number, in `0..255`. The number alone does not change placement or generate bank-switching code. |
 | `Mmc3BankedLayout` | `false` | Place the program at `$C000` instead of `$8000`; requires mapper 4. |
 | `OptimizeByteHelpers` | `false` | Use private RAM parameter homes for proven non-reentrant small byte helpers. Applies the same eligibility and native-code fallback as [`NESOptimizeByteHelpers`](msbuild-properties.md#nesoptimizebytehelpers). |
-| `OptimizePromotedByteArithmetic` | `false` | Compact full-width add/sub for proven unsigned-byte operands, without narrowing results or changing the ABI. Same contract as [`NESOptimizePromotedByteArithmetic`](msbuild-properties.md#nesoptimizepromotedbytearithmetic); default emission is unchanged. |
 
 Only options that select program construction are exposed. Mirroring, battery
 flags, PRG/CHR bank counts, and bank asset packaging belong to the ROM image

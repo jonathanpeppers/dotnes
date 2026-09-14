@@ -5,8 +5,6 @@ namespace dotnes;
 
 partial class Transpiler
 {
-    public bool OptimizePromotedByteArithmetic { get; init; }
-
     internal Dictionary<string, MethodNumericTypes> NumericTypes { get; } = new(StringComparer.Ordinal);
 
     Dictionary<string, PrimitiveTypeCode?> GetNumericFieldTypes(ISet<string>? ambiguousFields = null) =>

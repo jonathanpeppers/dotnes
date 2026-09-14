@@ -15,7 +15,7 @@
   <Target Name="_WriteNESPropertiesStamp">
     <WriteLinesToFile
         File="$(_NESPropertiesStampFile)"
-        Lines="NESMirroring=$(NESMirroring);NESMapper=$(NESMapper);NESPrgBanks=$(NESPrgBanks);NESChrBanks=$(NESChrBanks);NESBattery=$(NESBattery);NESMmc3BankedLayout=$(NESMmc3BankedLayout);NESOptimizeByteHelpers=$(NESOptimizeByteHelpers);NESOptimizePromotedByteArithmetic=$(NESOptimizePromotedByteArithmetic);@(NESPrgBank->'%(FullPath)|%(Bank)|%(CpuAddress)|%(Offset)');@(NESChrBank->'%(FullPath)|%(Bank)|%(Offset)')"
+        Lines="NESMirroring=$(NESMirroring);NESMapper=$(NESMapper);NESPrgBanks=$(NESPrgBanks);NESChrBanks=$(NESChrBanks);NESBattery=$(NESBattery);NESMmc3BankedLayout=$(NESMmc3BankedLayout);NESOptimizeByteHelpers=$(NESOptimizeByteHelpers);@(NESPrgBank->'%(FullPath)|%(Bank)|%(CpuAddress)|%(Offset)');@(NESChrBank->'%(FullPath)|%(Bank)|%(Offset)')"
         Overwrite="true"
         WriteOnlyWhenDifferent="true" />
     <ItemGroup>
@@ -37,7 +37,6 @@
         OutputPath="$(NESTargetPath)"
         DiagnosticLogging="$(NESDiagnosticLogging)"
         NESOptimizeByteHelpers="$(NESOptimizeByteHelpers)"
-        NESOptimizePromotedByteArithmetic="$(NESOptimizePromotedByteArithmetic)"
         NESMirroring="$(NESMirroring)"
         NESMapper="$(NESMapper)"
         NESPrgBanks="$(NESPrgBanks)"

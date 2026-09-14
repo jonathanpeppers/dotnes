@@ -14,8 +14,6 @@ public class TranspileToNES : Task
 
     public bool NESOptimizeByteHelpers { get; set; }
 
-    public bool NESOptimizePromotedByteArithmetic { get; set; }
-
     /// <summary>
     /// Nametable mirroring mode: "Horizontal" (default) or "Vertical".
     /// </summary>
@@ -80,7 +78,6 @@ public class TranspileToNES : Task
             chrBankAssets)
         {
             OptimizeByteHelpers = NESOptimizeByteHelpers,
-            OptimizePromotedByteArithmetic = NESOptimizePromotedByteArithmetic,
         };
         transpiler.Write(output);
 

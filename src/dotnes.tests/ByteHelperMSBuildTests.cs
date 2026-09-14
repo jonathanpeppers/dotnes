@@ -7,10 +7,8 @@ namespace dotnes.tests;
 
 public class ByteHelperMSBuildTests(ITestOutputHelper output) : RoslynTests(output)
 {
-    [Theory]
-    [InlineData("NESOptimizeByteHelpers")]
-    [InlineData("NESOptimizePromotedByteArithmetic")]
-    public async Task PropertyChangesRebuildAndRestoreBaselineRom(string property)
+    [Fact]
+    public async Task PropertyChangesRebuildAndRestoreBaselineRom()
     {
         string directory = Path.Combine(Path.GetTempPath(), $"dotnes-byte-helpers-{Guid.NewGuid():N}");
         Directory.CreateDirectory(directory);
@@ -20,11 +18,9 @@ public class ByteHelperMSBuildTests(ITestOutputHelper output) : RoslynTests(outp
             using (var assembly = CompileAssembly("""
                 NES.NESLib.poke(0x2001, 0);
                 State.Result = helper(42);
-                byte input = peek(0x6010);
-                State.Word = (ushort)(8 + input);
                 while (true) ;
                 static byte helper(byte value) => (byte)(value ^ 3);
-                static class State { public static byte Result; public static ushort Word; }
+                static class State { public static byte Result; }
                 """))
             using (var destination = File.Create(targetPath))
                 assembly.CopyTo(destination);
@@ -65,22 +61,22 @@ public class ByteHelperMSBuildTests(ITestOutputHelper output) : RoslynTests(outp
 
             Assert.Contains(transpilationMessage, await Build(null));
             byte[] defaultRom = File.ReadAllBytes(romPath);
-            Assert.Contains($"{property}=", File.ReadAllLines(stampPath));
+            Assert.Contains("NESOptimizeByteHelpers=", File.ReadAllLines(stampPath));
 
             Assert.Contains(transpilationMessage, await Build(false));
             byte[] baseline = File.ReadAllBytes(romPath);
             Assert.Equal(defaultRom, baseline);
             string baselineHash = Convert.ToHexString(SHA256.HashData(baseline));
-            Assert.Contains($"{property}=false", File.ReadAllText(stampPath));
+            Assert.Contains("NESOptimizeByteHelpers=false", File.ReadAllText(stampPath));
 
             Assert.Contains(transpilationMessage, await Build(true));
             Assert.NotEqual(baselineHash, Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(romPath))));
-            Assert.Contains($"{property}=true", File.ReadAllText(stampPath));
+            Assert.Contains("NESOptimizeByteHelpers=true", File.ReadAllText(stampPath));
 
             Assert.Contains(transpilationMessage, await Build(false));
             Assert.Equal(baselineHash, Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(romPath))));
             Assert.Equal(baseline, File.ReadAllBytes(romPath));
-            Assert.Contains($"{property}=false", File.ReadAllText(stampPath));
+            Assert.Contains("NESOptimizeByteHelpers=false", File.ReadAllText(stampPath));
 
             DateTime romTime = File.GetLastWriteTimeUtc(romPath);
             DateTime stampTime = File.GetLastWriteTimeUtc(stampPath);
@@ -106,7 +102,7 @@ public class ByteHelperMSBuildTests(ITestOutputHelper output) : RoslynTests(outp
                 startInfo.ArgumentList.Add("-v:normal");
                 startInfo.ArgumentList.Add("-nr:false");
                 if (optimize.HasValue)
-                    startInfo.ArgumentList.Add($"-p:{property}={optimize.Value.ToString().ToLowerInvariant()}");
+                    startInfo.ArgumentList.Add($"-p:NESOptimizeByteHelpers={optimize.Value.ToString().ToLowerInvariant()}");
                 using var process = Process.Start(startInfo);
                 Assert.NotNull(process);
                 Task<string> standardOutput = process.StandardOutput.ReadToEndAsync();

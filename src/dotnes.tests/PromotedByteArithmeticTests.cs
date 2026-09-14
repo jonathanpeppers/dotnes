@@ -5,11 +5,9 @@ namespace dotnes.tests;
 public class PromotedByteArithmeticTests(ITestOutputHelper output) : ExecutionTests(output)
 {
     [Theory]
-    [InlineData(false, "+")]
-    [InlineData(true, "+")]
-    [InlineData(false, "-")]
-    [InlineData(true, "-")]
-    public void ByteOperandsRetainFullPromotedResult(bool optimize, string operation)
+    [InlineData("+")]
+    [InlineData("-")]
+    public void ByteOperandsRetainFullPromotedResult(string operation)
     {
         using var transpiler = BuildProgram(
             $$"""
@@ -19,7 +17,7 @@ public class PromotedByteArithmeticTests(ITestOutputHelper output) : ExecutionTe
             poke(0x6000, low); poke(0x6001, high);
             test_stop(); while (true) ;
             static extern void test_stop();
-            """, out var program, optimizePromotedByteArithmetic: optimize);
+            """, out var program);
         program.DefineExternalLabel("_test_stop", 0x7FF0);
         byte[] bytes = program.ToBytes();
         Assert.True(program.Labels.TryResolve("main", out ushort entry));
@@ -48,19 +46,16 @@ public class PromotedByteArithmeticTests(ITestOutputHelper output) : ExecutionTe
     [InlineData("value + 256", 255, 511)]
     public void ConstantsPreserveCarryBorrowAndSignedFallback(string expression, byte input, int expected)
     {
-        foreach (bool optimize in new[] { false, true })
-        {
-            var cpu = ExecuteProgram(
-                $$"""
-                byte value = peek(0x6010);
-                int index = {{expression}};
-                byte low = (byte)index, high = (byte)(index >> 8);
-                poke(0x6000, low); poke(0x6001, high);
-                test_stop(); while (true) ;
-                static extern void test_stop();
-                """, cpu => cpu.Memory[0x6010] = input, optimizePromotedByteArithmetic: optimize);
-            Assert.Equal(new byte[] { (byte)expected, (byte)(expected >> 8) }, cpu.Memory[0x6000..0x6002]);
-        }
+        var cpu = ExecuteProgram(
+            $$"""
+            byte value = peek(0x6010);
+            int index = {{expression}};
+            byte low = (byte)index, high = (byte)(index >> 8);
+            poke(0x6000, low); poke(0x6001, high);
+            test_stop(); while (true) ;
+            static extern void test_stop();
+            """, cpu => cpu.Memory[0x6010] = input);
+        Assert.Equal(new byte[] { (byte)expected, (byte)(expected >> 8) }, cpu.Memory[0x6000..0x6002]);
     }
 
     [Theory]
@@ -88,19 +83,12 @@ public class PromotedByteArithmeticTests(ITestOutputHelper output) : ExecutionTe
         // Signed byte results explicitly wrap at their declared storage boundary.
         if (leftType == "sbyte")
             expected = unchecked((sbyte)expected);
-        using var baseline = BuildProgram(source, out var baselineProgram);
-        using var optimized = BuildProgram(source, out var optimizedProgram, optimizePromotedByteArithmetic: true);
-        baselineProgram.DefineExternalLabel("_test_stop", 0x7FF0);
-        optimizedProgram.DefineExternalLabel("_test_stop", 0x7FF0);
-        Assert.Equal(baselineProgram.GetMainBlock(), optimizedProgram.GetMainBlock());
-        var cpu = ExecuteProgram(source, optimizePromotedByteArithmetic: true);
+        var cpu = ExecuteProgram(source);
         Assert.Equal(new byte[] { (byte)expected, (byte)(expected >> 8) }, cpu.Memory[0x6000..0x6002]);
     }
 
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public void ExplicitByteConversionsAndCompoundResultsKeepTheirMeaning(bool optimize)
+    [Fact]
+    public void ExplicitByteConversionsAndCompoundResultsKeepTheirMeaning()
     {
         var cpu = ExecuteProgram(
             """
@@ -113,15 +101,13 @@ public class PromotedByteArithmeticTests(ITestOutputHelper output) : ExecutionTe
             poke(0x6002, average);
             test_stop(); while (true) ;
             static extern void test_stop();
-            """, cpu => cpu.Memory[0x6010] = 255, optimizePromotedByteArithmetic: optimize);
+            """, cpu => cpu.Memory[0x6010] = 255);
         Assert.Equal(new byte[] { 0xE0, 0x1F, 255 }, cpu.Memory[0x6000..0x6003]);
         Assert.Equal(Cpu6502.SoftwareStackTop, cpu.SoftwareStackPointer);
     }
 
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public void StagedArrayIndexAndValueKeepLoopAndEvaluationOrder(bool optimize)
+    [Fact]
+    public void StagedArrayIndexAndValueKeepLoopAndEvaluationOrder()
     {
         var cpu = ExecuteProgram(
             """
@@ -147,16 +133,14 @@ public class PromotedByteArithmeticTests(ITestOutputHelper output) : ExecutionTe
             static extern void test_stop();
             static byte Next() { State.Calls++; return State.Calls; }
             static class State { public static byte Calls; }
-            """, optimizePromotedByteArithmetic: optimize);
+            """);
         Assert.Equal(new byte[] { 1, 2, 3, 4 }, cpu.Memory[0x6000..0x6004]);
         Assert.Equal(Cpu6502.SoftwareStackTop, cpu.SoftwareStackPointer);
         Assert.Equal(0xFD, cpu.SP);
     }
 
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public void HelpersAndCapturedLoadsRetainLiveValues(bool optimize)
+    [Fact]
+    public void HelpersAndCapturedLoadsRetainLiveValues()
     {
         var cpu = ExecuteProgram(
             """
@@ -171,7 +155,7 @@ public class PromotedByteArithmeticTests(ITestOutputHelper output) : ExecutionTe
             static extern void test_stop();
             static ushort Sum(byte left, byte right) => (ushort)(left + right);
             ushort Captured() => (ushort)(captured + captured);
-            """, optimizePromotedByteArithmetic: optimize);
+            """);
         Assert.Equal(new byte[] { 0, 1, 254, 1 }, cpu.Memory[0x6000..0x6004]);
         Assert.Equal(Cpu6502.SoftwareStackTop, cpu.SoftwareStackPointer);
         Assert.Equal(0xFD, cpu.SP);
@@ -180,7 +164,7 @@ public class PromotedByteArithmeticTests(ITestOutputHelper output) : ExecutionTe
     [Theory]
     [InlineData("+")]
     [InlineData("-")]
-    public void PublicOptionReducesCodeAndExecutedInstructionsWithoutNarrowing(string operation)
+    public void DefaultCompilationUsesCompactFullWidthArithmetic(string operation)
     {
         string source =
             $$"""
@@ -191,35 +175,28 @@ public class PromotedByteArithmeticTests(ITestOutputHelper output) : ExecutionTe
             test_stop(); while (true) ;
             static extern void test_stop();
             """;
-        Assert.False(new CompilationOptions().OptimizePromotedByteArithmetic);
         using var assembly = CompileAssembly(source);
-        var baseline = NesCompiler.Compile(assembly);
+        var program = NesCompiler.Compile(assembly);
         assembly.Position = 0;
-        var optimized = NesCompiler.Compile(assembly,
-            new CompilationOptions { OptimizePromotedByteArithmetic = true });
-        assembly.Position = 0;
-        var disabled = NesCompiler.Compile(assembly,
-            new CompilationOptions { OptimizePromotedByteArithmetic = false });
-        baseline.DefineExternalLabel("_test_stop", 0x7FF0);
-        optimized.DefineExternalLabel("_test_stop", 0x7FF0);
-        disabled.DefineExternalLabel("_test_stop", 0x7FF0);
-        Assert.Equal(baseline.GetMainBlock(), disabled.GetMainBlock());
-        int savedBytes = baseline.GetMainBlock().Length - optimized.GetMainBlock().Length;
-        Assert.True(savedBytes >= (operation == "+" ? 11 : 18), $"Saved only {savedBytes} bytes.");
-        var baselineCpu = ExecuteProgram(source, cpu => cpu.Memory[0x6010] = 255);
-        var optimizedCpu = ExecuteProgram(source, cpu => cpu.Memory[0x6010] = 255,
-            optimizePromotedByteArithmetic: true);
-        Assert.Equal(baselineCpu.Memory[0x6000..0x6002], optimizedCpu.Memory[0x6000..0x6002]);
-        int savedInstructions = baselineCpu.InstructionCount - optimizedCpu.InstructionCount;
-        Assert.True(savedInstructions >= 6, $"Saved only {savedInstructions} instructions.");
-        Assert.Equal(0, optimizedCpu.SoftwareStackWrites);
-        Assert.Equal(Cpu6502.SoftwareStackTop, optimizedCpu.SoftwareStackPointer);
+        var explicitDefaults = NesCompiler.Compile(assembly, new CompilationOptions());
+        program.DefineExternalLabel("_test_stop", 0x7FF0);
+        explicitDefaults.DefineExternalLabel("_test_stop", 0x7FF0);
+        Assert.Equal(program.GetMainBlock(), explicitDefaults.GetMainBlock());
+        var cpu = ExecuteProgram(source, cpu => cpu.Memory[0x6010] = 255);
+        int expected = operation == "+" ? 263 : -247;
+        Assert.Equal(new byte[] { (byte)expected, (byte)(expected >> 8) }, cpu.Memory[0x6000..0x6002]);
+        int byteLimit = operation == "+" ? 62 : 133;
+        int instructionLimit = operation == "+" ? 23 : 62;
+        Assert.True(program.GetMainBlock().Length <= byteLimit,
+            $"Expected at most {byteLimit} bytes, got {program.GetMainBlock().Length}.");
+        Assert.True(cpu.InstructionCount <= instructionLimit,
+            $"Expected at most {instructionLimit} instructions, got {cpu.InstructionCount}.");
+        Assert.Equal(0, cpu.SoftwareStackWrites);
+        Assert.Equal(Cpu6502.SoftwareStackTop, cpu.SoftwareStackPointer);
     }
 
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public void NativeEffectsAndNestedCallsKeepOperandsAndHelperBarrier(bool optimize)
+    [Fact]
+    public void NativeEffectsAndNestedCallsKeepOperandsAndHelperBarrier()
     {
         using var assembly = CompileAssembly(
             """
@@ -251,7 +228,7 @@ public class PromotedByteArithmeticTests(ITestOutputHelper output) : ExecutionTe
                 rts
             """));
         var program = NesCompiler.Compile(assembly,
-            new CompilationOptions { OptimizePromotedByteArithmetic = optimize, OptimizeByteHelpers = true }, [native]);
+            new CompilationOptions { OptimizeByteHelpers = true }, [native]);
         program.DefineExternalLabel("_test_stop", 0x7FF0);
         Assert.Equal(0x20, program.GetMainBlock("Identity")[0]); // Standard stack-parameter prologue.
         Assert.True(program.Labels.TryResolve("main", out ushort entry));
@@ -264,50 +241,32 @@ public class PromotedByteArithmeticTests(ITestOutputHelper output) : ExecutionTe
         Assert.Equal(0xFD, cpu.SP);
     }
 
-    [Fact]
-    public void NegativeLiteralRetainsGenericEmission()
-    {
-        const string source = """
-            byte value = peek(0x6010);
-            int result = value + -1;
-            byte low = (byte)result, high = (byte)(result >> 8);
-            poke(0x6000, low); poke(0x6001, high);
-            while (true) ;
-            """;
-        using var baseline = BuildProgram(source, out var baselineProgram);
-        using var optimized = BuildProgram(source, out var optimizedProgram, optimizePromotedByteArithmetic: true);
-        Assert.Equal(baselineProgram.GetMainBlock(), optimizedProgram.GetMainBlock());
-    }
-
     [Theory]
     [InlineData(0, 256)]
     [InlineData(1, 510)]
     public void ConditionalOperandsAndLiveResultsSurviveCalls(byte condition, ushort expected)
     {
-        foreach (bool optimize in new[] { false, true })
-        {
-            var cpu = ExecuteProgram(
-                """
-                byte left = peek(0x6010);
-                ushort result = (ushort)(left + (peek(0x6011) == 0 ? One() : Max()));
-                byte other = One();
-                byte low = (byte)result, high = (byte)(result >> 8);
-                poke(0x6000, low); poke(0x6001, high); poke(0x6002, other);
-                byte calls = State.Calls;
-                poke(0x6003, calls);
-                test_stop(); while (true) ;
-                static extern void test_stop();
-                static byte One() { State.Calls++; return 1; }
-                static byte Max() { State.Calls++; return 255; }
-                static class State { public static byte Calls; }
-                """, cpu =>
-                {
-                    cpu.Memory[0x6010] = 255;
-                    cpu.Memory[0x6011] = condition;
-                }, optimizePromotedByteArithmetic: optimize);
-            Assert.Equal(new byte[] { (byte)expected, (byte)(expected >> 8), 1, 2 }, cpu.Memory[0x6000..0x6004]);
-            Assert.Equal(Cpu6502.SoftwareStackTop, cpu.SoftwareStackPointer);
-            Assert.Equal(0xFD, cpu.SP);
-        }
+        var cpu = ExecuteProgram(
+            """
+            byte left = peek(0x6010);
+            ushort result = (ushort)(left + (peek(0x6011) == 0 ? One() : Max()));
+            byte other = One();
+            byte low = (byte)result, high = (byte)(result >> 8);
+            poke(0x6000, low); poke(0x6001, high); poke(0x6002, other);
+            byte calls = State.Calls;
+            poke(0x6003, calls);
+            test_stop(); while (true) ;
+            static extern void test_stop();
+            static byte One() { State.Calls++; return 1; }
+            static byte Max() { State.Calls++; return 255; }
+            static class State { public static byte Calls; }
+            """, cpu =>
+            {
+                cpu.Memory[0x6010] = 255;
+                cpu.Memory[0x6011] = condition;
+            });
+        Assert.Equal(new byte[] { (byte)expected, (byte)(expected >> 8), 1, 2 }, cpu.Memory[0x6000..0x6004]);
+        Assert.Equal(Cpu6502.SoftwareStackTop, cpu.SoftwareStackPointer);
+        Assert.Equal(0xFD, cpu.SP);
     }
 }

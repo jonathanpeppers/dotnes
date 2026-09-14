@@ -6,8 +6,6 @@ namespace dotnes;
 
 partial class IL2NESWriter
 {
-    internal bool OptimizePromotedByteArithmetic { get; init; }
-
     MethodNumericTypes? _numericTypes;
     IReadOnlyDictionary<string, MethodNumericTypes>? _numericMethods;
     IReadOnlyDictionary<string, PrimitiveTypeCode?>? _numericFields;
@@ -347,7 +345,7 @@ partial class IL2NESWriter
             return false;
         }
 
-        if (OptimizePromotedByteArithmetic && leftType == PrimitiveTypeCode.Byte && rightType == PrimitiveTypeCode.Byte)
+        if (leftType == PrimitiveTypeCode.Byte && rightType == PrimitiveTypeCode.Byte)
         {
             EmitUnsignedByteOperand(Opcode.LDA, left);
             Emit(isAdd ? Opcode.CLC : Opcode.SEC, AddressMode.Implied);
