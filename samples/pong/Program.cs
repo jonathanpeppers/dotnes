@@ -58,12 +58,13 @@ while (true)
 
     // read controller 1 and move paddle 1
     PAD pad = pad_poll(0);
-    if (pad_pressed(pad, PAD.UP))
+    byte dpadY = (byte)pad_dpad_y(pad);
+    if (dpadY == 0xff)
     {
         if (p1_y > 16)
             p1_y = (byte)(p1_y - 2);
     }
-    if (pad_pressed(pad, PAD.DOWN))
+    if (dpadY == 1)
     {
         if (p1_y < 200)
             p1_y = (byte)(p1_y + 2);
@@ -71,12 +72,13 @@ while (true)
 
     // read controller 2 and move paddle 2
     pad = pad_poll(1);
-    if (pad_pressed(pad, PAD.UP))
+    dpadY = (byte)pad_dpad_y(pad);
+    if (dpadY == 0xff)
     {
         if (p2_y > 16)
             p2_y = (byte)(p2_y - 2);
     }
-    if (pad_pressed(pad, PAD.DOWN))
+    if (dpadY == 1)
     {
         if (p2_y < 200)
             p2_y = (byte)(p2_y + 2);

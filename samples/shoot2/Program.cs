@@ -255,22 +255,24 @@ while (true)
     }
 
     // --- Player movement (clamp to stay within bounds) ---
-    if ((pad & PAD.LEFT) != 0)
+    byte dpad = (byte)pad_dpad_x(pad);
+    if (dpad == 0xff)
     {
         if (player_x > 8 + PLAYER_SPEED) player_x = (byte)(player_x - PLAYER_SPEED);
         else player_x = 8;
     }
-    if ((pad & PAD.RIGHT) != 0)
+    if (dpad == 1)
     {
         if (player_x < 240 - PLAYER_SPEED) player_x = (byte)(player_x + PLAYER_SPEED);
         else player_x = 240;
     }
-    if ((pad & PAD.UP) != 0)
+    dpad = (byte)pad_dpad_y(pad);
+    if (dpad == 0xff)
     {
         if (player_y > 32 + PLAYER_SPEED) player_y = (byte)(player_y - PLAYER_SPEED);
         else player_y = 32;
     }
-    if ((pad & PAD.DOWN) != 0)
+    if (dpad == 1)
     {
         if (player_y < 224 - PLAYER_SPEED) player_y = (byte)(player_y + PLAYER_SPEED);
         else player_y = 224;

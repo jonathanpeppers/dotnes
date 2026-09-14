@@ -240,22 +240,24 @@ while (true)
             lastTrigger = pad_trigger(0);
 
             // Cursor movement
-            if ((lastTrigger & PAD.LEFT) != 0)
+            byte dpad = (byte)pad_dpad_x(lastTrigger);
+            if (dpad == 0xff)
             {
                 if (cursorX > (byte)(BOARD_X + 1))
                     cursorX = (byte)(cursorX - 1);
             }
-            if ((lastTrigger & PAD.RIGHT) != 0)
+            if (dpad == 1)
             {
                 if (cursorX < (byte)(BOARD_X + BOARD_W - 1))
                     cursorX = (byte)(cursorX + 1);
             }
-            if ((lastTrigger & PAD.UP) != 0)
+            dpad = (byte)pad_dpad_y(lastTrigger);
+            if (dpad == 0xff)
             {
                 if (cursorY > BOARD_Y)
                     cursorY = (byte)(cursorY - 1);
             }
-            if ((lastTrigger & PAD.DOWN) != 0)
+            if (dpad == 1)
             {
                 if (cursorY < (byte)(BOARD_Y + BOARD_H - 1))
                     cursorY = (byte)(cursorY + 1);
