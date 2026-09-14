@@ -8,7 +8,8 @@ Security checklist for code reviews. Applicable when any code files change.
 
 | Check | What to look for |
 |-------|-----------------|
-| **Path traversal** | `StartsWith()` checks on paths must normalize with `Path.GetFullPath()` first. A path like `C:\safe\..\evil` bypasses naive prefix checks. |
+| **Path traversal** | Path containment checks must normalize both paths with `Path.GetFullPath()` and enforce a directory boundary. A path like `C:\safe\..\evil` bypasses a raw prefix check, while `C:\safe-other` incorrectly matches `C:\safe`. |
+| **Archive extraction** | Extract archives entry by entry and verify each normalized destination remains under the extraction root. Do not trust entry names or use convenience extraction APIs for untrusted input without containment validation. |
 | **File overwrite protection** | The transpiler writes `.nes` files to `$(OutputPath)`. Verify the output path is validated and doesn't allow writing outside the expected build directory. |
 
 ---
@@ -17,7 +18,8 @@ Security checklist for code reviews. Applicable when any code files change.
 
 | Check | What to look for |
 |-------|-----------------|
-| **No command injection** | If any code spawns processes (e.g., running Mesen for testing), arguments must not be interpolated from user input. Use `ArgumentList` or separate argument arrays. |
+| **No command injection** | If any code spawns processes (e.g., running Mesen for testing), arguments must not be interpolated into a command string. Use `ArgumentList`, separate argument arrays, or the repository's process helper. |
+| **No silent elevation** | Libraries and build tasks should fail with an actionable permission error rather than relaunching themselves with elevated privileges. Elevation belongs to the calling tool or user. |
 
 ---
 

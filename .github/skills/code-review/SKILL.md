@@ -1,13 +1,15 @@
 ---
-name: code-reviewer
+name: code-review
 description: >-
-  Review dotnes PRs against established rules. Trigger on "review this PR",
-  a GitHub PR URL, or code review requests. Checks transpiler correctness,
-  6502 assembly, NES program conventions, MSBuild integration, snapshot tests,
-  C# patterns, and AI-generated code pitfalls.
+  Review dotnes pull requests against established repository rules. Use this
+  skill whenever the user asks for a code review, says "review this PR",
+  provides a GitHub pull request URL or number, or asks whether a change is
+  ready to merge. Checks transpiler correctness, 6502 assembly, NES and cc65
+  conventions, MSBuild integration, snapshot tests, C# patterns, security,
+  and AI-generated code pitfalls.
 ---
 
-# dotnes PR Reviewer
+# dotnes Code Review
 
 Review PRs against guidelines for the dotnes transpiler — a tool that converts .NET IL into 6502 machine code to produce NES ROMs.
 
@@ -22,7 +24,9 @@ Flag severity clearly in every comment:
 - ⚠️ **warning** — Should fix. Performance issues, missing test coverage, inconsistency with patterns.
 - 💡 **suggestion** — Consider changing. Style, readability, optional improvements.
 
-**Every review should produce at least one inline comment.** Even clean PRs have opportunities for improvement — missing edge-case tests, documentation gaps, or code consolidation. Use 💡 suggestions for these. Only omit inline comments for truly trivial PRs (1-line typo fix, dependency bump).
+For substantive PRs, prefer at least one useful inline comment over suggestions
+buried in the summary. Do not invent a nit merely to produce a comment. Only
+comment on a changed line where the observation is actionable and specific.
 
 ## Workflow
 
@@ -42,6 +46,10 @@ For each changed file, read the **full source file** (not just the diff) to unde
 
 **Form an independent assessment** of what the change does and what problems it has *before* reading the PR description.
 
+Verify project context before applying a rule. Check the target framework,
+project references, build imports, and existing compatibility helpers so a rule
+for modern .NET is not incorrectly applied to `netstandard2.0`, or vice versa.
+
 ### 3. Incorporate PR narrative and reconcile
 
 ```
@@ -58,6 +66,7 @@ gh pr checks {number} --repo {owner}/{repo}
 
 Review the CI results. **Never post ✅ LGTM if any required CI check is failing or if the code doesn't build.** If CI is failing:
 - Investigate the failure.
+- Inspect the failed GitHub Actions job logs.
 - If the failure is caused by the PR's code changes, flag it as ❌ error.
 - If the failure is a known infrastructure issue or pre-existing flake unrelated to the PR, note it in the summary but still use ⚠️ Needs Changes — the PR isn't mergeable until CI is green.
 
@@ -75,6 +84,8 @@ Based on the file types identified in step 2, read the appropriate rule files fr
 - `references/nes-program-rules.md` — When files under `samples/` changed, or when `NESLib.cs` changed, or when the diff contains NES API calls (e.g., `pal_col`, `ppu_on_all`, `oam_spr`). Covers NES program constraints and neslib API usage.
 - `references/testing-rules.md` — When test files changed (files under `src/dotnes.tests/`) or when transpiler changes lack corresponding test additions.
 - `references/msbuild-rules.md` — When `.targets`, `.props`, or `.csproj` files changed, or when `TranspileToNES.cs` changed.
+- `references/native-rules.md` — When `.c`, `.h`, or cc65 reference source files
+  changed. Covers reference parity, C safety, ownership, and compiler limits.
 - `references/security-rules.md` — When any code files changed (C# or MSBuild).
 
 ### 6. Analyze the diff
@@ -87,12 +98,13 @@ For each changed file, check against the loaded review rules. Record issues as:
 
 **What to look for (in priority order):**
 1. **Transpiler correctness** — Wrong opcodes, incorrect address modes, broken label resolution, ROM layout changes
-2. **Snapshot regressions** — Changes that would alter `.verified.bin` output for unchanged samples
-3. **Bugs & correctness** — Logic errors, off-by-one, null dereferences
-4. **Missing tests** — Transpiler changes without `RoslynTests`, new samples without snapshot data
-5. **Performance** — Unnecessary allocations, O(n²) patterns in hot transpiler paths
-6. **Code duplication** — Near-identical methods that should be consolidated
-7. **Documentation** — Misleading comments, undocumented behavioral decisions, missing `docs/msbuild-properties.md` updates
+2. **Safety and determinism** — Resource leaks, path/command vulnerabilities, non-deterministic ROM output
+3. **Snapshot regressions** — Changes that would alter `.verified.bin` output for unchanged samples
+4. **Bugs & correctness** — Logic errors, off-by-one, null dereferences
+5. **Missing tests** — Transpiler changes without `RoslynTests`, new samples without snapshot data
+6. **Performance** — Unnecessary allocations, O(n²) patterns in hot transpiler paths
+7. **Code duplication** — Near-identical methods that should be consolidated
+8. **Documentation** — Misleading comments, undocumented behavioral decisions, missing `docs/msbuild-properties.md` updates
 
 Constraints:
 - Only comment on added/modified lines in the diff — the API rejects out-of-range lines.
@@ -101,6 +113,8 @@ Constraints:
 - **Don't pile on.** If the same issue appears many times, flag it once with a note listing all affected files.
 - **Don't flag what CI catches.** Skip compiler errors, formatting the linter will catch, etc.
 - **Avoid false positives.** Verify the concern actually applies given the full context. If unsure, phrase it as a question rather than a firm claim.
+- **Verify downstream behavior.** Trace changed values to their final consumer;
+  helper names and comments are not proof of semantics.
 
 ### 7. Post the review
 
@@ -109,7 +123,10 @@ Post your findings directly:
 - **Inline comments** on specific lines of the diff with the severity, category, and explanation.
 - **Review summary** with the overall verdict (✅ LGTM, ⚠️ Needs Changes, or ❌ Reject), issue counts by severity, and positive callouts.
 
-If no issues found **and CI is green**, submit with at most one or two 💡 suggestions and a positive summary. Truly trivial PRs (dependency bumps, 1-line typo fixes) may have no inline comments.
+If no issues are found **and CI is green**, submit a positive summary. Add at
+most one or two 💡 suggestions only when they are concrete and worthwhile.
+Truly trivial PRs (dependency bumps, 1-line typo fixes) may have no inline
+comments.
 
 **Copilot-authored PRs:** If the PR author is `Copilot` (the GitHub Copilot coding agent) and the verdict is ⚠️ Needs Changes or ❌ Reject, prefix the review summary with `@copilot ` so the comment automatically triggers Copilot to address the feedback. Do NOT add the prefix for ✅ LGTM verdicts.
 
@@ -121,4 +138,4 @@ If no issues found **and CI is green**, submit with at most one or two 💡 sugg
 
 Where `{severity}` is ❌, ⚠️, or 💡.
 
-**Categories:** Transpiler correctness · 6502 emission · ROM layout · Snapshot integrity · NES program · neslib API · MSBuild · Nullable · Async pattern · Error handling · Performance · Code organization · Testing · YAGNI · API design · Documentation · Security
+**Categories:** Transpiler correctness · 6502 emission · ROM layout · Snapshot integrity · NES program · neslib API · C reference · MSBuild · Nullable · Async pattern · Error handling · Resource management · Performance · Code organization · Testing · YAGNI · API design · Documentation · Security
