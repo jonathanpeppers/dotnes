@@ -46,7 +46,8 @@ partial class Transpiler
             // The existing pad-mask lowering has its own persistent reload
             // local. Do not allocate a second snapshot for the same value.
             return !instructions.Skip(producer + 1).Take(consumers.Max() - producer - 1)
-                .Any(i => i.OpCode == ILOpCode.Call && i.String is "pad_poll" or "pad_trigger");
+                .Any(i => i.OpCode is ILOpCode.Starg or ILOpCode.Starg_s
+                    || i.OpCode == ILOpCode.Call && i.String is "pad_poll" or "pad_trigger");
         }
 
         for (int i = 0; i < instructions.Length; i++)

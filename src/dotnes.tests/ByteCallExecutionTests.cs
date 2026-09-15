@@ -305,6 +305,34 @@ public class ByteCallExecutionTests(ITestOutputHelper output) : ExecutionTests(o
     }
 
     [Theory]
+    [InlineData("pad_poll", 1)]
+    [InlineData("pad_poll", 128)]
+    [InlineData("pad_poll", 255)]
+    [InlineData("pad_trigger", 1)]
+    [InlineData("pad_trigger", 128)]
+    [InlineData("pad_trigger", 255)]
+    public void ArgumentAssignmentPreservesLivePadResult(string intrinsic, byte mask)
+    {
+        var cpu = ExecuteProgram(
+            $$"""
+            byte value = 127;
+            byte result = Change(value);
+            poke(0x6000, result);
+            poke(0x6002, value);
+            test_stop(); while (true) ;
+            static extern void test_stop();
+            static byte Change(byte value)
+            {
+                byte result = (byte)({{intrinsic}}(0) & (PAD)(value = {{mask}}));
+                poke(0x6001, value);
+                return result;
+            }
+            """);
+        Assert.Equal(new byte[] { 0, mask, 127 }, cpu.Memory[0x6000..0x6003]);
+        Assert.Equal(Cpu6502.SoftwareStackTop, cpu.SoftwareStackPointer);
+    }
+
+    [Theory]
     [InlineData(0, 1, 100)]
     [InlineData(127, 1, 100)]
     [InlineData(255, 1, 101)]
