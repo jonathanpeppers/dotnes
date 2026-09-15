@@ -50,9 +50,10 @@ partial class Transpiler
                     || i.OpCode == ILOpCode.Call && i.String is "pad_poll" or "pad_trigger");
         }
 
-        bool ReloadsLocalAfter(int value, int earlier) => value > earlier
+        bool ReloadsOperandAfter(int value, int earlier) => value > earlier
             && (instructions[value].GetLdlocIndex() != null
-                || analysis.Inputs[value].Any(input => ReloadsLocalAfter(input, earlier)));
+                || IL2NESWriter.NumericArgIndex(instructions[value]) != null
+                || analysis.Inputs[value].Any(input => ReloadsOperandAfter(input, earlier)));
 
         for (int i = 0; i < instructions.Length; i++)
         {
@@ -61,15 +62,16 @@ partial class Transpiler
                 && (UserMethods.ContainsKey(target) || ExternMethods.ContainsKey(target)))
             {
                 // Ordinary calls cannot recover an earlier runtime byte from TEMP
-                // after a local reload. Snapshot the operands in evaluation order.
+                // after a local/parameter reload. Snapshot operands in evaluation order.
                 for (int argument = 0; argument < inputs.Length - 1; argument++)
                 {
                     int producer = inputs[argument];
                     if (producer >= 0 && scalar[producer]
                         && types[producer] is PrimitiveTypeCode.Byte or PrimitiveTypeCode.SByte or PrimitiveTypeCode.Boolean
                         && instructions[producer].GetLdlocIndex() == null
+                        && IL2NESWriter.NumericArgIndex(instructions[producer]) == null
                         && instructions[producer].GetLdcValue() == null
-                        && inputs.Skip(argument + 1).Any(p => ReloadsLocalAfter(p, producer)))
+                        && inputs.Skip(argument + 1).Any(p => ReloadsOperandAfter(p, producer)))
                         spills.Add(producer);
                 }
             }

@@ -151,6 +151,96 @@ public class ReorderedArgumentExecutionTests(ITestOutputHelper output) : Executi
     }
 
     [Theory]
+    [InlineData("second", 1, 255, 255)]
+    [InlineData("second", 255, 0, 0)]
+    [InlineData("second", 0, 128, 128)]
+    [InlineData("(byte)(second + 1)", 1, 254, 255)]
+    [InlineData("(byte)(second + 1)", 255, 255, 0)]
+    [InlineData("(byte)(second ^ 255)", 17, 128, 127)]
+    [InlineData("(byte)(second << 1)", 1, 254, 252)]
+    public void LaterParameterArgumentPreservesEarlierCall(string expression, byte first, byte second, byte expected)
+    {
+        var cpu = ExecuteProgram(
+            $$"""
+            Forward({{first}}, {{second}});
+            test_stop(); while (true) ;
+            static extern void test_stop();
+            static void Forward(byte first, byte second)
+            {
+                Store(Read(first), {{expression}});
+                poke(0x6002, first);
+                poke(0x6003, second);
+            }
+            static byte Read(byte value)
+            {
+                byte count = peek(0x6010);
+                poke(0x6010, (byte)(count + 1));
+                return value;
+            }
+            static void Store(byte first, byte second)
+            {
+                poke(0x6000, first);
+                poke(0x6001, second);
+            }
+            """);
+        Assert.Equal(new byte[] { first, expected, first, second }, cpu.Memory[0x6000..0x6004]);
+        Assert.Equal(1, cpu.Memory[0x6010]);
+        Assert.Equal(Cpu6502.SoftwareStackTop, cpu.SoftwareStackPointer);
+        Assert.Equal(0xFD, cpu.SP);
+    }
+
+    [Fact]
+    public void LaterShortFormParameterLoadPreservesEarlierCall()
+    {
+        var cpu = ExecuteProgram(
+            """
+            Forward(17, 128, 42, 0, 255);
+            test_stop(); while (true) ;
+            static extern void test_stop();
+            static void Forward(byte first, byte second, byte third, byte fourth, byte fifth)
+            {
+                Store(Read(first), fifth, third);
+                poke(0x6003, second);
+                poke(0x6004, fourth);
+            }
+            static byte Read(byte value) { poke(0x6010, value); return value; }
+            static void Store(byte first, byte second, byte third)
+            {
+                poke(0x6000, first);
+                poke(0x6001, second);
+                poke(0x6002, third);
+            }
+            """);
+        Assert.Equal(new byte[] { 17, 255, 42, 128, 0 }, cpu.Memory[0x6000..0x6005]);
+        Assert.Equal(Cpu6502.SoftwareStackTop, cpu.SoftwareStackPointer);
+        Assert.Equal(0xFD, cpu.SP);
+    }
+
+    [Fact]
+    public void PureParameterForwardingDoesNotAllocateSnapshots()
+    {
+        using var transpiler = BuildProgram(
+            """
+            Forward(17, 255);
+            test_stop(); while (true) ;
+            static extern void test_stop();
+            static void Forward(byte first, byte second) => Store(second, first);
+            static void Store(byte first, byte second)
+            {
+                poke(0x6000, first);
+                poke(0x6001, second);
+            }
+            """, out var program);
+        Assert.Empty(transpiler.NumericTypes["Forward"].Locals);
+        program.DefineExternalLabel("_test_stop", 0x7FF0);
+        var cpu = new Cpu6502(program.ToBytes(), program.BaseAddress, program.GetLabels()["main"]);
+        cpu.RunUntil(0x7FF0);
+        Assert.Equal(new byte[] { 255, 17 }, cpu.Memory[0x6000..0x6002]);
+        Assert.Equal(Cpu6502.SoftwareStackTop, cpu.SoftwareStackPointer);
+        Assert.Equal(0xFD, cpu.SP);
+    }
+
+    [Theory]
     [InlineData(false)]
     [InlineData(true)]
     public void NativeCalleeReceivesReloadedBytesAndWordTail(bool wordTail)

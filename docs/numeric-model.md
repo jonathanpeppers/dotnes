@@ -136,7 +136,7 @@ index.
 ## Byte call lowering
 
 An evaluated byte argument remains distinct when a later argument reloads a
-saved local, including a local used inside a later arithmetic expression.
+saved local or parameter, including either used inside a later arithmetic expression.
 Ordinary managed and extern calls snapshot such live operands at
 their original IL evaluation points, then reload them in parameter order.
 This preserves side effects and optional argument slots without relying on
