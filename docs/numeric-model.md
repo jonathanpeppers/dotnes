@@ -76,6 +76,16 @@ seventeen bits. If those bits remain observable, the compiler diagnoses that
 unsupported result **before** inserting temporary spill storage. A final byte
 cast does not authorize losing carry before a shift or comparison.
 
+Addition/subtraction of two proven unsigned-byte operands automatically uses
+compact full-width emission. The 6502 low-byte carry/borrow constructs the complete
+high byte directly, replacing generic word scratch traffic. For example,
+`int index = 8 + offset` still produces 263 when byte `offset` is 255, not 7.
+Operand reconstruction must pass the existing purity, single-use, live-value,
+and branch-entry checks; signed/word operands and unproven expressions keep their
+generic path. This is not range-based narrowing of `int` indexes or a new calling
+convention, and it does not bypass the separate byte-helper native-code barrier.
+It applies in both ROM builds and the in-memory compiler API without a setting.
+
 Runtime-count unsigned right shifts also preserve a proven byte sum's ninth bit.
 An explicit word conversion before the shift defines wrapping: for example,
 `(byte)((ushort)(value + 1) >> count)` produces 128 for byte `value = 255`
