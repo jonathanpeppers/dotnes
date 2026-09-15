@@ -227,6 +227,33 @@ public class ByteCallExecutionTests(ITestOutputHelper output) : ExecutionTests(o
         Assert.Equal(Cpu6502.SoftwareStackTop, cpu.SoftwareStackPointer);
     }
 
+    [Theory]
+    [InlineData("NTADR_A")]
+    [InlineData("NTADR_B")]
+    [InlineData("NTADR_C")]
+    [InlineData("NTADR_D")]
+    public void ArgumentStoreConsumesPendingNametableResult(string intrinsic)
+    {
+        var cpu = ExecuteProgram(
+            $$"""
+            byte result = Change(0);
+            poke(0x6000, result);
+            test_stop(); while (true) ;
+            static extern void test_stop();
+            static byte Change(byte value)
+            {
+                byte row = 2;
+                value = (byte){{intrinsic}}(1, row);
+                byte next = 73;
+                for (byte i = 0; i < 1; i++) next++;
+                poke(0x6001, next);
+                return value;
+            }
+            """);
+        Assert.Equal(new byte[] { 0x41, 74 }, cpu.Memory[0x6000..0x6002]);
+        Assert.Equal(Cpu6502.SoftwareStackTop, cpu.SoftwareStackPointer);
+    }
+
     [Fact]
     public void ReemittedByteArgumentsRegisterPushaDependency()
     {

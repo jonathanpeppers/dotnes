@@ -610,6 +610,7 @@ partial class IL2NESWriter
         Stack.Pop();
         _accState = AccumulatorState.Empty;
         _savedState = SavedValueState.None;
+        _ntadrRuntimeResult = false;
         _lastLoadedLocalIndex = null;
         _lastStaticFieldAddress = null;
     }
