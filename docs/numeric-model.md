@@ -135,6 +135,13 @@ index.
 
 ## Byte call lowering
 
+An evaluated byte argument remains distinct when a later argument reloads a
+saved local. Ordinary managed and extern calls snapshot such live operands at
+their original IL evaluation points, then reload them in parameter order.
+This preserves side effects and optional argument slots without relying on
+named-argument syntax or reevaluating a call. Extern calls retain the cc65
+software-stack convention, including a word-sized final argument in A:X.
+
 Ordinary builds batch contiguous, single-use byte arguments into their existing
 software-stack layout when a complete frame can be constructed safely. Earlier
 arguments retain their declared order and the last argument is still passed in

@@ -53,6 +53,23 @@ partial class Transpiler
         for (int i = 0; i < instructions.Length; i++)
         {
             var inputs = analysis.Inputs[i];
+            if (instructions[i].OpCode == ILOpCode.Call && instructions[i].String is string target
+                && (UserMethods.ContainsKey(target) || ExternMethods.ContainsKey(target)))
+            {
+                // Ordinary calls cannot recover an earlier runtime byte from TEMP
+                // after a local reload. Snapshot the operands in evaluation order.
+                for (int argument = 0; argument < inputs.Length - 1; argument++)
+                {
+                    int producer = inputs[argument];
+                    if (producer >= 0 && scalar[producer]
+                        && types[producer] is PrimitiveTypeCode.Byte or PrimitiveTypeCode.SByte
+                        && instructions[producer].GetLdlocIndex() == null
+                        && instructions[producer].GetLdcValue() == null
+                        && inputs.Skip(argument + 1).Any(p => p > producer
+                            && instructions[p].GetLdlocIndex() != null))
+                        spills.Add(producer);
+                }
+            }
             if (IsScalarComparison(instructions[i].OpCode) && inputs.Length == 2
                 && inputs.All(p => p >= 0 && scalar[p] && types[p] == PrimitiveTypeCode.Byte)
                 && IL2NESWriter.NumericArgIndex(instructions[inputs[0]]) != null

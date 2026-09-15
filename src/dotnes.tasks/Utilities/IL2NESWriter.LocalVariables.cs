@@ -343,7 +343,7 @@ partial class IL2NESWriter
     bool IsDefaultCallPathTarget(string? callTarget)
     {
         if (callTarget == null) return false;
-        if (UserMethodNames.Contains(callTarget)) return true;
+        if (UserMethodNames.Contains(callTarget) || ExternMethodNames.Contains(callTarget)) return true;
         // NESLib methods that use the default Call path (no dedicated intrinsic handler)
         return callTarget is nameof(rect_overlap) or nameof(sprite_overlap);
     }
