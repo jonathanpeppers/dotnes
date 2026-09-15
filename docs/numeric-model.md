@@ -106,6 +106,10 @@ not the caller's variable. Postfix expressions snapshot the old value when it
 remains live across an argument store, including nested call arguments.
 Byte loop bounds and comparisons between a parameter and another runtime byte
 use the actual operands rather than compile-time placeholder values.
+This includes computed bytes such as `(byte)(fraction + increment) < fraction`:
+the comparison observes the wrapped byte, and calls are evaluated exactly once.
+A computed left operand can stay in the accumulator across a pure parameter
+load; a computed right operand requires preserving the earlier parameter value.
 This does not introduce a static parameter home or relax the byte-helper
 optimization's native-code/reentrancy guards.
 

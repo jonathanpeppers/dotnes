@@ -52,6 +52,13 @@ partial class Transpiler
         for (int i = 0; i < instructions.Length; i++)
         {
             var inputs = analysis.Inputs[i];
+            if (IsScalarComparison(instructions[i].OpCode) && inputs.Length == 2
+                && inputs.All(p => p >= 0 && scalar[p] && types[p] == PrimitiveTypeCode.Byte)
+                && IL2NESWriter.NumericArgIndex(instructions[inputs[0]]) != null
+                && instructions[inputs[1]].GetLdlocIndex() == null
+                && IL2NESWriter.NumericArgIndex(instructions[inputs[1]]) == null
+                && instructions[inputs[1]].GetLdcValue() == null)
+                spills.UnionWith(inputs);
             if (instructions[i].OpCode is ILOpCode.Mul or ILOpCode.Shl
                 && types[i] is PrimitiveTypeCode.Int16 or PrimitiveTypeCode.UInt16
                 && inputs.Length == 2 && inputs.All(p => p >= 0 && scalar[p])
@@ -135,6 +142,14 @@ partial class Transpiler
 
     static bool IsScalarBinary(ILOpCode op) => op is ILOpCode.Add or ILOpCode.Sub
         or ILOpCode.And or ILOpCode.Or or ILOpCode.Xor;
+
+    static bool IsScalarComparison(ILOpCode op) => op is ILOpCode.Ceq or ILOpCode.Clt or ILOpCode.Clt_un
+        or ILOpCode.Cgt or ILOpCode.Cgt_un or ILOpCode.Beq or ILOpCode.Beq_s
+        or ILOpCode.Bne_un or ILOpCode.Bne_un_s
+        or ILOpCode.Blt or ILOpCode.Blt_s or ILOpCode.Blt_un or ILOpCode.Blt_un_s
+        or ILOpCode.Ble or ILOpCode.Ble_s or ILOpCode.Ble_un or ILOpCode.Ble_un_s
+        or ILOpCode.Bgt or ILOpCode.Bgt_s or ILOpCode.Bgt_un or ILOpCode.Bgt_un_s
+        or ILOpCode.Bge or ILOpCode.Bge_s or ILOpCode.Bge_un or ILOpCode.Bge_un_s;
 
     static bool IsScalarExpression(ILOpCode op) => IsScalarBinary(op)
         || op is ILOpCode.Mul or ILOpCode.Div or ILOpCode.Rem or ILOpCode.Shl

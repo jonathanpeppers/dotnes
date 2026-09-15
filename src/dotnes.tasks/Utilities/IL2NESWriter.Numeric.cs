@@ -14,6 +14,7 @@ partial class IL2NESWriter
     Dictionary<int, PrimitiveTypeCode> _compactIntLocals = new();
     readonly Dictionary<int, int> _numericArgAdjust = new();
     readonly Dictionary<int, bool> _numericWordAtILOffset = new();
+    readonly Dictionary<int, bool> _numericRuntimeAtILOffset = new();
 
     internal void ConfigureNumericTypes(IReadOnlyDictionary<string, MethodNumericTypes> methods,
         IReadOnlyDictionary<string, PrimitiveTypeCode?>? fields = null,
@@ -460,11 +461,41 @@ partial class IL2NESWriter
         {
             if (NumericType(lhs) != PrimitiveTypeCode.Byte || NumericType(rhs) != PrimitiveTypeCode.Byte
                 || !HasParameterOperand(lhs) && !HasParameterOperand(rhs)
-                || Instructions![rhs].GetLdcValue() != null
-                || !TryNumericOperands(out int byteLeft, out int byteRight))
+                || Instructions![rhs].GetLdcValue() != null)
                 return false;
-            EmitUnsignedByteOperand(Opcode.LDA, greater ? byteRight : byteLeft);
-            EmitUnsignedByteOperand(Opcode.CMP, greater ? byteLeft : byteRight);
+            if (TryNumericOperands(out int byteLeft, out int byteRight))
+            {
+                EmitUnsignedByteOperand(Opcode.LDA, greater ? byteRight : byteLeft);
+                EmitUnsignedByteOperand(Opcode.CMP, greater ? byteLeft : byteRight);
+            }
+            else if (PureNumericOperand(rhs, out int firstRight) && lhs + 1 == firstRight
+                && rhs + 1 == Index && !ILBranchTargets.HasEntryAfter(Instructions, lhs, Index)
+                && !_numericValues.Escapes[lhs] && _numericValues.Consumers[lhs].Count == 1
+                && !_numericValues.Escapes[rhs] && _numericValues.Consumers[rhs].Count == 1
+                && _numericRuntimeAtILOffset.TryGetValue(Instructions[firstRight].Offset, out bool runtime) && runtime
+                && _blockCountAtILOffset.TryGetValue(Instructions[firstRight].Offset, out int byteStart))
+            {
+                for (int i = firstRight; i < Index; i++)
+                    if (_numericValues.Escapes[i] || _numericValues.Consumers[i].Count > 1)
+                        return false;
+                // Retain the computed left byte in A; only replace the pure right load.
+                RemoveLastInstructions(GetBufferedBlockCount() - byteStart);
+                _argStackAdjust = _numericArgAdjust[Instructions[firstRight].Offset];
+                CurrentBlock!.SetNextLabel(InstructionLabel(Instructions[firstRight].Offset));
+                if (greater)
+                {
+                    Emit(Opcode.STA, AddressMode.ZeroPage, TEMP);
+                    EmitUnsignedByteOperand(Opcode.LDA, rhs);
+                    Emit(Opcode.CMP, AddressMode.ZeroPage, TEMP);
+                }
+                else
+                    EmitUnsignedByteOperand(Opcode.CMP, rhs);
+                _savedState = SavedValueState.None;
+                _lastLoadedLocalIndex = null;
+                _lastStaticFieldAddress = null;
+            }
+            else
+                return false;
             string target = ILValueAnalysis.IsBranch(code)
                 ? InstructionLabel(ILValueAnalysis.GetBranchTarget(instruction)
                     ?? throw new InvalidOperationException("Numeric branch has no target."))
@@ -475,6 +506,7 @@ partial class IL2NESWriter
                 EmitWithLabel(unequal ? Opcode.BNE : Opcode.BEQ, AddressMode.Relative, target);
             Stack.Pop();
             Stack.Pop();
+            _ntadrRuntimeResult = false;
             if (ILValueAnalysis.IsBranch(code))
                 _accState = AccumulatorState.Empty;
             else

@@ -94,6 +94,56 @@ public class ByteCallExecutionTests(ITestOutputHelper output) : ExecutionTests(o
     }
 
     [Theory]
+    [MemberData(nameof(ParameterComparisons))]
+    public void ComputedByteParameterComparisons(byte left, byte right, string comparison, byte expected)
+    {
+        var cpu = ExecuteProgram(
+            $$"""
+            byte result = CompareLeft({{unchecked((byte)(left - 1))}}, {{right}});
+            poke(0x6000, result);
+            result = CompareRight({{left}}, {{unchecked((byte)(right - 1))}});
+            poke(0x6001, result);
+            if (CompareValue({{unchecked((byte)(left - 1))}}, {{right}})) poke(0x6002, 1);
+            result = CompareCall({{unchecked((byte)(left - 1))}}, {{right}});
+            poke(0x6003, result);
+            result = CompareRightCall({{left}}, {{unchecked((byte)(right - 1))}});
+            poke(0x6004, result);
+            test_stop(); while (true) ;
+            static extern void test_stop();
+            static byte CompareLeft(byte left, byte right)
+            {
+                if ((byte)(left + 1) {{comparison}} right) return 1;
+                return 0;
+            }
+            static byte CompareRight(byte left, byte right)
+            {
+                if (left {{comparison}} (byte)(right + 1)) return 1;
+                return 0;
+            }
+            static bool CompareValue(byte left, byte right) => (byte)(left + 1) {{comparison}} right;
+            static byte CompareCall(byte left, byte right)
+            {
+                if (Next(left) {{comparison}} right) return 1;
+                return 0;
+            }
+            static byte CompareRightCall(byte left, byte right)
+            {
+                if (left {{comparison}} Next(right)) return 1;
+                return 0;
+            }
+            static byte Next(byte value)
+            {
+                byte calls = peek(0x6005);
+                poke(0x6005, (byte)(calls + 1));
+                return (byte)(value + 1);
+            }
+            """);
+        Assert.Equal(new byte[] { expected, expected, expected, expected, expected, 2 },
+            cpu.Memory[0x6000..0x6006]);
+        Assert.Equal(Cpu6502.SoftwareStackTop, cpu.SoftwareStackPointer);
+    }
+
+    [Theory]
     [InlineData("value--;", 0, 255)]
     [InlineData("value += 128;", 127, 255)]
     [InlineData("value += 1;", 255, 0)]
@@ -251,6 +301,59 @@ public class ByteCallExecutionTests(ITestOutputHelper output) : ExecutionTests(o
             }
             """);
         Assert.Equal(new byte[] { 0x41, 74 }, cpu.Memory[0x6000..0x6002]);
+        Assert.Equal(Cpu6502.SoftwareStackTop, cpu.SoftwareStackPointer);
+    }
+
+    [Theory]
+    [InlineData(0, 1, 100)]
+    [InlineData(127, 1, 100)]
+    [InlineData(255, 1, 101)]
+    [InlineData(128, 136, 93)]
+    [InlineData(0, 255, 99)]
+    [InlineData(255, 255, 100)]
+    public void ComputedByteComparedWithParameterRetainsFractionalCarry(byte fraction, byte velocity, byte expected)
+    {
+        var cpu = ExecuteProgram(
+            $$"""
+            byte result = Pixel(100, {{fraction}}, {{velocity}});
+            poke(0x6000, result);
+            test_stop(); while (true) ;
+            static extern void test_stop();
+            static byte Pixel(byte pixel, byte fraction, byte velocity)
+            {
+                byte delta = (byte)(velocity >> 4);
+                if ((velocity & 0x80) != 0) delta = (byte)(delta | 0xF0);
+                byte nextFraction = (byte)(fraction + (velocity << 4));
+                if (nextFraction < fraction) delta++;
+                return (byte)(pixel + delta);
+            }
+            """);
+        Assert.Equal(expected, cpu.Memory[0x6000]);
+        Assert.Equal(Cpu6502.SoftwareStackTop, cpu.SoftwareStackPointer);
+    }
+
+    [Theory]
+    [InlineData("NTADR_A")]
+    [InlineData("NTADR_B")]
+    [InlineData("NTADR_C")]
+    [InlineData("NTADR_D")]
+    public void ByteParameterComparisonConsumesNametableResult(string intrinsic)
+    {
+        var cpu = ExecuteProgram(
+            $$"""
+            Compare(100);
+            test_stop(); while (true) ;
+            static extern void test_stop();
+            static void Compare(byte bound)
+            {
+                byte row = 2;
+                if ((byte){{intrinsic}}(1, row) < bound) poke(0x6000, 1);
+                byte next = 73;
+                for (byte i = 0; i < 1; i++) next++;
+                poke(0x6001, next);
+            }
+            """);
+        Assert.Equal(new byte[] { 1, 74 }, cpu.Memory[0x6000..0x6002]);
         Assert.Equal(Cpu6502.SoftwareStackTop, cpu.SoftwareStackPointer);
     }
 
