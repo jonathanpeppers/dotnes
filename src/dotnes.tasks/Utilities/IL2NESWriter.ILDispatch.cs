@@ -1264,6 +1264,11 @@ partial class IL2NESWriter
         {
             case ILOpCode.Nop:
                 break;
+            case ILOpCode.Starg:
+            case ILOpCode.Starg_s:
+                WriteStarg(operand);
+                break;
+            case ILOpCode.Ldarg:
             case ILOpCode.Ldarg_s:
                 {
                     int argIndex = operand;

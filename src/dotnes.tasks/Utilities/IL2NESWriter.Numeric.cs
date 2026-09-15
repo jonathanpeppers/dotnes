@@ -457,7 +457,41 @@ partial class IL2NESWriter
         bool signedRight = SignedNumericType(NumericType(rhs));
         if (!signedLeft && !signedRight
             && !WordNumericType(NumericType(lhs)) && !WordNumericType(NumericType(rhs)))
-            return false;
+        {
+            if (NumericType(lhs) != PrimitiveTypeCode.Byte || NumericType(rhs) != PrimitiveTypeCode.Byte
+                || !HasParameterOperand(lhs) && !HasParameterOperand(rhs)
+                || Instructions![rhs].GetLdcValue() != null
+                || !TryNumericOperands(out int byteLeft, out int byteRight))
+                return false;
+            EmitUnsignedByteOperand(Opcode.LDA, greater ? byteRight : byteLeft);
+            EmitUnsignedByteOperand(Opcode.CMP, greater ? byteLeft : byteRight);
+            string target = ILValueAnalysis.IsBranch(code)
+                ? InstructionLabel(ILValueAnalysis.GetBranchTarget(instruction)
+                    ?? throw new InvalidOperationException("Numeric branch has no target."))
+                : $"{MethodName ?? "main"}_byte_compare_{instruction.Offset:X4}_true";
+            if (less || greater)
+                EmitWithLabel(Opcode.BCC, AddressMode.Relative, target);
+            if (equal || unequal)
+                EmitWithLabel(unequal ? Opcode.BNE : Opcode.BEQ, AddressMode.Relative, target);
+            Stack.Pop();
+            Stack.Pop();
+            if (ILValueAnalysis.IsBranch(code))
+                _accState = AccumulatorState.Empty;
+            else
+            {
+                string byteDone = target + "_done";
+                Emit(Opcode.LDA, AddressMode.Immediate, 0);
+                EmitWithLabel(Opcode.JMP, AddressMode.Absolute, byteDone);
+                CurrentBlock!.SetNextLabel(target);
+                Emit(Opcode.LDA, AddressMode.Immediate, 1);
+                CurrentBlock.SetNextLabel(byteDone);
+                Emit(Opcode.CMP, AddressMode.Immediate, 0);
+                Stack.Push(0);
+                _accState = AccumulatorState.Runtime;
+            }
+            previous = code;
+            return true;
+        }
         // These branch forms already compare complete A:X against an immediate word.
         // Keep their compact emission; value-producing and mixed-runtime comparisons need this path.
         if (!signedLeft && !signedRight && NumericType(lhs) == PrimitiveTypeCode.UInt16
@@ -500,6 +534,16 @@ partial class IL2NESWriter
                     MethodName);
             left = lhs;
             right = rhs;
+        }
+
+        bool HasParameterOperand(int producer)
+        {
+            var instruction = Instructions![producer];
+            return NumericArgIndex(instruction) != null
+                || instruction.OpCode is ILOpCode.Conv_i1 or ILOpCode.Conv_u1 or ILOpCode.Conv_i2 or ILOpCode.Conv_u2
+                    && _numericValues!.Inputs[producer].Length == 1
+                    && _numericValues.Inputs[producer][0] >= 0
+                    && HasParameterOperand(_numericValues.Inputs[producer][0]);
         }
 
         // CLR promotes both operands to int. A third sign byte keeps unsigned

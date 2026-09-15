@@ -182,8 +182,27 @@ static class ArrayOperandLowering
         bool HasIndependentEffect(int consumer, HashSet<int> closure, int start) =>
             Enumerable.Range(start, consumer - start).Any(p =>
                 !closure.Contains(p) && (instructions[p].GetStlocIndex() is not null ||
-                    instructions[p].OpCode is ILOpCode.Call or ILOpCode.Stsfld or ILOpCode.Stfld
+                    instructions[p].OpCode is ILOpCode.Call or ILOpCode.Stsfld or ILOpCode.Stfld or ILOpCode.Starg or ILOpCode.Starg_s
                         or ILOpCode.Stelem_i1 or ILOpCode.Stind_i1));
+
+        bool DirectIndexedRead(int consumer)
+        {
+            if (consumer < 4 || consumer + 1 >= instructions.Length
+                || instructions[consumer + 1].GetStlocIndex() == null
+                || analysis.Outputs[consumer].Length != 1
+                || !analysis.Consumers[consumer].SequenceEqual([consumer + 1])
+                || !analysis.Inputs[consumer].SequenceEqual([consumer - 4, consumer - 1])
+                || instructions[consumer - 4].GetLdlocIndex() == null
+                || instructions[consumer - 1].OpCode is not (ILOpCode.Add or ILOpCode.Sub)
+                || !analysis.Inputs[consumer - 1].SequenceEqual([consumer - 3, consumer - 2])
+                || ILBranchTargets.HasEntryAfter(instructions, consumer - 4, consumer + 1))
+                return false;
+            for (int p = consumer - 3; p <= consumer - 2; p++)
+                if ((instructions[p].GetLdlocIndex() == null && instructions[p].GetLdcValue() == null)
+                    || !analysis.Consumers[p].SequenceEqual([consumer - 1]))
+                    return false;
+            return true;
+        }
 
         void SelectInputs(int consumer)
         {
@@ -259,7 +278,13 @@ static class ArrayOperandLowering
             else if (instruction.OpCode == ILOpCode.Ldelem_u1 && inputs.Length == 2)
             {
                 var closure = OperandClosure(inputs);
-                if (!Simple(Unwrap(inputs[1])) || HasIndependentEffect(i, closure, OperandClosure([inputs[1]]).Min()) ||
+                if (DirectIndexedRead(i))
+                {
+                    // The scalar arithmetic is contiguous and its result is stored
+                    // immediately. Only the full-width index needs a snapshot.
+                    selected.UnionWith(inputs);
+                }
+                else if (!Simple(Unwrap(inputs[1])) || HasIndependentEffect(i, closure, OperandClosure([inputs[1]]).Min()) ||
                     (inputs[0] != i - 2 && instructions[inputs[0]].OpCode == ILOpCode.Newarr))
                 {
                     SelectInputs(i);

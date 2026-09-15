@@ -1,9 +1,66 @@
+using dotnes.ObjectModel;
 using Xunit.Abstractions;
 
 namespace dotnes.tests;
 
 public class ArrayExecutionTests(ITestOutputHelper output) : ExecutionTests(output)
 {
+    [Theory]
+    [InlineData("8 + index")]
+    [InlineData("index + 8")]
+    [InlineData("11 - index")]
+    [InlineData("offset + index")]
+    public void DirectIndexedReadMatchesExplicitFullWidthStorage(string expression)
+    {
+        string Source(bool explicitIndex) => $$"""
+            byte[] data = new byte[32];
+            data[8] = 41;
+            data[11] = 73;
+            byte index = 3, offset = 8;
+            byte value = 0;
+            byte frame = 0;
+            while (frame < 2)
+            {
+                {{(explicitIndex ? $"int fullIndex = {expression}; value = data[fullIndex];" : $"value = data[{expression}];")}}
+                poke(0x6000, value);
+                frame++;
+            }
+            test_stop(); while (true) ;
+            static extern void test_stop();
+            """;
+        var direct = ExecuteProgram(Source(false));
+        var explicitStorage = ExecuteProgram(Source(true));
+        Assert.Equal(expression == "11 - index" ? 41 : 73, direct.Memory[0x6000]);
+        Assert.Equal(explicitStorage.Memory[0x6000], direct.Memory[0x6000]);
+        Assert.True(direct.InstructionCount <= explicitStorage.InstructionCount,
+            $"Direct: {direct.InstructionCount}; explicit storage: {explicitStorage.InstructionCount}");
+        Assert.Equal(Cpu6502.SoftwareStackTop, direct.SoftwareStackPointer);
+    }
+
+    [Fact]
+    public void DirectIndexedReadStoresThePromotedCarry()
+    {
+        using var transpiler = BuildProgram(
+            """
+            byte[] data = new byte[32];
+            byte index = 255;
+            byte value = data[8 + index];
+            poke(0x6000, value);
+            test_stop(); while (true) ;
+            static extern void test_stop();
+            """, out var program);
+        const ushort stop = 0x7FF0;
+        program.DefineExternalLabel("_test_stop", stop);
+        var highStore = Assert.Single(program.GetBlock("main")!.InstructionsWithLabels,
+            item => item.Instruction.Opcode == Opcode.STX && item.Instruction.Mode == AddressMode.Absolute);
+        ushort highAddress = Assert.IsType<AbsoluteOperand>(highStore.Instruction.Operand).Address;
+        var cpu = new Cpu6502(program.ToBytes(), program.BaseAddress, program.GetLabels()["main"]);
+        cpu.RunUntil(stop);
+        // Observe the generated index storage, not the out-of-bounds array value.
+        Assert.Equal(263, cpu.Memory[highAddress - 1] | cpu.Memory[highAddress] << 8);
+        Assert.Equal(Cpu6502.SoftwareStackTop, cpu.SoftwareStackPointer);
+    }
+
     [Theory]
     [InlineData("State.Index", 3, false)]
     [InlineData("(byte)(State.Index + 1)", 4, false)]

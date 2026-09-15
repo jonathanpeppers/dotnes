@@ -88,7 +88,7 @@ partial class Transpiler
                 for (int j = producer + 1; j < i; j++)
                 {
                     if ((instructions[j].GetStlocIndex() != null && !analysis.Inputs[j].Contains(producer))
-                        || instructions[j].OpCode is ILOpCode.Call or ILOpCode.Stsfld)
+                        || instructions[j].OpCode is ILOpCode.Call or ILOpCode.Stsfld or ILOpCode.Starg or ILOpCode.Starg_s)
                     {
                         spills.Add(producer);
                         break;

@@ -7,6 +7,226 @@ namespace dotnes.tests;
 
 public class ByteCallExecutionTests(ITestOutputHelper output) : ExecutionTests(output)
 {
+    [Theory]
+    [InlineData(0, 0)]
+    [InlineData(4, 3)]
+    [InlineData(127, 126)]
+    [InlineData(255, 254)]
+    public void ByteParameterBoundsLoop(byte end, byte expected)
+    {
+        var cpu = ExecuteProgram(
+            $$"""
+            byte value = Operations.Count({{end}});
+            poke(0x6000, value);
+            test_stop();
+            while (true) ;
+            static extern void test_stop();
+            static class Operations
+            {
+                public static byte Count(byte end)
+                {
+                    byte count = 0;
+                    for (byte i = 1; i < end; i++) count++;
+                    return count;
+                }
+            }
+            """);
+        Assert.Equal(expected, cpu.Memory[0x6000]);
+        Assert.Equal(Cpu6502.SoftwareStackTop, cpu.SoftwareStackPointer);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(127)]
+    [InlineData(255)]
+    public void MutatingByteParameterPreservesCaller(byte input)
+    {
+        var cpu = ExecuteProgram(
+            $$"""
+            byte value = {{input}};
+            byte result = Increment(value);
+            poke(0x6000, result);
+            poke(0x6001, value);
+            test_stop();
+            while (true) ;
+            static extern void test_stop();
+            static byte Increment(byte value) { value++; return value; }
+            """);
+        Assert.Equal(unchecked((byte)(input + 1)), cpu.Memory[0x6000]);
+        Assert.Equal(input, cpu.Memory[0x6001]);
+        Assert.Equal(Cpu6502.SoftwareStackTop, cpu.SoftwareStackPointer);
+    }
+
+    public static TheoryData<byte, byte, string, byte> ParameterComparisons()
+    {
+        var data = new TheoryData<byte, byte, string, byte>();
+        foreach (byte left in new byte[] { 0, 127, 255 })
+        foreach (byte right in new byte[] { 0, 127, 255 })
+        {
+            data.Add(left, right, "<", (byte)(left < right ? 1 : 0));
+            data.Add(left, right, "<=", (byte)(left <= right ? 1 : 0));
+            data.Add(left, right, ">", (byte)(left > right ? 1 : 0));
+            data.Add(left, right, ">=", (byte)(left >= right ? 1 : 0));
+            data.Add(left, right, "==", (byte)(left == right ? 1 : 0));
+            data.Add(left, right, "!=", (byte)(left != right ? 1 : 0));
+        }
+        return data;
+    }
+
+    [Theory]
+    [MemberData(nameof(ParameterComparisons))]
+    public void ByteParameterComparisons(byte left, byte right, string comparison, byte expected)
+    {
+        var cpu = ExecuteProgram(
+            $$"""
+            byte result = Compare({{left}}, {{right}});
+            poke(0x6000, result);
+            test_stop(); while (true) ;
+            static extern void test_stop();
+            static byte Compare(byte left, byte right)
+            {
+                if (left {{comparison}} right) return 1;
+                return 0;
+            }
+            """);
+        Assert.Equal(expected, cpu.Memory[0x6000]);
+        Assert.Equal(Cpu6502.SoftwareStackTop, cpu.SoftwareStackPointer);
+    }
+
+    [Theory]
+    [InlineData("value--;", 0, 255)]
+    [InlineData("value += 128;", 127, 255)]
+    [InlineData("value += 1;", 255, 0)]
+    [InlineData("value -= 128;", 127, 255)]
+    [InlineData("value *= 2;", 255, 254)]
+    [InlineData("value /= 2;", 255, 127)]
+    [InlineData("value %= 8;", 255, 7)]
+    [InlineData("value &= 127;", 255, 127)]
+    [InlineData("value |= 128;", 127, 255)]
+    [InlineData("value ^= 255;", 255, 0)]
+    [InlineData("value <<= 1;", 127, 254)]
+    [InlineData("value >>= 1;", 255, 127)]
+    public void ByteParameterCompoundAssignment(string statement, byte input, byte expected)
+    {
+        var cpu = ExecuteProgram(
+            $$"""
+            byte value = {{input}};
+            byte result = Change(value);
+            poke(0x6000, result);
+            poke(0x6001, value);
+            test_stop(); while (true) ;
+            static extern void test_stop();
+            static byte Change(byte value) { {{statement}} return value; }
+            """);
+        Assert.Equal(new[] { expected, input }, cpu.Memory[0x6000..0x6002]);
+        Assert.Equal(Cpu6502.SoftwareStackTop, cpu.SoftwareStackPointer);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(127)]
+    [InlineData(255)]
+    public void ParameterMutationKeepsNestedCallEvaluationOrder(byte input)
+    {
+        var cpu = ExecuteProgram(
+            $$"""
+            byte result = Outer({{input}});
+            poke(0x6004, result);
+            test_stop(); while (true) ;
+            static extern void test_stop();
+            static byte Outer(byte value)
+            {
+                Store(value++, Change(value), ++value);
+                return value;
+            }
+            static byte Change(byte value) { value += 8; return value; }
+            static void Store(byte first, byte second, byte third)
+            {
+                poke(0x6000, first);
+                poke(0x6001, second);
+                poke(0x6002, third);
+            }
+            """);
+        Assert.Equal(new byte[] { input, unchecked((byte)(input + 9)), unchecked((byte)(input + 2)), 0,
+            unchecked((byte)(input + 2)) }, cpu.Memory[0x6000..0x6005]);
+        Assert.Equal(Cpu6502.SoftwareStackTop, cpu.SoftwareStackPointer);
+        Assert.Equal(0xFD, cpu.SP);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(127)]
+    [InlineData(255)]
+    public void PostIncrementSnapshotsTheOldParameter(byte input)
+    {
+        var cpu = ExecuteProgram(
+            $$"""
+            byte old = Increment({{input}});
+            poke(0x6000, old);
+            Pair({{input}}, 8);
+            test_stop(); while (true) ;
+            static extern void test_stop();
+            static byte Increment(byte value) => value++;
+            static void Pair(byte value, byte increment)
+            {
+                Store(value++, value);
+                value += increment;
+                poke(0x6003, value);
+            }
+            static void Store(byte first, byte second)
+            {
+                poke(0x6001, first);
+                poke(0x6002, second);
+            }
+            """);
+        Assert.Equal(new byte[] { input, input, unchecked((byte)(input + 1)), unchecked((byte)(input + 9)) },
+            cpu.Memory[0x6000..0x6004]);
+        Assert.Equal(Cpu6502.SoftwareStackTop, cpu.SoftwareStackPointer);
+    }
+
+    [Theory]
+    [InlineData(-128, -127)]
+    [InlineData(-1, 0)]
+    [InlineData(127, -128)]
+    public void SignedArgumentStoreRetainsByteWidth(sbyte input, sbyte expected)
+    {
+        var cpu = ExecuteProgram(
+            $$"""
+            short value = Increment({{input}});
+            poke(0x6000, (byte)value);
+            poke(0x6001, (byte)(value >> 8));
+            test_stop(); while (true) ;
+            static extern void test_stop();
+            static short Increment(sbyte value) { value++; return value; }
+            """);
+        Assert.Equal(unchecked((ushort)expected), cpu.Memory[0x6000] | cpu.Memory[0x6001] << 8);
+        Assert.Equal(Cpu6502.SoftwareStackTop, cpu.SoftwareStackPointer);
+    }
+
+    [Fact]
+    public void ArgumentMutationWorksWithArrayParameterOffsets()
+    {
+        var cpu = ExecuteProgram(
+            """
+            byte[] data = new byte[8];
+            byte result = Change(255, data, 127);
+            byte stored = data[0];
+            poke(0x6000, result);
+            poke(0x6001, stored);
+            test_stop(); while (true) ;
+            static extern void test_stop();
+            static byte Change(byte first, byte[] data, byte last)
+            {
+                first++;
+                last++;
+                data[first] = last;
+                return first;
+            }
+            """);
+        Assert.Equal(new byte[] { 0, 128 }, cpu.Memory[0x6000..0x6002]);
+        Assert.Equal(Cpu6502.SoftwareStackTop, cpu.SoftwareStackPointer);
+    }
+
     [Fact]
     public void ReemittedByteArgumentsRegisterPushaDependency()
     {

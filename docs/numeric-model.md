@@ -100,6 +100,22 @@ argument. An unsupported parameter reports its method, index and type. Arrays
 and closure references use their separate lowering. Word returns retain
 both bytes, including signed extension from a byte-sized source.
 
+By-value byte/sbyte parameters can be reassigned, incremented, and used in
+compound assignments. Stores update the current software-stack argument slot,
+not the caller's variable. Postfix expressions snapshot the old value when it
+remains live across an argument store, including nested call arguments.
+Byte loop bounds and comparisons between a parameter and another runtime byte
+use the actual operands rather than compile-time placeholder values.
+This does not introduce a static parameter home or relax the byte-helper
+optimization's native-code/reentrancy guards.
+
+Contiguous array reads of the form `value = data[8 + index]` avoid redundant
+operand/result snapshots when the arithmetic uses only local or constant
+operands and the result is immediately stored to a local. The generated index
+still uses its full promoted storage width; this is not an eight-bit index
+range assumption. Calls, intervening stores, live outer operands, and branch
+entries keep the general materialization path.
+
 User-defined and extern primitive returns support `byte`, `sbyte`, `short`, `ushort`,
 `bool` and `void`. Int32/UInt32 and other unsupported primitive return signatures are
 diagnosed before emission; the compact-range exception for Int32 **locals** does
