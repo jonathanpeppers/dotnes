@@ -6,6 +6,7 @@ namespace dotnes;
 partial class IL2NESWriter
 {
     internal IReadOnlyDictionary<string, int> ByteParameterCalls { get; init; } = new Dictionary<string, int>();
+    internal IReadOnlyDictionary<string, string> ByteParameterFrameEntries { get; init; } = new Dictionary<string, string>();
     ILValueAnalysis? _byteCallValues;
 
     bool TryWriteByteCall(ILInstruction instruction, string method)
@@ -47,30 +48,60 @@ partial class IL2NESWriter
         }
         int start = _blockCountAtILOffset[Instructions[firstArgument].Offset];
         int argumentAdjustment = _numericArgAdjust[Instructions[firstArgument].Offset];
+        int ParameterBytesAfter(int argument)
+        {
+            int bytes = 0;
+            for (int j = argument + 1; j < MethodParamCount; j++)
+                bytes += j < ParamIsArray.Length && ParamIsArray[j] ? 2 : 1;
+            return bytes;
+        }
+        bool batch = ByteParameterFrameEntries.TryGetValue(method, out string? frameEntry)
+            && count <= byte.MaxValue
+            && physicalArguments.All(i => NumericArgIndex(Instructions[i]) is not int argument
+                || argumentAdjustment + count + ParameterBytesAfter(argument) <= byte.MaxValue);
         RemoveLastInstructions(GetBufferedBlockCount() - start);
+        if (batch)
+        {
+            Emit(Opcode.LDA, AddressMode.ZeroPage, (byte)NESConstants.sp);
+            Emit(Opcode.SEC, AddressMode.Implied);
+            Emit(Opcode.SBC, AddressMode.Immediate, (byte)count);
+            Emit(Opcode.STA, AddressMode.ZeroPage, (byte)NESConstants.sp);
+            Emit(Opcode.BCS, AddressMode.Relative, 2);
+            Emit(Opcode.DEC, AddressMode.ZeroPage, (byte)(NESConstants.sp + 1));
+        }
         for (int physical = 0; physical < physicalArguments.Length; physical++)
         {
             int i = physicalArguments[physical];
             var arg = Instructions[i];
+            bool lastDirectLoad = batch && physical == physicalArguments.Length - 1
+                && NumericArgIndex(arg) == null;
+            if (lastDirectLoad)
+                Emit(Opcode.LDY, AddressMode.Immediate, 0);
             if (arg.GetLdcValue() is int constant)
                 Emit(Opcode.LDA, AddressMode.Immediate, (byte)constant);
             else if (NumericArgIndex(arg) is int argument)
             {
-                int offset = argumentAdjustment + physical;
-                for (int j = argument + 1; j < MethodParamCount; j++)
-                    offset += j < ParamIsArray.Length && ParamIsArray[j] ? 2 : 1;
+                int offset = argumentAdjustment + (batch ? count : physical) + ParameterBytesAfter(argument);
                 Emit(Opcode.LDY, AddressMode.Immediate, checked((byte)offset));
                 Emit(Opcode.LDA, AddressMode.IndirectIndexed, (byte)NESConstants.sp);
             }
             else
                 Emit(Opcode.LDA, AddressMode.Absolute, (ushort)Locals[arg.GetLdlocIndex()!.Value].Address!.Value);
-            if (physical != physicalArguments.Length - 1)
+            if (batch)
+            {
+                if (!lastDirectLoad)
+                    Emit(Opcode.LDY, AddressMode.Immediate, (byte)(count - physical - 1));
+                Emit(Opcode.STA, AddressMode.IndirectIndexed, (byte)NESConstants.sp);
+                if (!lastDirectLoad && physical == physicalArguments.Length - 1)
+                    Emit(Opcode.ORA, AddressMode.Immediate, 0);
+            }
+            else if (physical != physicalArguments.Length - 1)
             {
                 EmitJSR("pusha");
                 UsedMethods?.Add("pusha");
             }
         }
-        EmitJSR(method);
+        EmitJSR(batch ? frameEntry! : method);
         _argStackAdjust = argumentAdjustment;
         for (int i = 0; i < count; i++)
             Stack.Pop();

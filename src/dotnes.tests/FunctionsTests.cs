@@ -185,7 +185,7 @@ public class FunctionsTests : RoslynTests
     public void ThreeParameterFunction()
     {
         // Function with 3 byte parameters
-        var bytes = GetProgramBytes(
+        using var transpiler = BuildProgram(
             """
             byte r = add3(1, 2, 3);
             pal_col(0, r);
@@ -193,15 +193,13 @@ public class FunctionsTests : RoslynTests
             while (true) ;
 
             static byte add3(byte a, byte b, byte c) => (byte)(a + b + c);
-            """);
-        Assert.NotNull(bytes);
-        Assert.NotEmpty(bytes);
-
-        var hex = Convert.ToHexString(bytes);
-        // All three constants should appear
-        Assert.Contains("A901", hex); // LDA #$01
-        Assert.Contains("A902", hex); // LDA #$02
-        Assert.Contains("A903", hex); // LDA #$03
+            """, out var program);
+        var main = program.GetBlock("main")!;
+        Assert.Contains(main.InstructionsWithLabels, i => i.Instruction == Asm.LDA(6));
+        Assert.DoesNotContain(main.InstructionsWithLabels, i =>
+            i.Instruction.Operand is LabelOperand { Label: var label }
+                && label.StartsWith("add3", StringComparison.Ordinal));
+        Assert.NotEmpty(program.GetMainBlock());
     }
 
     [Fact]

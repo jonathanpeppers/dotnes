@@ -5,6 +5,70 @@ namespace dotnes.tests;
 
 public class ByteHelperStackAnalysisTests
 {
+    [Theory]
+    [InlineData(2)]
+    [InlineData(3)]
+    [InlineData(8)]
+    public void BatchedEntriesAndExactInlineCleanupHaveBalancedEffects(byte count)
+    {
+        var program = new Program6502();
+        var main = ReserveFrame(count);
+        for (byte slot = 0; slot < count; slot++)
+            main.Emit(LDY(slot)).Emit(LDA(slot)).Emit(STA_ind_Y(NESConstants.sp));
+        main.Emit(JSR("helper_parameters_ready")).Emit(JMP_abs("done"), "done");
+        program.AddMainProgram(main);
+        var helper = new Block("helper").Emit(JSR("pusha"))
+            .Emit(NOP(), "helper_parameters_ready");
+        AppendCleanup(helper, count);
+        program.AddMainProgram(helper);
+        var analyzer = new Transpiler.ByteHelperStackAnalysis(program, NESConstants.LocalStackBase,
+            new Dictionary<string, string> { ["helper"] = "helper_parameters_ready" });
+        Assert.True(analyzer.TryAnalyze("main", out var effect));
+        Assert.Equal(new Transpiler.ByteHelperStackEffect(0, 0, count), effect);
+    }
+
+    [Theory]
+    [InlineData("out-of-frame")]
+    [InlineData("branch-past-y")]
+    [InlineData("unknown-y")]
+    [InlineData("broken-reservation")]
+    [InlineData("broken-cleanup")]
+    public void UnprovenBatchedFrameSequencesFailClosed(string scenario)
+    {
+        var program = new Program6502();
+        var main = ReserveFrame(2);
+        if (scenario == "broken-reservation")
+            main.Replace(2, ADC(2));
+        if (scenario == "branch-past-y")
+            main.Emit(BEQ("value"));
+        main.Emit(scenario == "unknown-y" ? TAY() : LDY(scenario == "out-of-frame" ? (byte)2 : (byte)0))
+            .Emit(LDA(17), "value")
+            .Emit(STA_ind_Y(NESConstants.sp));
+        if (scenario == "broken-cleanup")
+        {
+            var cleanup = BuiltInSubroutines.Incsp2();
+            main.EmitRange(cleanup.InstructionsWithLabels.Select(i => i.Instruction));
+            main.Emit(NOP());
+        }
+        else
+            main.Emit(JSR("incsp2")).Emit(JMP_abs("done"), "done");
+        program.AddMainProgram(main);
+        var analyzer = new Transpiler.ByteHelperStackAnalysis(program, NESConstants.LocalStackBase);
+        Assert.False(analyzer.TryAnalyze("main", out _));
+    }
+
+    static Block ReserveFrame(byte count) => new Block("main")
+        .Emit(LDA_zpg(NESConstants.sp)).Emit(SEC()).Emit(SBC(count))
+        .Emit(STA_zpg(NESConstants.sp)).Emit(BCS(2)).Emit(DEC_zpg(NESConstants.sp + 1));
+
+    static void AppendCleanup(Block block, byte count)
+    {
+        var cleanup = count == 2 ? BuiltInSubroutines.Incsp2() : BuiltInSubroutines.Addysp();
+        if (count != 2)
+            block.Emit(LDY(count));
+        block.EmitRange(cleanup.InstructionsWithLabels.Select(i => i.Instruction));
+    }
+
     [Fact]
     public void BoundsPendingArgumentsAcrossNestedCalls()
     {

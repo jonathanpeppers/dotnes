@@ -27,7 +27,8 @@ static class ArrayOperandLowering
     public static ILInstruction[] Rewrite(ILInstruction[] instructions, ReflectionCache reflection,
         IReadOnlyDictionary<string, bool[]> arrayParameters, bool[]? methodArrayParameters = null,
         ISet<string>? unsupportedArraySignatures = null, int closureArgIndex = -1, ArrayStorageAnalysis? storage = null,
-        Func<ILValueAnalysis, ISet<int>, ILInstruction[]>? materialize = null)
+        Func<ILValueAnalysis, ISet<int>, ILInstruction[]>? materialize = null,
+        Func<ILValueAnalysis, int, bool>? displacedRead = null)
     {
         var analysis = new ILValueAnalysis(instructions, reflection);
         storage ??= new ArrayStorageAnalysis([instructions], reflection);
@@ -282,7 +283,8 @@ static class ArrayOperandLowering
                 {
                     // The scalar arithmetic is contiguous and its result is stored
                     // immediately. Only the full-width index needs a snapshot.
-                    selected.UnionWith(inputs);
+                    if (displacedRead?.Invoke(analysis, i) != true)
+                        selected.UnionWith(inputs);
                 }
                 else if (!Simple(Unwrap(inputs[1])) || HasIndependentEffect(i, closure, OperandClosure([inputs[1]]).Min()) ||
                     (inputs[0] != i - 2 && instructions[inputs[0]].OpCode == ILOpCode.Newarr))

@@ -34,10 +34,25 @@ partial class Transpiler
             NumericStorage.RequireNarrowType(types[producer], method);
         var words = new HashSet<int>(selected.Where(i => NumericStorage.IsWord(types[i])));
         var signedWords = new HashSet<int>(words.Where(i => NumericStorage.IsSigned(types[i])));
+        var reusable = new Dictionary<int, (PrimitiveTypeCode Type, int Expression)>();
+        // Only methods expanded by nonconstant inlining receive allocation
+        // cleanup. Existing locals and snapshots from earlier passes stay outside
+        // this pass's new-slot pool.
+        if (_inlinedByteExpressionValues.TryGetValue(method, out var inlined) && inlined.Count > 0)
+            foreach (int producer in selected)
+                if (arrayProducers?.Contains(producer) != true
+                    && types[producer] is PrimitiveTypeCode.Byte or PrimitiveTypeCode.SByte
+                        or PrimitiveTypeCode.Boolean or PrimitiveTypeCode.Int16 or PrimitiveTypeCode.UInt16)
+                {
+                    int expression = inlined.TryGetValue(instructions[producer].Offset, out var origin)
+                        && ReferenceEquals(instructions[producer], origin.Instruction)
+                            ? origin.Expression : instructions[producer].Offset;
+                    reusable.Add(producer, (types[producer]!.Value, expression));
+                }
         var spillLocals = new Dictionary<int, int>();
         var rewritten = ILExpressionSpiller.Rewrite(instructions, analysis, selected, words,
             spillLocals, signature.Locals.Length, stableAddressProducers: stableAddresses,
-            signedWordProducers: signedWords);
+            signedWordProducers: signedWords, reusableSnapshots: reusable);
         if (spillLocals.Count == 0)
             return rewritten;
 

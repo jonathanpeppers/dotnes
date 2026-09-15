@@ -75,7 +75,8 @@ partial class Transpiler
         return safe;
     }
 
-    internal bool TryOptimizeByteHelpers(Program6502 program, ILInstruction[] main, int localHighWater, bool hasNativeCode, out int localBytes)
+    internal bool TryOptimizeByteHelpers(Program6502 program, ILInstruction[] main, int localHighWater, bool hasNativeCode,
+        out int localBytes, IReadOnlyDictionary<string, string>? frameEntries = null)
     {
         localBytes = localHighWater;
         // Native entry points are independent of C# extern declarations. Linked
@@ -91,7 +92,7 @@ partial class Transpiler
 
         // Work entirely from final emitted frames/stack effects before touching IR.
         // Unknown effects, recursion and nonzero stack changes around loops fail closed.
-        var analyzer = new ByteHelperStackAnalysis(program, NESConstants.LocalStackBase + localHighWater);
+        var analyzer = new ByteHelperStackAnalysis(program, NESConstants.LocalStackBase + localHighWater, frameEntries);
         if (!analyzer.TryAnalyze("main", out var stack) || stack.Minimum < 0 || stack.Delta != 0
             || NESConstants.LocalStackBase + localHighWater + candidates.Count > 0x0800 - stack.Maximum)
         {
@@ -216,12 +217,17 @@ partial class Transpiler
 
     internal readonly record struct ByteHelperStackEffect(int Delta, int Minimum, int Maximum);
 
-    internal sealed class ByteHelperStackAnalysis(Program6502 program, int localEnd)
+    internal sealed class ByteHelperStackAnalysis(Program6502 program, int localEnd,
+        IReadOnlyDictionary<string, string>? frameEntries = null)
     {
         const int MaxByteHelperCallDepth = 128;
 
         readonly Dictionary<string, ByteHelperStackEffect> _effects = new(StringComparer.Ordinal);
         readonly HashSet<string> _active = new(StringComparer.Ordinal);
+        readonly Dictionary<string, string> _frameEntries = frameEntries?.ToDictionary(p => p.Value, p => p.Key)
+            ?? new Dictionary<string, string>();
+        static readonly Instruction[] incsp2 = BuiltInSubroutines.Incsp2().InstructionsWithLabels.Select(i => i.Instruction).ToArray();
+        static readonly Instruction[] addysp = BuiltInSubroutines.Addysp().InstructionsWithLabels.Select(i => i.Instruction).ToArray();
 
         public bool TryAnalyze(string name, out ByteHelperStackEffect effect)
         {
@@ -240,24 +246,38 @@ partial class Transpiler
             if (_effects.TryGetValue(name, out effect))
                 return true;
             var block = program.GetBlock(name);
+            int start = 0;
+            if (block == null && _frameEntries.TryGetValue(name, out string? method))
+            {
+                block = program.GetBlock(method);
+                if (block == null || !InstructionLabels(block).TryGetValue(name, out start))
+                    return false;
+            }
             if (block is null || block.IsDataBlock || block.Count == 0
                 || _active.Count >= MaxByteHelperCallDepth || !_active.Add(name))
                 return false;
-            bool success = AnalyzeBlock(block, out effect);
+            bool success = AnalyzeBlock(block, start, out effect);
             _active.Remove(name);
             if (success)
                 _effects[name] = effect;
             return success;
         }
 
-        bool AnalyzeBlock(Block block, out ByteHelperStackEffect effect)
+        bool AnalyzeBlock(Block block, int start, out ByteHelperStackEffect effect)
         {
             effect = default;
             var labels = InstructionLabels(block);
             var offsets = InstructionOffsets(block);
+            bool IsBranchTarget(int target) => Enumerable.Range(0, block.Count).Any(i => block[i].Operand switch
+            {
+                LabelOperand label when block[i].Opcode == Opcode.JMP && labels.TryGetValue(label.Label, out int value) => value == target,
+                RelativeOperand label when labels.TryGetValue(label.Label, out int value) => value == target,
+                RelativeByteOperand branch => offsets[i] + block[i].Size + branch.Offset == offsets[target],
+                _ => false,
+            });
             var depths = new Dictionary<int, int>();
             var pending = new Stack<(int Index, int Depth)>();
-            pending.Push((0, 0));
+            pending.Push((start, 0));
             int minimum = 0, maximum = 0;
             int? exitDepth = null;
             while (pending.Count > 0)
@@ -273,6 +293,37 @@ partial class Transpiler
                 }
                 depths.Add(index, depth);
                 var instruction = block[index];
+                bool Matches(int at, params Instruction[] expected) => at + expected.Length <= block.Count
+                    && expected.Select((value, offset) => block[at + offset] == value).All(equal => equal);
+                if (index + 6 <= block.Count
+                    && block[index + 2] is { Opcode: Opcode.SBC, Mode: AddressMode.Immediate,
+                        Operand: ImmediateOperand { Value: > 0 } amount }
+                    && Matches(index,
+                        Asm.LDA_zpg(NESConstants.sp), Asm.SEC(), Asm.SBC(amount.Value),
+                        Asm.STA_zpg(NESConstants.sp), Asm.BCS(2), Asm.DEC_zpg(NESConstants.sp + 1)))
+                {
+                    depth += amount.Value;
+                    maximum = Math.Max(maximum, depth);
+                    pending.Push((index + 6, depth));
+                    continue;
+                }
+                int cleanup = 0;
+                if (index + incsp2.Length == block.Count && Matches(index, incsp2))
+                    cleanup = 2;
+                else if (index + addysp.Length + 1 == block.Count
+                    && instruction is { Opcode: Opcode.LDY, Mode: AddressMode.Immediate,
+                        Operand: ImmediateOperand { Value: > 0 } count }
+                    && Matches(index + 1, addysp))
+                    cleanup = count.Value;
+                if (cleanup > 0)
+                {
+                    depth -= cleanup;
+                    minimum = Math.Min(minimum, depth);
+                    if (exitDepth.HasValue && exitDepth != depth)
+                        return false;
+                    exitDepth = depth;
+                    continue;
+                }
                 if (instruction.Mode is AddressMode.AbsoluteX or AddressMode.AbsoluteY
                     or AddressMode.IndexedIndirect or AddressMode.ZeroPageX or AddressMode.ZeroPageY
                     || instruction.Mode == AddressMode.IndirectIndexed
@@ -284,9 +335,18 @@ partial class Transpiler
                     return false;
                 // Dynamic writes can overwrite sp or newly allocated homes. Even
                 // direct access to callback vectors makes interrupt effects unknown.
-                if (instruction.Opcode is Opcode.STA or Opcode.STX or Opcode.STY or Opcode.INC or Opcode.DEC
+                int yLoad = index - 1;
+                if (yLoad >= 0 && block[yLoad] is { Opcode: Opcode.LDA,
+                    Mode: AddressMode.Absolute or AddressMode.Immediate })
+                    yLoad--;
+                bool frameStore = instruction is { Opcode: Opcode.STA, Mode: AddressMode.IndirectIndexed,
+                        Operand: ImmediateOperand { Value: NESConstants.sp } }
+                    && yLoad >= 0 && block[yLoad] is { Opcode: Opcode.LDY, Mode: AddressMode.Immediate,
+                        Operand: ImmediateOperand slot } && slot.Value < depth
+                    && !Enumerable.Range(yLoad + 1, index - yLoad).Any(IsBranchTarget);
+                if (!frameStore && (instruction.Opcode is Opcode.STA or Opcode.STX or Opcode.STY or Opcode.INC or Opcode.DEC
                     || instruction.Mode != AddressMode.Accumulator
-                        && instruction.Opcode is Opcode.ASL or Opcode.LSR or Opcode.ROL or Opcode.ROR)
+                        && instruction.Opcode is Opcode.ASL or Opcode.LSR or Opcode.ROL or Opcode.ROR))
                 {
                     int address = instruction.Operand switch
                     {

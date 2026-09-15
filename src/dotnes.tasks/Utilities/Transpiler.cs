@@ -369,6 +369,10 @@ partial class Transpiler : IDisposable
         var externNames = new HashSet<string>(ExternMethods.Keys, StringComparer.Ordinal);
         var structLayouts = DetectStructLayouts();
 
+        instructions = InlineByteExpressions(instructions, reflectionCache, "main");
+        foreach (var name in UserMethods.Keys.ToArray())
+            UserMethods[name] = InlineByteExpressions(UserMethods[name], reflectionCache, name);
+
         // Pre-allocate user-defined static fields so all methods share the same addresses
         var (staticFields, wordStaticFields, staticFieldBytes, staticArrayFields) = PreAllocateStaticFields(instructions);
         var numericFieldTypes = GetNumericFieldTypes();
@@ -424,7 +428,7 @@ partial class Transpiler : IDisposable
                     var references = new HashSet<int>(selected.Where(p => types[p] is null &&
                         arrayStorage.GetStorage(body, p) is ArrayStorage.Ram or ArrayStorage.Rom or ArrayStorage.Parameter));
                     return RewriteTypedExpressionValues(body, analysis, selected, types, name, references);
-                });
+                }, (analysis, read) => CanUseDisplacedByteRead(body, analysis, read, name, arrayStorage));
         }
         instructions = RewriteArrays(instructions, "main");
         foreach (var name in UserMethods.Keys.ToArray())
@@ -444,6 +448,9 @@ partial class Transpiler : IDisposable
                 && kvp.Value.ReturnType is PrimitiveTypeCode.Byte or PrimitiveTypeCode.Void)
             .ToDictionary(kvp => kvp.Key,
                 kvp => _closureMethodArgIndex.TryGetValue(kvp.Key, out int closure) ? closure : -1);
+        var byteParameterFrameEntries = byteParameterCalls.Where(pair =>
+                UserMethodMetadata[pair.Key].argCount >= 2)
+            .ToDictionary(pair => pair.Key, pair => $"{pair.Key}:@parameters_ready", StringComparer.Ordinal);
 
         using var writer = new IL2NESWriter(new MemoryStream(), logger: _logger, reflectionCache: reflectionCache)
         {
@@ -453,6 +460,7 @@ partial class Transpiler : IDisposable
             UserMethodArrayParameters = arrayParameters,
             UnsupportedArrayHelperSignatures = _unsupportedArrayHelperSignatures,
             ByteParameterCalls = byteParameterCalls,
+            ByteParameterFrameEntries = byteParameterFrameEntries,
             ExternMethodNames = externNames,
             WordLocals = DetectWordLocals(instructions, reflectionCache),
             StructLayouts = structLayouts,
@@ -553,6 +561,7 @@ partial class Transpiler : IDisposable
                 UserMethodArrayParameters = arrayParameters,
                 UnsupportedArrayHelperSignatures = _unsupportedArrayHelperSignatures,
                 ByteParameterCalls = byteParameterCalls,
+                ByteParameterFrameEntries = byteParameterFrameEntries,
                 ExternMethodNames = externNames,
                 MethodParamCount = paramCount,
                 ParamIsArray = isArrayParam,
@@ -583,10 +592,21 @@ partial class Transpiler : IDisposable
             {
                 // byte[] params are 16-bit pointers: use pushax (2 bytes) instead of pusha (1 byte)
                 if (isArrayParam.Length > 0 && isArrayParam[paramCount - 1])
+                {
                     methodWriter.EmitJSR("pushax");
+                    UsedMethods.Add("pushax");
+                }
                 else
+                {
                     methodWriter.EmitJSR("pusha");
+                    UsedMethods.Add("pusha");
+                }
             }
+            bool hasFrameEntry = byteParameterFrameEntries.TryGetValue(methodName, out var frameEntry);
+            bool firstLoadIsLastArgument = hasFrameEntry && !_closureMethodArgIndex.ContainsKey(methodName)
+                && methodIL.Length > 0 && IL2NESWriter.NumericArgIndex(methodIL[0]) == paramCount - 1;
+            if (frameEntry is not null && !firstLoadIsLastArgument)
+                methodWriter.CurrentBlock!.SetNextLabel(frameEntry);
 
             for (int i = 0; i < methodWriter.Instructions.Length; i++)
             {
@@ -611,6 +631,11 @@ partial class Transpiler : IDisposable
                     methodWriter.Write(instruction, instruction.Bytes.Value);
                 else
                     methodWriter.Write(instruction);
+                if (i == 0 && firstLoadIsLastArgument)
+                {
+                    if (frameEntry is not null)
+                        methodWriter.CurrentBlock!.SetNextLabel(frameEntry);
+                }
             }
 
             var methodBlock = methodWriter.GetMainBlock(methodName);
@@ -644,6 +669,8 @@ partial class Transpiler : IDisposable
                     }
                 }
                 methodBlock.Emit(new Instruction(Opcode.RTS, AddressMode.Implied));
+                ElideCapturedByteFrame(methodName, methodIL, methodBlock,
+                    NESConstants.LocalStackBase + methodWriter.LocalCount);
                 program.AddMainProgram(methodBlock);
                 userMethodsTotalSize += methodBlock.Size;
                 _logger.WriteLine($"User method '{methodName}': {methodBlock.Size} bytes ({paramCount} params)");
@@ -655,6 +682,19 @@ partial class Transpiler : IDisposable
             foreach (var bytes in methodWriter.ByteArrays)
                 writer.MergeByteArray(bytes);
             localHighWater = Math.Max(localHighWater, methodWriter.LocalCount);
+        }
+
+        foreach (var entry in byteParameterFrameEntries)
+        {
+            if (!program.FindReferencesTo(entry.Value).Any())
+                continue;
+            var block = program.GetBlock(entry.Key)!;
+            int bytes = UserMethodMetadata[entry.Key].argCount;
+            userMethodsTotalSize -= block.Size;
+            block.RemoveLast(bytes == 2 ? 2 : 3);
+            EmitByteParameterCleanup(block, bytes);
+            block.Emit(new Instruction(Opcode.RTS, AddressMode.Implied));
+            userMethodsTotalSize += block.Size;
         }
 
         // Parse and add extern code blocks from .s assembly files using ca65 assembler
@@ -688,7 +728,8 @@ partial class Transpiler : IDisposable
 
         // Get local count from writer
         locals = (ushort)writer.LocalCount;
-        if (OptimizeByteHelpers && TryOptimizeByteHelpers(program, instructions, localHighWater, hasNativeCode, out int optimizedLocals))
+        if (OptimizeByteHelpers && TryOptimizeByteHelpers(program, instructions, localHighWater, hasNativeCode,
+            out int optimizedLocals, byteParameterFrameEntries))
         {
             locals = (ushort)optimizedLocals;
             userMethodsTotalSize = UserMethods.Keys.Sum(name => program.GetBlock(name)!.Size);

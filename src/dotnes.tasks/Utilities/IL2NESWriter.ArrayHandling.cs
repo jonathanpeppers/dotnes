@@ -571,7 +571,7 @@ partial class IL2NESWriter
         if (Stack.Count > 0) Stack.Pop(); // array ref
 
         // Find the two Ldloc instructions that loaded array and index
-        if (TryEmitArrayParameterRead())
+        if (TryEmitDisplacedByteIndexRead() || TryEmitArrayParameterRead())
             return;
         var indexInstr = Instructions[Index - 1];
         var arrayInstr = Instructions[Index - 2];
