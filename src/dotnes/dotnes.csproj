@@ -16,12 +16,18 @@
     <None Include="../dotnes.tasks/bin/$(Configuration)/netstandard2.0/dotnes.tasks.dll" Pack="true" PackagePath="build" />
     <None Include="../dotnes.tasks/bin/$(Configuration)/netstandard2.0/dotnes.tasks.pdb" Pack="true" PackagePath="build" />
     <None Include="../dotnes.tasks/bin/$(Configuration)/netstandard2.0/dotnes.props" Pack="true" PackagePath="build" />
+    <None Include="../dotnes.tasks/bin/$(Configuration)/netstandard2.0/dotnes.defaults.props" Pack="true" PackagePath="build" />
     <None Include="../dotnes.tasks/bin/$(Configuration)/netstandard2.0/dotnes.targets" Pack="true" PackagePath="build" />
+    <None Include="../dotnes.tasks/bin/$(Configuration)/netstandard2.0/dotnes.analyzers.targets" Pack="true" PackagePath="buildTransitive/dotnes.targets" />
     <None Include="../dotnes.tasks/bin/$(Configuration)/netstandard2.0/System.Reflection.Metadata.dll" Pack="true" PackagePath="build" />
     <None Include="../dotnes.tasks/bin/$(Configuration)/netstandard2.0/System.Collections.Immutable.dll" Pack="true" PackagePath="build" />
     <None Include="../dotnes.tasks/bin/$(Configuration)/netstandard2.0/neslib.dll" Pack="true" PackagePath="build" />
     <None Include="../dotnes.tasks/bin/$(Configuration)/netstandard2.0/neslib.pdb" Pack="true" PackagePath="build" />
     <None Include="../neslib/bin/$(Configuration)/netstandard2.0/ref/neslib.dll" Pack="true" PackagePath="ref/net10.0" />
+    <!-- Desktop tests use normal NuGet compile/runtime assets. The compiler's
+         metadata/immutable dependencies are provided by the net10.0 framework. -->
+    <None Include="../dotnes.tasks/bin/$(Configuration)/netstandard2.0/dotnes.tasks.dll" Pack="true" PackagePath="ref/net10.0;lib/net10.0" />
+    <None Include="../neslib/bin/$(Configuration)/netstandard2.0/neslib.dll" Pack="true" PackagePath="lib/net10.0" />
     <None Include="../dotnes.analyzers/bin/$(Configuration)/netstandard2.0/dotnes.analyzers.dll" Pack="true" PackagePath="analyzers/dotnet/cs" />
   </ItemGroup>
 </Project>

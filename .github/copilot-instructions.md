@@ -63,10 +63,17 @@ binlogtool savestrings output.binlog out.txt # Extract all strings
 ```
 
 ## MSBuild Integration
-- [bin/Debug/dotnes.props](bin/Debug/dotnes.props) - Disables BCL (`NoStdLib=true`), forces `Optimize=true`
-- [bin/Debug/dotnes.targets](bin/Debug/dotnes.targets) - Runs `TranspileToNES` task after Build
+- [src/dotnes.tasks/Targets/dotnes.props](src/dotnes.tasks/Targets/dotnes.props) - Schedules ROM defaults after all NuGet package props so standard test SDK detection is reliable
+- [src/dotnes.tasks/Targets/dotnes.defaults.props](src/dotnes.tasks/Targets/dotnes.defaults.props) - Applies ROM-only compiler/output settings before the SDK derives defaults
+- [src/dotnes.tasks/Targets/dotnes.targets](src/dotnes.tasks/Targets/dotnes.targets) - Runs `TranspileToNES` after Build for non-test projects
+- [src/dotnes.tasks/Targets/dotnes.analyzers.targets](src/dotnes.tasks/Targets/dotnes.analyzers.targets) - Excludes the NES analyzer for direct and transitive test consumers, including design-time builds
 
 The Transpile target automatically creates `.nes` from `.dll` + `*.s` files.
+Standard .NET 10 test projects can reference the existing `dotnes` package for
+`NesCompiler`/`Program6502`/`AssemblyReader` without ROM settings or NES-only
+analyzers. Detection uses props-time `IsTestProject`, not project names or output
+type. Nonstandard test frameworks must set it in `Directory.Build.props`, not
+only in the project body; ROM project-body overrides remain supported.
 
 **⚠️ When adding new public MSBuild properties**, always update [docs/msbuild-properties.md](docs/msbuild-properties.md) with the property name, type, default value, description, and an XML example.
 

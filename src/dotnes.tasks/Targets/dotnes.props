@@ -1,29 +1,12 @@
 <Project>
   <PropertyGroup>
-    <!-- Prevent foo.exe -->
-    <ComputeNETCoreBuildOutputFiles>false</ComputeNETCoreBuildOutputFiles>
-    <!-- Prevent foo.*.json -->
-    <GenerateDependencyFile>false</GenerateDependencyFile>
-    <GenerateRuntimeConfigurationFiles>false</GenerateRuntimeConfigurationFiles>
-    <!-- Prevent ref/foo.dll -->
-    <ProduceReferenceAssembly>false</ProduceReferenceAssembly>
-    <!-- Prevent neslib.dll -->
-    <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
-    <!-- Prevent the BCL! -->
-    <NoStdLib>true</NoStdLib>
-    <!-- Always work with Optimized IL -->
-    <Optimize>true</Optimize>
-    <!-- Also removes extra IL -->
-    <DebugSymbols>false</DebugSymbols>
-    <!-- Allow 'static extern' without [DllImport] -->
-    <NoWarn>$(NoWarn);CS0626</NoWarn>
-    <!-- Required for function pointer callback APIs -->
-    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- Wait for all package props, but precede SDK defaults and project overrides. -->
+    <_NESCustomAfterMicrosoftCommonProps>$(CustomAfterMicrosoftCommonProps)</_NESCustomAfterMicrosoftCommonProps>
+    <_NESCustomAfterMicrosoftCommonProps Condition="'$(_NESCustomAfterMicrosoftCommonProps)' == ''">$(MSBuildExtensionsPath)\v$(MSBuildToolsVersion)\Custom.After.Microsoft.Common.props</_NESCustomAfterMicrosoftCommonProps>
+    <CustomAfterMicrosoftCommonProps>$(MSBuildThisFileDirectory)dotnes.defaults.props</CustomAfterMicrosoftCommonProps>
   </PropertyGroup>
   <ItemGroup>
+    <!-- Keep this early so project-body Remove/Update items still work. -->
     <NESAssembly Include="*.s" />
-    <Using Include="NES" />
-    <Using Include="NES.NESLib" Static="true" />
-    <Using Include="NES.NESColor" Static="true" />
   </ItemGroup>
 </Project>

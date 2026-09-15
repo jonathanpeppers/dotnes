@@ -95,6 +95,9 @@ PRG/CHR bank counts, diagnostic logging, and more). See
 
 Tools that need a 6502 object model without writing a ROM can use the
 [in-memory compilation API](docs/compilation-api.md).
+Standard .NET test projects can reference `dotnes` directly to use that API
+without ROM build settings or NES-only analyzers; see
+[desktop test projects](docs/compilation-api.md#reference-from-a-desktop-test-project).
 
 ## Native runtime integration
 

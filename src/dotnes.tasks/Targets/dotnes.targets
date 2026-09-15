@@ -1,5 +1,9 @@
-<Project>
-  <PropertyGroup>
+<Project InitialTargets="_ValidateNESTestProject">
+  <Target Name="_ValidateNESTestProject"
+          Condition="('$(_NESIsTestProject)' == 'false' and '$(IsTestProject)' == 'true') or ('$(_NESIsTestProject)' == 'true' and '$(IsTestProject)' != 'true')">
+    <Error Text="dotnes: IsTestProject changed after package props were evaluated. Use Microsoft.NET.Test.Sdk or set IsTestProject in Directory.Build.props; do not change it in the project body." />
+  </Target>
+  <PropertyGroup Condition="'$(IsTestProject)' != 'true'">
     <NESTargetPath>$(OutputPath)$(TargetName).nes</NESTargetPath>
     <_NESPropertiesStampFile>$(IntermediateOutputPath)dotnes.properties.stamp</_NESPropertiesStampFile>
     <_NESTasksAssembly>$(MSBuildThisFileDirectory)dotnes.tasks.dll</_NESTasksAssembly>
@@ -8,11 +12,11 @@
   </PropertyGroup>
   <!-- Local dev: run task out-of-process so the build server doesn't lock dotnes.tasks.dll -->
   <UsingTask TaskName="dotnes.TranspileToNES" AssemblyFile="$(_NESTasksAssembly)"
-             TaskFactory="TaskHostFactory" Condition="'$(DotNESLocalDev)' == 'true'" />
+             TaskFactory="TaskHostFactory" Condition="'$(IsTestProject)' != 'true' and '$(DotNESLocalDev)' == 'true'" />
   <!-- NuGet package consumers: run in-process for performance -->
   <UsingTask TaskName="dotnes.TranspileToNES" AssemblyFile="$(_NESTasksAssembly)"
-             Condition="'$(DotNESLocalDev)' != 'true'" />
-  <Target Name="_WriteNESPropertiesStamp">
+             Condition="'$(IsTestProject)' != 'true' and '$(DotNESLocalDev)' != 'true'" />
+  <Target Name="_WriteNESPropertiesStamp" Condition="'$(IsTestProject)' != 'true'">
     <WriteLinesToFile
         File="$(_NESPropertiesStampFile)"
         Lines="NESMirroring=$(NESMirroring);NESMapper=$(NESMapper);NESPrgBanks=$(NESPrgBanks);NESChrBanks=$(NESChrBanks);NESBattery=$(NESBattery);NESMmc3BankedLayout=$(NESMmc3BankedLayout);NESOptimizeByteHelpers=$(NESOptimizeByteHelpers);@(NESPrgBank->'%(FullPath)|%(Bank)|%(CpuAddress)|%(Offset)');@(NESChrBank->'%(FullPath)|%(Bank)|%(Offset)')"
@@ -23,6 +27,7 @@
     </ItemGroup>
   </Target>
   <Target Name="Transpile" AfterTargets="Build"
+      Condition="'$(IsTestProject)' != 'true'"
       DependsOnTargets="$(TranspileDependsOn)"
       Inputs="$(TargetPath);@(NESAssembly);@(NESPrgBank);@(NESChrBank);$(_NESPropertiesStampFile);$(_NESTasksAssembly)" Outputs="$(NESTargetPath)">
     <ItemGroup>
