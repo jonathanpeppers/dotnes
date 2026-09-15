@@ -1,3 +1,4 @@
+using dotnes.ObjectModel;
 using Xunit.Abstractions;
 using static dotnes.ObjectModel.Asm;
 
@@ -208,5 +209,73 @@ public class ReorderedArgumentExecutionTests(ITestOutputHelper output) : Executi
         Assert.Equal(2, cpu.Memory[0x6010]);
         Assert.Equal(Cpu6502.SoftwareStackTop, cpu.SoftwareStackPointer);
         Assert.Equal(0xFD, cpu.SP);
+    }
+
+    [Theory]
+    [InlineData("(byte)(saved + 1)", 255)]
+    [InlineData("(byte)(saved ^ 255)", 1)]
+    [InlineData("(byte)(saved << 1)", 252)]
+    public void LocalDerivedLaterArgumentPreservesEarlierResult(string expression, byte expected)
+    {
+        var cpu = ExecuteProgram(
+            $$"""
+            byte saved = Read(254);
+            Store(Read(1), {{expression}});
+            test_stop(); while (true) ;
+            static extern void test_stop();
+            static byte Read(byte value)
+            {
+                byte count = peek(0x6010);
+                poke(0x6010, (byte)(count + 1));
+                return value;
+            }
+            static void Store(byte first, byte second)
+            {
+                poke(0x6000, first);
+                poke(0x6001, second);
+            }
+            """);
+        Assert.Equal(new byte[] { 1, expected }, cpu.Memory[0x6000..0x6002]);
+        Assert.Equal(2, cpu.Memory[0x6010]);
+        Assert.Equal(Cpu6502.SoftwareStackTop, cpu.SoftwareStackPointer);
+        Assert.Equal(0xFD, cpu.SP);
+    }
+
+    [Fact]
+    public void NativeBooleanArgumentsPreserveEarlierResult()
+    {
+        using var transpiler = BuildProgram(
+            """
+            bool saved = ReadFalse();
+            Store(ReadTrue(), saved);
+            test_stop(); while (true) ;
+            static extern void test_stop();
+            static extern void Store(bool first, bool second);
+            static bool ReadFalse() { poke(0x6010, 1); return false; }
+            static bool ReadTrue() { poke(0x6011, 1); return true; }
+            """, out var program);
+        program.DefineExternalLabel("_test_stop", 0x7FF0);
+        var native = program.CreateBlock("_Store");
+        native.Emit(STA_abs(0x6001))
+            .Emit(JSR("popa")).Emit(STA_abs(0x6000)).Emit(RTS());
+        var cpu = new Cpu6502(program.ToBytes(), program.BaseAddress, program.GetLabels()["main"]);
+        cpu.RunUntil(0x7FF0);
+        Assert.Equal(new byte[] { 1, 0 }, cpu.Memory[0x6000..0x6002]);
+        Assert.Equal(new byte[] { 1, 1 }, cpu.Memory[0x6010..0x6012]);
+        Assert.Equal(Cpu6502.SoftwareStackTop, cpu.SoftwareStackPointer);
+        Assert.Equal(0xFD, cpu.SP);
+    }
+
+    [Fact]
+    public void ManagedBooleanParametersStillRequireSupportedScalarSignature()
+    {
+        var error = Assert.Throws<TranspileException>(() => GetProgramBytes(
+            """
+            Store(true, false);
+            while (true) ;
+            static void Store(bool first, bool second) { }
+            """));
+        Assert.Contains("Boolean", error.Message);
+        Assert.Contains("byte and sbyte only", error.Message);
     }
 }

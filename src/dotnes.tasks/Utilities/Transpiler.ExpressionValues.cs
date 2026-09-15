@@ -50,6 +50,10 @@ partial class Transpiler
                     || i.OpCode == ILOpCode.Call && i.String is "pad_poll" or "pad_trigger");
         }
 
+        bool ReloadsLocalAfter(int value, int earlier) => value > earlier
+            && (instructions[value].GetLdlocIndex() != null
+                || analysis.Inputs[value].Any(input => ReloadsLocalAfter(input, earlier)));
+
         for (int i = 0; i < instructions.Length; i++)
         {
             var inputs = analysis.Inputs[i];
@@ -62,11 +66,10 @@ partial class Transpiler
                 {
                     int producer = inputs[argument];
                     if (producer >= 0 && scalar[producer]
-                        && types[producer] is PrimitiveTypeCode.Byte or PrimitiveTypeCode.SByte
+                        && types[producer] is PrimitiveTypeCode.Byte or PrimitiveTypeCode.SByte or PrimitiveTypeCode.Boolean
                         && instructions[producer].GetLdlocIndex() == null
                         && instructions[producer].GetLdcValue() == null
-                        && inputs.Skip(argument + 1).Any(p => p > producer
-                            && instructions[p].GetLdlocIndex() != null))
+                        && inputs.Skip(argument + 1).Any(p => ReloadsLocalAfter(p, producer)))
                         spills.Add(producer);
                 }
             }
