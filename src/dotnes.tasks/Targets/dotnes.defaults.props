@@ -1,0 +1,27 @@
+<Project>
+  <PropertyGroup>
+    <_NESIsTestProject>false</_NESIsTestProject>
+    <_NESIsTestProject Condition="'$(IsTestProject)' == 'true'">true</_NESIsTestProject>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(IsTestProject)' != 'true'">
+    <!-- These defaults must precede the SDK's derived output properties. -->
+    <ComputeNETCoreBuildOutputFiles>false</ComputeNETCoreBuildOutputFiles>
+    <GenerateDependencyFile>false</GenerateDependencyFile>
+    <GenerateRuntimeConfigurationFiles>false</GenerateRuntimeConfigurationFiles>
+    <ProduceReferenceAssembly>false</ProduceReferenceAssembly>
+    <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
+    <NoStdLib>true</NoStdLib>
+    <Optimize>true</Optimize>
+    <DebugSymbols>false</DebugSymbols>
+    <!-- Allow 'static extern' without [DllImport] and function pointer callbacks. -->
+    <NoWarn>$(NoWarn);CS0626</NoWarn>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(IsTestProject)' != 'true'">
+    <Using Include="NES" />
+    <Using Include="NES.NESLib" Static="true" />
+    <Using Include="NES.NESColor" Static="true" />
+  </ItemGroup>
+  <Import Project="$(_NESCustomAfterMicrosoftCommonProps)"
+          Condition="'$(_NESCustomAfterMicrosoftCommonProps)' != '' and Exists('$(_NESCustomAfterMicrosoftCommonProps)')" />
+</Project>

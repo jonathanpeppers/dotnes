@@ -48,6 +48,8 @@ jobs:
       run: dotnet build -bl:build-debug.binlog && dotnet build -c Release -bl:build-release.binlog
     - name: test
       run: dotnet test --no-build --verbosity normal && dotnet test --no-build --verbosity normal -c Release
+    - name: packed desktop and ROM consumers
+      run: dotnet run scripts/test-package.cs -- bin/Release/dotnes.[0-9]*.nupkg
     - name: samples
       run: dotnet build samples/samples.sln -bl:samples-debug.binlog && dotnet build samples/samples.sln -c Release -bl:samples-release.binlog
     - name: shutdown (best effort)
@@ -133,4 +135,3 @@ jobs:
       with:
         name: smoke-test-logs-${{ matrix.os }}
         path: '*.binlog'
-

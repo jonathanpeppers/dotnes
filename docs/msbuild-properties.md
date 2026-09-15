@@ -6,6 +6,43 @@ defaults for simple projects.
 
 ## Properties
 
+### `IsTestProject`
+
+The standard MSBuild test-project property selects desktop test integration
+instead of ROM compilation.
+
+| | |
+|---|---|
+| **Type** | `bool` |
+| **Default** | Unset; standard test SDKs set it to `true` |
+
+Ordinary `Microsoft.NET.Test.Sdk` projects are detected automatically. If a test
+framework does not set the property in package props, declare it in
+`Directory.Build.props`:
+
+```xml
+<Project>
+  <PropertyGroup>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+</Project>
+```
+
+Detection occurs after all NuGet package props, before the .NET SDK derives
+its compiler/output settings and before the project body. Test projects retain their normal framework
+references, compiler settings, test discovery, and runtime output. They receive
+the existing compiler APIs and their runtime assets, without NES-only analyzers
+or ROM transpilation. This also applies during design-time builds. Standard
+test-SDK projects need no additional configuration. Without such a test SDK,
+setting `IsTestProject` only in the project body is too late. Changing test
+classification in either direction after package props produces a clear build
+error. Keeping ROM defaults before the project body preserves
+existing consumer overrides such as `Optimize`, `DebugSymbols`, and `DebugType`.
+
+This is not inferred from names or `OutputType=Library`, and is not a general
+non-test tooling mode. See the [desktop test project example](compilation-api.md#reference-from-a-desktop-test-project).
+The ROM properties and targets below apply to non-test projects.
+
 ### `NESDiagnosticLogging`
 
 Enable verbose diagnostic output during transpilation.

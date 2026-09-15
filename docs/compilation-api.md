@@ -7,8 +7,68 @@ reflection over the internal `Transpiler` is necessary.
 
 The API lives alongside `Program6502` in `dotnes.tasks.dll` and is also included
 in the `dotnes.compiler` tool's `dotnes.dll`. Reference one compiler assembly,
-not both: they contain the same types. Keep its accompanying dependencies,
-including `neslib`, available to the host application.
+not both: they contain the same types.
+
+## Reference from a desktop test project
+
+A standard .NET 10 test project can reference the existing `dotnes` package
+directly. Set `DotnesVersion` to the package version you are testing:
+
+```xml
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="dotnes" Version="$(DotnesVersion)" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.9.0" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="4.0.0" />
+  </ItemGroup>
+</Project>
+```
+
+`Microsoft.NET.Test.Sdk` sets the standard MSBuild `IsTestProject` property.
+Detection runs after all NuGet package props, before the SDK's compiler defaults
+and the project body. Standard test projects need no custom imports,
+package-path references, analyzer-removal targets, or extra dotnes flags.
+Project names, directory names, and `OutputType=Library` are **not** used to
+detect tests.
+
+For a nonstandard test framework that does not set `IsTestProject` in package
+props, set `<IsTestProject>true</IsTestProject>` in `Directory.Build.props`.
+Setting it only in the project body is too late without a test SDK. Changing
+the classification in either direction after package props produces an error
+rather than mixing desktop and ROM settings.
+This timing preserves existing ROM projects' ability to override compiler and
+output settings in their project bodies.
+
+In test projects, dotnes leaves the SDK's framework references, CLR output,
+dependency/runtime configuration files, test discovery, optimization, debug,
+unsafe-code, and other ordinary compiler settings alone. It does not transpile
+the test assembly, write a `.nes`, or add NES-only analyzer diagnostics or
+implicit NES usings. `dotnet test` runs normally.
+
+NuGet supplies compile and runtime assets for `dotnes.tasks` and `neslib`;
+the .NET 10 shared framework supplies the compiler's metadata and immutable
+collection dependencies. Tests can call `NesCompiler.Compile`, use `Program6502`,
+and read native sources with `AssemblyReader` without loading an MSBuild task
+host. `NESLib` methods still describe NES operations, not a desktop emulator:
+compile fixture programs that call them rather than executing those stubs.
+If tests compile fixture C# at runtime, add their normal Roslyn dependency,
+such as `Microsoft.CodeAnalysis.CSharp`, separately.
+
+Compiler/runtime assets and test-only analyzer exclusion also work through
+project references. ROM build settings and transpilation targets do not
+propagate to those referencing projects.
+
+This automatic integration is scoped to standard test projects. A non-test
+library or tooling executable with a direct `dotnes` reference still gets ROM
+build behavior; `IsTestProject` is not a general-purpose host-mode switch.
+When hosting the API outside this test-project integration, keep the compiler's
+accompanying dependencies, including `neslib`, available to the host.
 
 ## Compile a program
 

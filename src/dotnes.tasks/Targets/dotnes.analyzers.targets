@@ -1,0 +1,14 @@
+<Project>
+  <!-- NuGet prefers buildTransitive/dotnes.targets over build/dotnes.targets.
+       Only direct consumers ran dotnes.props and captured their project kind. -->
+  <Import Project="$([MSBuild]::NormalizePath('$(MSBuildThisFileDirectory)', '..', 'build', 'dotnes.targets'))"
+          Condition="'$(_NESIsTestProject)' != ''" />
+  <!-- Analyzer assets can flow through project references without ROM build assets.
+       This hook also runs when the IDE resolves design-time compiler inputs. -->
+  <Target Name="_RemoveNESTestAnalyzer" AfterTargets="ResolveLockFileAnalyzers"
+          Condition="'$(IsTestProject)' == 'true'">
+    <ItemGroup>
+      <Analyzer Remove="$([MSBuild]::NormalizePath('$(MSBuildThisFileDirectory)', '..', 'analyzers', 'dotnet', 'cs', 'dotnes.analyzers.dll'))" />
+    </ItemGroup>
+  </Target>
+</Project>
