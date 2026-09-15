@@ -1442,6 +1442,10 @@ partial class IL2NESWriter
                         if (Stack.Count > 0)
                             Stack.Pop();
                     }
+                    // Binding a fixed array consumes its word-sized count, not a live A:X value.
+                    if (_ushortInAX && Instructions != null && Index + 1 < Instructions.Length
+                        && Instructions[Index + 1].GetStlocIndex() != null)
+                        _accState = AccumulatorState.Empty;
                 }
                 break;
             case ILOpCode.Stloc_s:

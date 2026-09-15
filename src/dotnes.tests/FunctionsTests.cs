@@ -198,10 +198,8 @@ public class FunctionsTests : RoslynTests
         Assert.NotEmpty(bytes);
 
         var hex = Convert.ToHexString(bytes);
-        // All three constants should appear
-        Assert.Contains("A901", hex); // LDA #$01
-        Assert.Contains("A902", hex); // LDA #$02
-        Assert.Contains("A903", hex); // LDA #$03
+        // The pure expression is inlined and its arguments fold to the result.
+        Assert.Contains("A906", hex); // LDA #$06
     }
 
     [Fact]

@@ -18,7 +18,8 @@ static class ILExpressionSpiller
         ILInstruction[] instructions, ILValueAnalysis analysis, ISet<int> producers,
         ISet<int>? wordProducers = null, IDictionary<int, int>? spillLocals = null,
         int minimumLocalIndex = 0, ISet<int>? stableAddressProducers = null,
-        ISet<int>? signedWordProducers = null)
+        ISet<int>? signedWordProducers = null,
+        IReadOnlyDictionary<int, (PrimitiveTypeCode Type, int Expression)>? reusableSnapshots = null)
     {
         if (producers.Count == 0)
             return instructions;
@@ -31,14 +32,41 @@ static class ILExpressionSpiller
             ?? -1).DefaultIfEmpty(-1).Max() + 1);
         int nextOffset = Math.Min(-1, instructions.Min(i => i.Offset) - 1);
         var locals = new Dictionary<int, int>();
-        foreach (int producer in producers.OrderBy(i => i))
-        {
+        foreach (int producer in producers)
             if (!analysis.ProducesValue[producer] || analysis.Escapes[producer])
                 throw new InvalidOperationException($"Cannot spill IL value at index {producer} across an unknown control-flow boundary.");
+
+        var reusable = new HashSet<int>(producers.Where(p => !Rematerialize(p)
+            && reusableSnapshots?.ContainsKey(p) == true
+            && reusableSnapshots[p].Type is PrimitiveTypeCode.Byte or PrimitiveTypeCode.SByte
+                or PrimitiveTypeCode.Boolean or PrimitiveTypeCode.Int16 or PrimitiveTypeCode.UInt16));
+        var conflicts = GetSnapshotConflicts(analysis, reusable);
+        var slots = new List<(int Local, PrimitiveTypeCode Type, List<int> Producers)>();
+        foreach (int producer in producers.OrderBy(i => i))
+        {
             if (!Rematerialize(producer))
             {
-                spillLocals?.Add(producer, nextLocal);
-                locals.Add(producer, nextLocal++);
+                int local;
+                if (reusable.Contains(producer))
+                {
+                    var snapshot = reusableSnapshots![producer];
+                    // Keep distinct temporaries within each complete inlined
+                    // expression; only later, noninterfering expressions reuse them.
+                    int slot = slots.FindIndex(s => s.Type == snapshot.Type
+                        && s.Producers.All(p => reusableSnapshots[p].Expression != snapshot.Expression
+                            && !conflicts[producer].Contains(p)));
+                    if (slot < 0)
+                    {
+                        slot = slots.Count;
+                        slots.Add((nextLocal++, snapshot.Type, []));
+                    }
+                    local = slots[slot].Local;
+                    slots[slot].Producers.Add(producer);
+                }
+                else
+                    local = nextLocal++;
+                spillLocals?.Add(producer, local);
+                locals.Add(producer, local);
             }
         }
 
@@ -95,6 +123,34 @@ static class ILExpressionSpiller
             }
         }
         return result.ToArray();
+    }
+
+    static Dictionary<int, HashSet<int>> GetSnapshotConflicts(ILValueAnalysis analysis, ISet<int> snapshots)
+    {
+        var conflicts = snapshots.ToDictionary(p => p, _ => new HashSet<int>());
+        foreach (int producer in snapshots)
+        {
+            var visited = new HashSet<int>();
+            var pending = new Stack<int>(analysis.Consumers[producer]);
+            while (pending.Count > 0)
+            {
+                int instruction = pending.Pop();
+                // A snapshot is live on every predecessor path from a use
+                // back to its definition, including branch edges and backedges.
+                // Count the consuming instruction too: input/output temporaries
+                // never alias even if the producer's last use is that operation.
+                if (instruction == producer || !visited.Add(instruction))
+                    continue;
+                if (snapshots.Contains(instruction))
+                {
+                    conflicts[producer].Add(instruction);
+                    conflicts[instruction].Add(producer);
+                }
+                foreach (int predecessor in analysis.Predecessors[instruction])
+                    pending.Push(predecessor);
+            }
+        }
+        return conflicts;
     }
 
     internal static ILInstruction Relocate(ILInstruction instruction, int offset)

@@ -124,6 +124,48 @@ still uses its full promoted storage width; this is not an eight-bit index
 range assumption. Calls, intervening stores, live outer operands, and branch
 entries keep the general materialization path.
 
+For a fixed RAM array and a byte local, a contiguous read such as
+`value = data[index + 8]` can fold the constant displacement into the 6502
+absolute-indexed address. Addressing carries into the high byte: byte index 255
+still addresses element 263. Subtraction adjusts the base with its borrow, and
+an explicit byte conversion keeps its separate wrapping behavior. The compiler
+requires a single fixed allocation, immediate result storage, and no intervening
+effects or branch entries; it does not infer an eight-bit range for the promoted
+index.
+
+## Byte call lowering
+
+Ordinary builds batch contiguous, single-use byte arguments into their existing
+software-stack layout when a complete frame can be constructed safely. Earlier
+arguments retain their declared order and the last argument is still passed in
+A. Compiler-only entry labels bypass the redundant callee push; the original
+entry remains available to native callers. Forwarded arguments account for the
+entire newly reserved frame. Inlined cleanup uses the existing runtime
+instructions, including their carry, wrap, register, and flag behavior.
+
+Small pure byte-returning expressions can be inlined when each byte argument is
+read exactly once, in declaration order. Calls, stores, branches, address-taking,
+variable shifts, and live outer operands prevent this rewrite. Promoted
+arithmetic is still checked and lowered at its required width; inlining is not
+permission to narrow an intermediate result.
+
+After nonconstant expression inlining changes a method, its newly allocated
+scalar snapshots can reuse slots with the same type and signedness when
+control-flow liveness proves they do not overlap. Authored locals, reference
+aliases, and snapshots from earlier lowering passes are excluded. Methods
+without nonconstant inlining retain their existing allocation; constant folding
+alone does not enable this cleanup.
+
+A void leaf can omit a redundant single-byte parameter slot when its only
+parameter use immediately captures the value into existing local or field
+storage. The proof rejects opaque calls, stack access (including RAM mirrors),
+indirect/indexed memory operations, and branches back into that capture. The
+existing storage is not moved or shared, native callers still supply A, and the
+software stack remains balanced. This is separate from the opt-in byte-helper
+home-allocation pass and does not relax that pass's native-code guards.
+
+## Return and address semantics
+
 User-defined and extern primitive returns support `byte`, `sbyte`, `short`, `ushort`,
 `bool` and `void`. Int32/UInt32 and other unsupported primitive return signatures are
 diagnosed before emission; the compact-range exception for Int32 **locals** does
