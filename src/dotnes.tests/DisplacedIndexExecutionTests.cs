@@ -1,3 +1,4 @@
+using dotnes.ObjectModel;
 using Xunit.Abstractions;
 
 namespace dotnes.tests;
@@ -24,6 +25,10 @@ public class DisplacedIndexExecutionTests(ITestOutputHelper output) : ExecutionT
             static extern void test_stop();
             """;
         using var transpiler = BuildProgram(source, out var program);
+        ushort foldedBase = (ushort)(NESConstants.LocalStackBase + target - input);
+        Assert.Contains(program.GetBlock("main")!.InstructionsWithLabels, i =>
+            i.Instruction is { Opcode: Opcode.LDA, Mode: AddressMode.AbsoluteX,
+                Operand: AbsoluteOperand { Address: var address } } && address == foldedBase);
         program.DefineExternalLabel("_test_stop", 0x7FF0);
         byte[] bytes = program.ToBytes();
         var cpu = new Cpu6502(bytes, program.BaseAddress, program.GetLabels()["main"]);
