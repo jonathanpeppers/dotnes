@@ -231,9 +231,8 @@ public class ByteHelperTests(ITestOutputHelper output) : RoslynTests(output)
     }
 
     [Theory]
-    [InlineData("value++; return value;")]
     [InlineData("unsafe { byte* address = &value; return *address; }")]
-    public void UnsupportedMutableOrAddressTakenParametersKeepTheirDiagnostic(string body)
+    public void AddressTakenParametersKeepTheirDiagnostic(string body)
     {
         string source = $$"""
             byte result = helper(42);
@@ -245,6 +244,24 @@ public class ByteHelperTests(ITestOutputHelper output) : RoslynTests(output)
         var optimized = Assert.Throws<TranspileException>(() =>
             BuildProgram(source, out _, allowUnsafe: true, optimizeByteHelpers: true));
         Assert.Equal(baseline.Message, optimized.Message);
+    }
+
+    [Fact]
+    public void MutableParametersKeepStandardStorage()
+    {
+        const string source = """
+            State.Result = helper(255);
+            while (true) ;
+            static byte helper(byte value) { value++; return value; }
+            static class State { public static byte Result; }
+            """;
+        using var baseline = BuildProgram(source, out var original);
+        using var optimized = BuildProgram(source, out var program, optimizeByteHelpers: true);
+        AssertStackParameter(program, "helper");
+        Assert.Equal(original.ToBytes(), program.ToBytes());
+        var result = Execute(program);
+        Assert.Equal(0, result.Memory[NESConstants.LocalStackBase]);
+        Assert.Equal(Cpu6502.SoftwareStackTop, result.SoftwareStackPointer);
     }
 
     [Theory]

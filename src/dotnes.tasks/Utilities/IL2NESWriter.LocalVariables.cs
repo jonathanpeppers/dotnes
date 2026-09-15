@@ -598,6 +598,26 @@ partial class IL2NESWriter
         Stack.Push(local.Value);
     }
 
+    void WriteStarg(int argIndex)
+    {
+        if (argIndex < 0 || argIndex >= MethodParamCount
+            || _numericTypes == null || argIndex >= _numericTypes.Parameters.Length
+            || _numericTypes.Parameters[argIndex] is not (PrimitiveTypeCode.Byte or PrimitiveTypeCode.SByte))
+            throw new TranspileException("Argument assignment requires a by-value byte or sbyte parameter.", MethodName);
+
+        Emit(Opcode.LDY, AddressMode.Immediate, checked((byte)ParameterOffset(argIndex)));
+        Emit(Opcode.STA, AddressMode.IndirectIndexed, sp);
+        Stack.Pop();
+        _accState = AccumulatorState.Empty;
+        _savedState = SavedValueState.None;
+        _ntadrRuntimeResult = false;
+        // Any live pad value crossing this store has already been materialized.
+        _padPollResultAvailable = false;
+        _firstAndAfterPadPoll = false;
+        _lastLoadedLocalIndex = null;
+        _lastStaticFieldAddress = null;
+    }
+
     void WriteLdarg(int argIndex)
     {
         if (MethodParamCount == 0)
