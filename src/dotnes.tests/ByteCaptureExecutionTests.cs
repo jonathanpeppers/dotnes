@@ -60,6 +60,13 @@ public class ByteCaptureExecutionTests(ITestOutputHelper output) : ExecutionTest
     [InlineData("observe();", "static extern void observe();")]
     [InlineData("poke(0x6003, peek(0x22));", "")]
     [InlineData("poke(0x6003, peek(0x0822));", "")]
+    [InlineData("poke(0x6003, peek(0x0400));", "")]
+    [InlineData("poke(0x6003, peek(0x07FF));", "")]
+    [InlineData("poke(0x6003, peek(0x0FFF));", "")]
+    [InlineData("poke(0x6003, peek(0x17FF));", "")]
+    [InlineData("poke(0x6003, peek(0x1FFF));", "")]
+    [InlineData("poke(0x07FF, captured);", "")]
+    [InlineData("poke(0x0FFF, captured);", "")]
     public void OpaqueCallsAndStackObserversRetainTheirFrames(string operation, string declaration)
     {
         using var transpiler = BuildProgram(
@@ -76,6 +83,37 @@ public class ByteCaptureExecutionTests(ITestOutputHelper output) : ExecutionTest
             }
             """, out var program);
         Assert.Equal(JSR("pusha"), program.GetBlock("Store")![0]);
+    }
+
+    [Theory]
+    [InlineData(0x0400)]
+    [InlineData(0x07FF)]
+    public void DirectSoftwareStackReadSeesThePushedParameter(ushort address)
+    {
+        using var transpiler = BuildProgram(
+            $$"""
+            Store(17);
+            test_stop(); while (true) ;
+            static extern void test_stop();
+            static void Store(byte value)
+            {
+                byte captured = value;
+                poke(0x6000, peek({{address}}));
+                poke(0x6001, captured);
+            }
+            """, out var program);
+        program.DefineExternalLabel("_test_stop", 0x7FF0);
+        byte[] bytes = program.ToBytes();
+        Assert.True(program.Labels.TryResolve("main", out ushort entry));
+        var cpu = new Cpu6502(bytes, program.BaseAddress, entry);
+        ushort stack = (ushort)(address + 1);
+        cpu.Memory[NESConstants.sp] = (byte)stack;
+        cpu.Memory[NESConstants.sp + 1] = (byte)(stack >> 8);
+        cpu.Memory[address] = 0xCC;
+        cpu.RunUntil(0x7FF0);
+        Assert.Equal(17, cpu.Memory[0x6000]);
+        Assert.Equal(17, cpu.Memory[0x6001]);
+        Assert.Equal(stack, cpu.SoftwareStackPointer);
     }
 
     [Fact]

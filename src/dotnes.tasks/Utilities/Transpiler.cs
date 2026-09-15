@@ -669,7 +669,8 @@ partial class Transpiler : IDisposable
                     }
                 }
                 methodBlock.Emit(new Instruction(Opcode.RTS, AddressMode.Implied));
-                ElideCapturedByteFrame(methodName, methodIL, methodBlock);
+                ElideCapturedByteFrame(methodName, methodIL, methodBlock,
+                    NESConstants.LocalStackBase + methodWriter.LocalCount);
                 program.AddMainProgram(methodBlock);
                 userMethodsTotalSize += methodBlock.Size;
                 _logger.WriteLine($"User method '{methodName}': {methodBlock.Size} bytes ({paramCount} params)");

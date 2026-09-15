@@ -158,7 +158,9 @@ alone does not enable this cleanup.
 
 A void leaf can omit a redundant single-byte parameter slot when its only
 parameter use immediately captures the value into existing local or field
-storage. The proof rejects opaque calls, stack access (including RAM mirrors),
+storage. Internal RAM accesses must stay within allocated local/static storage;
+software-stack space and all RAM mirrors retain the frame. The proof also rejects
+opaque calls, stack access,
 indirect/indexed memory operations, and branches back into that capture. The
 existing storage is not moved or shared, native callers still supply A, and the
 software stack remains balanced. This is separate from the opt-in byte-helper

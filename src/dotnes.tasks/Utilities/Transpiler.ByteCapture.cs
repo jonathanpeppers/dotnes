@@ -6,7 +6,7 @@ namespace dotnes;
 
 partial class Transpiler
 {
-    void ElideCapturedByteFrame(string name, ILInstruction[] il, Block block)
+    void ElideCapturedByteFrame(string name, ILInstruction[] il, Block block, int localEnd)
     {
         if (!NumericTypes.TryGetValue(name, out var types)
             || !types.Parameters.SequenceEqual([PrimitiveTypeCode.Byte])
@@ -41,7 +41,8 @@ partial class Transpiler
                         return;
                 }
                 else if (instruction.Operand is not AbsoluteOperand { Address: ushort address }
-                    || (address < 0x2000 && (address & 0x07FF) < 0x0300))
+                    || (address < 0x2000 && (address < NESConstants.LocalStackBase
+                        || address >= localEnd || address >= 0x0800)))
                     return;
             }
             else if (instruction.Mode == AddressMode.Relative)
