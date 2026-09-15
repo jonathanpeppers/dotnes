@@ -241,6 +241,31 @@ public class ReorderedArgumentExecutionTests(ITestOutputHelper output) : Executi
     }
 
     [Theory]
+    [InlineData("sprite_overlap(Read(1), saved, 1, 64, 8)")]
+    [InlineData("rect_overlap(Read(1), saved, 8, 8, 1, 64, 8, 8)")]
+    public void DefaultPathNesLibCallPreservesEarlierResult(string expression)
+    {
+        var cpu = ExecuteProgram(
+            $$"""
+            byte saved = 64;
+            bool overlaps = {{expression}};
+            if (overlaps) poke(0x6000, 1);
+            test_stop(); while (true) ;
+            static extern void test_stop();
+            static byte Read(byte value)
+            {
+                byte count = peek(0x6010);
+                poke(0x6010, (byte)(count + 1));
+                return value;
+            }
+            """);
+        Assert.Equal(1, cpu.Memory[0x6000]);
+        Assert.Equal(1, cpu.Memory[0x6010]);
+        Assert.Equal(Cpu6502.SoftwareStackTop, cpu.SoftwareStackPointer);
+        Assert.Equal(0xFD, cpu.SP);
+    }
+
+    [Theory]
     [InlineData(false)]
     [InlineData(true)]
     public void NativeCalleeReceivesReloadedBytesAndWordTail(bool wordTail)

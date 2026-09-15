@@ -139,6 +139,8 @@ An evaluated byte argument remains distinct when a later argument reloads a
 saved local or parameter, including either used inside a later arithmetic expression.
 Ordinary managed and extern calls snapshot such live operands at
 their original IL evaluation points, then reload them in parameter order.
+The default-path `rect_overlap` and `sprite_overlap` helpers use the same
+preservation rules.
 This preserves side effects and optional argument slots without relying on
 named-argument syntax or reevaluating a call. Extern calls retain the cc65
 software-stack convention, including Boolean arguments and a word-sized final

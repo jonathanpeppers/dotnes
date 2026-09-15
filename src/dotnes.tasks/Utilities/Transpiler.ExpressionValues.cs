@@ -59,7 +59,8 @@ partial class Transpiler
         {
             var inputs = analysis.Inputs[i];
             if (instructions[i].OpCode == ILOpCode.Call && instructions[i].String is string target
-                && (UserMethods.ContainsKey(target) || ExternMethods.ContainsKey(target)))
+                && (UserMethods.ContainsKey(target) || ExternMethods.ContainsKey(target)
+                    || IL2NESWriter.IsDefaultNesLibCallPathTarget(target)))
             {
                 // Ordinary calls cannot recover an earlier runtime byte from TEMP
                 // after a local/parameter reload. Snapshot operands in evaluation order.
