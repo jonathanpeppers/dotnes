@@ -611,6 +611,9 @@ partial class IL2NESWriter
         _accState = AccumulatorState.Empty;
         _savedState = SavedValueState.None;
         _ntadrRuntimeResult = false;
+        // Any live pad value crossing this store has already been materialized.
+        _padPollResultAvailable = false;
+        _firstAndAfterPadPoll = false;
         _lastLoadedLocalIndex = null;
         _lastStaticFieldAddress = null;
     }

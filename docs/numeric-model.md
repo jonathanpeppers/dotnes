@@ -106,6 +106,8 @@ not the caller's variable. Postfix expressions snapshot the old value when it
 remains live across an argument store, including nested call arguments.
 Live controller-poll results also use normal snapshots when an argument
 assignment intervenes, rather than the specialized constant-mask reload path.
+An assignment that consumes a controller result cannot reuse its provenance
+for an unrelated later mask.
 Byte loop bounds and comparisons between a parameter and another runtime byte
 use the actual operands rather than compile-time placeholder values.
 This includes computed bytes such as `(byte)(fraction + increment) < fraction`:

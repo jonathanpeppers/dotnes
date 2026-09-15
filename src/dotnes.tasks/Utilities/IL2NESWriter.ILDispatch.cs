@@ -821,6 +821,22 @@ partial class IL2NESWriter
                     int mask = Stack.Pop();
                     int value = Stack.Count > 0 ? Stack.Pop() : 0;
 
+                    if (_numericValues != null && Instructions != null
+                        && _numericValues.Inputs[Index].Length == 2
+                        && _numericValues.Inputs[Index][0] is >= 0 and int left
+                        && _numericValues.Inputs[Index][1] is >= 0 and int right
+                        && Instructions[left].GetLdcValue() is >= 0 and <= byte.MaxValue
+                        && Instructions[right].GetLdcValue() is >= 0 and <= byte.MaxValue
+                        && TryNumericOperands(out _, out _))
+                    {
+                        // Remove both constant loads, including any speculative software-stack push.
+                        byte result = (byte)(value & mask);
+                        Emit(Opcode.LDA, AddressMode.Immediate, result);
+                        _immediateInA = result;
+                        Stack.Push(result);
+                        break;
+                    }
+
                     if (_variableShiftIndex == Index + 1)
                     {
                         // Only the count's low five bits matter, even for a word local.

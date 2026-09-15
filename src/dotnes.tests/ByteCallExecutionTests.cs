@@ -305,13 +305,19 @@ public class ByteCallExecutionTests(ITestOutputHelper output) : ExecutionTests(o
     }
 
     [Theory]
-    [InlineData("pad_poll", 1)]
-    [InlineData("pad_poll", 128)]
-    [InlineData("pad_poll", 255)]
-    [InlineData("pad_trigger", 1)]
-    [InlineData("pad_trigger", 128)]
-    [InlineData("pad_trigger", 255)]
-    public void ArgumentAssignmentPreservesLivePadResult(string intrinsic, byte mask)
+    [InlineData("pad_poll", 1, 0)]
+    [InlineData("pad_poll", 128, 0)]
+    [InlineData("pad_poll", 255, 0)]
+    [InlineData("pad_trigger", 1, 0)]
+    [InlineData("pad_trigger", 128, 0)]
+    [InlineData("pad_trigger", 255, 0)]
+    [InlineData("pad_poll", 1, 1)]
+    [InlineData("pad_poll", 128, 1)]
+    [InlineData("pad_poll", 255, 1)]
+    [InlineData("pad_trigger", 1, 1)]
+    [InlineData("pad_trigger", 128, 1)]
+    [InlineData("pad_trigger", 255, 1)]
+    public void ArgumentAssignmentPreservesLivePadResult(string intrinsic, byte mask, byte port)
     {
         var cpu = ExecuteProgram(
             $$"""
@@ -323,12 +329,49 @@ public class ByteCallExecutionTests(ITestOutputHelper output) : ExecutionTests(o
             static extern void test_stop();
             static byte Change(byte value)
             {
-                byte result = (byte)({{intrinsic}}(0) & (PAD)(value = {{mask}}));
+                byte result = (byte)({{intrinsic}}({{port}}) & (PAD)(value = {{mask}}));
                 poke(0x6001, value);
                 return result;
             }
+            """, initialize: cpu => cpu.Memory[0x4017] = 1);
+        Assert.Equal(new byte[] { port == 0 ? (byte)0 : mask, mask, 127 }, cpu.Memory[0x6000..0x6003]);
+        Assert.Equal(Cpu6502.SoftwareStackTop, cpu.SoftwareStackPointer);
+    }
+
+    [Theory]
+    [InlineData("pad_poll", 1, 1)]
+    [InlineData("pad_poll", 0, 3)]
+    [InlineData("pad_poll", 170, 85)]
+    [InlineData("pad_poll", 255, 127)]
+    [InlineData("pad_trigger", 1, 1)]
+    [InlineData("pad_trigger", 0, 3)]
+    [InlineData("pad_trigger", 170, 85)]
+    [InlineData("pad_trigger", 255, 127)]
+    public void ConsumedPadArgumentDoesNotReplaceUnrelatedMask(string intrinsic, byte other, byte mask)
+    {
+        var cpu = ExecuteProgram(
+            $$"""
+            byte result = Compare(127);
+            poke(0x6000, result);
+            result = CompareLocal(127);
+            poke(0x6001, result);
+            test_stop(); while (true) ;
+            static extern void test_stop();
+            static byte Compare(byte value)
+            {
+                value = (byte){{intrinsic}}(0);
+                byte other = {{other}};
+                return (byte)(other & {{mask}});
+            }
+            static byte CompareLocal(byte value)
+            {
+                value = (byte){{intrinsic}}(0);
+                byte other = 1;
+                for (byte i = 0; i < 1; i++) other++;
+                return (byte)(other & 3);
+            }
             """);
-        Assert.Equal(new byte[] { 0, mask, 127 }, cpu.Memory[0x6000..0x6003]);
+        Assert.Equal(new byte[] { (byte)(other & mask), 2 }, cpu.Memory[0x6000..0x6002]);
         Assert.Equal(Cpu6502.SoftwareStackTop, cpu.SoftwareStackPointer);
     }
 
