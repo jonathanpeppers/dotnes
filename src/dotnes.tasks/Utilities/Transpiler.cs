@@ -605,7 +605,7 @@ partial class Transpiler : IDisposable
             bool hasFrameEntry = byteParameterFrameEntries.TryGetValue(methodName, out var frameEntry);
             bool firstLoadIsLastArgument = hasFrameEntry && !_closureMethodArgIndex.ContainsKey(methodName)
                 && methodIL.Length > 0 && IL2NESWriter.NumericArgIndex(methodIL[0]) == paramCount - 1;
-            if (hasFrameEntry && !firstLoadIsLastArgument)
+            if (frameEntry is not null && !firstLoadIsLastArgument)
                 methodWriter.CurrentBlock!.SetNextLabel(frameEntry);
 
             for (int i = 0; i < methodWriter.Instructions.Length; i++)
@@ -633,7 +633,7 @@ partial class Transpiler : IDisposable
                     methodWriter.Write(instruction);
                 if (i == 0 && firstLoadIsLastArgument)
                 {
-                    if (hasFrameEntry)
+                    if (frameEntry is not null)
                         methodWriter.CurrentBlock!.SetNextLabel(frameEntry);
                 }
             }
