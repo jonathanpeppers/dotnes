@@ -986,12 +986,9 @@ internal static class ManagedMapperSafety
                 throw Error(node,
                     "source store may overwrite the compiler-owned software-stack pointer $22/$23; " +
                     "preserve that pointer and use a separately bounded native RAM pointer");
-            if (node.Native)
-            {
-                for (int page = 0x100; page < 0x2000; page += 0x800)
-                    if (range.Min <= page + 0xff && range.Max >= page)
-                        throw Error(node, "native store may overwrite the hardware return stack; use a provably separate RAM buffer");
-            }
+            for (int page = 0x100; page < 0x2000; page += 0x800)
+                if (range.Min <= page + 0xff && range.Max >= page)
+                    throw Error(node, "source store may overwrite the hardware return stack; use a provably separate RAM buffer");
             if (range.Max < 0x8000)
                 return;
             if (range.Min != range.Max)

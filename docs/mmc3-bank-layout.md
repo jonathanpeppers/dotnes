@@ -157,6 +157,12 @@ returns support `void`, `byte`, `sbyte`, `bool`, `short`, and `ushort`.
 Byrefs, array/pointer gate arguments, generics, captured closures, indirect
 calls, and delegate/function-pointer escapes are unsupported.
 
+Authored managed and native stores must not reach the hardware return-stack
+page `$0100-$01FF` or its NES RAM mirrors. Direct stores, read/modify/write
+instructions, and indexed/indirect ranges that intersect those pages are
+rejected. Compiler-generated argument/frame accesses retain their separately
+proven RAM bounds.
+
 ### Desktop compilation API
 
 `NesCompiler.CompileBanked` exposes the fixed program and named managed regions

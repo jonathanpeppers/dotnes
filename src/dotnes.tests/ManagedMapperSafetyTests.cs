@@ -20,6 +20,55 @@ public class ManagedMapperSafetyTests
     public class ManagedMapperSafetyCompilerTests(ITestOutputHelper output) : RoslynTests(output)
     {
         [Theory]
+        [InlineData(false, 0x0100)]
+        [InlineData(false, 0x01FF)]
+        [InlineData(false, 0x0900)]
+        [InlineData(false, 0x09FF)]
+        [InlineData(false, 0x1100)]
+        [InlineData(false, 0x11FF)]
+        [InlineData(false, 0x1900)]
+        [InlineData(false, 0x19FF)]
+        [InlineData(true, 0x0100)]
+        [InlineData(true, 0x01FF)]
+        [InlineData(true, 0x0900)]
+        [InlineData(true, 0x09FF)]
+        [InlineData(true, 0x1100)]
+        [InlineData(true, 0x11FF)]
+        [InlineData(true, 0x1900)]
+        [InlineData(true, 0x19FF)]
+        public void ManagedSourceCannotOverwriteHardwareStackOrMirrors(bool banked, int address)
+        {
+            using var assembly = CompileAssembly($$"""
+                {{(banked ? "" : $"poke(0x{address:X4}, 1);")}}
+                poke(0x6000, Audio.Tick(peek(0x6200)));
+                while (true) ;
+                [NESCodeBank("audio")]
+                static class Audio
+                {
+                    public static byte Tick(byte value)
+                    {
+                        {{(banked ? $"poke(0x{address:X4}, value);" : "")}}
+                        return value;
+                    }
+                }
+                """);
+            var options = new CompilationOptions
+            {
+                Mapper = 4,
+                PrgBanks = 3,
+                Mmc3BankedLayout = true,
+                Mmc3ManagedHomeBank = 0,
+                ManagedCodeBanks = { new() { Name = "audio", Bank = 2, Size = 0x1000 } },
+            };
+
+            var error = Assert.Throws<TranspileException>(() =>
+                NesCompiler.CompileBanked(assembly, options, logger: _logger));
+
+            Assert.Contains("hardware return stack", error.Message);
+            Assert.Contains(banked ? "_Tick" : "main", error.Message);
+        }
+
+        [Theory]
         [InlineData(false)]
         [InlineData(true)]
         public void PoisonedSoftwareStackIsRejectedBeforeBankedArgumentPushes(bool native)
@@ -530,6 +579,60 @@ public class ManagedMapperSafetyTests
             .Emit(RTS());
         ManagedMapperSafety.Prepare([program], [], ["main"], [], Shadow, 0, managedBlocks: [main]);
         Assert.Equal(10, main.Count);
+    }
+
+    [Theory]
+    [InlineData(AddressMode.AbsoluteX)]
+    [InlineData(AddressMode.AbsoluteY)]
+    [InlineData(AddressMode.IndexedIndirect)]
+    [InlineData(AddressMode.IndirectIndexed)]
+    public void ManagedIndexedAndIndirectStoresCannotReachHardwareStack(AddressMode mode)
+    {
+        var program = Program();
+        var main = program.CreateBlock("main");
+        if (mode is AddressMode.IndexedIndirect or AddressMode.IndirectIndexed)
+        {
+            main.Emit(LDA(0)).Emit(STA_zpg(0x10)).Emit(LDA(1)).Emit(STA_zpg(0x11)).Emit(LDX(0));
+            main.Emit(new Instruction(Opcode.STA, mode, new ImmediateOperand(0x10)));
+        }
+        else
+            main.Emit(new Instruction(Opcode.STA, mode, new AbsoluteOperand(0x100)));
+        main.Emit(RTS());
+
+        var error = Assert.Throws<TranspileException>(() =>
+            ManagedMapperSafety.Prepare([program], [], ["main"], [], Shadow, 0, managedBlocks: [main]));
+
+        Assert.Contains("hardware return stack", error.Message);
+    }
+
+    [Fact]
+    public void ManagedReadModifyWriteCannotReachHardwareStack()
+    {
+        var program = Program();
+        var main = program.CreateBlock("main")
+            .Emit(new Instruction(Opcode.INC, AddressMode.Absolute, new AbsoluteOperand(0x01FD))).Emit(RTS());
+
+        var error = Assert.Throws<TranspileException>(() =>
+            ManagedMapperSafety.Prepare([program], [], ["main"], [], Shadow, 0, managedBlocks: [main]));
+
+        Assert.Contains("hardware return stack", error.Message);
+    }
+
+    [Theory]
+    [InlineData(0x00FF)]
+    [InlineData(0x0200)]
+    [InlineData(0x08FF)]
+    [InlineData(0x0A00)]
+    [InlineData(0x10FF)]
+    [InlineData(0x1200)]
+    [InlineData(0x18FF)]
+    [InlineData(0x1A00)]
+    public void ManagedStoresAdjacentToHardwareStackRemainAllowed(ushort address)
+    {
+        var program = Program();
+        var main = program.CreateBlock("main").Emit(LDA(1)).Emit(STA_abs(address)).Emit(RTS());
+
+        ManagedMapperSafety.Prepare([program], [], ["main"], [], Shadow, 0, managedBlocks: [main]);
     }
 
     [Fact]
