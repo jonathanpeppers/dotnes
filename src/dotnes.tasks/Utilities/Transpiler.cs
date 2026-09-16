@@ -185,26 +185,20 @@ partial class Transpiler : IDisposable
         var program = _managedCodeBanks.Count == 0
             ? CompileProgram(out sizeOfMain, out locals)
             : (banked = CompileManagedProgram(out sizeOfMain, out locals)).FixedProgram;
-        program.ResolveAndRelaxBranches();
-
         _logger.WriteLine($"Size of main: {sizeOfMain}, locals: {locals}");
 
-        // Write vectors: NMI, RESET, IRQ (little-endian) at end of last PRG bank
-        // Resolve vector addresses from program labels (always present as built-in blocks)
-        var labels = program.GetLabels();
-        if (!labels.TryGetValue(NESConstants._nmi, out var nmiAddr))
-            throw new InvalidOperationException($"Required label '{NESConstants._nmi}' not found in resolved program labels.");
-        ushort nmi_data = nmiAddr;
-        // Use irq_with_callback handler when irq_set_callback is used, otherwise default _irq handler
-        bool hasIrqCb = labels.TryGetValue(NESConstants.irq_with_callback, out var irqCbAddr);
-        bool hasIrq = labels.TryGetValue(NESConstants._irq, out var irqAddr);
-        ushort irq_data;
-        if (hasIrqCb)
-            irq_data = irqCbAddr;
-        else if (hasIrq)
-            irq_data = irqAddr;
-        else
-            throw new InvalidOperationException($"Required label '{NESConstants._irq}' not found in resolved program labels.");
+        // Managed vectors are bound after coordinated linking and mapper preparation.
+        ushort nmi_data = 0, irq_data = 0;
+        if (banked == null)
+        {
+            program.ResolveAndRelaxBranches();
+            var labels = program.GetLabels();
+            if (!labels.TryGetValue(NESConstants._nmi, out nmi_data))
+                throw new InvalidOperationException($"Required label '{NESConstants._nmi}' not found in resolved program labels.");
+            if (!labels.TryGetValue(NESConstants.irq_with_callback, out irq_data) &&
+                !labels.TryGetValue(NESConstants._irq, out irq_data))
+                throw new InvalidOperationException($"Required label '{NESConstants._irq}' not found in resolved program labels.");
+        }
         byte[] prgImage;
         if (_mmc3BankedLayout)
         {
@@ -265,6 +259,14 @@ partial class Transpiler : IDisposable
                 chrImage = new byte[totalChrSize];
                 Array.Copy(chrData, chrImage, chrData.Length);
             }
+        }
+
+        if (stream is MemoryStream memory)
+        {
+            const int headerSize = 16;
+            int requiredCapacity = checked((int)memory.Position + headerSize + prgImage.Length + chrImage.Length);
+            if (memory.Capacity < requiredCapacity)
+                memory.Capacity = requiredCapacity;
         }
 
         using var writer = new BinaryWriter(stream, Encoding.ASCII, leaveOpen: true);

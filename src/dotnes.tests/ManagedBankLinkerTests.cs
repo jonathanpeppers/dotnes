@@ -258,6 +258,23 @@ public sealed class ManagedBankLinkerTests : IDisposable
     }
 
     [Theory]
+    [InlineData(-1)]
+    [InlineData(1)]
+    [InlineData(2)]
+    public void RejectsInvalidDataRelocationOffsetsAndRestoresScope(int offset)
+    {
+        var program = FixedProgram();
+        var data = Block.FromRawData(new byte[2], "table");
+        data.Relocations = [(offset, "table")];
+        program.AddBlock(data);
+        BankedCompilation.LinkPrograms([program]);
+
+        Assert.Contains("Invalid data relocation", Assert.Throws<InvalidOperationException>(
+            () => program.ToBytes()).Message);
+        Assert.Null(program.Labels.CurrentScope);
+    }
+
+    [Theory]
     [InlineData(16370, true)]
     [InlineData(16371, false)]
     [InlineData(16385, false)]

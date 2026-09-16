@@ -173,6 +173,35 @@ public class TranspilerTests
     }
 
     [Theory]
+    [InlineData(2, 1, 0, 0, false)]
+    [InlineData(6, 16, 0, 7, false)]
+    [InlineData(6, 16, 300000, 7, false)]
+    [InlineData(2, 1, 0, 7, true)]
+    public void WritePreallocatesValidatedRomWithoutChangingPrefixes(
+        int prgBanks, int chrBanks, int initialCapacity, int prefixLength, bool fixedCapacity)
+    {
+        using var dll = Utilities.GetResource("hello.release.dll");
+        using var chr = new AssemblyReader(new StreamReader(Utilities.GetResource("chr_generic.s")));
+        using var transpiler = new Transpiler(dll, [chr], _logger,
+            mapper: 4, prgBanks: prgBanks, chrBanks: chrBanks);
+        int expectedLength = prefixLength + 16 + prgBanks * NESWriter.PRG_ROM_BLOCK_SIZE +
+            chrBanks * NESWriter.CHR_ROM_BLOCK_SIZE;
+        using var stream = fixedCapacity
+            ? new MemoryStream(new byte[expectedLength])
+            : new MemoryStream(initialCapacity);
+        byte[] prefix = Enumerable.Repeat((byte)0x5A, prefixLength).ToArray();
+        stream.Write(prefix);
+
+        transpiler.Write(stream);
+
+        Assert.Equal(expectedLength, stream.Length);
+        Assert.Equal(Math.Max(initialCapacity, expectedLength), stream.Capacity);
+        byte[] bytes = stream.ToArray();
+        Assert.Equal(prefix, bytes[..prefixLength]);
+        Assert.Equal(new byte[] { 0x4E, 0x45, 0x53, 0x1A }, bytes[prefixLength..(prefixLength + 4)]);
+    }
+
+    [Theory]
     [InlineData(false)] // no battery: flags6 bit 1 = 0
     [InlineData(true)]  // battery: flags6 bit 1 = 1
     public void Write_BatteryFlag(bool battery)

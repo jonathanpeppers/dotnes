@@ -464,7 +464,7 @@ public class Program6502
     {
         ResolveAndRelaxBranches();
         if (_coordinatedLayout)
-            BankedCompilation.ValidateForEmission(this);
+            ValidateDataRelocations();
 
         var ms = new MemoryStream(TotalSize);
         ushort currentAddress = BaseAddress;
@@ -509,6 +509,30 @@ public class Program6502
         _labels.CurrentScope = null;
 
         return ms.ToArray();
+    }
+
+    internal void ValidateDataRelocations()
+    {
+        try
+        {
+            foreach (var block in _blocks)
+            {
+                _labels.CurrentScope = block.Label;
+                if (block.Relocations == null)
+                    continue;
+                foreach (var (offset, label) in block.Relocations)
+                {
+                    if (block.RawData == null || offset < 0 || offset > block.RawData.Length - 2)
+                        throw new InvalidOperationException($"Invalid data relocation '{label}' at offset {offset}.");
+                    if (!_labels.TryResolve(label, out _))
+                        throw new InvalidOperationException($"Program contains an unresolved data relocation '{label}'.");
+                }
+            }
+        }
+        finally
+        {
+            _labels.CurrentScope = null;
+        }
     }
 
     /// <summary>

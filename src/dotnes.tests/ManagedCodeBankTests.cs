@@ -325,6 +325,44 @@ public class ManagedCodeBankTests(ITestOutputHelper output) : RoslynTests(output
     }
 
     [Fact]
+    public void StockWriterMatchesCoordinatedCompilationAfterInstrumentedBranchRelaxation()
+    {
+        const string source = """
+            Native(); poke(0x6000, Audio.Tick(7)); while (true) ;
+            static extern void Native();
+            [NESCodeBank("audio")]
+            static class Audio { public static byte Tick(byte input) => (byte)(input + 1); }
+            """;
+        string native = """
+            .segment "CODE"
+            _Native:
+                lda $6002
+                beq NativeEnd
+                lda #3
+                sta $8000
+                lda #$12
+                sta $8001
+            """ + "\n" + string.Join("\n", Enumerable.Repeat("nop", 115)) + "\nNativeEnd:\nrts\n";
+        var compiled = Compile(source, native: native);
+        var program = compiled.FixedProgram;
+        ushort end = program.GetLabels()["NativeEnd"];
+        Assert.Equal(new byte[] { 0xAD, 2, 0x60, 0xD0, 3, 0x4C, (byte)end, (byte)(end >> 8) },
+            program.GetMainBlock("_Native")[..8]);
+        byte[] expected = Mmc3BankLayout.BuildPrgImage(program, 3, [], 0, 0,
+            compiled.Regions, compiledPrgAssets: compiled.PrgAssets);
+
+        var assembly = CompileAssembly(source);
+        using var reader = new AssemblyReader(new StringReader(native));
+        using var transpiler = new Transpiler(assembly, [reader], _logger,
+            mapper: 4, prgBanks: 3, chrBanks: 0, mmc3BankedLayout: true,
+            managedCodeBanks: Options().ManagedCodeBanks.ToArray(), mmc3ManagedHomeBank: 0);
+        using var rom = new MemoryStream();
+        transpiler.Write(rom);
+
+        Assert.Equal(expected, rom.ToArray()[16..]);
+    }
+
+    [Fact]
     public void ReservationCannotOverlapAssetsEvenAfterEmittedCodeEnds()
     {
         string asset = Path.Combine(Path.GetTempPath(), $"dotnes-managed-overlap-{Guid.NewGuid():N}.bin");

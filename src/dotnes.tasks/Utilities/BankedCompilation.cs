@@ -261,28 +261,4 @@ public sealed class BankedCompilation
         }
         program.Labels.CurrentScope = null;
     }
-
-    internal static void ValidateForEmission(Program6502 program)
-    {
-        try
-        {
-            foreach (var block in program.Blocks)
-            {
-                program.Labels.CurrentScope = block.Label;
-                if (block.Relocations == null)
-                    continue;
-                foreach (var (offset, label) in block.Relocations)
-                {
-                    if (block.RawData == null || offset < 0 || offset > block.RawData.Length - 2)
-                        throw new InvalidOperationException($"Invalid data relocation '{label}' at offset {offset}.");
-                    if (!program.Labels.TryResolve(label, out _))
-                        throw new InvalidOperationException($"Program contains an unresolved data relocation '{label}'.");
-                }
-            }
-        }
-        finally
-        {
-            program.Labels.CurrentScope = null;
-        }
-    }
 }

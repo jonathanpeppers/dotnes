@@ -9,6 +9,9 @@ public sealed class NESCodeBankAttribute : Attribute
     /// <summary>
     /// Declares the nonempty, case-sensitive region name used by the compiler.
     /// </summary>
+    /// <remarks>
+    /// The transpiler validates the name from attribute metadata without invoking this constructor.
+    /// </remarks>
     public NESCodeBankAttribute(string name)
     {
         Name = name;

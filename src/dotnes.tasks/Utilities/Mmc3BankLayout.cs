@@ -81,7 +81,7 @@ static class Mmc3BankLayout
             BankedCompilation.ValidateSizes(program, managedRegions);
             ValidateManagedPlacements(managedRegions, compiledPrgAssets, prgBanks);
             foreach (var imageProgram in programs)
-                BankedCompilation.ValidateForEmission(imageProgram);
+                imageProgram.ValidateDataRelocations();
 
             var labels = program.GetDefinedLabels();
             if (!labels.TryGetValue(NESConstants._nmi, out nmiAddress))
