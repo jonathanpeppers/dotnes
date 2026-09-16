@@ -41,7 +41,7 @@ cd samples/hello && dotnet run  # Build + run in emulator
 
 > **💡 Skills available:**
 > - `nes-rom-debug` — Static binary analysis: disassembly, byte comparison, IL dump. Use when investigating transpiler output or comparing ROMs.
-> - `nes-emu-debug` — Dynamic runtime analysis: run ROMs headlessly in Mesen2 to inspect memory, palette, nametable, screen buffer, CPU/PPU state. Use when a ROM doesn't display correctly or you need to verify runtime behavior.
+> - `nes-emu-debug` — Dynamic runtime analysis: run ROMs headlessly in MesenCE to inspect memory, palette, nametable, screen buffer, CPU/PPU state. Use when a ROM doesn't display correctly or you need to verify runtime behavior.
 
 - `python scripts/disasm.py <file.nes> [start_hex] [end_hex]` — Disassembles PRG ROM into 6502 assembly (default: full `$8000-$FFFF` range)
 - `python scripts/compare_rom.py <cc65.nes> <dotnes.nes>` — Side-by-side ROM comparison with 6502 disassembly (useful for debugging transpiler output vs cc65 reference)

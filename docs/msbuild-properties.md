@@ -251,6 +251,19 @@ read and write save data.
 
 ### `MesenTestRunner`
 
+The `dotnes.mesen` 2.2.1 package downloads
+[Mesen Community Edition (MesenCE)](https://github.com/nesdev-org/MesenCE/releases/tag/2.2.1)
+from `nesdev-org/MesenCE`, replacing the archived `SourMesen/Mesen2` release.
+Downloads are SHA256-pinned for Windows, Linux x64/ARM64, and macOS Intel/Apple
+Silicon. The integration remains MIT-licensed; the separate emulator process is
+GPLv3-licensed, with its license downloaded alongside the executable. Emulator
+binaries are not included in the NuGet package.
+
+First-run settings use the platform's Documents folder on Windows or application
+data folder on Linux/macOS, under `MesenCE`. Existing `Mesen2/settings.json` is
+reused when no MesenCE settings exist, matching the emulator's legacy fallback.
+Existing settings are never overwritten.
+
 Run Mesen in headless test-runner mode (`--testrunner --doNotSaveSettings`).
 Useful for CI smoke tests.
 
