@@ -257,6 +257,8 @@ sealed class PackageTests(Options options)
         Check(nativeRom.AsSpan(16 + 32768, 2).SequenceEqual(new byte[] { 0x12, 0x34 }), "Native .s CHARS asset was not embedded in ROM.");
         Console.WriteLine($"PASS: hello ROM unchanged ({Hash(File.ReadAllBytes(hello))}); native source and CHR assets work.");
 
+        await CheckManagedBanking(hello);
+
         string invalid = CreateProject(candidateRoot, "InvalidRom", "<OutputType>Exe</OutputType>", PackageReferences(candidate), """
             ppu_off();
             while (true) ;
@@ -274,6 +276,269 @@ sealed class PackageTests(Options options)
         Console.WriteLine("PASS: Library is not a test opt-out; invalid ROM still fails NES002 before transpilation.");
         Console.WriteLine($"PASS: {checks} package regression checks. Logs, evaluated items, generated projects and TRX retained at {options.Artifacts}");
     }
+
+    async Task CheckManagedBanking(string hello)
+    {
+        const string properties = """
+            <OutputType>Exe</OutputType>
+            <NESMapper>4</NESMapper>
+            <NESPrgBanks>6</NESPrgBanks>
+            <NESChrBanks>2</NESChrBanks>
+            <NESMirroring>Vertical</NESMirroring>
+            <NESBattery>true</NESBattery>
+            <NESMmc3BankedLayout>true</NESMmc3BankedLayout>
+            <NESMmc3ManagedHomeBank>0</NESMmc3ManagedHomeBank>
+            <ManagedRegionBank Condition="'$(ManagedRegionBank)' == ''">2</ManagedRegionBank>
+            <ManagedRegionOffset Condition="'$(ManagedRegionOffset)' == ''">0x100</ManagedRegionOffset>
+            <ManagedRegionSize Condition="'$(ManagedRegionSize)' == ''">0x800</ManagedRegionSize>
+            <NativeRamContract Condition="'$(NativeRamContract)' == ''">ForegroundRtsPreservesMapperContext</NativeRamContract>
+            """;
+        string project = CreateProject(candidateRoot, "ManagedBankRom", properties, PackageReferences(candidate) + """
+            <NESManagedCodeBank Include="audio" Bank="$(ManagedRegionBank)"
+                                CpuAddress="0x8000" Offset="$(ManagedRegionOffset)" Size="$(ManagedRegionSize)" />
+            <NESPrgBank Include="payload.bin" Bank="2" CpuAddress="0x8000" Offset="0x1800" />
+            <NESPrgBank Include="native-payload.s" Bank="1" CpuAddress="0xA000" Offset="0x1000" />
+            <NESChrBank Include="extra-tiles.bin" Bank="8" />
+            <NESNativeRamCode Include="io-write" Address="0x7420" Size="4" Contract="$(NativeRamContract)" />
+            """, """
+            poke(MMC3_BANK_SELECT, 7);
+            poke(MMC3_BANK_DATA, 1);
+            NativePayload();
+            Audio.Reset();
+            byte result = Audio.Tick(9);
+            poke(0x6101, result);
+            while (true) ;
+
+            static extern void NativePayload();
+
+            [NESCodeBank("audio")]
+            static class Audio
+            {
+                static byte state;
+                public static void Reset()
+                {
+                    state = 0x37;
+                    poke(0x6100, 0xA7);
+                }
+                public static byte Tick(byte input)
+                {
+                    state = (byte)(state + input);
+                    return state;
+                }
+            }
+            """);
+        string directory = ProjectDirectory(project);
+        File.Copy(Path.Combine(options.Repository, "samples", "hello", "chr_generic.s"), Path.Combine(directory, "chr_generic.s"));
+        byte[] extraChr = Enumerable.Range(0, 1024).Select(i => (byte)((i * 37 + 11) & 255)).ToArray();
+        byte[] prgAsset = Enumerable.Range(0, 32).Select(i => (byte)(0xC0 + i)).ToArray();
+        File.WriteAllBytes(Path.Combine(directory, "extra-tiles.bin"), extraChr);
+        File.WriteAllBytes(Path.Combine(directory, "payload.bin"), prgAsset);
+        Write(directory, "native-payload.s", """
+            .segment "CODE"
+            _NativePayload:
+                lda #$5D
+                sta $6102
+                rts
+            """);
+        await Restore(project);
+        await Build(project, "Release", rom: true);
+        CheckResolvedAssets(project, candidate);
+
+        string output = RomPath(project, "Release");
+        string dll = Path.ChangeExtension(output, ".dll");
+        string stamp = Path.Combine(directory, "obj", "Release", "net10.0", "dotnes.properties.stamp");
+        string originalDllHash = Hash(File.ReadAllBytes(dll));
+        DateTime originalDllTime = File.GetLastWriteTimeUtc(dll);
+        byte[] legacyChr = File.ReadAllBytes(hello).AsSpan(16 + 32768, 8192).ToArray();
+        byte[] originalRom = File.ReadAllBytes(output);
+        CheckManagedRom(originalRom, legacyChr, extraChr, prgAsset);
+        Check(File.ReadAllText(stamp).Contains("audio|2|0x8000|0x100|0x800", StringComparison.Ordinal),
+            "Managed region name and all placement metadata are missing from the package properties stamp.");
+        Check(File.ReadAllText(stamp).Contains("io-write|0x7420|4|ForegroundRtsPreservesMapperContext", StringComparison.Ordinal),
+            "Native RAM entry name, address, size, or contract is missing from the package properties stamp.");
+        Check(!File.Exists(Path.Combine(directory, "audio")), "A logical managed region unexpectedly became a file.");
+
+        string verifier = CreateProject(candidateRoot, "ManagedBankTests", TestProperties(), TestPackages(candidate),
+            ManagedBankTestSource(directory, dll, output, stamp));
+        await Restore(verifier);
+        await Test(verifier, "Release", 1);
+        NoRomArtifacts(verifier);
+
+        DateTime originalRomTime = File.GetLastWriteTimeUtc(output);
+        DateTime originalStampTime = File.GetLastWriteTimeUtc(stamp);
+        await Task.Delay(1100);
+        await Build(project, "Release", rom: true);
+        Check(File.GetLastWriteTimeUtc(output) == originalRomTime && File.GetLastWriteTimeUtc(stamp) == originalStampTime,
+            "An unchanged managed project rewrote its ROM or properties stamp.");
+
+        async Task Rebuild(int bank, string size = "0x800", bool success = true)
+        {
+            var result = await RunProcess(directory, $"managed-bank-{bank}-size-{size}",
+                ["build", project, "--no-restore", "--disable-build-servers", "-c", "Release", "-v:minimal",
+                    "-nr:false", "-p:UseSharedCompilation=false", "-p:ManagedRegionOffset=0x300",
+                    $"-p:ManagedRegionBank={bank}", $"-p:ManagedRegionSize={size}"], expectedSuccess: success);
+            Check(Hash(File.ReadAllBytes(dll)) == originalDllHash && File.GetLastWriteTimeUtc(dll) == originalDllTime,
+                "Changing only managed placement metadata rebuilt or changed the C# DLL.");
+            if (!success)
+                Check(result.ExitCode != 0 && result.Output.Contains("audio", StringComparison.Ordinal) &&
+                    result.Output.Contains("Size", StringComparison.Ordinal),
+                    "Malformed managed reservation did not fail with a region Size diagnostic. " + result.Log);
+        }
+
+        await Task.Delay(1100);
+        await Rebuild(2);
+        byte[] movedRom = File.ReadAllBytes(output);
+        Check(!movedRom.AsSpan().SequenceEqual(originalRom) && File.GetLastWriteTimeUtc(output) != originalRomTime,
+            "Metadata-only region offset change did not regenerate the ROM.");
+        Check(File.ReadAllText(stamp).Contains("audio|2|0x8000|0x300|0x800", StringComparison.Ordinal),
+            "Managed offset change was not recorded in the properties stamp.");
+        CheckManagedRom(movedRom, legacyChr, extraChr, prgAsset);
+        await Test(verifier, "Release", 1);
+
+        await Rebuild(3);
+        byte[] rebankedRom = File.ReadAllBytes(output);
+        Check(!rebankedRom.AsSpan().SequenceEqual(movedRom), "Metadata-only physical bank change did not regenerate the ROM.");
+        Check(rebankedRom.AsSpan(16 + 2 * 8192 + 0x300, 0x800).IndexOfAnyExcept((byte)0) < 0,
+            "Moving the managed region left stale code in its old physical bank.");
+        CheckManagedRom(rebankedRom, legacyChr, extraChr, prgAsset);
+        await Test(verifier, "Release", 1);
+
+        DateTime workingRomTime = File.GetLastWriteTimeUtc(output);
+        foreach (string invalidSize in new[] { "1", "bad" })
+        {
+            await Rebuild(3, invalidSize, success: false);
+            Check(File.ReadAllBytes(output).AsSpan().SequenceEqual(rebankedRom) &&
+                File.GetLastWriteTimeUtc(output) == workingRomTime,
+                "Managed placement validation failure damaged the last working ROM.");
+        }
+        await Rebuild(3);
+        Check(File.ReadAllBytes(output).AsSpan().SequenceEqual(rebankedRom),
+            "Correcting malformed managed metadata did not restore deterministic output.");
+        workingRomTime = File.GetLastWriteTimeUtc(output);
+        foreach (string invalidContract in new[] { "1", "foregroundrtspreservesmappercontext" })
+        {
+            var failure = await RunProcess(directory, "invalid-native-ram-contract",
+                ["build", project, "--no-restore", "--disable-build-servers", "-c", "Release", "-v:minimal",
+                    "-nr:false", "-p:UseSharedCompilation=false", "-p:ManagedRegionOffset=0x300", "-p:ManagedRegionBank=3",
+                    $"-p:NativeRamContract={invalidContract}"], expectedSuccess: false);
+            Check(failure.ExitCode != 0 && failure.Output.Contains("NESNativeRamCode", StringComparison.Ordinal) &&
+                failure.Output.Contains("Contract", StringComparison.Ordinal),
+                "Native RAM contracts must reject numeric values and incorrectly cased names. " + failure.Log);
+            Check(File.ReadAllBytes(output).AsSpan().SequenceEqual(rebankedRom) &&
+                File.GetLastWriteTimeUtc(output) == workingRomTime,
+                "Invalid native RAM contract damaged the last working ROM.");
+            Check(Hash(File.ReadAllBytes(dll)) == originalDllHash && File.GetLastWriteTimeUtc(dll) == originalDllTime,
+                "Changing only a native RAM contract rebuilt or changed the C# DLL.");
+        }
+        await Rebuild(3);
+        Check(File.ReadAllBytes(output).AsSpan().SequenceEqual(rebankedRom),
+            "Correcting a native RAM contract did not restore deterministic output.");
+        NoRomArtifacts(verifier);
+        Console.WriteLine("PASS: stock managed PackageReference ROM, typed CompileBanked gates/regions, full legacy and explicit CHR, PRG assets, metadata-only incremental placement, no-op builds, and failed-build ROM preservation.");
+    }
+
+    void CheckManagedRom(byte[] rom, byte[] legacyChr, byte[] extraChr, byte[] prgAsset)
+    {
+        const int prgSize = 6 * 16384;
+        const int fixedStart = 16 + prgSize - 16384;
+        Check(rom.Length == 16 + prgSize + 2 * 8192, "Managed ROM lost its declared PRG/CHR size.");
+        Check(rom.AsSpan(0, 8).SequenceEqual(new byte[] { 0x4E, 0x45, 0x53, 0x1A, 6, 2, 0x43, 0 }),
+            "Managed ROM changed the iNES mapper, mirroring, battery, or bank counts.");
+        Check(rom.AsSpan(16 + prgSize, 8192).SequenceEqual(legacyChr), "Managed banking truncated or changed legacy CHARS.");
+        Check(rom.AsSpan(16 + prgSize + 8192, extraChr.Length).SequenceEqual(extraChr),
+            "Managed banking lost explicit CHR placement.");
+        Check(rom.AsSpan(16 + prgSize + 8192 + extraChr.Length).IndexOfAnyExcept((byte)0) < 0,
+            "Unused managed CHR space is not zero-filled.");
+        Check(rom.AsSpan(16 + 2 * 8192 + 0x1800, prgAsset.Length).SequenceEqual(prgAsset),
+            "Managed banking changed the explicit PRG asset sharing a physical bank.");
+        Check(rom.AsSpan(16 + 8192 + 0x1000, 6).SequenceEqual(new byte[] { 0xA9, 0x5D, 0x8D, 2, 0x61, 0x60 }),
+            "Managed banking lost the callable native PRG asset at $B000.");
+        Check(rom.AsSpan(fixedStart + 0x3FF2, 8).SequenceEqual(new byte[] { 0xA9, 0, 0x8D, 0, 0x80, 0x4C, 0, 0xC0 }),
+            "Managed ROM changed the MMC3 reset stub.");
+        for (int offset = 0x3FFA; offset <= 0x3FFE; offset += 2)
+        {
+            int vector = rom[fixedStart + offset] | rom[fixedStart + offset + 1] << 8;
+            Check(offset == 0x3FFC ? vector == 0xFFF2 : vector is >= 0xC000 and < 0xFFF2,
+                "Managed ROM has an invalid fixed-bank interrupt/reset vector.");
+        }
+    }
+
+    string ManagedBankTestSource(string directory, string dll, string rom, string stamp) => $$"""
+        using dotnes;
+        using Xunit;
+        public sealed class ManagedBankTests
+        {
+            [Fact]
+            public void PackagedCompilerModelsMatchStockRomAndFixedGates()
+            {
+                string[] placement = File.ReadLines({{Quote(stamp)}}).Single(line => line.StartsWith("audio|", StringComparison.Ordinal)).Split('|');
+                int bank = int.Parse(placement[1]);
+                int offset = Convert.ToInt32(placement[3][2..], 16);
+                using var assembly = File.OpenRead({{Quote(dll)}});
+                var options = new CompilationOptions
+                {
+                    Mapper = 4, PrgBanks = 6, Mmc3BankedLayout = true, Mmc3ManagedHomeBank = 0,
+                    ManagedCodeBanks = { new ManagedCodeBank { Name = "audio", Bank = bank, Offset = offset, Size = 0x800 } },
+                    PrgBankAssets =
+                    {
+                        new PrgBankAsset { Path = {{Quote(Path.Combine(directory, "payload.bin"))}},
+                            Bank = 2, CpuAddress = 0x8000, Offset = 0x1800 },
+                        new PrgBankAsset { Path = {{Quote(Path.Combine(directory, "native-payload.s"))}},
+                            Bank = 1, CpuAddress = 0xA000, Offset = 0x1000 },
+                    },
+                    NativeRamCode =
+                    {
+                        new NativeRamCode { Name = "io-write", Address = 0x7420, Size = 4,
+                            Contract = NativeRamCodeContract.ForegroundRtsPreservesMapperContext },
+                    },
+                };
+                var compiled = NesCompiler.CompileBanked(assembly, options);
+                compiled.ResolveAndRelax();
+                var region = Assert.Single(compiled.Regions);
+                Assert.Equal("audio", region.Placement.Name);
+                Assert.Equal(bank, region.Placement.Bank);
+                Assert.Equal(0x8000 + offset, region.Program.BaseAddress);
+                byte[] image = File.ReadAllBytes({{Quote(rom)}});
+                byte[] regionBytes = region.Program.ToBytes();
+                byte[] fixedBytes = compiled.FixedProgram.ToBytes();
+                Assert.NotEmpty(regionBytes);
+                Assert.True(regionBytes.Length <= 0x800);
+                Assert.True(image.AsSpan(16 + bank * 8192 + offset, regionBytes.Length).SequenceEqual(regionBytes));
+                Assert.True(image.AsSpan(16 + 10 * 8192, fixedBytes.Length).SequenceEqual(fixedBytes));
+                Assert.True(image.AsSpan(16 + bank * 8192 + offset + regionBytes.Length, 0x800 - regionBytes.Length).IndexOfAnyExcept((byte)0) < 0);
+                byte[] marker = { 0xA9, 0xA7, 0x8D, 0, 0x61 };
+                Assert.True(regionBytes.AsSpan().IndexOf(marker) >= 0);
+                Assert.True(fixedBytes.AsSpan().IndexOf(marker) < 0);
+                Assert.True(compiled.FixedProgram.GetMainBlock().AsSpan().IndexOf(new byte[] { 0x20, 0, 0xB0 }) >= 0);
+                Assert.Equal(2, compiled.PrgAssets.Count);
+                foreach (var asset in compiled.PrgAssets)
+                {
+                    byte[] bytes = asset.Program?.ToBytes() ?? asset.Data!;
+                    Assert.NotEmpty(bytes);
+                    Assert.True(image.AsSpan(16 + asset.Placement.Bank * 8192 + asset.Placement.Offset, bytes.Length).SequenceEqual(bytes));
+                }
+                var native = Assert.Single(compiled.PrgAssets.Where(asset => asset.Program != null));
+                Assert.Equal(0xB000, native.Program!.BaseAddress);
+                Assert.Equal(0xB000, native.Program.GetLabels()["_NativePayload"]);
+                var gates = compiled.FixedProgram.Blocks.Where(block => block.Label?.StartsWith("__nesbank_gate_", StringComparison.Ordinal) == true).ToArray();
+                Assert.Equal(2, gates.Length);
+                var labels = compiled.FixedProgram.GetLabels();
+                foreach (var gate in gates)
+                {
+                    ushort address = labels[gate.Label!];
+                    Assert.InRange(address, (ushort)0xC000, (ushort)0xFFF1);
+                    byte[] call = { 0x20, (byte)address, (byte)(address >> 8) };
+                    Assert.True(compiled.FixedProgram.GetMainBlock().AsSpan().IndexOf(call) >= 0);
+                    byte[] bytes = compiled.FixedProgram.GetMainBlock(gate.Label!);
+                    Assert.True(Enumerable.Range(0, bytes.Length - 2).Any(i =>
+                        bytes[i] == 0x20 && (bytes[i + 1] | bytes[i + 2] << 8) >= region.Program.BaseAddress &&
+                        (bytes[i + 1] | bytes[i + 2] << 8) < region.Program.BaseAddress + regionBytes.Length));
+                }
+                Assert.Equal({{Quote(compilerHash)}}, Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
+                    File.ReadAllBytes(typeof(NesCompiler).Assembly.Location))));
+            }
+        }
+        """;
 
     Package PreparePackage(string path, string root, string label, bool requireCompiler)
     {

@@ -29,18 +29,67 @@ static class Mmc3BankLayout
         byte[]? RawBytes,
         Dictionary<string, ushort> Labels);
 
+    /// <summary>
+    /// Builds the stock PRG image. Explicit vector addresses apply to legacy layout;
+    /// managed layout binds stock vector labels after preparation and relaxation.
+    /// </summary>
     public static byte[] BuildPrgImage(
         Program6502 program,
         int prgBanks,
         IReadOnlyList<BankedRomAsset> assets,
         ushort nmiAddress,
-        ushort irqAddress)
+        ushort irqAddress,
+        IReadOnlyList<ManagedCodeRegion>? managedRegions = null,
+        Action<IReadOnlyList<Program6502>>? prepareManagedPrograms = null,
+        IReadOnlyList<CompiledPrgAsset>? compiledPrgAssets = null)
     {
         int physicalBankCount = checked(prgBanks * 2);
         if (physicalBankCount < 4)
             throw new InvalidOperationException("MMC3 banked layout requires at least 2 NESPrgBanks (four physical 8 KiB PRG banks).");
         if (program.BaseAddress != FixedProgramAddress)
             throw new InvalidOperationException($"MMC3 fixed program must be linked at ${FixedProgramAddress:X4}, not ${program.BaseAddress:X4}.");
+
+        List<PreparedPrgAsset>? prepared = null;
+        if (managedRegions != null)
+        {
+            var names = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var region in managedRegions)
+            {
+                BankedCompilation.ValidateRegion(region);
+                if (!names.Add(region.Placement.Name))
+                    throw new InvalidOperationException($"Duplicate managed code region '{region.Placement.Name}'.");
+                if (region.Placement.Bank >= physicalBankCount - 2)
+                    throw new InvalidOperationException(
+                        $"Managed code region '{region.Placement.Name}' selects bank {region.Placement.Bank}. " +
+                        $"Valid switchable banks are 0-{physicalBankCount - 3}; the last two banks are reserved for the fixed program.");
+            }
+
+            compiledPrgAssets ??= PrepareManagedPrgAssets(assets, prgBanks);
+            prepared = compiledPrgAssets.Select(item => new PreparedPrgAsset(
+                new BankedRomAsset(item.Placement.Path, item.Placement.Bank, item.Placement.Offset, item.Placement.CpuAddress),
+                item.Placement.CpuAddress, item.Program, item.Data,
+                new Dictionary<string, ushort>(StringComparer.Ordinal))).ToList();
+            var programs = new List<Program6502> { program };
+            programs.AddRange(managedRegions.Select(region => region.Program));
+            programs.AddRange(prepared.Where(item => item.Program != null).Select(item => item.Program!));
+            BankedCompilation.LinkPrograms(programs);
+            if (prepareManagedPrograms != null)
+            {
+                prepareManagedPrograms(programs);
+                BankedCompilation.LinkPrograms(programs);
+            }
+            BankedCompilation.ValidateSizes(program, managedRegions);
+            ValidateManagedPlacements(managedRegions, compiledPrgAssets, prgBanks);
+            foreach (var imageProgram in programs)
+                imageProgram.ValidateDataRelocations();
+
+            var labels = program.GetDefinedLabels();
+            if (!labels.TryGetValue(NESConstants._nmi, out nmiAddress))
+                throw new InvalidOperationException($"Required fixed label '{NESConstants._nmi}' not found.");
+            if (!labels.TryGetValue(NESConstants.irq_with_callback, out irqAddress) &&
+                !labels.TryGetValue(NESConstants._irq, out irqAddress))
+                throw new InvalidOperationException($"Required fixed label '{NESConstants._irq}' not found.");
+        }
 
         var programBytes = program.ToBytes();
         int fixedProgramCapacity = (PrgBankSize * 2) - ResetStub.Length - InterruptVectorSize;
@@ -68,8 +117,20 @@ static class Mmc3BankLayout
         };
         PlaceBytes(image, occupied, owners, vectorsOffset, vectors, "interrupt vectors");
 
-        var prepared = PreparePrgAssets(assets, physicalBankCount, program.GetLabels());
+        prepared ??= PreparePrgAssets(assets, physicalBankCount, program.GetLabels());
         var windowByBank = new Dictionary<int, ushort>();
+        if (managedRegions != null)
+        {
+            foreach (var region in managedRegions)
+            {
+                var placement = region.Placement;
+                windowByBank[placement.Bank] = FirstSwitchableWindow;
+                var bytes = new byte[placement.Size];
+                region.Program.ToBytes().CopyTo(bytes, 0);
+                int destination = checked((placement.Bank * PrgBankSize) + placement.Offset);
+                PlaceBytes(image, occupied, owners, destination, bytes, $"managed code region '{placement.Name}'");
+            }
+        }
         foreach (var item in prepared)
         {
             var asset = item.Asset;
@@ -115,6 +176,78 @@ static class Mmc3BankLayout
         }
 
         return image;
+    }
+
+    internal static IReadOnlyList<CompiledPrgAsset> PrepareManagedPrgAssets(
+        IReadOnlyList<BankedRomAsset> assets,
+        int prgBanks)
+    {
+        if (prgBanks < 2)
+            throw new InvalidOperationException("MMC3 banked layout requires at least 2 NESPrgBanks.");
+        var prepared = PreparePrgAssets(assets, checked(prgBanks * 2), programLabels: null);
+        var result = prepared.Select(item => new CompiledPrgAsset(
+            new PrgBankAsset
+            {
+                Path = item.Asset.Path,
+                Bank = item.Asset.Bank,
+                CpuAddress = item.CpuAddress,
+                Offset = item.Asset.Offset,
+            }, item.Program, item.RawBytes)).ToArray();
+        return Array.AsReadOnly(result);
+    }
+
+    internal static void ValidateManagedPlacements(
+        IReadOnlyList<ManagedCodeRegion> regions,
+        IReadOnlyList<CompiledPrgAsset> assets,
+        int? prgBanks)
+    {
+        if (prgBanks.HasValue && prgBanks.Value < 2)
+            throw new InvalidOperationException("MMC3 banked layout requires at least 2 NESPrgBanks.");
+        int? physicalBankCount = prgBanks.HasValue ? checked(prgBanks.Value * 2) : null;
+        var placements = new List<(int Bank, int Offset, int Size, ushort Window, string Owner)>();
+
+        void AddPlacement(int bank, int offset, int size, ushort window, string owner)
+        {
+            if (bank < 0 || (physicalBankCount.HasValue && bank >= physicalBankCount.Value - 2))
+                throw new InvalidOperationException(
+                    $"Placement '{owner}' selects invalid/reserved physical PRG bank {bank}.");
+            if (offset < 0 || offset >= PrgBankSize)
+                throw new InvalidOperationException($"Placement '{owner}' offset must be between 0 and {PrgBankSize - 1}.");
+            if (window != FirstSwitchableWindow && window != SecondSwitchableWindow)
+                throw new InvalidOperationException($"Placement '{owner}' CpuAddress must be $8000 or $A000.");
+            if (size > PrgBankSize - offset)
+                throw new InvalidOperationException(
+                    $"Placement '{owner}' ({size} bytes at offset {offset}) exceeds physical 8 KiB bank {bank}.");
+            foreach (var previous in placements)
+            {
+                if (previous.Bank != bank)
+                    continue;
+                if (previous.Window != window)
+                    throw new InvalidOperationException(
+                        $"Physical PRG bank {bank} has conflicting CPU windows ${previous.Window:X4} and ${window:X4}.");
+                if (size != 0 && previous.Size != 0 &&
+                    offset < previous.Offset + previous.Size && previous.Offset < offset + size)
+                    throw new InvalidOperationException($"Placement '{owner}' overlaps '{previous.Owner}'.");
+            }
+            placements.Add((bank, offset, size, window, owner));
+        }
+
+        foreach (var region in regions)
+        {
+            BankedCompilation.ValidateRegion(region);
+            var placement = region.Placement;
+            AddPlacement(placement.Bank, placement.Offset, placement.Size, placement.CpuAddress,
+                $"managed code region '{placement.Name}'");
+        }
+        foreach (var asset in assets)
+        {
+            var placement = asset.Placement;
+            AddPlacement(placement.Bank, placement.Offset, asset.Program?.TotalSize ?? asset.Data!.Length,
+                placement.CpuAddress, placement.Path);
+            if (asset.Program != null && asset.Program.BaseAddress != placement.CpuAddress + placement.Offset)
+                throw new InvalidOperationException(
+                    $"PRG bank asset '{placement.Path}' program address must match CpuAddress + Offset.");
+        }
     }
 
     public static byte[] BuildChrImage(
@@ -168,7 +301,7 @@ static class Mmc3BankLayout
     static List<PreparedPrgAsset> PreparePrgAssets(
         IReadOnlyList<BankedRomAsset> assets,
         int physicalBankCount,
-        Dictionary<string, ushort> programLabels)
+        Dictionary<string, ushort>? programLabels)
     {
         var prepared = new List<PreparedPrgAsset>();
         foreach (var asset in assets
@@ -217,16 +350,25 @@ static class Mmc3BankLayout
 
             var assetProgram = new Program6502 { BaseAddress = (ushort)(asset.CpuAddress.Value + asset.Offset) };
             foreach (var block in blocks)
-                assetProgram.AddBlock(block);
-            assetProgram.ResolveAndRelaxBranches();
+            {
+                if (programLabels == null && !block.IsDataBlock)
+                    assetProgram.AddNativeBlock(block);
+                else
+                    assetProgram.AddBlock(block);
+            }
+            if (programLabels != null)
+                assetProgram.ResolveAndRelaxBranches();
 
             prepared.Add(new PreparedPrgAsset(
                 asset,
                 cpuAddress,
                 assetProgram,
                 RawBytes: null,
-                assetProgram.GetLabels()));
+                programLabels == null ? new Dictionary<string, ushort>(StringComparer.Ordinal) : assetProgram.GetLabels()));
         }
+
+        if (programLabels == null)
+            return prepared;
 
         var labelOwners = new Dictionary<string, PreparedPrgAsset?>(StringComparer.Ordinal);
         foreach (var label in programLabels.Keys)

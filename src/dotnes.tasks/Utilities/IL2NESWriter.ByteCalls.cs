@@ -38,9 +38,10 @@ partial class IL2NESWriter
                     continue;
                 return false;
             }
-            if (arg.GetLdcValue() is int constant && constant is >= 0 and <= 255)
+            if (arg.GetLdcValue() is int constant && constant is >= sbyte.MinValue and <= byte.MaxValue)
                 continue;
-            if (NumericArgIndex(arg) != null && NumericType(i) == PrimitiveTypeCode.Byte)
+            if (NumericArgIndex(arg) != null &&
+                NumericType(i) is PrimitiveTypeCode.Byte or PrimitiveTypeCode.SByte or PrimitiveTypeCode.Boolean)
                 continue;
             if (arg.GetLdlocIndex() is not int index || !Locals.TryGetValue(index, out var value)
                 || value.Address == null || value.IsWord || value.ArraySize != 0 || value.LabelName != null)
@@ -78,7 +79,7 @@ partial class IL2NESWriter
             if (lastDirectLoad)
                 Emit(Opcode.LDY, AddressMode.Immediate, 0);
             if (arg.GetLdcValue() is int constant)
-                Emit(Opcode.LDA, AddressMode.Immediate, (byte)constant);
+                Emit(Opcode.LDA, AddressMode.Immediate, unchecked((byte)constant));
             else if (NumericArgIndex(arg) is int argument)
             {
                 int offset = argumentAdjustment + (batch ? count : physical) + ParameterBytesAfter(argument);
@@ -105,7 +106,7 @@ partial class IL2NESWriter
         _argStackAdjust = argumentAdjustment;
         for (int i = 0; i < count; i++)
             Stack.Pop();
-        _ushortInAX = false;
+        _ushortInAX = _reflectionCache.Returns16Bit(method);
         _runtimeValueInA = _reflectionCache.HasReturnValue(method);
         if (_runtimeValueInA)
         {

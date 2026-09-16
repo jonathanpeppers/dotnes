@@ -1,2 +1,5 @@
 #nullable enable
+NES.NESCodeBankAttribute
+NES.NESCodeBankAttribute.NESCodeBankAttribute(string! name) -> void
+NES.NESCodeBankAttribute.Name.get -> string!
 static NES.NESLib.ppu_use_native_renderer() -> void

@@ -209,7 +209,7 @@ Enable deterministic mapper-4 physical bank placement. This mode requires
 | **Type** | `bool` |
 | **Default** | `false` |
 
-When enabled, dotnes links the transpiled C# program at `$C000` across the
+When enabled, dotnes links the fixed C# program at `$C000` across the
 final two physical 8 KiB PRG banks. The second-last bank is mapped at `$C000`
 only in PRG mode 0; the last bank is always fixed at `$E000`. A reset stub in
 the last bank selects PRG mode 0 before jumping to `$C000`, and the NMI/RESET/IRQ
@@ -217,6 +217,9 @@ vectors are written at `$FFFA-$FFFF`. Runtime code must keep MMC3 bank-select
 bit 6 clear so it does not unmap the program at `$C000`. Other PRG assets can
 be assigned to the switchable `$8000` or `$A000` windows with `NESPrgBank`
 items. Banked layout supports at most 32 `NESPrgBanks` and 32 `NESChrBanks`.
+Named `NESManagedCodeBank` items additionally move annotated managed methods
+to R6 at `$8000` and generate fixed bank-switch gates. Without these items and
+annotations, banked layout alone does not generate runtime mapper writes.
 
 ```xml
 <PropertyGroup>
@@ -228,6 +231,60 @@ items. Banked layout supports at most 32 `NESPrgBanks` and 32 `NESChrBanks`.
 ```
 
 See `samples/bankswitch` and [MMC3 bank layout](mmc3-bank-layout.md).
+
+### `NESMmc3ManagedHomeBank`
+
+Physical 8 KiB MMC3 R6 bank mapped at startup and restored after every public
+managed bank-switch gate.
+
+| | |
+|---|---|
+| **Type** | `int` (decimal, `0x`-prefixed hex, or `$`-prefixed hex) |
+| **Default** | *(empty; unconfigured)* |
+
+Required when `NESManagedCodeBank` regions are present. Requires mapper 4 and
+`NESMmc3BankedLayout=true`; the bank must be a valid switchable physical PRG
+bank, not one of the final two fixed banks. This is not a 16 KiB iNES bank
+number and does not authorize arbitrary foreground R6 changes.
+
+```xml
+<PropertyGroup>
+  <NESMapper>4</NESMapper>
+  <NESPrgBanks>6</NESPrgBanks>
+  <NESMmc3BankedLayout>true</NESMmc3BankedLayout>
+  <NESMmc3ManagedHomeBank>0</NESMmc3ManagedHomeBank>
+</PropertyGroup>
+```
+
+### `NESMmc3ManagedInterruptContract`
+
+Declare the native interrupt callback scheduling contract for managed banking.
+
+| | |
+|---|---|
+| **Type** | `string` (`None` or `NonNestingChrCallbacks`, case-sensitive) |
+| **Default** | *(empty; equivalent to `None`)* |
+
+`None` allows no user interrupt callbacks with managed banking.
+`NonNestingChrCallbacks` explicitly permits native CHR-only callbacks returning
+through the stock NMI/IRQ dispatchers. Callbacks must not nest, change PRG
+mappings, or enter banked managed code. NMI must not interrupt IRQ mapper-write
+sequences. The contract is the caller's scheduling obligation, **not proof**
+of interrupt timing or nonoverlap; unsupported effects remain diagnostics.
+Numeric enum values and unknown names are rejected.
+
+```xml
+<PropertyGroup>
+  <NESMmc3ManagedInterruptContract>NonNestingChrCallbacks</NESMmc3ManagedInterruptContract>
+</PropertyGroup>
+```
+
+The compiler preserves the full foreground selector with a shared-RAM shadow.
+Each affected stock dispatcher restores it after the callback JSR, adding
+8 cycles and 6 bytes to its epilogue, without pre-callback instrumentation
+or changes inside callback mapper-write sequences. See the
+[interrupt and selector contract](mmc3-bank-layout.md#interrupt-and-selector-contract)
+for the required CHR mode and scheduling constraints.
 
 ### `NESBattery`
 
@@ -335,8 +392,85 @@ optional byte offset within the bank.
 The final two physical PRG banks are reserved for the fixed transpiled program.
 Assembly assets support the existing label relocations for absolute
 instructions, low/high-byte immediates, and `.word`/`.addr` data. A bank must
-be selected at runtime before code accesses it; dotnes does not insert mapper
-writes automatically.
+be selected at runtime before code accesses it; this asset item does not insert
+mapper writes automatically.
+
+### `NESManagedCodeBank`
+
+Reserve a named region for methods annotated with `NES.NESCodeBankAttribute`.
+Requires `NESMapper=4`, `NESMmc3BankedLayout=true`, and an explicit
+`NESMmc3ManagedHomeBank`.
+
+| Metadata | Type | Default | Description |
+|---|---|---|---|
+| `Include` | `string` | Required | Nonempty, case-sensitive logical region name, not a path |
+| `Bank` | `int` | Required | Zero-based physical 8 KiB PRG bank index |
+| `CpuAddress` | 16-bit integer | Required | CPU window base; only `0x8000` (R6) is supported |
+| `Offset` | `int` | `0` | Byte offset within the physical bank |
+| `Size` | `int` | Required | Positive size of the entire reserved region in bytes |
+
+Numeric metadata accepts decimal, `0x`-prefixed hex, and `$`-prefixed hex.
+
+```xml
+<ItemGroup>
+  <NESManagedCodeBank Include="audio"
+                      Bank="2"
+                      CpuAddress="0x8000"
+                      Offset="0"
+                      Size="0x1000" />
+</ItemGroup>
+```
+
+Annotate a static class or static method/local function with
+`[NESCodeBank("audio")]`. A method annotation overrides its class's region.
+Static fields remain in shared RAM; use explicit initialization methods rather
+than unsupported static constructors. Cross-region calls, recursion, and bank
+reentry are rejected. R7 managed banking is not supported.
+
+The final two physical PRG banks remain reserved for fixed code and gates.
+The full `Size`, not just emitted bytes, participates in overlap checks.
+`NESPrgBank` assets may occupy compatible, non-overlapping space in the same
+physical bank. Legacy `NESAssembly` `CHARS` and explicit CHR assets are preserved.
+This logical item is not a file input or assembly asset; its name and all
+metadata are tracked in the properties stamp. See
+[managed code regions](mmc3-bank-layout.md#managed-code-regions) for the ABI,
+placement, and interrupt restrictions.
+
+### `NESNativeRamCode`
+
+Declare one foreground native PRG-RAM entry under an explicit caller behavior
+contract. This is **not compiler proof** of self-modifying code, an automatic
+inference, or a general unchecked-effects fallback.
+
+| Metadata | Type | Default | Description |
+|---|---|---|---|
+| `Include` | `string` | Required | Nonempty logical declaration name, not a path |
+| `Address` | 16-bit integer | Required | Exact callable entry address in PRG RAM `$6000-$7FFF` |
+| `Size` | `int` | Required | Positive byte size; the whole region must fit in PRG RAM and not overlap another declaration |
+| `Contract` | `string` | Required; no implicit contract | Exact case-sensitive name `ForegroundRtsPreservesMapperContext` |
+
+`Address` and `Size` accept decimal, `0x`-prefixed hex, or `$`-prefixed hex.
+
+```xml
+<ItemGroup>
+  <NESNativeRamCode Include="io-write"
+                    Address="0x7420"
+                    Size="4"
+                    Contract="ForegroundRtsPreservesMapperContext" />
+</ItemGroup>
+```
+
+The contract permits only foreground entry at the exact declared address,
+by a normal call or tail `JMP`, returning through `RTS` with balanced hardware
+stack. The software stack, mapper registers, full selector, and compiler
+selector shadow must remain unchanged. Callback and banked-code paths are
+never permitted. The consumer owns initialization, every mutation, and runtime
+verification of those guarantees. The declaration does not initialize RAM.
+
+Missing/unknown contracts, `None`, numeric contract values, and undeclared
+RAM calls remain errors. All names and metadata participate in the properties
+stamp, but these logical declarations are not file inputs. See
+[explicit foreground native RAM contracts](mmc3-bank-layout.md#explicit-foreground-native-ram-contracts).
 
 ### `NESChrBank`
 
@@ -419,9 +553,18 @@ to avoid re-transpiling when nothing has changed. The inputs include:
 
 - `$(TargetPath)` — the compiled `.dll`
 - `@(NESAssembly)` — the `.s` assembly files
+- `@(NESPrgBank)` and `@(NESChrBank)` — physical bank asset files
 - A **properties stamp file** — tracks changes to `NESMirroring`, `NESMapper`,
-  `NESPrgBanks`, `NESChrBanks`, `NESBattery`, `NESMmc3BankedLayout`, and bank
-  item metadata
+  `NESPrgBanks`, `NESChrBanks`, `NESBattery`, `NESMmc3BankedLayout`,
+  `NESOptimizeByteHelpers`, `NESMmc3ManagedHomeBank`,
+  `NESMmc3ManagedInterruptContract`, physical asset metadata, and every
+  `NESManagedCodeBank` name, `Bank`, `CpuAddress`, `Offset`, and `Size`
+  and every `NESNativeRamCode` name, `Address`, `Size`, and `Contract`
+
+`NESManagedCodeBank` and `NESNativeRamCode` items are logical names, not file `Inputs`. Changing only
+a reservation or contract therefore retriggers transpilation without looking
+for a file named after the region. Desktop test projects remain exempt from
+ROM targets and this stamp.
 
 A `_WriteNESPropertiesStamp` target automatically runs before each transpilation
 and writes the current property values to

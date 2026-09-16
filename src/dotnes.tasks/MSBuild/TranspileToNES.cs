@@ -54,6 +54,26 @@ public class TranspileToNES : Task
     /// </summary>
     public ITaskItem[] NESChrBank { get; set; } = Array.Empty<ITaskItem>();
 
+    /// <summary>
+    /// Logical named managed regions with Bank, CpuAddress, Size, and optional Offset metadata.
+    /// </summary>
+    public ITaskItem[] NESManagedCodeBank { get; set; } = Array.Empty<ITaskItem>();
+
+    /// <summary>
+    /// Logical native PRG-RAM entries with required Address, Size, and Contract metadata.
+    /// </summary>
+    public ITaskItem[] NESNativeRamCode { get; set; } = Array.Empty<ITaskItem>();
+
+    /// <summary>
+    /// Explicit physical R6 home bank. Empty means unconfigured.
+    /// </summary>
+    public string NESMmc3ManagedHomeBank { get; set; } = "";
+
+    /// <summary>
+    /// Native callback contract: None or NonNestingChrCallbacks. Empty means None.
+    /// </summary>
+    public string NESMmc3ManagedInterruptContract { get; set; } = "";
+
     public ILogger? Logger { get; set; }
 
     public override bool Execute()
@@ -61,9 +81,16 @@ public class TranspileToNES : Task
         Logger ??= DiagnosticLogging ? new MSBuildLogger(Log) : null;
         var prgBankAssets = NESPrgBank.Select(ParsePrgBankAsset).ToArray();
         var chrBankAssets = NESChrBank.Select(ParseChrBankAsset).ToArray();
+        var managedCodeBanks = NESManagedCodeBank.Select(ParseManagedCodeBank).ToArray();
+        var nativeRamCode = NESNativeRamCode.Select(ParseNativeRamCode).ToArray();
+        int? managedHomeBank = string.IsNullOrWhiteSpace(NESMmc3ManagedHomeBank)
+            ? null
+            : ParseInteger(NESMmc3ManagedHomeBank,
+                $"NESMmc3ManagedHomeBank has invalid value '{NESMmc3ManagedHomeBank}'.");
+        var managedInterruptContract = ParseManagedInterruptContract(NESMmc3ManagedInterruptContract);
         var assemblies = AssemblyFiles.Select(a => new AssemblyReader(a)).ToList();
         using var input = File.OpenRead(TargetPath);
-        using var output = File.Create(OutputPath);
+        using var output = new MemoryStream();
         using var transpiler = new Transpiler(
             input,
             assemblies,
@@ -75,13 +102,22 @@ public class TranspileToNES : Task
             NESBattery,
             NESMmc3BankedLayout,
             prgBankAssets,
-            chrBankAssets)
+            chrBankAssets,
+            managedCodeBanks,
+            managedHomeBank,
+            managedInterruptContract,
+            nativeRamCode: nativeRamCode)
         {
             OptimizeByteHelpers = NESOptimizeByteHelpers,
         };
         transpiler.Write(output);
 
-        return !Log.HasLoggedErrors;
+        if (Log.HasLoggedErrors)
+            return false;
+        using var destination = File.Create(OutputPath);
+        output.Position = 0;
+        output.CopyTo(destination);
+        return true;
     }
 
     static BankedRomAsset ParsePrgBankAsset(ITaskItem item)
@@ -101,16 +137,73 @@ public class TranspileToNES : Task
         return new BankedRomAsset(GetPath(item), bank, offset);
     }
 
-    static int ParseMetadata(ITaskItem item, string name, bool required)
+    static ManagedCodeBank ParseManagedCodeBank(ITaskItem item)
+    {
+        int bank = ParseMetadata(item, "Bank", required: true, itemType: "NESManagedCodeBank");
+        int cpuAddress = ParseMetadata(item, "CpuAddress", required: true, itemType: "NESManagedCodeBank");
+        int offset = ParseMetadata(item, "Offset", required: false, itemType: "NESManagedCodeBank");
+        int size = ParseMetadata(item, "Size", required: true, itemType: "NESManagedCodeBank");
+        if (cpuAddress < 0 || cpuAddress > ushort.MaxValue)
+            throw new InvalidOperationException($"NESManagedCodeBank '{item.ItemSpec}' CpuAddress must fit in 16 bits.");
+        return new ManagedCodeBank
+        {
+            Name = item.ItemSpec,
+            Bank = bank,
+            CpuAddress = (ushort)cpuAddress,
+            Offset = offset,
+            Size = size,
+        };
+    }
+
+    static NativeRamCode ParseNativeRamCode(ITaskItem item)
+    {
+        int address = ParseMetadata(item, "Address", required: true, itemType: "NESNativeRamCode");
+        int size = ParseMetadata(item, "Size", required: true, itemType: "NESNativeRamCode");
+        if (address < 0 || address > ushort.MaxValue)
+            throw new InvalidOperationException($"NESNativeRamCode '{item.ItemSpec}' Address must fit in 16 bits.");
+        string value = item.GetMetadata("Contract");
+        if (string.IsNullOrWhiteSpace(value))
+            throw new InvalidOperationException($"NESNativeRamCode '{item.ItemSpec}' requires Contract metadata.");
+        var contract = value.Trim() switch
+        {
+            nameof(NativeRamCodeContract.None) => NativeRamCodeContract.None,
+            nameof(NativeRamCodeContract.ForegroundRtsPreservesMapperContext) => NativeRamCodeContract.ForegroundRtsPreservesMapperContext,
+            _ => throw new InvalidOperationException(
+                $"NESNativeRamCode '{item.ItemSpec}' has invalid Contract metadata '{value}'. Expected ForegroundRtsPreservesMapperContext."),
+        };
+        return new NativeRamCode
+        {
+            Name = item.ItemSpec,
+            Address = (ushort)address,
+            Size = size,
+            Contract = contract,
+        };
+    }
+
+    static Mmc3ManagedInterruptContract ParseManagedInterruptContract(string value) => value.Trim() switch
+    {
+        "" => Mmc3ManagedInterruptContract.None,
+        nameof(Mmc3ManagedInterruptContract.None) => Mmc3ManagedInterruptContract.None,
+        nameof(Mmc3ManagedInterruptContract.NonNestingChrCallbacks) => Mmc3ManagedInterruptContract.NonNestingChrCallbacks,
+        _ => throw new InvalidOperationException(
+            $"NESMmc3ManagedInterruptContract has invalid value '{value}'. Expected None or NonNestingChrCallbacks."),
+    };
+
+    static int ParseMetadata(ITaskItem item, string name, bool required, string itemType = "Bank asset")
     {
         string value = item.GetMetadata(name);
         if (string.IsNullOrWhiteSpace(value))
         {
             if (required)
-                throw new InvalidOperationException($"Bank asset '{item.ItemSpec}' requires {name} metadata.");
+                throw new InvalidOperationException($"{itemType} '{item.ItemSpec}' requires {name} metadata.");
             return 0;
         }
 
+        return ParseInteger(value, $"{itemType} '{item.ItemSpec}' has invalid {name} metadata '{value}'.");
+    }
+
+    static int ParseInteger(string value, string errorMessage)
+    {
         string normalized = value.Trim();
         System.Globalization.NumberStyles style = System.Globalization.NumberStyles.Integer;
         if (normalized.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
@@ -125,7 +218,7 @@ public class TranspileToNES : Task
         }
 
         if (!int.TryParse(normalized, style, System.Globalization.CultureInfo.InvariantCulture, out int result))
-            throw new InvalidOperationException($"Bank asset '{item.ItemSpec}' has invalid {name} metadata '{value}'.");
+            throw new InvalidOperationException(errorMessage);
         return result;
     }
 

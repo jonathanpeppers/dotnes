@@ -37,16 +37,79 @@ public static class NesCompiler
             throw new ArgumentException("Assembly sources must not contain null readers.", nameof(assemblyFiles));
 
         options ??= new CompilationOptions();
+        if (options.PrgBankAssets.Count != 0)
+            throw new ArgumentException("PRG asset models require CompileBanked; Compile returns only a flat program.", nameof(options));
         using var transpiler = new Transpiler(
             assembly,
             sources,
             logger,
             mapper: options.Mapper,
-            mmc3BankedLayout: options.Mmc3BankedLayout)
+            prgBanks: options.PrgBanks,
+            mmc3BankedLayout: options.Mmc3BankedLayout,
+            managedCodeBanks: options.ManagedCodeBanks.ToArray(),
+            mmc3ManagedHomeBank: options.Mmc3ManagedHomeBank,
+            mmc3ManagedInterruptContract: options.Mmc3ManagedInterruptContract,
+            nativeRamCode: options.NativeRamCode.ToArray())
         {
             LeaveAssemblyReadersOpen = true,
             OptimizeByteHelpers = options.OptimizeByteHelpers,
         };
         return transpiler.CompileProgram(out _, out _);
+    }
+
+    /// <summary>
+    /// Compiles explicitly annotated managed methods into MMC3 regions and fixed code.
+    /// The returned models use the same gates, RAM allocation and linking as stock ROM builds.
+    /// Native callback and mapper effects require source-visible bodies.
+    /// </summary>
+    /// <remarks>
+    /// The caller owns all inputs. This method does not write an iNES image or CHR data.
+    /// Use the stock package targets for ROM packaging; use this result to inspect emitted code.
+    /// </remarks>
+    public static BankedCompilation CompileBanked(
+        Stream assembly,
+        CompilationOptions options,
+        IEnumerable<AssemblyReader>? assemblyFiles = null,
+        ILogger? logger = null)
+    {
+        if (assembly == null)
+            throw new ArgumentNullException(nameof(assembly));
+        if (!assembly.CanRead || !assembly.CanSeek)
+            throw new ArgumentException("The assembly stream must be readable and seekable.", nameof(assembly));
+        if (options == null)
+            throw new ArgumentNullException(nameof(options));
+        var sources = assemblyFiles?.ToList() ?? new List<AssemblyReader>();
+        if (sources.Any(source => source == null))
+            throw new ArgumentException("Assembly sources must not contain null readers.", nameof(assemblyFiles));
+        using var transpiler = new Transpiler(
+            assembly, sources, logger,
+            mapper: options.Mapper, prgBanks: options.PrgBanks,
+            mmc3BankedLayout: options.Mmc3BankedLayout,
+            prgBankAssets: GetPrgAssets(options),
+            managedCodeBanks: options.ManagedCodeBanks.ToArray(),
+            mmc3ManagedHomeBank: options.Mmc3ManagedHomeBank,
+            mmc3ManagedInterruptContract: options.Mmc3ManagedInterruptContract,
+            nativeRamCode: options.NativeRamCode.ToArray())
+        {
+            LeaveAssemblyReadersOpen = true,
+            OptimizeByteHelpers = options.OptimizeByteHelpers,
+        };
+        var result = transpiler.CompileManagedProgram(out _, out _);
+        BankedCompilation.LinkPrograms(result.GetPrograms());
+        transpiler.PrepareManagedMapperContext(result.GetPrograms(), result.PrgAssets);
+        result.ResolveAndRelax();
+        return result;
+    }
+
+    static BankedRomAsset[] GetPrgAssets(CompilationOptions options)
+    {
+        var assets = new List<BankedRomAsset>();
+        foreach (var asset in options.PrgBankAssets)
+        {
+            if (asset == null)
+                throw new ArgumentException("PRG assets must not contain null entries.", nameof(options));
+            assets.Add(new BankedRomAsset(asset.Path, asset.Bank, asset.Offset, asset.CpuAddress));
+        }
+        return assets.ToArray();
     }
 }
