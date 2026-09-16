@@ -95,7 +95,7 @@ public static class NesCompiler
             OptimizeByteHelpers = options.OptimizeByteHelpers,
         };
         var result = transpiler.CompileManagedProgram(out _, out _);
-        result.ResolveAndRelax();
+        BankedCompilation.LinkPrograms(result.GetPrograms());
         transpiler.PrepareManagedMapperContext(result.GetPrograms(), result.PrgAssets);
         result.ResolveAndRelax();
         return result;

@@ -8,16 +8,18 @@ namespace dotnes;
 /// </summary>
 internal static class ManagedMapperSafety
 {
-    internal static void Prepare(IReadOnlyList<Program6502> programs,
+    internal static bool Prepare(IReadOnlyList<Program6502> programs,
         IReadOnlyCollection<string> callbackLabels, IReadOnlyCollection<string> foregroundLabels,
         IReadOnlyCollection<string> bankedMethodLabels, ushort selectorShadow, int homeBank,
         IReadOnlyList<NativeRamCode>? nativeRamCode = null,
         IReadOnlyCollection<Block>? managedBlocks = null, IReadOnlyCollection<Block>? compilerOwnedBlocks = null,
         IReadOnlyList<CompiledPrgAsset>? prgAssets = null)
     {
-        new Analysis(programs, callbackLabels, foregroundLabels, bankedMethodLabels,
+        var analysis = new Analysis(programs, callbackLabels, foregroundLabels, bankedMethodLabels,
             selectorShadow, homeBank, nativeRamCode ?? Array.Empty<NativeRamCode>(),
-            managedBlocks, compilerOwnedBlocks, prgAssets ?? Array.Empty<CompiledPrgAsset>()).Run();
+            managedBlocks, compilerOwnedBlocks, prgAssets ?? Array.Empty<CompiledPrgAsset>());
+        analysis.Run();
+        return analysis.PreservesBankSelector;
     }
 
     [Flags]
@@ -212,6 +214,7 @@ internal static class ManagedMapperSafety
         readonly HashSet<Block> sourceBlocks = new();
         readonly HashSet<Block> managedBlocks = new();
         int generatedLabel;
+        public bool PreservesBankSelector { get; private set; } = true;
 
         public Analysis(IReadOnlyList<Program6502> programs, IReadOnlyCollection<string> callbacks,
             IReadOnlyCollection<string> foreground, IReadOnlyCollection<string> banked, ushort shadow, int home,
@@ -1001,6 +1004,8 @@ internal static class ManagedMapperSafety
             Value stored = StoreValue(instruction, state);
             if ((range.Min & 1) == 0)
             {
+                if ((context & Context.Banked) != 0)
+                    PreservesBankSelector = false;
                 if (!stored.IsConstant)
                     throw Error(node, "dynamic MMC3 selector cannot be proven safe; load a constant selector (PRG mode 0) before the store");
                 if ((stored.Bits & 0x40) != 0)

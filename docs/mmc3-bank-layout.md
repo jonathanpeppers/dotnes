@@ -138,9 +138,13 @@ inlining never crosses a managed-bank boundary.
 
 Gates share a flag/register-preserving return path. The compiler inlines their
 entry bookkeeping when the whole set fits the unchanged fixed-bank capacity,
-otherwise retaining compact entries. The emitted forms add 103 or 122 CPU cycles
-per entry respectively, excluding the unchanged callee body and interrupts.
-This selection needs no consumer build step or additional mapper contract.
+otherwise retaining compact entries. If effect analysis proves banked methods
+and their reachable helpers never write the selector, return gates also omit
+redundant R6 selection: interrupt epilogues preserve the published selector.
+The inline/compact forms add 87/106 CPU cycles in that case, or 103/122 when
+banked code can select CHR registers, excluding the unchanged callee body and
+interrupts. These selections need no consumer build step or additional mapper
+contract.
 
 Banked and fixed code share the existing zero-initialized RAM allocation.
 Use ordinary C# initialization methods such as `Reset`; unsupported implicit

@@ -378,9 +378,19 @@ partial class Transpiler
 
     internal void PrepareManagedMapperContext(IReadOnlyList<Program6502> programs, IReadOnlyList<CompiledPrgAsset> prgAssets)
     {
-        ManagedMapperSafety.Prepare(programs, _managedCallbacks, _managedForeground, _methodRegions.Keys.ToArray(),
+        bool preservesBankSelector = ManagedMapperSafety.Prepare(programs, _managedCallbacks, _managedForeground, _methodRegions.Keys.ToArray(),
             _selectorShadow, _managedHomeBank!.Value, _nativeRamCode, _managedBlocks, _compilerOwnedBlocks, prgAssets);
         var program = programs[0];
+        if (preservesBankSelector)
+        {
+            // Callbacks restore the published selector. Without banked selector
+            // stores, R6 is still selected when the managed callee returns.
+            var leave = program.GetBlock(LeaveManagedBank)!;
+            for (int index = 0; index < 5; index++)
+                leave.RemoveAt(2);
+            program.InvalidateAddresses();
+            _logger.WriteLine($"Managed banked code preserves the selector; return gates omit redundant R6 selection.");
+        }
         var enter = program.GetBlock(EnterManagedBank);
         if (_managedGateBanks.Count == 0 || enter == null)
             return;

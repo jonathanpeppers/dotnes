@@ -992,4 +992,24 @@ public class ManagedMapperSafetyTests
             new Instruction(Opcode.STA, AddressMode.AbsoluteX, new AbsoluteOperand(Shadow + 2)), RTS());
         Prepare(program, ["_callback"]);
     }
+
+    [Theory]
+    [InlineData(0x8000)]
+    [InlineData(0x9002)]
+    public void BankedNativeHelperSelectorStoresPreventReturnShortcut(ushort address)
+    {
+        var program = Program();
+        var banked = program.CreateBlock("banked").Emit(JSR("_helper")).Emit(RTS());
+        Native(program, "_helper", LDA(3), STA_abs(address), RTS());
+        Assert.False(ManagedMapperSafety.Prepare([program], [], [], ["banked"], Shadow, 0, managedBlocks: [banked]));
+    }
+
+    [Fact]
+    public void CallbackSelectorStoresDoNotInvalidatePreservedBankSelector()
+    {
+        var program = Program();
+        var banked = program.CreateBlock("banked").Emit(RTS());
+        Native(program, "_callback", LDA(3), STA_abs(0x8000), RTS());
+        Assert.True(ManagedMapperSafety.Prepare([program], ["_callback"], [], ["banked"], Shadow, 0, managedBlocks: [banked]));
+    }
 }

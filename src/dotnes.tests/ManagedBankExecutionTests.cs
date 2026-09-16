@@ -12,12 +12,12 @@ public class ManagedBankExecutionTests(ITestOutputHelper output) : RoslynTests(o
         ManagedCodeBanks = { new() { Name = "audio", Bank = 2, Size = 0x1000 } },
     };
 
-    BankedCompilation Compile(byte mode, bool optimize = false, bool compact = false)
+    BankedCompilation Compile(byte mode, bool optimize = false, bool compact = false, bool bankedSelectorWrites = false)
     {
         string padding = "";
         if (compact)
         {
-            var fast = Compile(mode, optimize);
+            var fast = Compile(mode, optimize, bankedSelectorWrites: bankedSelectorWrites);
             int capacity = Mmc3BankLayout.ResetStubAddress - Mmc3BankLayout.FixedProgramAddress;
             padding = $".segment \"RODATA\"\npadding:\n.res {capacity - fast.FixedProgram.TotalSize + 26}, 0";
         }
@@ -45,6 +45,7 @@ public class ManagedBankExecutionTests(ITestOutputHelper output) : RoslynTests(o
                 public static void Reset() { count = 7; }
                 public static byte Tick(byte input, byte next)
                 {
+                    {{(bankedSelectorWrites ? $"mmc3_set_chr_bank({mode | 2}, 8);" : "")}}
                     count = (byte)(count + input);
                     byte note = peek(0x9003);
                     return (byte)(Add(next, note) + count);
@@ -85,26 +86,27 @@ public class ManagedBankExecutionTests(ITestOutputHelper output) : RoslynTests(o
         return NesCompiler.CompileBanked(assembly, options, [native], _logger);
     }
 
-    [Theory]
-    [InlineData(false, 0, false, false)]
-    [InlineData(true, 0, false, false)]
-    [InlineData(false, 0x80, false, false)]
-    [InlineData(true, 0x80, false, false)]
-    [InlineData(false, 0, true, false)]
-    [InlineData(true, 0, true, false)]
-    [InlineData(false, 0x80, true, false)]
-    [InlineData(true, 0x80, true, false)]
-    [InlineData(false, 0, false, true)]
-    [InlineData(true, 0, false, true)]
-    [InlineData(false, 0x80, false, true)]
-    [InlineData(true, 0x80, false, true)]
-    [InlineData(false, 0, true, true)]
-    [InlineData(true, 0, true, true)]
-    [InlineData(false, 0x80, true, true)]
-    [InlineData(true, 0x80, true, true)]
-    public void EveryGateAndForegroundPublicationBoundarySurvivesStockInterrupt(bool irq, byte mode, bool optimize, bool compact)
+    public static TheoryData<bool, byte, bool, bool, bool> InterruptGateCases
     {
-        var result = Compile(mode, optimize, compact);
+        get
+        {
+            var cases = new TheoryData<bool, byte, bool, bool, bool>();
+            foreach (bool irq in new[] { false, true })
+            foreach (byte mode in new byte[] { 0, 0x80 })
+            foreach (bool optimize in new[] { false, true })
+            foreach (bool compact in new[] { false, true })
+            foreach (bool writes in new[] { false, true })
+                cases.Add(irq, mode, optimize, compact, writes);
+            return cases;
+        }
+    }
+
+    [Theory]
+    [MemberData(nameof(InterruptGateCases))]
+    public void EveryGateAndForegroundPublicationBoundarySurvivesStockInterrupt(
+        bool irq, byte mode, bool optimize, bool compact, bool bankedSelectorWrites)
+    {
+        var result = Compile(mode, optimize, compact, bankedSelectorWrites);
         Assert.Equal(compact, result.FixedProgram.GetBlock("__nesbank_enter") != null);
         var fixedProgram = result.FixedProgram;
         var targets = new HashSet<ushort>();
@@ -159,6 +161,8 @@ public class ManagedBankExecutionTests(ITestOutputHelper output) : RoslynTests(o
             Assert.True(injected && restored, $"Interrupt did not resume boundary {boundary}.");
             Assert.Equal(1, machine.Cpu.InterruptCount);
             Assert.Equal(irq ? (byte)0x44 : (byte)0x33, machine.Chr[irq ? 4 : 5]);
+            if (bankedSelectorWrites)
+                Assert.Equal(8, machine.Chr[2]);
             AssertResult(machine, mode);
         }
     }
@@ -239,11 +243,13 @@ public class ManagedBankExecutionTests(ITestOutputHelper output) : RoslynTests(o
     }
 
     [Theory]
-    [InlineData(false, 103)]
-    [InlineData(true, 122)]
-    public void InlineEntryAndSharedReturnBoundGateOverhead(bool compact, int expectedCycles)
+    [InlineData(false, false, 87)]
+    [InlineData(true, false, 106)]
+    [InlineData(false, true, 103)]
+    [InlineData(true, true, 122)]
+    public void InlineEntryAndSharedReturnBoundGateOverhead(bool compact, bool bankedSelectorWrites, int expectedCycles)
     {
-        var result = Compile(0, compact: compact);
+        var result = Compile(0, compact: compact, bankedSelectorWrites: bankedSelectorWrites);
         var program = result.FixedProgram;
         Assert.Equal(compact, program.GetBlock("__nesbank_enter") != null);
         var labels = program.GetLabels();
