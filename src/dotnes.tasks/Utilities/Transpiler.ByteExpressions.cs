@@ -22,6 +22,7 @@ partial class Transpiler
         {
             var call = instructions[index];
             if (call.OpCode != ILOpCode.Call || call.String is not string name
+                || _methodRegions.ContainsKey(name)
                 || !UserMethods.TryGetValue(name, out var body)
                 || !_byteHelperDefinitions.TryGetValue(name, out var definition)
                 || (definition.Attributes & MethodAttributes.Static) == 0

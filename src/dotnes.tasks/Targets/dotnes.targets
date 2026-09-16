@@ -19,7 +19,7 @@
   <Target Name="_WriteNESPropertiesStamp" Condition="'$(IsTestProject)' != 'true'">
     <WriteLinesToFile
         File="$(_NESPropertiesStampFile)"
-        Lines="NESMirroring=$(NESMirroring);NESMapper=$(NESMapper);NESPrgBanks=$(NESPrgBanks);NESChrBanks=$(NESChrBanks);NESBattery=$(NESBattery);NESMmc3BankedLayout=$(NESMmc3BankedLayout);NESOptimizeByteHelpers=$(NESOptimizeByteHelpers);@(NESPrgBank->'%(FullPath)|%(Bank)|%(CpuAddress)|%(Offset)');@(NESChrBank->'%(FullPath)|%(Bank)|%(Offset)')"
+        Lines="NESMirroring=$(NESMirroring);NESMapper=$(NESMapper);NESPrgBanks=$(NESPrgBanks);NESChrBanks=$(NESChrBanks);NESBattery=$(NESBattery);NESMmc3BankedLayout=$(NESMmc3BankedLayout);NESOptimizeByteHelpers=$(NESOptimizeByteHelpers);NESMmc3ManagedHomeBank=$(NESMmc3ManagedHomeBank);NESMmc3ManagedInterruptContract=$(NESMmc3ManagedInterruptContract);@(NESPrgBank->'%(FullPath)|%(Bank)|%(CpuAddress)|%(Offset)');@(NESChrBank->'%(FullPath)|%(Bank)|%(Offset)');@(NESManagedCodeBank->'%(Identity)|%(Bank)|%(CpuAddress)|%(Offset)|%(Size)');@(NESNativeRamCode->'%(Identity)|%(Address)|%(Size)|%(Contract)')"
         Overwrite="true"
         WriteOnlyWhenDifferent="true" />
     <ItemGroup>
@@ -50,6 +50,10 @@
         NESMmc3BankedLayout="$(NESMmc3BankedLayout)"
         NESPrgBank="@(NESPrgBank)"
         NESChrBank="@(NESChrBank)"
+        NESManagedCodeBank="@(NESManagedCodeBank)"
+        NESNativeRamCode="@(NESNativeRamCode)"
+        NESMmc3ManagedHomeBank="$(NESMmc3ManagedHomeBank)"
+        NESMmc3ManagedInterruptContract="$(NESMmc3ManagedInterruptContract)"
     />
     <ItemGroup>
       <FileWrites Include="$(NESTargetPath)" />

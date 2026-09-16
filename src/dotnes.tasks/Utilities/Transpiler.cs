@@ -103,7 +103,11 @@ partial class Transpiler : IDisposable
         bool battery = false,
         bool mmc3BankedLayout = false,
         IReadOnlyList<BankedRomAsset>? prgBankAssets = null,
-        IReadOnlyList<BankedRomAsset>? chrBankAssets = null)
+        IReadOnlyList<BankedRomAsset>? chrBankAssets = null,
+        IReadOnlyList<ManagedCodeBank>? managedCodeBanks = null,
+        int? mmc3ManagedHomeBank = null,
+        Mmc3ManagedInterruptContract mmc3ManagedInterruptContract = Mmc3ManagedInterruptContract.None,
+        IReadOnlyList<NativeRamCode>? nativeRamCode = null)
     {
         _pe = new PEReader(stream, PEStreamOptions.LeaveOpen);
         try
@@ -125,6 +129,10 @@ partial class Transpiler : IDisposable
         _mmc3BankedLayout = mmc3BankedLayout;
         _prgBankAssets = prgBankAssets ?? Array.Empty<BankedRomAsset>();
         _chrBankAssets = chrBankAssets ?? Array.Empty<BankedRomAsset>();
+        _managedCodeBanks = managedCodeBanks ?? Array.Empty<ManagedCodeBank>();
+        _managedHomeBank = mmc3ManagedHomeBank;
+        _managedInterruptContract = mmc3ManagedInterruptContract;
+        _nativeRamCode = nativeRamCode ?? Array.Empty<NativeRamCode>();
     }
 
     public void Write(Stream stream)
@@ -172,7 +180,11 @@ partial class Transpiler : IDisposable
         _logger.WriteLine($"Building program...");
 
         // Build the complete program using single-pass transpilation
-        var program = CompileProgram(out ushort sizeOfMain, out ushort locals);
+        BankedCompilation? banked = null;
+        ushort sizeOfMain, locals;
+        var program = _managedCodeBanks.Count == 0
+            ? CompileProgram(out sizeOfMain, out locals)
+            : (banked = CompileManagedProgram(out sizeOfMain, out locals)).FixedProgram;
         program.ResolveAndRelaxBranches();
 
         _logger.WriteLine($"Size of main: {sizeOfMain}, locals: {locals}");
@@ -197,7 +209,17 @@ partial class Transpiler : IDisposable
         if (_mmc3BankedLayout)
         {
             prgImage = Mmc3BankLayout.BuildPrgImage(
-                program, _prgBanks, _prgBankAssets, nmi_data, irq_data);
+                program, _prgBanks, _prgBankAssets, nmi_data, irq_data,
+                banked?.Regions, banked == null ? null : programs => PrepareManagedMapperContext(programs, banked.PrgAssets),
+                banked?.PrgAssets);
+            if (banked != null)
+            {
+                _logger.WriteLine(
+                    $"Managed MMC3 fixed program: {program.TotalSize}/{Mmc3BankLayout.ResetStubAddress - Mmc3BankLayout.FixedProgramAddress} bytes.");
+                foreach (var region in banked.Regions)
+                    _logger.WriteLine(
+                        $"Managed region '{region.Placement.Name}': {region.Program.TotalSize}/{region.Placement.Size} bytes, physical bank {region.Placement.Bank}, CPU ${region.Program.BaseAddress:X4}.");
+            }
         }
         else
         {
@@ -290,6 +312,7 @@ partial class Transpiler : IDisposable
 
     void ValidateRomConfiguration()
     {
+        ValidateManagedConfiguration();
         if (_mapper < 0 || _mapper > byte.MaxValue)
             throw new InvalidOperationException($"NESMapper must be between 0 and {byte.MaxValue}.");
         if (_prgBanks < 1 || _prgBanks > byte.MaxValue)
@@ -329,6 +352,7 @@ partial class Transpiler : IDisposable
         _logger.WriteLine($"Single-pass transpilation...");
         
         var instructions = ReadStaticVoidMain().ToArray();
+        ValidateManagedMethods(instructions);
         bool nativeRenderer = UsedMethods.Contains(nameof(NESLib.ppu_use_native_renderer));
         if (nativeRenderer)
             ValidateNativeRenderer(instructions);
@@ -375,6 +399,14 @@ partial class Transpiler : IDisposable
 
         // Pre-allocate user-defined static fields so all methods share the same addresses
         var (staticFields, wordStaticFields, staticFieldBytes, staticArrayFields) = PreAllocateStaticFields(instructions);
+        if (_methodRegions.Count > 0)
+        {
+            _selectorShadow = checked((ushort)(NESConstants.LocalStackBase + staticFieldBytes));
+            _savedSelector = checked((ushort)(_selectorShadow + 1));
+            staticFieldBytes += 2;
+            if (staticFieldBytes > NESConstants.MaxLocalBytes)
+                throw new TranspileException("Managed MMC3 mapper context exceeds available static RAM.");
+        }
         var numericFieldTypes = GetNumericFieldTypes();
 
         // Detect and set up closure struct support
@@ -442,15 +474,23 @@ partial class Transpiler : IDisposable
         ValidateStaticArrayInitialization(instructions, UserMethods, reflectionCache, staticArrayAliases.Keys, provenStaticArrayStores);
 
         var byteParameterCalls = NumericTypes.Where(kvp =>
-            UserMethods.ContainsKey(kvp.Key) && kvp.Value.Parameters.Where((p, index) =>
+        {
+            bool banked = _methodRegions.ContainsKey(kvp.Key);
+            return UserMethods.ContainsKey(kvp.Key) && kvp.Value.Parameters.Where((p, index) =>
                     !_closureMethodArgIndex.TryGetValue(kvp.Key, out int closure) || index != closure)
-                .All(p => p == PrimitiveTypeCode.Byte)
-                && kvp.Value.ReturnType is PrimitiveTypeCode.Byte or PrimitiveTypeCode.Void)
+                .All(p => p == PrimitiveTypeCode.Byte || banked && p is PrimitiveTypeCode.SByte or PrimitiveTypeCode.Boolean)
+                && (kvp.Value.ReturnType is PrimitiveTypeCode.Byte or PrimitiveTypeCode.Void ||
+                    banked && kvp.Value.ReturnType is PrimitiveTypeCode.SByte or PrimitiveTypeCode.Boolean or
+                        PrimitiveTypeCode.Int16 or PrimitiveTypeCode.UInt16);
+        })
             .ToDictionary(kvp => kvp.Key,
                 kvp => _closureMethodArgIndex.TryGetValue(kvp.Key, out int closure) ? closure : -1);
         var byteParameterFrameEntries = byteParameterCalls.Where(pair =>
                 UserMethodMetadata[pair.Key].argCount >= 2)
             .ToDictionary(pair => pair.Key, pair => $"{pair.Key}:@parameters_ready", StringComparer.Ordinal);
+        Dictionary<string, string> FrameEntriesFor(string caller) => byteParameterFrameEntries
+            .Where(pair => !_methodRegions.ContainsKey(pair.Key) || SameManagedRegion(caller, pair.Key))
+            .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal);
 
         using var writer = new IL2NESWriter(new MemoryStream(), logger: _logger, reflectionCache: reflectionCache)
         {
@@ -460,7 +500,7 @@ partial class Transpiler : IDisposable
             UserMethodArrayParameters = arrayParameters,
             UnsupportedArrayHelperSignatures = _unsupportedArrayHelperSignatures,
             ByteParameterCalls = byteParameterCalls,
-            ByteParameterFrameEntries = byteParameterFrameEntries,
+            ByteParameterFrameEntries = FrameEntriesFor("main"),
             ExternMethodNames = externNames,
             WordLocals = DetectWordLocals(instructions, reflectionCache),
             StructLayouts = structLayouts,
@@ -537,6 +577,8 @@ partial class Transpiler : IDisposable
         {
             sizeOfMain = 0;
         }
+        if (_methodRegions.Count > 0)
+            DefineManagedRamLabels(program, writer, staticFields, staticFieldBytes);
 
         // Transpile user-defined methods into separate blocks
         // Each method's locals must use unique addresses to prevent collisions in nested calls
@@ -561,7 +603,7 @@ partial class Transpiler : IDisposable
                 UserMethodArrayParameters = arrayParameters,
                 UnsupportedArrayHelperSignatures = _unsupportedArrayHelperSignatures,
                 ByteParameterCalls = byteParameterCalls,
-                ByteParameterFrameEntries = byteParameterFrameEntries,
+                ByteParameterFrameEntries = FrameEntriesFor(methodName),
                 ExternMethodNames = externNames,
                 MethodParamCount = paramCount,
                 ParamIsArray = isArrayParam,
@@ -584,7 +626,8 @@ partial class Transpiler : IDisposable
                 ClosureArgIndex = _closureMethodArgIndex.TryGetValue(methodName, out var cai) ? cai : -1,
                 TryFinallyRegions = UserMethodExceptionRegions.TryGetValue(methodName, out var umer) ? umer : null,
             };
-            methodWriter.ConfigureNumericTypes(NumericTypes, numericFieldTypes, _closureNumericFieldTypes);
+            methodWriter.ConfigureNumericTypes(NumericTypes, numericFieldTypes, _closureNumericFieldTypes,
+                allowBooleanArguments: _methodRegions.ContainsKey(methodName));
             methodWriter.StartBlockBuffering();
 
             // If method has parameters, emit prologue to push last arg onto cc65 stack
@@ -765,7 +808,8 @@ partial class Transpiler : IDisposable
 
         // Add final built-ins (before data tables)
         // Program layout: built-ins -> main -> final built-ins -> byte/string tables -> destructor
-        program.ResolveAddresses(); // Resolve to get current size
+        if (!_buildingManagedProgram)
+            program.ResolveAddresses();
 
         // Scan emitted blocks for JSR pusha/pushax label references.
         // These may be emitted for byte array/string parameter passing even in programs
@@ -816,15 +860,19 @@ partial class Transpiler : IDisposable
         program.AddDestructorTable();
 
         // Final address resolution
-        program.ResolveAddresses();
+        if (!_buildingManagedProgram)
+            program.ResolveAddresses();
 
         // Log block addresses for diagnostics
-        _logger.WriteLine($"Block layout ({program.Blocks.Count} blocks):");
-        ushort diagAddr = program.BaseAddress;
-        foreach (var block in program.Blocks)
+        if (!_buildingManagedProgram)
         {
-            _logger.WriteLine($"  ${diagAddr:X4}: [{block.Label}] {block.Size} bytes, data={block.IsDataBlock}");
-            diagAddr += (ushort)block.Size;
+            _logger.WriteLine($"Block layout ({program.Blocks.Count} blocks):");
+            ushort diagAddr = program.BaseAddress;
+            foreach (var block in program.Blocks)
+            {
+                _logger.WriteLine($"  ${diagAddr:X4}: [{block.Label}] {block.Size} bytes, data={block.IsDataBlock}");
+                diagAddr += (ushort)block.Size;
+            }
         }
 
         _logger.WriteLine($"Single-pass complete. Size of main: {sizeOfMain}, locals: {locals}");

@@ -14,6 +14,9 @@ public class Program6502
     private readonly Dictionary<string, ushort> _externBindings = new();
     private readonly HashSet<Block> _nativeBlocks = new();
     private readonly HashSet<string> _externSymbols = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, ushort> _definedLabels = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, ushort> _linkedLabels = new(StringComparer.Ordinal);
+    private bool _coordinatedLayout;
     private bool _addressesValid;
 
     /// <summary>
@@ -109,6 +112,8 @@ public class Program6502
         AddBlock(block);
     }
 
+    internal bool IsNativeBlock(Block block) => _nativeBlocks.Contains(block);
+
     /// <summary>
     /// Inserts a block at a specific index
     /// </summary>
@@ -196,12 +201,42 @@ public class Program6502
     /// </summary>
     public void ResolveAddresses()
     {
+        if (_coordinatedLayout)
+            ValidateAddressRange();
         _labels.Clear();
+        _labels.CurrentScope = null;
+        _definedLabels.Clear();
         var nativeSymbols = new Dictionary<string, ushort>(_externBindings);
+        var definitionBlocks = new Dictionary<string, Block>(StringComparer.Ordinal);
+        var instructionLabels = new HashSet<(Block Block, string Name)>();
+        var pendingAliases = new List<(Block Block, string Name, string Target, bool IsInstructionAlias)>();
+
+        void DefineLocalLabel(Block block, string name, ushort address)
+        {
+            if (_coordinatedLayout && _definedLabels.TryGetValue(name, out ushort previous) &&
+                (previous != address || definitionBlocks[name] != block) &&
+                !name.StartsWith("_anonymous_code_", StringComparison.Ordinal))
+                throw new InvalidOperationException(
+                    $"Program defines duplicate label '{name}' at ${previous:X4} in '{definitionBlocks[name].Label}' " +
+                    $"and ${address:X4} in '{block.Label}'.");
+            _definedLabels[name] = address;
+            definitionBlocks[name] = block;
+            _labels.DefineOrUpdate(name, address);
+            if (_nativeBlocks.Contains(block))
+                nativeSymbols[name] = address;
+        }
         
         // Restore external labels
         foreach (var kvp in _externalLabels)
-            _labels.Define(kvp.Key, kvp.Value);
+        {
+            if (!_coordinatedLayout || _externBindings.ContainsKey(kvp.Key))
+                _labels.Define(kvp.Key, kvp.Value);
+        }
+        foreach (var kvp in _linkedLabels)
+        {
+            _labels.DefineOrUpdate(kvp.Key, kvp.Value);
+            nativeSymbols[kvp.Key] = kvp.Value;
+        }
 
         ushort currentAddress = BaseAddress;
 
@@ -209,9 +244,7 @@ public class Program6502
         {
             void DefineBlockLabel(string name, ushort address)
             {
-                _labels.DefineOrUpdate(name, address);
-                if (_nativeBlocks.Contains(block))
-                    nativeSymbols[name] = address;
+                DefineLocalLabel(block, name, address);
             }
 
             // Define block label (accounting for any label offset)
@@ -227,12 +260,16 @@ public class Program6502
                     int eqIdx = alias.IndexOf('=');
                     if (eqIdx > 0)
                     {
+                        if (_coordinatedLayout)
+                            pendingAliases.Add((block, ScopeLabel(alias.Substring(0, eqIdx), block),
+                                ScopeLabel(alias.Substring(eqIdx + 1), block), false));
                         // Instruction-level alias: resolve after instruction labels are defined
                         // (handled below after instruction labels)
                     }
                     else
                     {
-                        DefineBlockLabel(alias, (ushort)(currentAddress + block.LabelOffset));
+                        DefineBlockLabel(_coordinatedLayout ? ScopeLabel(alias, block) : alias,
+                            (ushort)(currentAddress + block.LabelOffset));
                     }
                 }
             }
@@ -243,7 +280,8 @@ public class Program6502
                 if (block.InternalLabels != null)
                 {
                     foreach (var kvp in block.InternalLabels)
-                        DefineBlockLabel(kvp.Key, (ushort)(currentAddress + kvp.Value));
+                        DefineBlockLabel(_coordinatedLayout ? ScopeLabel(kvp.Key, block) : kvp.Key,
+                            (ushort)(currentAddress + kvp.Value));
                 }
                 // Data blocks just advance the address by their size
                 currentAddress += (ushort)block.Size;
@@ -255,7 +293,9 @@ public class Program6502
                 {
                     if (label != null)
                     {
-                        DefineBlockLabel(ScopeLabel(label, block), currentAddress);
+                        string scopedLabel = ScopeLabel(label, block);
+                        instructionLabels.Add((block, scopedLabel));
+                        DefineBlockLabel(scopedLabel, currentAddress);
                     }
                     currentAddress += (ushort)instruction.Size;
                 }
@@ -263,6 +303,11 @@ public class Program6502
                 // Resolve label aliases (for IL instructions that don't emit code)
                 foreach (var kvp in block.LabelAliases)
                 {
+                    if (_coordinatedLayout)
+                    {
+                        pendingAliases.Add((block, ScopeLabel(kvp.Key, block), ScopeLabel(kvp.Value, block), true));
+                        continue;
+                    }
                     if (_labels.TryResolve(ScopeLabel(kvp.Value, block), out ushort address))
                     {
                         DefineBlockLabel(ScopeLabel(kvp.Key, block), address);
@@ -270,7 +315,7 @@ public class Program6502
                 }
 
                 // Resolve instruction-level additional labels (e.g., _famitone_init=FamiToneInit)
-                if (block.AdditionalLabels != null)
+                if (block.AdditionalLabels != null && !_coordinatedLayout)
                 {
                     foreach (var alias in block.AdditionalLabels)
                     {
@@ -287,6 +332,33 @@ public class Program6502
             }
         }
 
+        while (pendingAliases.Count != 0)
+        {
+            bool resolved = false;
+            for (int i = pendingAliases.Count - 1; i >= 0; i--)
+            {
+                var alias = pendingAliases[i];
+                // Re-emitting an IL location can leave an obsolete alias after lowering rewrites.
+                if (alias.IsInstructionAlias && !_nativeBlocks.Contains(alias.Block) &&
+                    IsILInstructionLabel(alias.Name, alias.Block) && instructionLabels.Contains((alias.Block, alias.Name)))
+                {
+                    pendingAliases.RemoveAt(i);
+                    resolved = true;
+                    continue;
+                }
+                if (!_labels.TryResolve(alias.Target, out ushort address))
+                    continue;
+                if (_definedLabels.ContainsKey(alias.Target))
+                    DefineLocalLabel(alias.Block, alias.Name, address);
+                else
+                    _labels.DefineOrUpdate(alias.Name, address);
+                pendingAliases.RemoveAt(i);
+                resolved = true;
+            }
+            if (!resolved)
+                break;
+        }
+
         // Prefer the cc65 spelling, but accept legacy bare native exports/bindings.
         // Resolve on every layout pass so the alias follows branch relaxation.
         foreach (var name in _externSymbols)
@@ -301,7 +373,16 @@ public class Program6502
             if (hasCanonical)
                 _labels.DefineOrUpdate(canonicalName, canonicalAddress);
             else if (hasLegacy)
+            {
                 _labels.DefineOrUpdate(canonicalName, address);
+                if (_definedLabels.TryGetValue(name, out ushort localAddress) &&
+                    localAddress == address && definitionBlocks.TryGetValue(name, out var owner) &&
+                    _nativeBlocks.Contains(owner))
+                {
+                    _definedLabels[canonicalName] = address;
+                    definitionBlocks[canonicalName] = owner;
+                }
+            }
         }
 
         PatchPalBrightTables();
@@ -361,12 +442,29 @@ public class Program6502
         return label;
     }
 
+    static bool IsILInstructionLabel(string label, Block block)
+    {
+        if (block.Label == null)
+            return false;
+        string prefix = block.Label == "main" ? "instruction_" : $"{block.Label}_instruction_";
+        if (!label.StartsWith(prefix, StringComparison.Ordinal) || label.Length == prefix.Length)
+            return false;
+        for (int i = prefix.Length; i < label.Length; i++)
+        {
+            if (!Uri.IsHexDigit(label[i]))
+                return false;
+        }
+        return true;
+    }
+
     /// <summary>
     /// Emits the program to a byte array
     /// </summary>
     public byte[] ToBytes()
     {
         ResolveAndRelaxBranches();
+        if (_coordinatedLayout)
+            BankedCompilation.ValidateForEmission(this);
 
         var ms = new MemoryStream(TotalSize);
         ushort currentAddress = BaseAddress;
@@ -431,7 +529,11 @@ public class Program6502
                 {
                     _labels.CurrentScope = block.Label;
                     if (block.RelaxBranches(addr, _labels))
+                    {
                         anyRelaxed = true;
+                        if (_coordinatedLayout)
+                            ValidateAddressRange();
+                    }
                 }
                 addr += (ushort)block.Size;
             }
@@ -587,6 +689,44 @@ public class Program6502
     public void InvalidateAddresses()
     {
         _addressesValid = false;
+    }
+
+    internal void SetLinkedLabels(IReadOnlyDictionary<string, ushort> labels)
+    {
+        _coordinatedLayout = true;
+        _linkedLabels.Clear();
+        foreach (var label in labels)
+            _linkedLabels.Add(label.Key, label.Value);
+        _addressesValid = false;
+    }
+
+    internal void ValidateAddressRange()
+    {
+        long end = BaseAddress;
+        foreach (var block in _blocks)
+        {
+            if (block.Label != null && (end + block.LabelOffset < 0 || end + block.LabelOffset > ushort.MaxValue))
+                throw new InvalidOperationException($"Label '{block.Label}' exceeds the 16-bit CPU address space.");
+            if (block.InternalLabels != null)
+            {
+                foreach (var label in block.InternalLabels)
+                {
+                    if (end + label.Value < 0 || end + label.Value > ushort.MaxValue)
+                        throw new InvalidOperationException($"Label '{label.Key}' exceeds the 16-bit CPU address space.");
+                }
+            }
+            end += block.Size;
+        }
+        if (end > 0x10000)
+            throw new InvalidOperationException(
+                $"Program at ${BaseAddress:X4} ({end - BaseAddress} bytes) exceeds the 16-bit CPU address space.");
+    }
+
+    internal Dictionary<string, ushort> GetDefinedLabels()
+    {
+        if (!_addressesValid)
+            ResolveAddresses();
+        return new Dictionary<string, ushort>(_definedLabels, StringComparer.Ordinal);
     }
 
     /// <summary>

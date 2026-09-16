@@ -18,7 +18,8 @@ partial class IL2NESWriter
 
     internal void ConfigureNumericTypes(IReadOnlyDictionary<string, MethodNumericTypes> methods,
         IReadOnlyDictionary<string, PrimitiveTypeCode?>? fields = null,
-        IReadOnlyDictionary<string, PrimitiveTypeCode?>? closureFields = null)
+        IReadOnlyDictionary<string, PrimitiveTypeCode?>? closureFields = null,
+        bool allowBooleanArguments = false)
     {
         _numericMethods = methods;
         _numericFields = fields;
@@ -27,7 +28,8 @@ partial class IL2NESWriter
         if (MethodName != null && _numericTypes != null)
         {
             for (int i = 0; i < _numericTypes.Parameters.Length; i++)
-                if (_numericTypes.Parameters[i] is not (null or PrimitiveTypeCode.Byte or PrimitiveTypeCode.SByte))
+                if (_numericTypes.Parameters[i] is not (null or PrimitiveTypeCode.Byte or PrimitiveTypeCode.SByte) &&
+                    !(allowBooleanArguments && _numericTypes.Parameters[i] == PrimitiveTypeCode.Boolean))
                     throw new TranspileException(
                         $"Parameter {i} has type {_numericTypes.Parameters[i]}, but user-method scalar arguments " +
                         "currently support byte and sbyte only. Keep word values in locals or use a supported " +

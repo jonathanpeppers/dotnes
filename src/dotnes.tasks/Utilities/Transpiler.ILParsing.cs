@@ -18,6 +18,7 @@ partial class Transpiler
     {
         _byteHelperDefinitions.Clear();
         _ambiguousByteHelperNames = false;
+        DiscoverManagedBanks();
         GetUsedMethods(_reader);
         var arrayValues = GetArrayValues(_reader);
         int entryPointToken = _pe.PEHeaders.CorHeader?.EntryPointTokenOrRelativeVirtualAddress ?? 0;
@@ -97,6 +98,8 @@ partial class Transpiler
                 {
                     cleanName = methodName;
                 }
+                if (_managedMethodNames.TryGetValue(h, out var bankedName))
+                    cleanName = bankedName;
 
                 // User-defined method: read and store its IL
                 ReadNumericTypes(methodDef, cleanName);
@@ -210,6 +213,8 @@ partial class Transpiler
                                     stringValue = pipeIdx > nameStart ? stringValue.Substring(nameStart, pipeIdx - nameStart) : stringValue.Substring(nameStart);
                                 }
                             }
+                            if (_managedMethodNames.TryGetValue((MethodDefinitionHandle)entity, out var bankedMethod))
+                                stringValue = bankedMethod;
                             break;
                         case HandleKind.MemberReference:
                             var member = _reader.GetMemberReference((MemberReferenceHandle)entity);
