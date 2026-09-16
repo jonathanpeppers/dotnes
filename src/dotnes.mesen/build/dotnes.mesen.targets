@@ -7,27 +7,33 @@
   </PropertyGroup>
 
   <!-- Detect OS and architecture to pick the right Mesen release asset -->
-  <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('windows'))">
+  <PropertyGroup>
+    <_MesenPlatform Condition="'$(_MesenPlatform)' == '' And $([MSBuild]::IsOSPlatform('windows'))">windows</_MesenPlatform>
+    <_MesenPlatform Condition="'$(_MesenPlatform)' == '' And $([MSBuild]::IsOSPlatform('linux'))">linux</_MesenPlatform>
+    <_MesenPlatform Condition="'$(_MesenPlatform)' == '' And $([MSBuild]::IsOSPlatform('osx'))">osx</_MesenPlatform>
+    <_MesenArchitecture Condition="'$(_MesenArchitecture)' == ''">$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)</_MesenArchitecture>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(_MesenPlatform)' == 'windows'">
     <_MesenZipName>Mesen_$(MesenVersion)_Windows.zip</_MesenZipName>
     <_MesenZipSha256>c19e10b3b3865eb0e86e4d01bf09a5027a4452081c04b5bd5b6cbbf76e346fd6</_MesenZipSha256>
     <_MesenExe>$(_MesenDir)Mesen.exe</_MesenExe>
   </PropertyGroup>
-  <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('linux')) And '$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)' == 'X64'">
+  <PropertyGroup Condition="'$(_MesenPlatform)' == 'linux' And '$(_MesenArchitecture)' == 'X64'">
     <_MesenZipName>Mesen_$(MesenVersion)_Linux_x64.zip</_MesenZipName>
     <_MesenZipSha256>c88ff4d251b407515c43d3332d641927655cd69fb538996b6a21da4509dbb58f</_MesenZipSha256>
     <_MesenExe>$(_MesenDir)Mesen</_MesenExe>
   </PropertyGroup>
-  <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('linux')) And '$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)' == 'Arm64'">
+  <PropertyGroup Condition="'$(_MesenPlatform)' == 'linux' And '$(_MesenArchitecture)' == 'Arm64'">
     <_MesenZipName>Mesen_$(MesenVersion)_Linux_ARM64.zip</_MesenZipName>
     <_MesenZipSha256>5030702ba13d043bf926ee3cc6c6a5d3567e08345e9c50b2df4d4d08b90ead30</_MesenZipSha256>
     <_MesenExe>$(_MesenDir)Mesen</_MesenExe>
   </PropertyGroup>
-  <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('osx')) And '$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)' == 'X64'">
+  <PropertyGroup Condition="'$(_MesenPlatform)' == 'osx' And '$(_MesenArchitecture)' == 'X64'">
     <_MesenZipName>Mesen_$(MesenVersion)_macOS_x64_Intel.zip</_MesenZipName>
     <_MesenZipSha256>804cca46e70b9015898973b5a0a86e679d13f93a89e10813f74e3b7364c9c2d7</_MesenZipSha256>
     <_MesenExe>$(_MesenDir)Mesen.app/Contents/MacOS/Mesen</_MesenExe>
   </PropertyGroup>
-  <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('osx')) And '$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)' == 'Arm64'">
+  <PropertyGroup Condition="'$(_MesenPlatform)' == 'osx' And '$(_MesenArchitecture)' == 'Arm64'">
     <_MesenZipName>Mesen_$(MesenVersion)_macOS_ARM64_AppleSilicon.zip</_MesenZipName>
     <_MesenZipSha256>9c230cc25ad0bae79fed810c9eeb21c1c507b96b1ce795bbd22ca4331ffb6e48</_MesenZipSha256>
     <_MesenExe>$(_MesenDir)Mesen.app/Contents/MacOS/Mesen</_MesenExe>

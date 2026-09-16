@@ -21,6 +21,19 @@ public class MesenMSBuildTests
     };
 
     [Theory]
+    [MemberData(nameof(ReleaseAssets))]
+    public async Task EvaluatesEveryReleaseAsset(string platform, string architecture, string asset, string executable, string hash)
+    {
+        using var project = new TestProject();
+        var properties = await project.Evaluate("_MesenDir,_MesenExe,_MesenZipName,_MesenZipSha256",
+            [$"-p:_MesenPlatform={platform}", $"-p:_MesenArchitecture={architecture}"]);
+        Assert.Equal($"Mesen_{Version}_{asset}.zip", properties["_MesenZipName"]);
+        Assert.Equal(hash, properties["_MesenZipSha256"]);
+        Assert.Equal(Path.GetFullPath(Path.Combine(properties["_MesenDir"], executable)),
+            Path.GetFullPath(properties["_MesenExe"]));
+    }
+
+    [Theory]
     [InlineData(false)]
     [InlineData(true)]
     public async Task EvaluatesDownloadAndRunMetadata(bool testRunner)
