@@ -10,7 +10,7 @@
 
   <ItemGroup>
     <PackageReference Include="dotnes" Version="$(PackageVersion)" />
-    <PackageReference Include="dotnes.mesen" Version="2.1.1" />
+    <PackageReference Include="dotnes.mesen" Version="$(MesenPackageVersion)" />
   </ItemGroup>
 
 </Project>

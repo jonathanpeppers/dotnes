@@ -3,5 +3,6 @@
   <PropertyGroup>
     <!-- Use TaskHostFactory so the build server doesn't lock dotnes.tasks.dll -->
     <DotNESLocalDev>true</DotNESLocalDev>
+    <MesenPackageVersion>2.2.1</MesenPackageVersion>
   </PropertyGroup>
 </Project>

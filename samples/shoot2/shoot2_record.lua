@@ -1,5 +1,5 @@
 --
--- shoot2_record.lua — Mesen2 Lua script for recording shoot2 gameplay.
+-- shoot2_record.lua — MesenCE Lua script for recording shoot2 gameplay.
 --
 -- Simulates Player 1 controller input: moves the ship around and fires
 -- bullets at enemies, creating a natural gameplay recording.

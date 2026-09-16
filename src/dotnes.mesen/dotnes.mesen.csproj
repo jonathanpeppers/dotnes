@@ -2,10 +2,10 @@
   <Import Project="../NuGet.props" />
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
-    <Description>Mesen emulator integration for .NES — downloads Mesen at build time for 'dotnet run'</Description>
-    <PackageProjectUrl>https://github.com/SourMesen/Mesen2</PackageProjectUrl>
-    <PackageTags>$(PackageTags) Emulator Mesen</PackageTags>
-    <PackageVersion>2.1.1</PackageVersion>
+    <Description>Mesen Community Edition integration for .NES — downloads MesenCE at build time for 'dotnet run'. The integration is MIT-licensed; the separately downloaded emulator is GPLv3.</Description>
+    <PackageProjectUrl>https://github.com/nesdev-org/MesenCE</PackageProjectUrl>
+    <PackageTags>$(PackageTags) Emulator Mesen MesenCE</PackageTags>
+    <PackageVersion>2.2.1</PackageVersion>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <NoWarn>$(NoWarn);NU5119;NU5128</NoWarn>
     <GenerateDependencyFile>false</GenerateDependencyFile>

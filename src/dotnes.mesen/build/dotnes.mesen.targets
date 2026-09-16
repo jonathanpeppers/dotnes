@@ -1,51 +1,54 @@
 <Project>
   <PropertyGroup>
-    <MesenVersion>2.1.1</MesenVersion>
-    <_MesenBaseUrl>https://github.com/SourMesen/Mesen2/releases/download/$(MesenVersion)</_MesenBaseUrl>
-    <_MesenLicenseUrl>https://raw.githubusercontent.com/SourMesen/Mesen2/$(MesenVersion)/LICENSE</_MesenLicenseUrl>
+    <MesenVersion>2.2.1</MesenVersion>
+    <_MesenBaseUrl>https://github.com/nesdev-org/MesenCE/releases/download/$(MesenVersion)</_MesenBaseUrl>
+    <_MesenLicenseUrl>https://raw.githubusercontent.com/nesdev-org/MesenCE/$(MesenVersion)/LICENSE</_MesenLicenseUrl>
     <_MesenDir>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)../bin/'))</_MesenDir>
   </PropertyGroup>
 
   <!-- Detect OS and architecture to pick the right Mesen release asset -->
-  <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('windows'))">
+  <PropertyGroup>
+    <_MesenPlatform Condition="'$(_MesenPlatform)' == '' And $([MSBuild]::IsOSPlatform('windows'))">windows</_MesenPlatform>
+    <_MesenPlatform Condition="'$(_MesenPlatform)' == '' And $([MSBuild]::IsOSPlatform('linux'))">linux</_MesenPlatform>
+    <_MesenPlatform Condition="'$(_MesenPlatform)' == '' And $([MSBuild]::IsOSPlatform('osx'))">osx</_MesenPlatform>
+    <_MesenArchitecture Condition="'$(_MesenArchitecture)' == ''">$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)</_MesenArchitecture>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(_MesenPlatform)' == 'windows'">
     <_MesenZipName>Mesen_$(MesenVersion)_Windows.zip</_MesenZipName>
-    <_MesenZipSha256>23ccc2bc060b663c68dad3a8c5d6da7d23a50f872d04f135bafa2b04ff7d5cbe</_MesenZipSha256>
+    <_MesenZipSha256>c19e10b3b3865eb0e86e4d01bf09a5027a4452081c04b5bd5b6cbbf76e346fd6</_MesenZipSha256>
     <_MesenExe>$(_MesenDir)Mesen.exe</_MesenExe>
   </PropertyGroup>
-  <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('linux')) And '$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)' == 'X64'">
+  <PropertyGroup Condition="'$(_MesenPlatform)' == 'linux' And '$(_MesenArchitecture)' == 'X64'">
     <_MesenZipName>Mesen_$(MesenVersion)_Linux_x64.zip</_MesenZipName>
-    <_MesenZipSha256>7a9947575cc198209f743fef83fb2b702b786ea705506bdf3f2aea01ab7c1ce9</_MesenZipSha256>
+    <_MesenZipSha256>c88ff4d251b407515c43d3332d641927655cd69fb538996b6a21da4509dbb58f</_MesenZipSha256>
     <_MesenExe>$(_MesenDir)Mesen</_MesenExe>
   </PropertyGroup>
-  <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('linux')) And '$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)' == 'Arm64'">
+  <PropertyGroup Condition="'$(_MesenPlatform)' == 'linux' And '$(_MesenArchitecture)' == 'Arm64'">
     <_MesenZipName>Mesen_$(MesenVersion)_Linux_ARM64.zip</_MesenZipName>
-    <_MesenZipSha256>b0e028f616ab61ae3247f720a80cbe696a29fcbbf01aec0f0103b3b66b3f4dad</_MesenZipSha256>
+    <_MesenZipSha256>5030702ba13d043bf926ee3cc6c6a5d3567e08345e9c50b2df4d4d08b90ead30</_MesenZipSha256>
     <_MesenExe>$(_MesenDir)Mesen</_MesenExe>
   </PropertyGroup>
-  <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('osx')) And '$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)' == 'X64'">
+  <PropertyGroup Condition="'$(_MesenPlatform)' == 'osx' And '$(_MesenArchitecture)' == 'X64'">
     <_MesenZipName>Mesen_$(MesenVersion)_macOS_x64_Intel.zip</_MesenZipName>
-    <_MesenZipSha256>538f3d072891b1546c961e53f8deb0718d7b273573b16e3318db8f1e9b1ac96d</_MesenZipSha256>
+    <_MesenZipSha256>804cca46e70b9015898973b5a0a86e679d13f93a89e10813f74e3b7364c9c2d7</_MesenZipSha256>
     <_MesenExe>$(_MesenDir)Mesen.app/Contents/MacOS/Mesen</_MesenExe>
   </PropertyGroup>
-  <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('osx')) And '$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)' == 'Arm64'">
+  <PropertyGroup Condition="'$(_MesenPlatform)' == 'osx' And '$(_MesenArchitecture)' == 'Arm64'">
     <_MesenZipName>Mesen_$(MesenVersion)_macOS_ARM64_AppleSilicon.zip</_MesenZipName>
-    <_MesenZipSha256>c16068b3d934f7b993b782a0652b8f0e7fc0cde7464862fea91d5e76b68a813f</_MesenZipSha256>
+    <_MesenZipSha256>9c230cc25ad0bae79fed810c9eeb21c1c507b96b1ce795bbd22ca4331ffb6e48</_MesenZipSha256>
     <_MesenExe>$(_MesenDir)Mesen.app/Contents/MacOS/Mesen</_MesenExe>
   </PropertyGroup>
 
-  <!-- Mesen config directory per platform (used to create settings.json on first run) -->
+  <!-- Match MesenCE's special folders, including redirected Documents and XDG_CONFIG_HOME. -->
   <PropertyGroup>
-    <_MesenUserProfile>$([System.Environment]::GetEnvironmentVariable('USERPROFILE'))</_MesenUserProfile>
-    <_MesenHome>$([System.Environment]::GetEnvironmentVariable('HOME'))</_MesenHome>
+    <_MesenConfigBaseDir Condition="$([MSBuild]::IsOSPlatform('windows'))">$([System.Environment]::GetFolderPath('System.Environment+SpecialFolder.MyDocuments', 'System.Environment+SpecialFolderOption.DoNotVerify'))</_MesenConfigBaseDir>
+    <_MesenConfigBaseDir Condition="!$([MSBuild]::IsOSPlatform('windows'))">$([System.Environment]::GetFolderPath('System.Environment+SpecialFolder.ApplicationData', 'System.Environment+SpecialFolderOption.DoNotVerify'))</_MesenConfigBaseDir>
   </PropertyGroup>
-  <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('windows')) And '$(_MesenUserProfile)' != ''">
-    <_MesenConfigDir>$(_MesenUserProfile)\Documents\Mesen2</_MesenConfigDir>
-  </PropertyGroup>
-  <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('osx')) And '$(_MesenHome)' != ''">
-    <_MesenConfigDir>$(_MesenHome)/Library/Application Support/Mesen2</_MesenConfigDir>
-  </PropertyGroup>
-  <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('linux')) And '$(_MesenHome)' != ''">
-    <_MesenConfigDir>$(_MesenHome)/.config/Mesen2</_MesenConfigDir>
+  <PropertyGroup Condition="'$(_MesenConfigBaseDir)' != ''">
+    <_MesenConfigDir>$([System.IO.Path]::Combine('$(_MesenConfigBaseDir)', 'MesenCE'))</_MesenConfigDir>
+    <!-- Keep MesenCE's fallback to existing Mesen2 settings instead of hiding them with an empty config. -->
+    <_MesenLegacyConfigDir>$([System.IO.Path]::Combine('$(_MesenConfigBaseDir)', 'Mesen2'))</_MesenLegacyConfigDir>
+    <_MesenConfigDir Condition="!Exists('$(_MesenConfigDir)/settings.json') And Exists('$(_MesenLegacyConfigDir)/settings.json')">$(_MesenLegacyConfigDir)</_MesenConfigDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(_MesenConfigDir)' != ''">
     <_MesenSettingsJson>$([System.IO.Path]::Combine('$(_MesenConfigDir)', 'settings.json'))</_MesenSettingsJson>

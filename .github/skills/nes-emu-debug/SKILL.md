@@ -1,7 +1,7 @@
 ---
 name: nes-emu-debug
 description: >-
-  Run NES ROMs in the Mesen2 emulator to debug runtime behavior. Use this skill
+  Run NES ROMs in the MesenCE emulator to debug runtime behavior. Use this skill
   whenever the user wants to run a ROM and inspect what actually happens at runtime:
   read NES memory (RAM, palette, nametable, OAM), dump CPU/PPU/APU state after
   N frames, capture the screen buffer, compare runtime behavior between two ROMs,
@@ -12,27 +12,29 @@ description: >-
   binary analysis).
 ---
 
-# NES Emulator Debug (Mesen2)
+# NES Emulator Debug (MesenCE)
 
-Run NES ROMs headlessly in Mesen2's test runner to inspect runtime state, memory,
+Run NES ROMs headlessly in MesenCE's test runner to inspect runtime state, memory,
 and screen output. This complements the `nes-rom-debug` skill (static binary
 analysis) with dynamic runtime inspection.
 
 ## Prerequisites
 
-Build the Mesen2 package first:
+Build the local packages, then a sample to install MesenCE:
 
 ```powershell
-dotnet build src/dotnes.mesen/dotnes.mesen.csproj
+dotnet build
+dotnet build samples\hello\hello.csproj
 ```
 
-This downloads Mesen2 to `src/dotnes.mesen/obj/Debug/mesen/`. The executable is:
-- **Windows:** `src/dotnes.mesen/obj/Debug/mesen/Mesen.exe`
-- **Linux/macOS:** `src/dotnes.mesen/obj/Debug/mesen/Mesen`
+The `dotnes.mesen` 2.2.1 package downloads MesenCE from `nesdev-org/MesenCE`
+into its NuGet package's `bin` directory. Building the packaging project alone
+does not download the emulator. Query the sample's evaluated `RunCommand` rather
+than hardcoding the cache path or platform-specific executable.
 
 ## How It Works
 
-Mesen2 has a **headless test runner** mode that loads a ROM, runs a Lua script,
+MesenCE has a **headless test runner** mode that loads a ROM, runs a Lua script,
 and exits — no window, no GUI. The Lua script has full access to the emulator API:
 CPU/PPU/APU state, all memory types, screen buffer, frame callbacks, etc.
 
@@ -40,12 +42,7 @@ CPU/PPU/APU state, all memory types, screen buffer, frame callbacks, etc.
 
 ```powershell
 # Find the Mesen executable (works on any OS / config)
-$mesenDir = Get-ChildItem "src/dotnes.mesen/obj/*/mesen" -Directory | Select-Object -First 1
-$mesenExe = if ($IsWindows -or $env:OS -match 'Windows') {
-  Join-Path $mesenDir "Mesen.exe"
-} else {
-  Join-Path $mesenDir "Mesen"
-}
+$mesenExe = dotnet msbuild samples\hello\hello.csproj -getProperty:RunCommand
 $mesen = (Resolve-Path $mesenExe).Path
 $rom   = (Resolve-Path "path/to/rom.nes").Path
 $script = (Resolve-Path "path/to/script.lua").Path
