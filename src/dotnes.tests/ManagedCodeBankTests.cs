@@ -103,6 +103,32 @@ public class ManagedCodeBankTests(ITestOutputHelper output) : RoslynTests(output
     }
 
     [Fact]
+    public void SameRegionByteExpressionsInlineWithoutEscapingPlacement()
+    {
+        var result = Compile("""
+            poke(0x6000, Audio.Add(1, 2));
+            poke(0x6001, Audio.Tick(3));
+            while (true) ;
+            [NESCodeBank("audio")]
+            static class Audio
+            {
+                public static byte Add(byte first, byte second) => (byte)(first + second);
+                public static byte Tick(byte input) => Add(input, 7);
+            }
+            """);
+        var region = Assert.Single(result.Regions);
+        var add = Assert.Single(region.Program.Blocks, block => block.Label!.EndsWith("_Add", StringComparison.Ordinal));
+        var tick = Assert.Single(region.Program.Blocks, block => block.Label!.EndsWith("_Tick", StringComparison.Ordinal));
+        Assert.Empty(tick.FindAll(instruction => instruction.Opcode == Opcode.JSR &&
+            instruction.Operand is LabelOperand label && label.Label.StartsWith(add.Label!, StringComparison.Ordinal)));
+        Assert.Contains(result.FixedProgram.Blocks, block =>
+            block.Label == $"__nesbank_gate_{add.Label}");
+        Assert.Single(result.FixedProgram.GetBlock("main")!.FindAll(instruction =>
+            instruction.Opcode == Opcode.JSR && instruction.Operand is LabelOperand label &&
+            label.Label == $"__nesbank_gate_{add.Label}"));
+    }
+
+    [Fact]
     public void SupportsMethodAnnotationOnStaticLocalFunction()
     {
         var result = Compile("""
@@ -180,6 +206,32 @@ public class ManagedCodeBankTests(ITestOutputHelper output) : RoslynTests(output
         options.ManagedCodeBanks[0].Size--;
         Assert.Contains("exceed", Assert.Throws<InvalidOperationException>(() => Compile(Simple, options)).Message,
             StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void CompactGateEntryPreservesExactFixedBankCapacity()
+    {
+        const string source = """
+            Audio.One(); Audio.Two(); while (true) ;
+            [NESCodeBank("audio")]
+            static class Audio
+            {
+                public static void One() { poke(0x6000, 1); }
+                public static void Two() { poke(0x6001, 2); }
+                public static extern void UnusedNative();
+            }
+            """;
+        var fast = Compile(source);
+        Assert.Null(fast.FixedProgram.GetBlock("__nesbank_enter"));
+        int capacity = Mmc3BankLayout.ResetStubAddress - Mmc3BankLayout.FixedProgramAddress;
+        int padding = capacity - fast.FixedProgram.TotalSize + 10;
+        var compact = Compile(source, native: $".segment \"RODATA\"\npadding:\n.res {padding}, 0");
+        Assert.NotNull(compact.FixedProgram.GetBlock("__nesbank_enter"));
+        Assert.Equal(capacity, compact.FixedProgram.TotalSize);
+        Assert.All(compact.FixedProgram.Blocks.Where(block =>
+            block.Label?.StartsWith("__nesbank_gate_", StringComparison.Ordinal) == true),
+            block => Assert.Equal(15, block.Size));
+        Assert.Equal(capacity, compact.FixedProgram.ToBytes().Length);
     }
 
     [Fact]

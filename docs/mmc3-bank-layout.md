@@ -133,7 +133,14 @@ before returning, while preserving the supported argument/return ABI and
 the caller's selector context. Startup initializes R6 to the home bank after
 RAM initialization and before enabling NMI. The home bank must be explicitly
 configured; it does not authorize arbitrary foreground R6 changes.
-Same-region calls are direct.
+Same-region calls are direct and retain eligible pure-byte-expression inlining;
+inlining never crosses a managed-bank boundary.
+
+Gates share a flag/register-preserving return path. The compiler inlines their
+entry bookkeeping when the whole set fits the unchanged fixed-bank capacity,
+otherwise retaining compact entries. The emitted forms add 103 or 122 CPU cycles
+per entry respectively, excluding the unchanged callee body and interrupts.
+This selection needs no consumer build step or additional mapper contract.
 
 Banked and fixed code share the existing zero-initialized RAM allocation.
 Use ordinary C# initialization methods such as `Reset`; unsupported implicit

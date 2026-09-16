@@ -12,8 +12,15 @@ public class ManagedBankExecutionTests(ITestOutputHelper output) : RoslynTests(o
         ManagedCodeBanks = { new() { Name = "audio", Bank = 2, Size = 0x1000 } },
     };
 
-    BankedCompilation Compile(byte mode, bool optimize = false)
+    BankedCompilation Compile(byte mode, bool optimize = false, bool compact = false)
     {
+        string padding = "";
+        if (compact)
+        {
+            var fast = Compile(mode, optimize);
+            int capacity = Mmc3BankLayout.ResetStubAddress - Mmc3BankLayout.FixedProgramAddress;
+            padding = $".segment \"RODATA\"\npadding:\n.res {capacity - fast.FixedProgram.TotalSize + 26}, 0";
+        }
         string source = $$"""
             ppu_use_native_renderer();
             unsafe { nmi_set_callback(&NativeNmi); irq_set_callback(&NativeIrq); }
@@ -71,6 +78,7 @@ public class ManagedBankExecutionTests(ITestOutputHelper output) : RoslynTests(o
                 ldy #$DD
                 sec
                 rts
+            {padding}
             """));
         var options = Options();
         options.OptimizeByteHelpers = optimize;
@@ -78,17 +86,26 @@ public class ManagedBankExecutionTests(ITestOutputHelper output) : RoslynTests(o
     }
 
     [Theory]
-    [InlineData(false, 0, false)]
-    [InlineData(true, 0, false)]
-    [InlineData(false, 0x80, false)]
-    [InlineData(true, 0x80, false)]
-    [InlineData(false, 0, true)]
-    [InlineData(true, 0, true)]
-    [InlineData(false, 0x80, true)]
-    [InlineData(true, 0x80, true)]
-    public void EveryGateAndForegroundPublicationBoundarySurvivesStockInterrupt(bool irq, byte mode, bool optimize)
+    [InlineData(false, 0, false, false)]
+    [InlineData(true, 0, false, false)]
+    [InlineData(false, 0x80, false, false)]
+    [InlineData(true, 0x80, false, false)]
+    [InlineData(false, 0, true, false)]
+    [InlineData(true, 0, true, false)]
+    [InlineData(false, 0x80, true, false)]
+    [InlineData(true, 0x80, true, false)]
+    [InlineData(false, 0, false, true)]
+    [InlineData(true, 0, false, true)]
+    [InlineData(false, 0x80, false, true)]
+    [InlineData(true, 0x80, false, true)]
+    [InlineData(false, 0, true, true)]
+    [InlineData(true, 0, true, true)]
+    [InlineData(false, 0x80, true, true)]
+    [InlineData(true, 0x80, true, true)]
+    public void EveryGateAndForegroundPublicationBoundarySurvivesStockInterrupt(bool irq, byte mode, bool optimize, bool compact)
     {
-        var result = Compile(mode, optimize);
+        var result = Compile(mode, optimize, compact);
+        Assert.Equal(compact, result.FixedProgram.GetBlock("__nesbank_enter") != null);
         var fixedProgram = result.FixedProgram;
         var targets = new HashSet<ushort>();
         foreach (var block in fixedProgram.Blocks.Where(block => block.Label is not null &&
@@ -186,8 +203,9 @@ public class ManagedBankExecutionTests(ITestOutputHelper output) : RoslynTests(o
             var target = (LabelOperand)block[call].Operand!;
             entries.Add(program.GetInstructionAddress(block, 0), program.GetLabels()[target.Label]);
             returns.Add(program.GetInstructionAddress(block, call + 1));
-            exits.Add(program.GetInstructionAddress(block, block.Count - 1));
         }
+        var leave = program.GetBlock("__nesbank_leave")!;
+        exits.Add(program.GetInstructionAddress(leave, leave.Count - 1));
         var machine = new BankMachine(result, 0);
         (byte A, byte X, byte Y, byte Status, ushort SoftwareSP) entry = default, returned = default;
         ushort targetPc = 0;
@@ -217,6 +235,53 @@ public class ManagedBankExecutionTests(ITestOutputHelper output) : RoslynTests(o
         machine.Run();
         Assert.Equal(3, entered);
         Assert.Equal(entered, returnedCount);
+        AssertResult(machine, 0);
+    }
+
+    [Theory]
+    [InlineData(false, 103)]
+    [InlineData(true, 122)]
+    public void InlineEntryAndSharedReturnBoundGateOverhead(bool compact, int expectedCycles)
+    {
+        var result = Compile(0, compact: compact);
+        var program = result.FixedProgram;
+        Assert.Equal(compact, program.GetBlock("__nesbank_enter") != null);
+        var labels = program.GetLabels();
+        var gates = new Dictionary<ushort, (ushort Method, ushort Return)>();
+        foreach (var block in program.Blocks.Where(block =>
+            block.Label?.StartsWith("__nesbank_gate_", StringComparison.Ordinal) == true))
+        {
+            int call = Enumerable.Range(0, block.Count).Single(index =>
+                block[index].Opcode == Opcode.JSR && block[index].Operand is LabelOperand label &&
+                label.Label.StartsWith("__nesbank_method_", StringComparison.Ordinal));
+            gates.Add(labels[block.Label!], (labels[((LabelOperand)block[call].Operand!).Label],
+                program.GetInstructionAddress(block, call + 1)));
+        }
+        var leave = program.GetBlock("__nesbank_leave")!;
+        ushort exit = program.GetInstructionAddress(leave, leave.Count - 1);
+        var machine = new BankMachine(result, 0);
+        (ushort Method, ushort Return) current = default;
+        long started = 0, bodyStarted = 0, bodyCycles = 0;
+        int measured = 0;
+        machine.Cpu.BeforeInstruction = cpu =>
+        {
+            if (gates.TryGetValue(cpu.PC, out var gate))
+            {
+                current = gate;
+                started = cpu.CycleCount;
+            }
+            else if (cpu.PC == current.Method)
+                bodyStarted = cpu.CycleCount;
+            else if (cpu.PC == current.Return)
+                bodyCycles = cpu.CycleCount - bodyStarted;
+            else if (cpu.PC == exit)
+            {
+                Assert.Equal(expectedCycles, cpu.CycleCount - started - bodyCycles + 6);
+                measured++;
+            }
+        };
+        machine.Run();
+        Assert.Equal(3, measured);
         AssertResult(machine, 0);
     }
 

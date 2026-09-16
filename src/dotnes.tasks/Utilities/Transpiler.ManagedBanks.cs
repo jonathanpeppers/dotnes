@@ -18,6 +18,7 @@ partial class Transpiler
     readonly HashSet<string> _managedForeground = new(StringComparer.Ordinal);
     readonly HashSet<Block> _managedBlocks = new();
     readonly HashSet<Block> _compilerOwnedBlocks = new();
+    readonly Dictionary<Block, byte> _managedGateBanks = new();
     ushort _selectorShadow, _savedSelector;
     bool _buildingManagedProgram;
     const string EnterManagedBank = "__nesbank_enter";
@@ -261,6 +262,7 @@ partial class Transpiler
         }
         _managedBlocks.Clear();
         _compilerOwnedBlocks.Clear();
+        _managedGateBanks.Clear();
         foreach (var block in program.Blocks)
         {
             if (program.IsNativeBlock(block) || block.IsDataBlock)
@@ -299,19 +301,21 @@ partial class Transpiler
                 .Emit(PHP()).Emit(PHA())
                 .Emit(LDA((byte)region.Bank)).Emit(JSR(EnterManagedBank))
                 .Emit(PLA()).Emit(PLP()).Emit(JSR(method))
-                .Emit(PHP()).Emit(PHA()).Emit(JSR(LeaveManagedBank))
-                .Emit(PLA()).Emit(PLP()).Emit(RTS());
+                .Emit(JMP(LeaveManagedBank));
             _compilerOwnedBlocks.Add(gate);
+            _managedGateBanks.Add(gate, checked((byte)region.Bank));
         }
         var enter = program.CreateBlock(EnterManagedBank)
             .Emit(PHA()).Emit(LDA_abs(_selectorShadow)).Emit(STA_abs(_savedSelector))
             .Emit(AND(0x80)).Emit(ORA(6)).Emit(STA_abs(_selectorShadow)).Emit(STA_abs(NESLib.MMC3_BANK_SELECT))
             .Emit(PLA()).Emit(STA_abs(NESLib.MMC3_BANK_DATA)).Emit(RTS());
         var leave = program.CreateBlock(LeaveManagedBank)
+            .Emit(PHP()).Emit(PHA())
             .Emit(LDA_abs(_savedSelector)).Emit(AND(0x80)).Emit(ORA(6))
             .Emit(STA_abs(_selectorShadow)).Emit(STA_abs(NESLib.MMC3_BANK_SELECT))
             .Emit(LDA(checked((byte)_managedHomeBank!.Value))).Emit(STA_abs(NESLib.MMC3_BANK_DATA))
-            .Emit(LDA_abs(_savedSelector)).Emit(STA_abs(_selectorShadow)).Emit(STA_abs(NESLib.MMC3_BANK_SELECT)).Emit(RTS());
+            .Emit(LDA_abs(_savedSelector)).Emit(STA_abs(_selectorShadow)).Emit(STA_abs(NESLib.MMC3_BANK_SELECT))
+            .Emit(PLA()).Emit(PLP()).Emit(RTS());
         _compilerOwnedBlocks.Add(enter);
         _compilerOwnedBlocks.Add(leave);
         PatchManagedStartup(program);
@@ -372,7 +376,37 @@ partial class Transpiler
             clear.Insert(beforeNmi + i, initialize[i]);
     }
 
-    internal void PrepareManagedMapperContext(IReadOnlyList<Program6502> programs, IReadOnlyList<CompiledPrgAsset> prgAssets) =>
+    internal void PrepareManagedMapperContext(IReadOnlyList<Program6502> programs, IReadOnlyList<CompiledPrgAsset> prgAssets)
+    {
         ManagedMapperSafety.Prepare(programs, _managedCallbacks, _managedForeground, _methodRegions.Keys.ToArray(),
             _selectorShadow, _managedHomeBank!.Value, _nativeRamCode, _managedBlocks, _compilerOwnedBlocks, prgAssets);
+        var program = programs[0];
+        var enter = program.GetBlock(EnterManagedBank);
+        if (_managedGateBanks.Count == 0 || enter == null)
+            return;
+        // Gates are appended after authored code. Expanding their branch-free entry
+        // sequences cannot change authored relative-branch distances.
+        int growth = checked(_managedGateBanks.Count * 16 - enter.Size);
+        if (program.TotalSize + growth > Mmc3BankLayout.ResetStubAddress - Mmc3BankLayout.FixedProgramAddress)
+        {
+            _logger.WriteLine($"Managed gates retain compact entries to fit the fixed-bank capacity.");
+            return;
+        }
+        foreach (var pair in _managedGateBanks)
+        {
+            Instruction[] entry =
+            [
+                LDA_abs(_selectorShadow), STA_abs(_savedSelector), AND(0x80), ORA(6),
+                STA_abs(_selectorShadow), STA_abs(NESLib.MMC3_BANK_SELECT),
+                LDA(pair.Value), STA_abs(NESLib.MMC3_BANK_DATA),
+            ];
+            pair.Key.RemoveAt(3);
+            pair.Key.RemoveAt(2);
+            for (int index = 0; index < entry.Length; index++)
+                pair.Key.Insert(index + 2, entry[index]);
+        }
+        program.RemoveBlock(enter);
+        program.InvalidateAddresses();
+        _logger.WriteLine($"Managed gates inline {_managedGateBanks.Count} entries within the fixed-bank capacity ({growth} bytes).");
+    }
 }
