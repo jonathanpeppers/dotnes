@@ -29,6 +29,10 @@ static class Mmc3BankLayout
         byte[]? RawBytes,
         Dictionary<string, ushort> Labels);
 
+    /// <summary>
+    /// Builds the stock PRG image. Explicit vector addresses apply to legacy layout;
+    /// managed layout binds stock vector labels after preparation and relaxation.
+    /// </summary>
     public static byte[] BuildPrgImage(
         Program6502 program,
         int prgBanks,

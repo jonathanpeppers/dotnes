@@ -60,6 +60,25 @@ public class ManagedCodeBankTests(ITestOutputHelper output) : RoslynTests(output
     }
 
     [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void InvalidAnnotationIdentifiesItsDeclaringMember(bool onType)
+    {
+        string source = $$"""
+            Audio.Tick(); while (true) ;
+            {{(onType ? "[NESCodeBank(\" \")]" : "")}}
+            static class Audio
+            {
+                {{(onType ? "" : "[NESCodeBank(\" \")]")}}
+                public static void Tick() { poke(0x6000, 1); }
+            }
+            """;
+        var error = Assert.Throws<TranspileException>(() => Compile(source));
+        Assert.Contains(onType ? "'Audio'" : "'Audio.Tick'", error.Message);
+        Assert.Contains("nonempty region name", error.Message);
+    }
+
+    [Theory]
     [InlineData("static byte value = 1;")]
     [InlineData("static Audio() { }")]
     [InlineData("static byte[] values = new byte[4];")]

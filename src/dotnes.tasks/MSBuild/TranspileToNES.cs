@@ -114,7 +114,9 @@ public class TranspileToNES : Task
 
         if (Log.HasLoggedErrors)
             return false;
-        File.WriteAllBytes(OutputPath, output.ToArray());
+        using var destination = File.Create(OutputPath);
+        output.Position = 0;
+        output.CopyTo(destination);
         return true;
     }
 

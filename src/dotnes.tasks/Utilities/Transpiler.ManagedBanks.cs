@@ -81,8 +81,8 @@ partial class Transpiler
         foreach (var typeHandle in _reader.TypeDefinitions)
         {
             var type = _reader.GetTypeDefinition(typeHandle);
-            string? typeRegion = ReadCodeBankAttribute(type.GetCustomAttributes());
             string typeName = _reader.GetString(type.Name);
+            string? typeRegion = ReadCodeBankAttribute(type.GetCustomAttributes(), typeName);
             if (typeRegion != null && !regions.Contains(typeRegion))
                 throw new TranspileException($"NESCodeBank '{typeRegion}' on '{typeName}' has no NESManagedCodeBank region.");
             if (typeRegion != null && ((type.Attributes & (TypeAttributes.Abstract | TypeAttributes.Sealed)) !=
@@ -95,7 +95,7 @@ partial class Transpiler
                 var method = _reader.GetMethodDefinition(handle);
                 string name = _reader.GetString(method.Name);
                 hasInitializer |= name == ".cctor";
-                string? methodRegion = ReadCodeBankAttribute(method.GetCustomAttributes());
+                string? methodRegion = ReadCodeBankAttribute(method.GetCustomAttributes(), $"{typeName}.{name}");
                 string? region = methodRegion ?? typeRegion;
                 if (region == null || name.StartsWith(".", StringComparison.Ordinal))
                     continue;
@@ -143,7 +143,7 @@ partial class Transpiler
         }
     }
 
-    string? ReadCodeBankAttribute(CustomAttributeHandleCollection attributes)
+    string? ReadCodeBankAttribute(CustomAttributeHandleCollection attributes, string member)
     {
         string? result = null;
         foreach (var handle in attributes)
@@ -175,10 +175,10 @@ partial class Transpiler
                 continue;
             var blob = _reader.GetBlobReader(attribute.Value);
             if (result != null || blob.RemainingBytes < 3 || blob.ReadUInt16() != 1)
-                throw new TranspileException("Malformed or repeated NESCodeBank metadata.");
+                throw new TranspileException($"Malformed or repeated NESCodeBank metadata on '{member}'.");
             result = blob.ReadSerializedString();
             if (string.IsNullOrWhiteSpace(result) || blob.RemainingBytes != 2 || blob.ReadUInt16() != 0)
-                throw new TranspileException("NESCodeBank requires exactly one nonempty region name.");
+                throw new TranspileException($"NESCodeBank on '{member}' requires exactly one nonempty region name.");
         }
         return result;
     }
