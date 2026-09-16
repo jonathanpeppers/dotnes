@@ -408,13 +408,14 @@ public class ManagedBankExecutionTests(ITestOutputHelper output) : RoslynTests(o
         Assert.Equal(0xFF, machine.Cpu.SP);
     }
 
-    sealed class BankMachine
+    internal sealed class BankMachine
     {
         readonly byte[] home = Enumerable.Repeat((byte)0x6B, 0x2000).ToArray();
         readonly byte[] banked = new byte[0x2000];
         public Cpu6502 Cpu { get; }
         public byte Selector { get; private set; }
         public byte Bank { get; private set; }
+        public byte R7Bank { get; private set; }
         public byte[] Chr { get; } = new byte[6];
 
         public BankMachine(BankedCompilation result, byte mode)
@@ -425,6 +426,14 @@ public class ManagedBankExecutionTests(ITestOutputHelper output) : RoslynTests(o
             banked[0x1003] = 0x21;
             banked[0x1004] = 0xAB;
             banked[0x1005] = 3;
+            var r7Images = new Dictionary<int, byte[]>();
+            foreach (var asset in result.PrgAssets)
+            {
+                Assert.Equal(0xA000, asset.Placement.CpuAddress);
+                if (!r7Images.TryGetValue(asset.Placement.Bank, out var image))
+                    r7Images.Add(asset.Placement.Bank, image = new byte[0x2000]);
+                (asset.Program?.ToBytes() ?? asset.Data!).CopyTo(image, asset.Placement.Offset);
+            }
             Cpu = new Cpu6502(program.ToBytes(), program.BaseAddress, labels["main"]);
             Cpu.Memory[labels["__nesbank_selector"]] = Selector = (byte)(mode | 6);
             Cpu.Memory[0x6200] = 3;
@@ -432,7 +441,9 @@ public class ManagedBankExecutionTests(ITestOutputHelper output) : RoslynTests(o
             Word(0xFFFA, labels["_nmi"]);
             Word(0xFFFE, labels["irq_with_callback"]);
             Cpu.ReadBus = address => address is >= 0x8000 and < 0xA000
-                ? (Bank == 0 ? home : banked)[address - 0x8000] : Cpu.Memory[address];
+                ? (Bank == 0 ? home : banked)[address - 0x8000]
+                : address is >= 0xA000 and < 0xC000 && r7Images.TryGetValue(R7Bank, out var image)
+                    ? image[address - 0xA000] : Cpu.Memory[address];
             Cpu.WriteBus = (address, value) =>
             {
                 if (address == NESLib.MMC3_BANK_SELECT)
@@ -447,6 +458,8 @@ public class ManagedBankExecutionTests(ITestOutputHelper output) : RoslynTests(o
                         Assert.True(value is 0 or 2);
                         Bank = value;
                     }
+                    else if ((Selector & 7) == 7)
+                        R7Bank = value;
                     else
                     {
                         Assert.InRange(Selector & 7, 0, 5);

@@ -26,7 +26,7 @@ internal static class ManagedMapperSafety
     enum Context { Foreground = 1, Callback = 2, Banked = 4 }
 
     // Known bits retain useful pointer bounds even when a pointer's low byte is dynamic.
-    readonly record struct Value(byte Bits, byte Mask)
+    readonly record struct Value(byte Bits, byte Mask, string? Label = null, bool HighByte = false)
     {
         public static Value Unknown => default;
         public static Value Constant(int value) => new((byte)value, 255);
@@ -35,6 +35,8 @@ internal static class ManagedMapperSafety
         public bool IsConstant => Mask == 255;
         public Value Merge(Value other)
         {
+            if (this == other)
+                return this;
             byte mask = (byte)(Mask & other.Mask & ~(Bits ^ other.Bits));
             return new((byte)(Bits & mask), mask);
         }
@@ -211,6 +213,8 @@ internal static class ManagedMapperSafety
         readonly HashSet<Node> publications = new();
         readonly HashSet<int> foregroundModes = new(), callbackModes = new(), r7Banks = new();
         readonly HashSet<Node> bankedEntries = new();
+        readonly HashSet<Node> callbackEntries = new();
+        readonly Dictionary<Node, Value> callbackR7 = new();
         readonly HashSet<Block> sourceBlocks = new();
         readonly HashSet<Block> managedBlocks = new();
         int generatedLabel;
@@ -247,7 +251,12 @@ internal static class ManagedMapperSafety
             foreach (string label in banked)
                 bankedEntries.Add(Root(label));
             var roots = new List<Invocation>();
-            roots.AddRange(callbacks.Select(label => new Invocation(Root(label), Context.Callback, true)));
+            foreach (string label in callbacks)
+            {
+                Node callback = Root(label);
+                callbackEntries.Add(callback);
+                roots.Add(new Invocation(callback, Context.Callback, true));
+            }
             foreach (string label in foreground)
             {
                 if (TryRamRoot(label, out int address))
@@ -280,8 +289,13 @@ internal static class ManagedMapperSafety
                 foreach (Block block in compilerOwnedBlocks)
                     if (programs.Any(program => program.IsNativeBlock(block)))
                         throw new TranspileException("Managed MMC3 source-native block cannot be declared a trusted compiler helper.");
-            foreach (var invocation in roots.Distinct().OrderBy(root =>
-                root.Context == Context.Foreground && root.Root.Block.Label == "main" ? 0 : 1))
+            foreach (var invocation in roots.Distinct().OrderBy(root => root.Context switch
+                {
+                    Context.Foreground when root.Root.Block.Label == "main" => 0,
+                    Context.Foreground => 1,
+                    Context.Banked => 2,
+                    _ => 3,
+                }))
             {
                 if (invocation.Context == Context.Foreground && invocation.Root.Native && reachedForeground.Contains(invocation.Root))
                     continue;
@@ -289,7 +303,11 @@ internal static class ManagedMapperSafety
                     continue;
                 if (invocation.Context == Context.Callback && !invocation.Root.Native)
                     throw Error(invocation.Root, "interrupt callback must resolve to source-visible native code");
-                Analyze(invocation);
+                State? incoming = invocation.Context == Context.Callback &&
+                    callbackR7.TryGetValue(invocation.Root, out var mapping)
+                    ? new State { R7 = mapping }
+                    : null;
+                Analyze(invocation, incoming);
             }
             foreach (var item in effects)
                 if ((item.Value & Context.Callback) != 0 && (item.Value & (Context.Foreground | Context.Banked)) != 0)
@@ -579,6 +597,8 @@ internal static class ManagedMapperSafety
                     {
                         if (compilerOwnedBlocks == null || !compilerOwnedBlocks.Contains(target.Block))
                             throw Error(node, $"target '{target.Block.Label}' is neither authored managed code nor a registered compiler-owned helper");
+                        if (target.Block.Label is nameof(NESLib.nmi_set_callback) or nameof(NESLib.irq_set_callback))
+                            RegisterCallback(node, state, invocation.Context);
                         Node? entry = GateEntry(target.Block);
                         if (entry != null)
                         {
@@ -666,6 +686,25 @@ internal static class ManagedMapperSafety
                 input.SelectorRegisters = 1 << 6;
                 Analyze(new Invocation(call.Value, Context.Banked, false), input);
             }
+        }
+
+        void RegisterCallback(Node node, State state, Context context)
+        {
+            if (context != Context.Foreground || state.A.Label is not string label || state.A.HighByte ||
+                state.X.Label != label || !state.X.HighByte)
+                throw Error(node, "callback registration requires a direct symbolic native function address from managed foreground code");
+            Node callback = Root(label);
+            if (!callback.Native || !callbackEntries.Contains(callback))
+                throw Error(node, $"callback registration target '{label}' is not a declared source-visible native callback");
+            if (nativePlacements.TryGetValue(callback.Program, out var placement) &&
+                placement.CpuAddress == 0xa000 &&
+                (!state.R7.IsConstant || state.R7.Bits != placement.Bank))
+                throw Error(node,
+                    $"callback '{label}' registration requires proven R7 bank {placement.Bank}; " +
+                    "initialize R7 before registering the callback on every incoming path");
+            callbackR7[callback] = callbackR7.TryGetValue(callback, out var previous)
+                ? previous.Merge(state.R7)
+                : state.R7;
         }
 
         bool ResolveAddress(Node node, Operand? operand, out int address)
@@ -785,10 +824,10 @@ internal static class ManagedMapperSafety
             if (instruction.Operand is LowByteOperand or HighByteOperand)
             {
                 string label = instruction.Operand is LowByteOperand low ? low.Label : ((HighByteOperand)instruction.Operand).Label;
-                // RAM constants do not move during branch relaxation, unlike code addresses.
+                // Keep code-address identity symbolic across preparation and branch relaxation.
                 if (ResolveLabelAddress(node, label, out int address) && address < 0x8000)
                     return Value.Constant(instruction.Operand is LowByteOperand ? address : address >> 8);
-                return Value.Unknown;
+                return new Value(0, 0, Scope(node.Block, label), instruction.Operand is HighByteOperand);
             }
             var range = AddressRange(node, state);
             return range.Min == range.Max ? state.Read(range.Min) : Value.Unknown;

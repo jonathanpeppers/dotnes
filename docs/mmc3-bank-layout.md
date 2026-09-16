@@ -220,6 +220,35 @@ do not switch R7. Native bodies must remain source-visible to validate their
 mapper effects. Use the ordinary package build targets to produce the complete
 ROM, including legacy `CHARS` and explicit CHR assets.
 
+Native callbacks can also reside in a permanently mapped R7 asset. Establish
+the asset's physical R7 bank **before** ordinary C# callback registration:
+
+```csharp
+poke(MMC3_BANK_SELECT, 7);
+poke(MMC3_BANK_DATA, 1);
+unsafe
+{
+    nmi_set_callback(&NativeNmi);
+    irq_set_callback(&NativeIrq);
+}
+
+static extern void NativeNmi();
+static extern void NativeIrq();
+```
+
+The asset defines the corresponding native labels (`_NativeNmi` and
+`_NativeIrq`, or their supported bare aliases). Callback addresses remain
+symbolic through preparation and final linking. The compiler requires the
+correct R7 bank on every incoming registration path and retains the existing
+single-constant-R7 restriction across foreground code. Reasserting the same
+bank is allowed; later different or unknown R7 writes are rejected.
+Callback analysis inherits only the proven R7 mapping, not foreground
+registers, flags, or RAM values. All CHR-only and non-nesting callback
+constraints still apply, with no extra callback instructions or trust option.
+Registration before mapping is rejected even if interrupts are disabled:
+this proof does not infer interrupt enable/disable timing. Use the ordinary
+C# setters, not native calls into compiler-owned setter routines.
+
 ### Explicit foreground native RAM contracts
 
 Self-modifying native code cannot be proven from a ROM's assembly body.
