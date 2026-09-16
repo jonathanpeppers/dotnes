@@ -171,4 +171,4 @@ The decompiler reads ROM metadata and sets appropriate MSBuild properties:
 ## Related Skills
 
 - **nes-rom-debug** — Low-level 6502 disassembly and byte-level ROM inspection
-- **nes-emu-debug** — Run ROMs in Mesen2 emulator to verify runtime behavior
+- **nes-emu-debug** — Run ROMs in MesenCE emulator to verify runtime behavior

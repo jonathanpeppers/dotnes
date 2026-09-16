@@ -1,5 +1,5 @@
 --
--- smoke-test.lua — Mesen2 Lua script for CI headless smoke testing.
+-- smoke-test.lua — MesenCE Lua script for CI headless smoke testing.
 --
 -- Runs the ROM for ~5 seconds (300 frames at 60 fps) and exits cleanly.
 -- Validates that the ROM loads without crashing in the emulator.

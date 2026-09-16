@@ -1,5 +1,5 @@
 --
--- pong_record.lua — Mesen2 Lua script for recording pong gameplay.
+-- pong_record.lua — MesenCE Lua script for recording pong gameplay.
 --
 -- Simulates Player 1 controller input so the paddle tracks the ball,
 -- creating a natural gameplay recording. Player 2 stays stationary.
