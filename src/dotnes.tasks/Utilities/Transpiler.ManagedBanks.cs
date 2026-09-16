@@ -394,6 +394,9 @@ partial class Transpiler
         var enter = program.GetBlock(EnterManagedBank);
         if (_managedGateBanks.Count == 0 || enter == null)
             return;
+        // Selector publication can relax authored branches. Settle that growth
+        // before deciding whether the complete set of inline gates fits.
+        BankedCompilation.LinkPrograms(programs);
         // Gates are appended after authored code. Expanding their branch-free entry
         // sequences cannot change authored relative-branch distances.
         int growth = checked(_managedGateBanks.Count * 16 - enter.Size);

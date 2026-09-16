@@ -76,7 +76,11 @@ public sealed class ManagedCodeRegion
     public Program6502 Program { get; }
 }
 
-/// <summary>Coordinated fixed and switchable managed 6502 program images.</summary>
+/// <summary>Coordinated, editable fixed and switchable 6502 inspection models.</summary>
+/// <remarks>
+/// Compiler effect validation applies to the original source compilation, not arbitrary
+/// subsequent model edits. Use the stock targets to rebuild source for validated ROM output.
+/// </remarks>
 public sealed class BankedCompilation
 {
     readonly int? prgBanks;
@@ -119,6 +123,12 @@ public sealed class BankedCompilation
     /// Unbound external symbols may be supplied with Program6502.DefineExternalLabel
     /// before emitting bytes.
     /// </summary>
+    /// <remarks>
+    /// This low-level operation validates layout, not the safety of edited instructions.
+    /// It does not rerun mapper-effect analysis or add selector instrumentation.
+    /// Callers editing instruction behavior own the resulting execution semantics;
+    /// validated production changes must be made in source and recompiled.
+    /// </remarks>
     public void ResolveAndRelax()
     {
         if (FixedProgram.BaseAddress != Mmc3BankLayout.FixedProgramAddress)

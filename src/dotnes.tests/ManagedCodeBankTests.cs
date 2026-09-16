@@ -148,6 +148,27 @@ public class ManagedCodeBankTests(ITestOutputHelper output) : RoslynTests(output
     }
 
     [Fact]
+    public void SameRegionSideEffectingHelperRemainsADirectCall()
+    {
+        var result = Compile("""
+            Audio.Tick(); while (true) ;
+            [NESCodeBank("audio")]
+            static class Audio
+            {
+                public static void Tick() { Write(); }
+                static void Write() { poke(0x6000, 0x42); }
+            }
+            """);
+        var region = Assert.Single(result.Regions);
+        var tick = Assert.Single(region.Program.Blocks, block => block.Label!.EndsWith("_Tick", StringComparison.Ordinal));
+        var write = Assert.Single(region.Program.Blocks, block => block.Label!.EndsWith("_Write", StringComparison.Ordinal));
+        Assert.Contains(tick.InstructionsWithLabels, entry =>
+            entry.Instruction.Opcode is Opcode.JSR or Opcode.JMP &&
+            entry.Instruction.Operand is LabelOperand target && target.Label == write.Label);
+        Assert.Null(result.FixedProgram.GetBlock($"__nesbank_gate_{write.Label}"));
+    }
+
+    [Fact]
     public void SupportsMethodAnnotationOnStaticLocalFunction()
     {
         var result = Compile("""
@@ -324,14 +345,20 @@ public class ManagedCodeBankTests(ITestOutputHelper output) : RoslynTests(output
         }
     }
 
-    [Fact]
-    public void StockWriterMatchesCoordinatedCompilationAfterInstrumentedBranchRelaxation()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void StockWriterMatchesCoordinatedCompilationAfterInstrumentedBranchRelaxation(bool compact)
     {
         const string source = """
-            Native(); poke(0x6000, Audio.Tick(7)); while (true) ;
+            Native(); poke(0x6000, Audio.Tick(7)); Audio.Other(); while (true) ;
             static extern void Native();
             [NESCodeBank("audio")]
-            static class Audio { public static byte Tick(byte input) => (byte)(input + 1); }
+            static class Audio
+            {
+                public static byte Tick(byte input) => (byte)(input + 1);
+                public static void Other() { poke(0x6001, 0x42); }
+            }
             """;
         string native = """
             .segment "CODE"
@@ -344,7 +371,16 @@ public class ManagedCodeBankTests(ITestOutputHelper output) : RoslynTests(output
                 sta $8001
             """ + "\n" + string.Join("\n", Enumerable.Repeat("nop", 115)) + "\nNativeEnd:\nrts\n";
         var compiled = Compile(source, native: native);
+        if (compact)
+        {
+            int capacity = Mmc3BankLayout.ResetStubAddress - Mmc3BankLayout.FixedProgramAddress;
+            int padding = capacity - compiled.FixedProgram.TotalSize + 1;
+            native += $".segment \"RODATA\"\npadding:\n.res {padding}, 0\n";
+            compiled = Compile(source, native: native);
+            Assert.Equal(capacity - 9, compiled.FixedProgram.TotalSize);
+        }
         var program = compiled.FixedProgram;
+        Assert.Equal(compact, program.GetBlock("__nesbank_enter") != null);
         ushort end = program.GetLabels()["NativeEnd"];
         Assert.Equal(new byte[] { 0xAD, 2, 0x60, 0xD0, 3, 0x4C, (byte)end, (byte)(end >> 8) },
             program.GetMainBlock("_Native")[..8]);
@@ -481,6 +517,15 @@ public class ManagedCodeBankTests(ITestOutputHelper output) : RoslynTests(output
         var options = Options();
         options.PrgBankAssets.Add(null!);
         Assert.Contains("null entries", Assert.Throws<ArgumentException>(() => Compile(Simple, options)).Message);
+    }
+
+    [Fact]
+    public void PublicCompilationRejectsNullManagedRegionsBeforeMetadataDiscovery()
+    {
+        var options = Options();
+        options.ManagedCodeBanks.Add(null!);
+        Assert.Contains("region names must be nonempty and unique",
+            Assert.Throws<TranspileException>(() => Compile(Simple, options)).Message);
     }
 
     [Theory]

@@ -204,6 +204,16 @@ its captured `Placement` and either an editable assembly `Program` or raw binary
 and references reflect final placement. Resolve again after editing a model
 before inspecting its emitted bytes.
 
+These are mutable, low-level inspection/construction models, not a continuing
+safety certification for caller-edited instructions. `ResolveAndRelax()` checks
+linking and placement; it does **not** rerun mapper-effect analysis or add
+selector instrumentation after arbitrary model edits. Inspection fixtures may
+insert tracking instructions or rebase blocks and own the resulting execution
+semantics. For validated production ROM changes, edit the C#/native sources and
+rebuild with the stock targets, which perform a fresh compiler safety pass.
+The public inspection result does not provide an iNES packaging API for edited
+models.
+
 `compiled.FixedNativeBlocks` exposes the prepared fixed native assembly blocks
 (code and data) in emission order, retaining the exact instances in
 `FixedProgram`. It includes inserted selector tracking and relaxed branches,
@@ -344,6 +354,11 @@ Foreground code and callbacks must obey the same CHR inversion-mode contract.
 Statically detectable violations and unresolved mapper effects are diagnostics;
 the option does not make arbitrary nested interrupts safe. In particular,
 `SEI` cannot mask NMI.
+
+The CHR-only restriction concerns R0-R7 bank selections, not every mapper MMIO
+operation. Native raster callbacks may acknowledge, reload, and enable MMC3
+IRQs through their IRQ control registers. This bank-mapping proof is not a
+general validation of application-specific interrupt or other MMIO behavior.
 
 The compiler tracks the full foreground MMC3 selector in allocated shared RAM,
 publishing the intended value before each supported foreground selector write.
