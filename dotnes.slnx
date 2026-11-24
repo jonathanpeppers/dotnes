@@ -1,0 +1,15 @@
+<Solution>
+  <Folder Name="/Solution Items/">
+    <File Path=".editorconfig" />
+  </Folder>
+  <Project Path="src/dotnes.analyzers.tests/dotnes.analyzers.tests.csproj" />
+  <Project Path="src/dotnes.analyzers/dotnes.analyzers.csproj" />
+  <Project Path="src/dotnes.compiler/dotnes.compiler.csproj" />
+  <Project Path="src/dotnes.decompiler/dotnes.decompiler.csproj" />
+  <Project Path="src/dotnes.mesen/dotnes.mesen.csproj" />
+  <Project Path="src/dotnes.tasks/dotnes.tasks.csproj" />
+  <Project Path="src/dotnes.templates/dotnes.templates.csproj" />
+  <Project Path="src/dotnes.tests/dotnes.tests.csproj" />
+  <Project Path="src/dotnes/dotnes.csproj" />
+  <Project Path="src/neslib/neslib.csproj" />
+</Solution>

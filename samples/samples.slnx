@@ -1,0 +1,32 @@
+<Solution>
+  <Configurations>
+    <Platform Name="Any CPU" />
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Project Path="animation/animation.csproj" />
+  <Project Path="aputest/aputest.csproj" />
+  <Project Path="attributetable/attributetable.csproj" />
+  <Project Path="bigsprites/bigsprites.csproj" />
+  <Project Path="flicker/flicker.csproj" />
+  <Project Path="hello/hello.csproj" />
+  <Project Path="hellofs/hellofs.fsproj" />
+  <Project Path="lols/lols.csproj" />
+  <Project Path="metacursor/metacursor.csproj" />
+  <Project Path="metasprites/metasprites.csproj" />
+  <Project Path="metatrigger/metatrigger.csproj" />
+  <Project Path="mmc1/mmc1.csproj" />
+  <Project Path="multifile/multifile.csproj" />
+  <Project Path="music/music.csproj" />
+  <Project Path="peekpoke/peekpoke.csproj" />
+  <Project Path="rletitle/rletitle.csproj" />
+  <Project Path="scoreboard/scoreboard.csproj" />
+  <Project Path="siegegame/siegegame.csproj" />
+  <Project Path="sprites/sprites.csproj" />
+  <Project Path="staticsprite/staticsprite.csproj" />
+  <Project Path="statusbar/statusbar.csproj" />
+  <Project Path="tileset1/tileset1.csproj" />
+  <Project Path="tint/tint.csproj" />
+  <Project Path="transtable/transtable.csproj" />
+  <Project Path="vrambuffer/vrambuffer.csproj" />
+</Solution>
