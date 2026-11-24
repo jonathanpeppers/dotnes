@@ -51,7 +51,7 @@ jobs:
     - name: packed desktop and ROM consumers
       run: dotnet run scripts/test-package.cs -- bin/Release/dotnes.[0-9]*.nupkg
     - name: samples
-      run: dotnet build samples/samples.sln -bl:samples-debug.binlog && dotnet build samples/samples.sln -c Release -bl:samples-release.binlog
+      run: dotnet build samples/samples.slnx -bl:samples-debug.binlog && dotnet build samples/samples.slnx -c Release -bl:samples-release.binlog
     - name: shutdown (best effort)
       if: always()
       run: dotnet build-server shutdown
