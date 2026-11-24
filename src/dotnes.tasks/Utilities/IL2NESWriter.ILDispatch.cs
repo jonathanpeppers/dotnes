@@ -3351,6 +3351,17 @@ partial class IL2NESWriter
                         argsAlreadyPopped = true;
                         break;
                     default:
+                        // set_vram_update(ushort) takes the full address in A:X, but a
+                        // byte-sized argument only loads A — widen it with LDX #$00
+                        // (dotnes#642). Array arguments, word values, and NTADR results
+                        // already load X, so they are not widened. This must be captured
+                        // before the array handling below consumes the markers.
+                        bool widenSetVramUpdateArg = operand is nameof(NESLib.set_vram_update)
+                            && _ldlocByteArrayLabel is null
+                            && _lastByteArrayLabel is null
+                            && !_ntadrRuntimeResult
+                            && !_ushortInAX
+                            && Stack.Count > 0 && Stack.Peek() is >= 0 and <= byte.MaxValue;
                         if (TryEmitArrayParameterCall(operand))
                             break;
                         // Handle byte array locals loaded via ldloc (pushax pattern).
@@ -3406,6 +3417,10 @@ partial class IL2NESWriter
                                 _lastByteArrayLabel = null;
                                 _lastByteArraySize = 0;
                             }
+                        }
+                        if (widenSetVramUpdateArg)
+                        {
+                            Emit(Opcode.LDX, AddressMode.Immediate, 0x00);
                         }
                         // Emit JSR — extern methods use cc65 _prefix convention
                         if (ExternMethodNames.Contains(operand))
