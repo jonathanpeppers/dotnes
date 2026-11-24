@@ -10,6 +10,11 @@ vrambuf_clear();
 // set NMI handler to use update buffer at $0100
 set_vram_update(updbuf);
 
+// Flush an update while rendering is still off, then start with an empty buffer.
+vrambuf_put(NTADR_A(2, 29), "SCREEN OFF UPDATE");
+flush_vram_update_nmi();
+vrambuf_clear();
+
 // enable PPU rendering
 ppu_on_all();
 

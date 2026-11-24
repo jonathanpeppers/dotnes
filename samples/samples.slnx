@@ -8,6 +8,7 @@
   <Project Path="aputest/aputest.csproj" />
   <Project Path="attributetable/attributetable.csproj" />
   <Project Path="bigsprites/bigsprites.csproj" />
+  <Project Path="fade/fade.csproj" />
   <Project Path="flicker/flicker.csproj" />
   <Project Path="hello/hello.csproj" />
   <Project Path="hellofs/hellofs.fsproj" />

@@ -454,6 +454,17 @@ public static class NESLib
     // https://github.com/mhughson/mbh-firstnes/blob/master/game/LIB/nesdoug.s
 
     /// <summary>
+    /// Set the PPU color-emphasis bits while preserving the other PPU mask settings.
+    /// </summary>
+    public static void color_emphasis(ColorEmphasis color) => throw null!;
+
+    /// <summary>
+    /// Fade the palette brightness from one level to another. Levels range from 0 (black)
+    /// through 4 (normal) to 8 (white); each step waits four frames.
+    /// </summary>
+    public static void pal_fade_to(byte from, byte to) => throw null!;
+
+    /// <summary>
     /// nesdoug: Append a single byte write to the VRAM update buffer.
     /// Schedules <paramref name="data"/> to be written to <paramref name="ppuAddress"/>
     /// during the next NMI.
@@ -509,6 +520,19 @@ public static class NESLib
     /// are pixel coordinates (0..255).
     /// </summary>
     public static ushort get_ppu_addr(byte nt, byte x, byte y) => throw null!;
+
+    /// <summary>
+    /// nesdoug: Convert pixel coordinates to the corresponding PPU attribute-table address.
+    /// <paramref name="nt"/> is the nametable (0..3), and <paramref name="x"/>/<paramref name="y"/>
+    /// are pixel coordinates.
+    /// </summary>
+    public static ushort get_at_addr(byte nt, byte x, byte y) => throw null!;
+
+    /// <summary>
+    /// Immediately flush the VRAM update buffer selected by <see cref="set_vram_update(byte[])"/>.
+    /// Use while rendering is disabled.
+    /// </summary>
+    public static void flush_vram_update_nmi() => throw null!;
 
     #endregion
 
@@ -739,6 +763,17 @@ public static class NESLib
     /// <remarks>Controls PPU rendering options such as grayscale, background and sprite visibility, and color
     /// emphasis. Accessed via the CPU memory map at $2001; reads are typically open-bus on real hardware.</remarks>
     public const ushort PPU_MASK = 0x2001;
+
+    /// <summary>No color emphasis.</summary>
+    public const byte COL_EMP_NORMAL = 0x00;
+    /// <summary>Emphasize red (green on PAL/Dendy).</summary>
+    public const byte COL_EMP_RED = 0x20;
+    /// <summary>Emphasize green (red on PAL/Dendy).</summary>
+    public const byte COL_EMP_GREEN = 0x40;
+    /// <summary>Emphasize blue.</summary>
+    public const byte COL_EMP_BLUE = 0x80;
+    /// <summary>Emphasize all colors, darkening the screen.</summary>
+    public const byte COL_EMP_DARK = 0xE0;
 
     /// <summary>
     /// CPU address for the NES PPU status register (PPUSTATUS) at $2002.
