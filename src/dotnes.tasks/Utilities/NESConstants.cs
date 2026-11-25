@@ -8,22 +8,25 @@ internal static class NESConstants
 {
     // Zero-page variables (neslib)
     public const int ZP_START = 0x00;
-    public const int STARTUP = 0x01;
-    public const int NES_PRG_BANKS = 0x02;
-    public const int VRAM_UPDATE = 0x03;
-    public const int NAME_UPD_ADR = 0x04;
-    public const int NAME_UPD_ENABLE = 0x06;
-    public const int PAL_UPDATE = 0x07;
-    public const int PAL_BG_PTR = 0x08;
-    public const int PAL_SPR_PTR = 0x0A;
-    public const int SCROLL_X = 0x0C;
-    public const int SCROLL_Y = 0x0D;
-    public const int SCROLL_X1 = 0x0E;       // split() saved X scroll
-    public const int PPU_CTRL_VAR1 = 0x0F;   // split() saved PPU_CTRL
+    public const int STARTUP = 0x01; // 1 byte
+    public const int NES_PRG_BANKS = 0x02; // 1 byte
+    public const int VRAM_UPDATE = 0x03; // 1 byte
+    public const int NAME_UPD_ADR = 0x04; // 2 bytes (0x04-0x05)
+    public const int NAME_UPD_ENABLE = 0x06; // 1 byte
+    public const int PAL_UPDATE = 0x07; // 1 byte
+    public const int PAL_BG_PTR = 0x08; // 2 bytes (0x08-0x09)
+    public const int PAL_SPR_PTR = 0x0A; // 2 bytes (0x0A-0x0B)
+    public const int SCROLL_X = 0x0C; // 1 byte
+    public const int SCROLL_Y = 0x0D; // 1 byte
+    public const int SCROLL_X1 = 0x0E; // 1 byte: split() saved X scroll
+    public const int PPU_CTRL_VAR1 = 0x0F; // 1 byte: split() saved PPU_CTRL
     public const int NMI_CALLBACK = 0x14;  // 3 bytes: JMP opcode + address ($14-$16)
     public const int IRQ_CALLBACK = 0x1E;  // 3 bytes: JMP opcode + address ($1E-$20)
     public const int TEMP = 0x17;
     public const int TEMP_HI = 0x18;   // TEMP+1 (also used as DUP_TEMP; not always the "high byte")
+    public const int PAD_STATE = 0x3C;  // 2 bytes total (1 per controller): current state
+    public const int PAD_STATEP = 0x3E; // 2 bytes total (1 per controller): previous state
+    public const int PAD_STATET = 0x40; // 2 bytes total (1 per controller): newly pressed state
     public const int RAND_SEED = 0x3C;  // 1 byte: random seed for LFSR PRNG (cc65 compatible)
     public const int RAND_STATE = 0x3D; // 4 bytes: cc65 rand() LCG state ($3D-$40)
     public const int PAL_FADE_TO = 0x43;   // 1 byte: destination brightness
@@ -61,6 +64,7 @@ internal static class NESConstants
     public const ushort condes = 0x0300;
 
     // PPU registers
+    // https://github.com/clbr/neslib/blob/46052dddca490f89de62fcf8d0f1751a6d7a99ae/crt0.s#L35-L50
     public const ushort PPU_CTRL = 0x2000;
     public const ushort PPU_MASK = 0x2001;
     public const ushort PPU_STATUS = 0x2002;
@@ -85,9 +89,10 @@ internal static class NESConstants
     public const ushort APU_NOISE_CTRL = 0x400C;
     public const ushort APU_NOISE_PERIOD = 0x400E;
     public const ushort APU_NOISE_LENGTH = 0x400F;
-    public const ushort APU_STATUS = 0x4015;
     public const ushort DMC_FREQ = 0x4010;
     public const ushort PPU_OAM_DMA = 0x4014;
+    public const ushort APU_STATUS = 0x4015;
+    public const ushort CTRL_PORT1 = 0x4016;
     public const ushort PPU_FRAMECNT = 0x4017;
 
     // Music engine state (cc65-compatible BSS at $0300+)

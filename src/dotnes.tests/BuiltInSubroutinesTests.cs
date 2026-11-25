@@ -519,12 +519,12 @@ public class BuiltInSubroutinesTests
             0xA8,                   // TAY
             0xA2, 0x00,             // LDX #$00
             0xA9, 0x01,             // LDA #$01
-            0x8D, 0x16, 0x40,       // STA $4016
+            0x8D, 0x16, 0x40,       // STA CTRL_PORT1
             0xA9, 0x00,             // LDA #$00
-            0x8D, 0x16, 0x40,       // STA $4016
+            0x8D, 0x16, 0x40,       // STA CTRL_PORT1
             0xA9, 0x08,             // LDA #$08
             0x85, 0x17,             // STA TEMP
-            0xB9, 0x16, 0x40,       // LDA $4016,y
+            0xB9, 0x16, 0x40,       // LDA CTRL_PORT1,y
             0x4A,                   // LSR
             0x76, 0x18,             // ROR $18,x (TEMP+1)
             0xC6, 0x17,             // DEC TEMP
@@ -538,13 +538,13 @@ public class BuiltInSubroutinesTests
             0xC5, 0x1A,             // CMP $1A
             0xF0, 0x02,             // BEQ +2
             0xA5, 0x19,             // LDA $19
-            0x99, 0x3C, 0x00,       // STA $003C,y
+            0x99, 0x3C, 0x00,       // STA PAD_STATE,y
             0xAA,                   // TAX
-            0x59, 0x3E, 0x00,       // EOR $003E,y
-            0x39, 0x3C, 0x00,       // AND $003C,y
-            0x99, 0x40, 0x00,       // STA $0040,y
+            0x59, 0x3E, 0x00,       // EOR PAD_STATEP,y
+            0x39, 0x3C, 0x00,       // AND PAD_STATE,y
+            0x99, 0x40, 0x00,       // STA PAD_STATET,y
             0x8A,                   // TXA
-            0x99, 0x3E, 0x00,       // STA $003E,y
+            0x99, 0x3E, 0x00,       // STA PAD_STATEP,y
             0xA2, 0x00,             // LDX #$00
             0x60                    // RTS
         ];

@@ -2301,13 +2301,13 @@ internal static class BuiltInSubroutines
              .Emit(LDX(0x00))
              // Pad poll port
              .Emit(LDA(0x01), "@padPollPort")
-             .Emit(STA_abs(0x4016))
+             .Emit(STA_abs(CTRL_PORT1))
              .Emit(LDA(0x00))
-             .Emit(STA_abs(0x4016))
+             .Emit(STA_abs(CTRL_PORT1))
              .Emit(LDA(0x08))
              .Emit(STA_zpg(TEMP))
              // Pad poll loop
-             .Emit(LDA_abs_Y(0x4016), "@padPollLoop")
+             .Emit(LDA_abs_Y(CTRL_PORT1), "@padPollLoop")
              .Emit(LSR_A())
              .Emit(ROR_X_zpg(TEMP + 1))
              .Emit(DEC_zpg(TEMP))
@@ -2322,13 +2322,13 @@ internal static class BuiltInSubroutines
              .Emit(BEQ(2))   // branch to @done
              .Emit(LDA_zpg(TEMP2))
              // @done
-             .Emit(STA_abs_Y(0x003C), "@done")
+             .Emit(STA_abs_Y(PAD_STATE), "@done")
              .Emit(TAX())
-             .Emit(EOR_Y_abs(0x003E))
-             .Emit(AND_Y_abs(0x003C))
-             .Emit(STA_abs_Y(0x0040))
+             .Emit(EOR_Y_abs(PAD_STATEP))
+             .Emit(AND_Y_abs(PAD_STATE))
+             .Emit(STA_abs_Y(PAD_STATET))
              .Emit(TXA())
-             .Emit(STA_abs_Y(0x003E))
+             .Emit(STA_abs_Y(PAD_STATEP))
              .Emit(LDX(0x00))
              .Emit(RTS());
         return block;
@@ -2344,7 +2344,7 @@ internal static class BuiltInSubroutines
              .Emit(JSR(nameof(NESLib.pad_poll)))
              .Emit(PLA())
              .Emit(TAX())
-             .Emit(LDA_zpg_X(0x40))
+             .Emit(LDA_zpg_X(PAD_STATET))
              .Emit(LDX(0x00))
              .Emit(RTS());
         return block;
@@ -2357,7 +2357,7 @@ internal static class BuiltInSubroutines
     {
         var block = new Block("pad_state");
         block.Emit(TAX())
-             .Emit(LDA_zpg_X(0x3C))
+             .Emit(LDA_zpg_X(PAD_STATE))
              .Emit(LDX(0x00))
              .Emit(RTS());
         return block;
