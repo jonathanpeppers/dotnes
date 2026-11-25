@@ -459,6 +459,12 @@ public static class NESLib
     public static void color_emphasis(ColorEmphasis color) => throw null!;
 
     /// <summary>
+    /// Set the PPU color-emphasis bits while preserving the other PPU mask settings.
+    /// Accepts the <c>COL_EMP_*</c> constants.
+    /// </summary>
+    public static void color_emphasis(byte color) => throw null!;
+
+    /// <summary>
     /// Fade the palette brightness from one level to another. Levels range from 0 (black)
     /// through 4 (normal) to 8 (white); each step waits four frames.
     /// </summary>
