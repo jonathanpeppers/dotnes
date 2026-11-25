@@ -51,6 +51,12 @@ class ReflectionCache
                 _cache[name] = method = typeof(NESLib).GetMethod(name, [typeof(ushort), typeof(string)]) ??
                     throw new InvalidOperationException($"Unable to find method named '{nameof(NESLib)}.{name}'!");
             }
+            else if (name is nameof(NESLib.color_emphasis))
+            {
+                // color_emphasis has overloads for ColorEmphasis and byte; both pass one byte in A
+                _cache[name] = method = typeof(NESLib).GetMethod(name, [typeof(ColorEmphasis)]) ??
+                    throw new InvalidOperationException($"Unable to find method named '{nameof(NESLib)}.{name}'!");
+            }
             else
             {
                 _cache[name] = method = typeof(NESLib).GetMethod(name) ??

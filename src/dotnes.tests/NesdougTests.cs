@@ -85,6 +85,20 @@ public class NesdougTests : RoslynTests
     }
 
     [Fact]
+    public void ColorEmphasis_AcceptsByteConstant()
+    {
+        using var transpiler = BuildProgram(
+            """
+            color_emphasis(COL_EMP_RED | COL_EMP_BLUE);
+            while (true) ;
+            """, out var program);
+
+        Assert.Contains(
+            "A9A0" + Convert.ToHexString(CallBytes(program, "color_emphasis")),
+            Convert.ToHexString(program.GetMainBlock()));
+    }
+
+    [Fact]
     public void PalFadeTo_EmitsExpectedHex()
     {
         using var transpiler = BuildProgram(
