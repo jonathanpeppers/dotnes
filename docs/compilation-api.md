@@ -11,13 +11,13 @@ not both: they contain the same types.
 
 ## Reference from a desktop test project
 
-A standard .NET 10 test project can reference the existing `dotnes` package
+A standard .NET 11 test project can reference the existing `dotnes` package
 directly. Set `DotnesVersion` to the package version you are testing:
 
 ```xml
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFramework>net11.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>
@@ -52,7 +52,7 @@ the test assembly, write a `.nes`, or add NES-only analyzer diagnostics or
 implicit NES usings. `dotnet test` runs normally.
 
 NuGet supplies compile and runtime assets for `dotnes.tasks` and `neslib`;
-the .NET 10 shared framework supplies the compiler's metadata and immutable
+the .NET 11 shared framework supplies the compiler's metadata and immutable
 collection dependencies. Tests can call `NesCompiler.Compile`, use `Program6502`,
 and read native sources with `AssemblyReader` without loading an MSBuild task
 host. `NESLib` methods still describe NES operations, not a desktop emulator:

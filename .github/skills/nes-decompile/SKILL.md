@@ -32,7 +32,7 @@ dotnet run --project src/dotnes.decompiler -- <input.nes> [output-directory]
 ```bash
 # Decompile a sample ROM (build it first if needed)
 cd samples/hello && dotnet build && cd ../..
-dotnet run --project src/dotnes.decompiler -- samples/hello/bin/Debug/net10.0/hello.nes hello-decompiled
+dotnet run --project src/dotnes.decompiler -- samples/hello/bin/Debug/net11.0/hello.nes hello-decompiled
 
 # Decompile any .nes ROM
 dotnet run --project src/dotnes.decompiler -- path/to/game.nes game-decompiled
@@ -88,7 +88,7 @@ Build the sample, then decompile its ROM output:
 cd samples/hello && dotnet build && cd ../..
 
 # Decompile the ROM
-dotnet run --project src/dotnes.decompiler -- samples/hello/bin/Debug/net10.0/hello.nes hello-decompiled
+dotnet run --project src/dotnes.decompiler -- samples/hello/bin/Debug/net11.0/hello.nes hello-decompiled
 
 # Inspect the output
 cat hello-decompiled/Program.cs
@@ -103,13 +103,13 @@ Verify the decompiler produces code that builds back to an equivalent ROM:
 cd samples/hello && dotnet build && cd ../..
 
 # 2. Decompile the ROM
-dotnet run --project src/dotnes.decompiler -- samples/hello/bin/Debug/net10.0/hello.nes hello-roundtrip
+dotnet run --project src/dotnes.decompiler -- samples/hello/bin/Debug/net11.0/hello.nes hello-roundtrip
 
 # 3. Build the decompiled project
 cd hello-roundtrip && dotnet build && cd ..
 
 # 4. Compare the two ROMs
-python scripts/compare_rom.py samples/hello/bin/Debug/net10.0/hello.nes hello-roundtrip/bin/Debug/net10.0/hello.nes
+python scripts/compare_rom.py samples/hello/bin/Debug/net11.0/hello.nes hello-roundtrip/bin/Debug/net11.0/hello.nes
 ```
 
 If the round-trip produces an identical ROM, the decompiler recovered all observable behavior.

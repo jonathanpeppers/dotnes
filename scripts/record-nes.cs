@@ -5,7 +5,7 @@
 //   --interval N       Milliseconds between frames (default: 100)
 //   --delay N          Milliseconds to wait before first capture (default: 3000)
 //   --output FILE      Output file path (default: screenshot.png or recording.gif)
-// Requires: .NET 10+, Windows
+// Requires: .NET 11+, Windows
 #:package System.Drawing.Common@9.*
 #:package AnimatedGif@1.*
 #:property NoWarn=CA1416

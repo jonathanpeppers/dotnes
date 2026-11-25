@@ -1,7 +1,7 @@
 // Usage: dotnet run scripts/record-all-samples.cs
 // Builds and runs all samples via `dotnet run`, captures PNG/GIF for each
 // into samples/{name}/{name}.png or .gif
-// Requires: .NET 10+, Windows
+// Requires: .NET 11+, Windows
 #:package System.Drawing.Common@9.*
 #:package AnimatedGif@1.*
 #:property NoWarn=CA1416

@@ -115,8 +115,8 @@ python scripts/disasm.py output.nes 85F0 8630
 ### "What did the transpiler emit for my code?"
 
 1. Build the sample: `cd samples/hello && dotnet build`
-2. Dump the IL to see what C# compiled to: `dotnet run scripts/ildump.cs -- samples/hello/bin/Debug/net10.0/hello.dll`
-3. Disassemble the ROM to see the 6502 output: `python scripts/disasm.py samples/hello/bin/Debug/net10.0/hello.nes 8500`
+2. Dump the IL to see what C# compiled to: `dotnet run scripts/ildump.cs -- samples/hello/bin/Debug/net11.0/hello.dll`
+3. Disassemble the ROM to see the 6502 output: `python scripts/disasm.py samples/hello/bin/Debug/net11.0/hello.nes 8500`
 
 ### "Where is main() in the ROM?"
 

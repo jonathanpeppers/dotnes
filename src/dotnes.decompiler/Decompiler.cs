@@ -1889,7 +1889,7 @@ class Decompiler
         sb.AppendLine();
         sb.AppendLine("  <PropertyGroup>");
         sb.AppendLine("    <OutputType>Exe</OutputType>");
-        sb.AppendLine("    <TargetFramework>net10.0</TargetFramework>");
+        sb.AppendLine("    <TargetFramework>net11.0</TargetFramework>");
         sb.AppendLine("    <ImplicitUsings>enable</ImplicitUsings>");
         sb.AppendLine("    <Nullable>enable</Nullable>");
 

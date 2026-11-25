@@ -515,7 +515,7 @@ logging:
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFramework>net11.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
 
@@ -544,7 +544,7 @@ $(OutputPath)$(TargetName).nes
 ```
 
 For example, building a project called `hello` in Debug configuration produces
-`bin/Debug/net10.0/hello.nes`.
+`bin/Debug/net11.0/hello.nes`.
 
 ## Incremental Builds
 
