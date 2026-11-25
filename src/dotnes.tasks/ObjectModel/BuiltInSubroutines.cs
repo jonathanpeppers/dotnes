@@ -2586,7 +2586,8 @@ internal static class BuiltInSubroutines
     // NMI handler drains via updName.
 
     /// <summary>
-    /// _color_emphasis - Set PPUMASK emphasis bits without changing rendering flags
+    /// _color_emphasis (nesdoug) - Set PPUMASK emphasis bits without changing rendering flags
+    /// https://github.com/mhughson/mbh-firstnes/blob/8a8bfcf7e0b395350fd97b3e40430ba8182fcf51/game/LIB/nesdoug.s#L694
     /// </summary>
     public static Block ColorEmphasis()
     {
@@ -2602,8 +2603,9 @@ internal static class BuiltInSubroutines
     }
 
     /// <summary>
-    /// _pal_fade_to - Fade palette brightness between arbitrary levels
+    /// _pal_fade_to (nesdoug) - Fade palette brightness between arbitrary levels
     /// Entry: A = destination, cc65 stack holds the starting brightness.
+    /// https://github.com/mhughson/mbh-firstnes/blob/8a8bfcf7e0b395350fd97b3e40430ba8182fcf51/game/LIB/nesdoug.s#L235
     /// </summary>
     public static Block PalFadeTo()
     {
@@ -2612,30 +2614,36 @@ internal static class BuiltInSubroutines
              .Emit(JSR(popa))
              .Emit(STA_zpg(PAL_FADE_FROM))
              .Emit(JMP("@check_equal"))
+             // @fade_loop
              .Emit(LDA(0x04), "@fade_loop")
              .Emit(JSR(nameof(NESLib.delay)))
              .Emit(LDA_zpg(PAL_FADE_FROM))
              .Emit(CMP_zpg(PAL_FADE_TO))
              .Emit(BCS("@more"))
+             // @less
              .Emit(CLC(), "@less")
              .Emit(ADC(0x01))
              .Emit(STA_zpg(PAL_FADE_FROM))
              .Emit(JSR(nameof(NESLib.pal_bright)))
              .Emit(JMP("@check_equal"))
+             // @more
              .Emit(SEC(), "@more")
              .Emit(SBC(0x01))
              .Emit(STA_zpg(PAL_FADE_FROM))
              .Emit(JSR(nameof(NESLib.pal_bright)))
+             // @check_equal
              .Emit(LDA_zpg(PAL_FADE_FROM), "@check_equal")
              .Emit(CMP_zpg(PAL_FADE_TO))
              .Emit(BNE("@fade_loop"))
+             // @done
              .Emit(JSR(nameof(NESLib.ppu_wait_nmi)))
              .Emit(RTS());
         return block;
     }
 
     /// <summary>
-    /// _flush_vram_update_nmi - Flush using the already configured VRAM update pointer
+    /// _flush_vram_update_nmi (nesdoug) - Flush using the already configured VRAM update pointer
+    /// https://github.com/mhughson/mbh-firstnes/blob/8a8bfcf7e0b395350fd97b3e40430ba8182fcf51/game/LIB/neslib.s#L1182
     /// </summary>
     public static Block FlushVramUpdateNmi()
     {
@@ -2780,6 +2788,7 @@ internal static class BuiltInSubroutines
     /// get_at_addr (nesdoug) — compute attribute-table address from pixel coordinates.
     /// Entry: A = y; cc65 stack holds nt and x (popped via popa).
     /// Returns: A = lo byte, X = hi byte.
+    /// https://github.com/mhughson/mbh-firstnes/blob/8a8bfcf7e0b395350fd97b3e40430ba8182fcf51/game/LIB/nesdoug.s#L384
     /// </summary>
     public static Block GetAtAddr()
     {
@@ -2879,7 +2888,7 @@ internal static class BuiltInSubroutines
     }
 
     /// <summary>
-    /// multi_vram_buffer_common — shared tail of multi_vram_buffer_horz/vert.
+    /// multi_vram_buffer_common (nesdoug) — shared tail of multi_vram_buffer_horz/vert.
     /// Pops len then data pointer from cc65 stack, copies data to VRAM buffer,
     /// writes EOF marker, and updates UPDPTR.
     /// </summary>
