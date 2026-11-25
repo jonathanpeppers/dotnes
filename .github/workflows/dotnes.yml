@@ -41,7 +41,7 @@ jobs:
     - name: install .NET
       uses: actions/setup-dotnet@v6
       with:
-        dotnet-version: 10.x
+        dotnet-version: 11.x
     - name: cache Mesen downloads
       uses: ./.github/workflows/cache-mesen
     - name: build
@@ -50,6 +50,9 @@ jobs:
       run: dotnet test --no-build --verbosity normal && dotnet test --no-build --verbosity normal -c Release
     - name: packed desktop and ROM consumers
       run: dotnet run scripts/test-package.cs -- bin/Release/dotnes.[0-9]*.nupkg
+      env:
+        # The consumer projects target net10.0; only the .NET 11 runtime is installed.
+        DOTNET_ROLL_FORWARD: Major
     - name: samples
       run: dotnet build samples/samples.slnx -bl:samples-debug.binlog && dotnet build samples/samples.slnx -c Release -bl:samples-release.binlog
     - name: shutdown (best effort)
@@ -102,7 +105,7 @@ jobs:
     - name: install .NET
       uses: actions/setup-dotnet@v6
       with:
-        dotnet-version: 10.x
+        dotnet-version: 11.x
     - name: install SDL2 (macOS)
       if: runner.os == 'macOS'
       run: brew install sdl2
