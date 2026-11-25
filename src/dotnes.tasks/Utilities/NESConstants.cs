@@ -67,6 +67,9 @@ internal static class NESConstants
     public const ushort PPU_SCROLL = 0x2005;
     public const ushort PPU_ADDR = 0x2006;
     public const ushort PPU_DATA = 0x2007;
+    public const ushort DMC_FREQ = 0x4010;
+    public const ushort PPU_OAM_DMA = 0x4014;
+    public const ushort PPU_FRAMECNT = 0x4017;
 
     // APU/IO registers
     public const ushort APU_PULSE1_CTRL = 0x4000;
@@ -84,9 +87,6 @@ internal static class NESConstants
     public const ushort APU_NOISE_PERIOD = 0x400E;
     public const ushort APU_NOISE_LENGTH = 0x400F;
     public const ushort APU_STATUS = 0x4015;
-    public const ushort DMC_FREQ = 0x4010;
-    public const ushort PPU_OAM_DMA = 0x4014;
-    public const ushort PPU_FRAMECNT = 0x4017;
 
     // Music engine state (cc65-compatible BSS at $0300+)
     public const ushort MUSIC_DURATION = 0x0300;  // 1 byte: frames until next note
