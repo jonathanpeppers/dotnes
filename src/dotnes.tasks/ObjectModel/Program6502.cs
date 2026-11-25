@@ -1024,6 +1024,8 @@ public class Program6502
             action(BuiltInSubroutines.FadeIn());
         if (usedMethods.Contains("fade_out"))
             action(BuiltInSubroutines.FadeOut());
+        if (usedMethods.Contains("pal_fade_to"))
+            action(BuiltInSubroutines.PalFadeTo());
         // nesdoug aliases: pull in their underlying subroutines too.
         // get_pad_new wraps pad_trigger (which itself depends on pad_poll).
         // clear_vram_buffer tail-calls vrambuf_clear.
@@ -1059,6 +1061,12 @@ public class Program6502
             action(BuiltInSubroutines.SetScrollY());
         if (usedMethods.Contains("get_ppu_addr"))
             action(BuiltInSubroutines.GetPpuAddr());
+        if (usedMethods.Contains("get_at_addr"))
+            action(BuiltInSubroutines.GetAtAddr());
+        if (usedMethods.Contains("color_emphasis"))
+            action(BuiltInSubroutines.ColorEmphasis());
+        if (usedMethods.Contains("flush_vram_update_nmi"))
+            action(BuiltInSubroutines.FlushVramUpdateNmi());
     }
 
     /// <summary>

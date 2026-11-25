@@ -1,5 +1,20 @@
 #nullable enable
+NES.ColorEmphasis
+NES.ColorEmphasis.Blue = 128 -> NES.ColorEmphasis
+NES.ColorEmphasis.Dark = NES.ColorEmphasis.Red | NES.ColorEmphasis.Green | NES.ColorEmphasis.Blue -> NES.ColorEmphasis
+NES.ColorEmphasis.Green = 64 -> NES.ColorEmphasis
+NES.ColorEmphasis.Normal = 0 -> NES.ColorEmphasis
+NES.ColorEmphasis.Red = 32 -> NES.ColorEmphasis
 NES.NESCodeBankAttribute
 NES.NESCodeBankAttribute.NESCodeBankAttribute(string! name) -> void
 NES.NESCodeBankAttribute.Name.get -> string!
+const NES.NESLib.COL_EMP_BLUE = 128 -> byte
+const NES.NESLib.COL_EMP_DARK = 224 -> byte
+const NES.NESLib.COL_EMP_GREEN = 64 -> byte
+const NES.NESLib.COL_EMP_NORMAL = 0 -> byte
+const NES.NESLib.COL_EMP_RED = 32 -> byte
+static NES.NESLib.color_emphasis(NES.ColorEmphasis color) -> void
+static NES.NESLib.flush_vram_update_nmi() -> void
+static NES.NESLib.get_at_addr(byte nt, byte x, byte y) -> ushort
+static NES.NESLib.pal_fade_to(byte from, byte to) -> void
 static NES.NESLib.ppu_use_native_renderer() -> void

@@ -123,6 +123,29 @@ public enum MASK : byte
 }
 
 /// <summary>
+/// PPU color-emphasis bits for <see cref="NESLib.color_emphasis(ColorEmphasis)"/>.
+/// </summary>
+/// <remarks>These map to bits 5-7 of $2001 and can be combined with bitwise OR.</remarks>
+[Flags]
+public enum ColorEmphasis : byte
+{
+    /// <summary>No color emphasis.</summary>
+    Normal = 0x00,
+
+    /// <summary>Emphasize red (green on PAL/Dendy).</summary>
+    Red = 0x20,
+
+    /// <summary>Emphasize green (red on PAL/Dendy).</summary>
+    Green = 0x40,
+
+    /// <summary>Emphasize blue.</summary>
+    Blue = 0x80,
+
+    /// <summary>Emphasize all colors, darkening the screen.</summary>
+    Dark = Red | Green | Blue,
+}
+
+/// <summary>
 /// Sprite size for <see cref="NESLib.oam_size(SpriteSize)"/>
 /// </summary>
 public enum SpriteSize : byte

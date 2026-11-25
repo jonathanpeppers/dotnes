@@ -30,6 +30,7 @@ partial class Transpiler
                     nameof(NESLib.set_vram_update) or nameof(NESLib.flush_vram_update) or
                     nameof(NESLib.one_vram_buffer) or nameof(NESLib.multi_vram_buffer_horz) or
                     nameof(NESLib.multi_vram_buffer_vert) or nameof(NESLib.clear_vram_buffer) or
+                    nameof(NESLib.flush_vram_update_nmi) or nameof(NESLib.color_emphasis) or
                     nameof(NESLib.fade_in) or nameof(NESLib.fade_out) or
                     nameof(NESLib.set_ppu_ctrl_var) or
                     "get_oam_off" or "set_oam_off";

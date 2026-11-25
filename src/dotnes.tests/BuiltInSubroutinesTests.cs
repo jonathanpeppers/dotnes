@@ -734,6 +734,7 @@ public class BuiltInSubroutinesTests
         Assert.Equal("ppu_on_bg", BuiltInSubroutines.PpuOnBg().Label);
         Assert.Equal("ppu_on_spr", BuiltInSubroutines.PpuOnSpr().Label);
         Assert.Equal("ppu_mask", BuiltInSubroutines.PpuMask().Label);
+        Assert.Equal("color_emphasis", BuiltInSubroutines.ColorEmphasis().Label);
         Assert.Equal("ppu_wait_nmi", BuiltInSubroutines.PpuWaitNmi().Label);
         Assert.Equal("ppu_wait_frame", BuiltInSubroutines.PpuWaitFrame().Label);
         Assert.Equal("ppu_system", BuiltInSubroutines.PpuSystem().Label);
@@ -753,10 +754,12 @@ public class BuiltInSubroutinesTests
         Assert.Equal("vram_write", BuiltInSubroutines.VramWrite().Label);
         Assert.Equal("set_vram_update", BuiltInSubroutines.SetVramUpdate().Label);
         Assert.Equal("flush_vram_update", BuiltInSubroutines.FlushVramUpdate().Label);
+        Assert.Equal("flush_vram_update_nmi", BuiltInSubroutines.FlushVramUpdateNmi().Label);
         Assert.Equal("nesclock", BuiltInSubroutines.NesClock().Label);
         Assert.Equal("delay", BuiltInSubroutines.Delay().Label);
         Assert.Equal("fade_in", BuiltInSubroutines.FadeIn().Label);
         Assert.Equal("fade_out", BuiltInSubroutines.FadeOut().Label);
+        Assert.Equal("pal_fade_to", BuiltInSubroutines.PalFadeTo().Label);
         Assert.Equal("nmi_set_callback", BuiltInSubroutines.NmiSetCallback().Label);
         Assert.Equal("popa", BuiltInSubroutines.Popa().Label);
         Assert.Equal("popax", BuiltInSubroutines.Popax().Label);
@@ -770,6 +773,7 @@ public class BuiltInSubroutinesTests
         Assert.Equal("pad_poll", BuiltInSubroutines.PadPoll().Label);
         Assert.Equal("srand", BuiltInSubroutines.SRand().Label);
         Assert.Equal("rand16", BuiltInSubroutines.Rand().Label);
+        Assert.Equal("get_at_addr", BuiltInSubroutines.GetAtAddr().Label);
     }
 
     [Fact]

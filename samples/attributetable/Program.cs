@@ -35,6 +35,7 @@ vram_adr(NAMETABLE_A);  // start address ($2000)
 vram_fill(0x16, 32 * 30);   // fill nametable (960 bytes)
 
 // copy attribute table from PRG ROM to VRAM
+vram_adr(get_at_addr(0, 0, 0));
 vram_write(ATTRIBUTE_TABLE);
 
 // enable PPU rendering (turn on screen)
