@@ -24,6 +24,9 @@ internal static class NESConstants
     public const int IRQ_CALLBACK = 0x1E;  // 3 bytes: JMP opcode + address ($1E-$20)
     public const int TEMP = 0x17;
     public const int TEMP_HI = 0x18;   // TEMP+1 (also used as DUP_TEMP; not always the "high byte")
+    public const int PAD_STATE = 0x3C;  // 2 bytes total (1 per controller): current state
+    public const int PAD_STATEP = 0x3E; // 2 bytes total (1 per controller): previous state
+    public const int PAD_STATET = 0x40; // 2 bytes total (1 per controller): newly pressed state
     public const int RAND_SEED = 0x3C;  // 1 byte: random seed for LFSR PRNG (cc65 compatible)
     public const int RAND_STATE = 0x3D; // 4 bytes: cc65 rand() LCG state ($3D-$40)
     public const int TEMP2 = 0x19;  // Additional temporary variable
@@ -59,6 +62,7 @@ internal static class NESConstants
     public const ushort condes = 0x0300;
 
     // PPU registers
+    // https://github.com/clbr/neslib/blob/46052dddca490f89de62fcf8d0f1751a6d7a99ae/crt0.s#L35-L50
     public const ushort PPU_CTRL = 0x2000;
     public const ushort PPU_MASK = 0x2001;
     public const ushort PPU_STATUS = 0x2002;
@@ -68,6 +72,7 @@ internal static class NESConstants
     public const ushort PPU_ADDR = 0x2006;
     public const ushort PPU_DATA = 0x2007;
     public const ushort DMC_FREQ = 0x4010;
+    public const ushort CTRL_PORT1 = 0x4016;
     public const ushort PPU_OAM_DMA = 0x4014;
     public const ushort PPU_FRAMECNT = 0x4017;
 
