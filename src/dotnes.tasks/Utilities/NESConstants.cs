@@ -8,18 +8,18 @@ internal static class NESConstants
 {
     // Zero-page variables (neslib)
     public const int ZP_START = 0x00;
-    public const int STARTUP = 0x01;
-    public const int NES_PRG_BANKS = 0x02;
-    public const int VRAM_UPDATE = 0x03;
-    public const int NAME_UPD_ADR = 0x04;
-    public const int NAME_UPD_ENABLE = 0x06;
-    public const int PAL_UPDATE = 0x07;
-    public const int PAL_BG_PTR = 0x08;
-    public const int PAL_SPR_PTR = 0x0A;
-    public const int SCROLL_X = 0x0C;
-    public const int SCROLL_Y = 0x0D;
-    public const int SCROLL_X1 = 0x0E;       // split() saved X scroll
-    public const int PPU_CTRL_VAR1 = 0x0F;   // split() saved PPU_CTRL
+    public const int STARTUP = 0x01; // 1 byte
+    public const int NES_PRG_BANKS = 0x02; // 1 byte
+    public const int VRAM_UPDATE = 0x03; // 1 byte
+    public const int NAME_UPD_ADR = 0x04; // 2 bytes (0x04-0x05)
+    public const int NAME_UPD_ENABLE = 0x06; // 1 byte
+    public const int PAL_UPDATE = 0x07; // 1 byte
+    public const int PAL_BG_PTR = 0x08; // 2 bytes (0x08-0x09)
+    public const int PAL_SPR_PTR = 0x0A; // 2 bytes (0x0A-0x0B)
+    public const int SCROLL_X = 0x0C; // 1 byte
+    public const int SCROLL_Y = 0x0D; // 1 byte
+    public const int SCROLL_X1 = 0x0E; // 1 byte: split() saved X scroll
+    public const int PPU_CTRL_VAR1 = 0x0F; // 1 byte: split() saved PPU_CTRL
     public const int NMI_CALLBACK = 0x14;  // 3 bytes: JMP opcode + address ($14-$16)
     public const int IRQ_CALLBACK = 0x1E;  // 3 bytes: JMP opcode + address ($1E-$20)
     public const int TEMP = 0x17;
