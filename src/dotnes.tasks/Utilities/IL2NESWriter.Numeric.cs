@@ -45,7 +45,25 @@ partial class IL2NESWriter
         }
     }
 
-    internal enum WordArgumentWidening { None, ZeroExtend, SignExtend }
+    /// <summary>
+    /// How a narrow (8-bit) argument held in A must be extended into A:X before
+    /// calling a routine that reads a 16-bit value from A (low) and X (high).
+    /// </summary>
+    internal enum WordArgumentWidening
+    {
+        /// <summary>
+        /// No code emitted: the argument already occupies A:X (16-bit value, array
+        /// address, NTADR result), or the parameter is not 16-bit.
+        /// </summary>
+        None,
+        /// <summary>Unsigned byte/bool: high byte is 0 (<c>LDX #$00</c>).</summary>
+        ZeroExtend,
+        /// <summary>
+        /// Signed sbyte: high byte is $FF when bit 7 of A is set, otherwise $00
+        /// (<c>LDX #$00; CMP #$80; BCC +1; DEX</c>).
+        /// </summary>
+        SignExtend,
+    }
 
     /// <summary>
     /// Determines how the last argument of the current call must be widened when the
@@ -53,43 +71,67 @@ partial class IL2NESWriter
     /// would otherwise keep a stale high byte (dotnes#642). Uses the declared callee
     /// parameter type and the inferred type of the argument's producer.
     /// </summary>
+    /// <remarks>
+    /// Must be called before the call handler consumes the byte-array / NTADR markers,
+    /// since the unknown-producer fallback inspects them.
+    /// </remarks>
     WordArgumentWidening GetLastWordArgumentWidening(string operand)
     {
         if (Instructions == null || Index < 0 || Index >= Instructions.Length)
             return WordArgumentWidening.None;
+
+        // Step 1: does the callee read its last argument as a 16-bit value in A:X?
+        // The type comes from the call-site signature (MethodDef/MemberRef), so it is
+        // exact even for overloaded neslib names, unlike ReflectionCache lookups.
         bool isExtern = ExternMethodNames.Contains(operand);
         switch (Instructions[Index].CallLastParameterType)
         {
             case PrimitiveTypeCode.UInt16 or PrimitiveTypeCode.Int16 or PrimitiveTypeCode.Char:
                 break;
-            // neslib passes uint/int sizes in A:X; extern ABIs for 32-bit values are not defined
+            // neslib passes uint/int sizes (vram_fill, vram_write, ...) in A:X;
+            // extern ABIs for 32-bit values are not defined, so leave them alone.
             case PrimitiveTypeCode.UInt32 or PrimitiveTypeCode.Int32 when !isExtern:
                 break;
+            // byte/sbyte/bool parameters only use A; arrays, refs and structs decode
+            // to null and are marshalled by their own handlers.
             default:
                 return WordArgumentWidening.None;
         }
 
+        // Step 2: what is the static type of the value being passed? The last input
+        // of the call instruction is the IL instruction that produced the argument
+        // (ldc, ldloc, ldarg, ldsfld, conv, call, arithmetic...). Relying on the
+        // producer's type rather than emitter flags such as _ushortInAX keeps the
+        // decision independent of how earlier instructions happened to be emitted.
         var inputs = _numericValues?.Inputs[Index];
         int producer = inputs is { Length: > 0 } ? inputs[inputs.Length - 1] : -1;
         switch (NumericType(producer))
         {
+            // Narrow unsigned value: only A was loaded, X is stale.
             case PrimitiveTypeCode.Byte or PrimitiveTypeCode.Boolean:
                 return WordArgumentWidening.ZeroExtend;
+            // Narrow signed value: C# semantics require sign extension to short/ushort.
             case PrimitiveTypeCode.SByte:
                 return WordArgumentWidening.SignExtend;
             case null:
-                // Unknown producer: widen only when nothing indicates X was already loaded
+                // Unknown producer (merged control flow, unsupported opcode, no value
+                // analysis): fall back to the #642 emitter-state heuristic and widen
+                // only when nothing indicates X was already loaded with a high byte —
+                // a byte-array address, an NTADR result, or a 16-bit value in A:X —
+                // and the compile-time stack value fits in a byte.
                 return _ldlocByteArrayLabel is null
                     && _lastByteArrayLabel is null
                     && !_ntadrRuntimeResult
                     && !_ushortInAX
                     && Stack.Count > 0 && Stack.Peek() is >= 0 and <= byte.MaxValue
                     ? WordArgumentWidening.ZeroExtend : WordArgumentWidening.None;
+            // 16-bit or wider producer: the value was loaded into A:X already.
             default:
                 return WordArgumentWidening.None;
         }
     }
 
+    /// <summary>Emits the A→A:X extension chosen by <see cref="GetLastWordArgumentWidening"/>.</summary>
     void EmitWordArgumentWidening(WordArgumentWidening widening)
     {
         if (widening == WordArgumentWidening.None)
