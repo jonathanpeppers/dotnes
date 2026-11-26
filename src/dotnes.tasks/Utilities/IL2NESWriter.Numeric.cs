@@ -45,6 +45,64 @@ partial class IL2NESWriter
         }
     }
 
+    internal enum WordArgumentWidening { None, ZeroExtend, SignExtend }
+
+    /// <summary>
+    /// Determines how the last argument of the current call must be widened when the
+    /// callee takes it as a 16-bit value in A:X. Narrow arguments only load A, so X
+    /// would otherwise keep a stale high byte (dotnes#642). Uses the declared callee
+    /// parameter type and the inferred type of the argument's producer.
+    /// </summary>
+    WordArgumentWidening GetLastWordArgumentWidening(string operand)
+    {
+        if (Instructions == null || Index < 0 || Index >= Instructions.Length)
+            return WordArgumentWidening.None;
+        bool isExtern = ExternMethodNames.Contains(operand);
+        switch (Instructions[Index].CallLastParameterType)
+        {
+            case PrimitiveTypeCode.UInt16 or PrimitiveTypeCode.Int16 or PrimitiveTypeCode.Char:
+                break;
+            // neslib passes uint/int sizes in A:X; extern ABIs for 32-bit values are not defined
+            case PrimitiveTypeCode.UInt32 or PrimitiveTypeCode.Int32 when !isExtern:
+                break;
+            default:
+                return WordArgumentWidening.None;
+        }
+
+        var inputs = _numericValues?.Inputs[Index];
+        int producer = inputs is { Length: > 0 } ? inputs[inputs.Length - 1] : -1;
+        switch (NumericType(producer))
+        {
+            case PrimitiveTypeCode.Byte or PrimitiveTypeCode.Boolean:
+                return WordArgumentWidening.ZeroExtend;
+            case PrimitiveTypeCode.SByte:
+                return WordArgumentWidening.SignExtend;
+            case null:
+                // Unknown producer: widen only when nothing indicates X was already loaded
+                return _ldlocByteArrayLabel is null
+                    && _lastByteArrayLabel is null
+                    && !_ntadrRuntimeResult
+                    && !_ushortInAX
+                    && Stack.Count > 0 && Stack.Peek() is >= 0 and <= byte.MaxValue
+                    ? WordArgumentWidening.ZeroExtend : WordArgumentWidening.None;
+            default:
+                return WordArgumentWidening.None;
+        }
+    }
+
+    void EmitWordArgumentWidening(WordArgumentWidening widening)
+    {
+        if (widening == WordArgumentWidening.None)
+            return;
+        Emit(Opcode.LDX, AddressMode.Immediate, 0x00);
+        if (widening == WordArgumentWidening.SignExtend)
+        {
+            Emit(Opcode.CMP, AddressMode.Immediate, 0x80);
+            Emit(Opcode.BCC, AddressMode.Relative, 1);
+            Emit(Opcode.DEX, AddressMode.Implied);
+        }
+    }
+
     PrimitiveTypeCode? NumericType(int producer)
     {
         if (producer < 0 || Instructions == null || _numericValues == null)

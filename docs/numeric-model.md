@@ -147,6 +147,15 @@ software-stack convention, including Boolean arguments and a word-sized final
 argument in A:X. Managed Boolean parameters remain unsupported; this does not
 expand the managed scalar signature rules.
 
+When the last parameter of a neslib or extern call is 16-bit (`ushort`, `short`,
+`char`, or a neslib `uint`/`int` size), the argument travels in A:X even if its
+value is narrow. Byte and Boolean arguments (constants 0-255, byte locals,
+fields, and byte-returning calls) are zero-extended with `LDX #$00`. `sbyte`
+arguments are sign-extended. Without this, X keeps a stale high byte, as in
+`vram_adr(0)`, `set_scroll_x(0)`, or `one_vram_buffer(t, 0x40)` (dotnes#642).
+The decision uses the callee's declared parameter type, not emitter state.
+Earlier 16-bit arguments are not widened yet.
+
 Ordinary builds batch contiguous, single-use byte arguments into their existing
 software-stack layout when a complete frame can be constructed safely. Earlier
 arguments retain their declared order and the last argument is still passed in

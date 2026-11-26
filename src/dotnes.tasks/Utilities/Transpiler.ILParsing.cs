@@ -338,7 +338,9 @@ partial class Transpiler
             {
                 CallSignature = opCode == ILOpCode.Call && callSignature is { } signature
                     ? (signature.ParameterTypes.Length + (signature.Header.IsInstance ? 1 : 0),
-                        signature.ReturnType != PrimitiveTypeCode.Void) : null
+                        signature.ReturnType != PrimitiveTypeCode.Void) : null,
+                CallLastParameterType = opCode == ILOpCode.Call && callSignature is { ParameterTypes.Length: > 0 } parameters
+                    ? parameters.ParameterTypes[parameters.ParameterTypes.Length - 1] : null
             };
         }
     }

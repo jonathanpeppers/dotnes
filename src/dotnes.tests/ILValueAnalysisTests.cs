@@ -159,10 +159,10 @@ public class ILValueAnalysisTests
         using var transpiler = new Transpiler(dll, Array.Empty<AssemblyReader>());
         var il = transpiler.ReadStaticVoidMain().ToArray();
         var analysis = new ILValueAnalysis(il, new ReflectionCache());
-        int call = Array.FindIndex(il, i => i.Offset == 0x028A);
+        int call = Array.FindIndex(il, i => i.Offset == 0x027A);
         Assert.True(analysis.Inputs[call].SequenceEqual(new[] { call - 1 }),
             $"Inputs: {string.Join(",", analysis.Inputs[call])}; predecessor: {il[call - 1]}; edges: "
-            + string.Join("; ", il.Where(i => ILValueAnalysis.GetBranchTargets(i).Contains(0x028A))));
+            + string.Join("; ", il.Where(i => ILValueAnalysis.GetBranchTargets(i).Contains(0x027A))));
     }
 
     [Fact]
