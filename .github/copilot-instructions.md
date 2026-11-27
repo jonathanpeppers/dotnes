@@ -69,7 +69,7 @@ binlogtool savestrings output.binlog out.txt # Extract all strings
 - [src/dotnes.tasks/Targets/dotnes.analyzers.targets](src/dotnes.tasks/Targets/dotnes.analyzers.targets) - Excludes the NES analyzer for direct and transitive test consumers, including design-time builds
 
 The Transpile target automatically creates `.nes` from `.dll` + `*.s` files.
-Standard .NET 10 test projects can reference the existing `dotnes` package for
+Standard .NET 11 test projects can reference the existing `dotnes` package for
 `NesCompiler`/`Program6502`/`AssemblyReader` without ROM settings or NES-only
 analyzers. Detection uses props-time `IsTestProject`, not project names or output
 type. Nonstandard test frameworks must set it in `Directory.Build.props`, not

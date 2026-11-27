@@ -1,5 +1,5 @@
 // Usage: dotnet run scripts/screenshot-nes.cs -- <rom_path> [delay_ms] [output.png]
-// Requires: .NET 10+
+// Requires: .NET 11+
 #:package System.Drawing.Common@9.*
 #:property NoWarn=CA1416
 

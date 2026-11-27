@@ -224,10 +224,10 @@ Once all checks pass:
 
    ```powershell
    # Screenshot (PNG)
-   dotnet run scripts/screenshot-nes.cs -- samples/<name>/bin/Debug/net10.0/<name>.nes 4000 samples/<name>/<name>.png
+   dotnet run scripts/screenshot-nes.cs -- samples/<name>/bin/Debug/net11.0/<name>.nes 4000 samples/<name>/<name>.png
 
    # Animated GIF (better for samples with movement)
-   dotnet run scripts/record-nes.cs -- samples/<name>/bin/Debug/net10.0/<name>.nes --gif --output samples/<name>/<name>.gif
+   dotnet run scripts/record-nes.cs -- samples/<name>/bin/Debug/net11.0/<name>.nes --gif --output samples/<name>/<name>.gif
    ```
 
    Upload the image to the PR comment so reviewers can see the result without

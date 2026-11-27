@@ -1,6 +1,6 @@
 // Usage: dotnet run scripts/test-package.cs -- candidate.nupkg [baseline.nupkg]
 //        [--artifacts directory] [--timeout-seconds 300]
-// Requires a .NET 10+ SDK, the .NET 10 runtime, and nuget.org. Child commands honor
+// Requires a .NET 11+ SDK, the .NET 11 runtime, and nuget.org. Child commands honor
 // DOTNET_HOST_PATH (when set), otherwise resolve dotnet using the inherited PATH.
 // All generated projects, isolated caches, logs and
 // test results are retained under artifacts/pkg-<unique run> by default.
@@ -104,8 +104,8 @@ sealed class PackageTests(Options options)
         Write(options.Artifacts, "Directory.Packages.props", "<Project />");
         var sdk = await RunProcess(options.Artifacts, "sdk", "--version");
         string sdkVersion = sdk.Output.Trim();
-        Check(Version.TryParse(sdkVersion.Split('-')[0], out var parsedSdk) && parsedSdk.Major >= 10,
-            $"A .NET 10 or newer SDK is required; found {sdkVersion}");
+        Check(Version.TryParse(sdkVersion.Split('-')[0], out var parsedSdk) && parsedSdk.Major >= 11,
+            $"A .NET 11 or newer SDK is required; found {sdkVersion}");
         Console.WriteLine($"SDK: {sdkVersion}; dotnet host: {dotnetHost}");
         candidateRoot = Path.Combine(options.Artifacts, "candidate");
         candidate = PreparePackage(options.Candidate, candidateRoot, "candidate", requireCompiler: true);
@@ -346,7 +346,7 @@ sealed class PackageTests(Options options)
 
         string output = RomPath(project, "Release");
         string dll = Path.ChangeExtension(output, ".dll");
-        string stamp = Path.Combine(directory, "obj", "Release", "net10.0", "dotnes.properties.stamp");
+        string stamp = Path.Combine(directory, "obj", "Release", "net11.0", "dotnes.properties.stamp");
         string originalDllHash = Hash(File.ReadAllBytes(dll));
         DateTime originalDllTime = File.GetLastWriteTimeUtc(dll);
         byte[] legacyChr = File.ReadAllBytes(hello).AsSpan(16 + 32768, 8192).ToArray();
@@ -626,7 +626,7 @@ sealed class PackageTests(Options options)
         Write(directory, $"{name}.csproj", $"""
             <Project Sdk="Microsoft.NET.Sdk">
               <PropertyGroup Label="PackageConsumer">
-                <TargetFramework>net10.0</TargetFramework>
+                <TargetFramework>net11.0</TargetFramework>
                 <ImplicitUsings>enable</ImplicitUsings>
                 <Nullable>enable</Nullable>
                 {properties}
@@ -863,7 +863,7 @@ sealed class PackageTests(Options options)
 
     void CheckDesktopOutputs(string project, string configuration, JsonElement evaluation)
     {
-        string output = Path.Combine(ProjectDirectory(project), "bin", configuration, "net10.0");
+        string output = Path.Combine(ProjectDirectory(project), "bin", configuration, "net11.0");
         string name = Path.GetFileNameWithoutExtension(project);
         foreach (string file in new[] { $"{name}.dll", $"{name}.deps.json" })
             Check(File.Exists(Path.Combine(output, file)), $"{project}/{configuration}: missing desktop output {file}.");
@@ -872,7 +872,7 @@ sealed class PackageTests(Options options)
             Check(File.Exists(Path.Combine(output, file)) == copyLocal, $"{project}/{configuration}: SDK CopyLocalLockFileAssemblies={copyLocal} was not respected for {file}.");
         Check(File.Exists(Path.Combine(output, $"{name}.runtimeconfig.json")) == (Property(evaluation, "GenerateRuntimeConfigurationFiles") == "true"),
             $"{project}/{configuration}: runtimeconfig generation differs from SDK settings.");
-        Check(File.Exists(Path.Combine(ProjectDirectory(project), "obj", configuration, "net10.0", "ref", $"{name}.dll")),
+        Check(File.Exists(Path.Combine(ProjectDirectory(project), "obj", configuration, "net11.0", "ref", $"{name}.dll")),
             $"{project}/{configuration}: SDK reference assembly missing.");
         using var deps = JsonDocument.Parse(File.ReadAllText(Path.Combine(output, $"{name}.deps.json")));
         var target = deps.RootElement.GetProperty("targets").EnumerateObject().First().Value;
@@ -1009,7 +1009,7 @@ sealed class PackageTests(Options options)
                     result.Output.Contains("IsTestProject changed after package props were evaluated", StringComparison.Ordinal),
                     $"Late IsTestProject changes must fail explicitly during {scenario}, in both directions. {result.Log}");
                 Check(!HasTranspileMessage(result.Output), $"Late IsTestProject validation reached transpilation. {result.Log}");
-                Check(!File.Exists(Path.Combine(ProjectDirectory(project), "bin", "Debug", "net10.0", Path.GetFileNameWithoutExtension(project) + ".dll")),
+                Check(!File.Exists(Path.Combine(ProjectDirectory(project), "bin", "Debug", "net11.0", Path.GetFileNameWithoutExtension(project) + ".dll")),
                     $"Late IsTestProject validation occurred after compilation. {result.Log}");
                 NoRomArtifacts(project);
             }
@@ -1145,7 +1145,7 @@ sealed class PackageTests(Options options)
     static bool HasTranspileMessage(string output) => output.Contains("Transpiling", StringComparison.OrdinalIgnoreCase) || output.Contains("TranspileToNES", StringComparison.OrdinalIgnoreCase);
     static string ProjectDirectory(string project) => Path.GetDirectoryName(project)!;
     static string PackageRoot(string project) => Path.GetDirectoryName(ProjectDirectory(project))!;
-    static string RomPath(string project, string configuration) => Path.Combine(ProjectDirectory(project), "bin", configuration, "net10.0", Path.GetFileNameWithoutExtension(project) + ".nes");
+    static string RomPath(string project, string configuration) => Path.Combine(ProjectDirectory(project), "bin", configuration, "net11.0", Path.GetFileNameWithoutExtension(project) + ".nes");
     static string Hash(byte[] bytes) => Convert.ToHexString(SHA256.HashData(bytes));
     static string Quote(string value) => "\"" + JsonEncodedText.Encode(value) + "\"";
     static void Write(string directory, string name, string contents) => File.WriteAllText(Path.Combine(directory, name), contents, new UTF8Encoding(false));

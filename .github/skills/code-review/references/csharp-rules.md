@@ -19,7 +19,7 @@ General C# guidance applicable across this repository.
 |-------|-----------------|
 | **Nullable is project-level** | Nullable is enabled via `<Nullable>enable</Nullable>` in project files. Per-file `#nullable enable` is unnecessary. |
 | **Avoid `!` (null-forgiving operator)** | The postfix `!` null-forgiving operator should be avoided. Add proper null checks or make the type non-nullable. Exception: `NESLib.cs` uses `throw null!` by design. |
-| **`ArgumentNullException.ThrowIfNull`** | Use `ArgumentNullException.ThrowIfNull(param)` for parameter validation — but only in `net10.0`-targeting projects. The `dotnes.tasks` project targets `netstandard2.0` where this API is unavailable; use explicit `if (x is null) throw new ArgumentNullException(nameof(x));` there instead. |
+| **`ArgumentNullException.ThrowIfNull`** | Use `ArgumentNullException.ThrowIfNull(param)` for parameter validation — but only in `net11.0`-targeting projects. The `dotnes.tasks` project targets `netstandard2.0` where this API is unavailable; use explicit `if (x is null) throw new ArgumentNullException(nameof(x));` there instead. |
 
 ---
 

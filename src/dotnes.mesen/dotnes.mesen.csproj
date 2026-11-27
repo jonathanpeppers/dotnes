@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.Build.NoTargets">
   <Import Project="../NuGet.props" />
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFramework>net11.0</TargetFramework>
     <Description>Mesen Community Edition integration for .NES — downloads MesenCE at build time for 'dotnet run'. The integration is MIT-licensed; the separately downloaded emulator is GPLv3.</Description>
     <PackageProjectUrl>https://github.com/nesdev-org/MesenCE</PackageProjectUrl>
     <PackageTags>$(PackageTags) Emulator Mesen MesenCE</PackageTags>

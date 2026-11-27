@@ -138,7 +138,7 @@ public class DecompilerTests
         var csproj = decompiler.GenerateCsproj("hello");
 
         Assert.Contains("<OutputType>Exe</OutputType>", csproj);
-        Assert.Contains("<TargetFramework>net10.0</TargetFramework>", csproj);
+        Assert.Contains("<TargetFramework>net11.0</TargetFramework>", csproj);
         Assert.Contains("<Using Include=\"NES\" />", csproj);
         Assert.Contains("dotnes", csproj);
         // hello uses default settings so no mapper/prg/chr overrides
