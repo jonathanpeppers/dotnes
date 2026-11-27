@@ -162,7 +162,10 @@ while (true)
     for (i = 0; i < 16; i = (byte)(i + 1))
     {
         map[i] = 0;
-        prev_map[i] = 0;
+        // 0xFF forces every cell to redraw below: the redraw pass only
+        // rewrites tiles that differ from prev_map, so zeroing both
+        // would leave the previous game's tiles on screen.
+        prev_map[i] = 0xFF;
     }
     oam_clear();
 
