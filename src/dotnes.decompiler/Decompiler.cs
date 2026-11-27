@@ -253,8 +253,8 @@ class Decompiler
             ("incsp1", new byte[] { 0xA0, 0x00, 0xF0 }),
             // vram_write subroutine starting with ptr1/ptr2 setup
             ("vram_write", new byte[] { 0x85, 0x2A, 0x86, 0x2B }),
-            // set_rand: STA RAND_SEED ($3C); RTS  (85 3C 60)
-            ("set_rand", new byte[] { 0x85, 0x3C, 0x60 }),
+            // set_rand: STA RAND_SEED ($47); RTS  (85 47 60)
+            ("set_rand", new byte[] { 0x85, 0x47, 0x60 }),
             // pad_poll: TAY; LDX #$00; LDA #$01; STA $4016  (A8 A2 00 A9 01 8D 16 40)
             ("pad_poll", new byte[] { 0xA8, 0xA2, 0x00, 0xA9, 0x01, 0x8D, 0x16, 0x40 }),
             // pad_state: TAX; LDA $3C,X; LDX #$00; RTS  (AA B5 3C A2 00 60)

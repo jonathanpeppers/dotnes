@@ -251,7 +251,11 @@ The NES library stores state in zero page. Key addresses
 | $1B | OAM_OFF | OAM buffer offset |
 | $1C | UPDPTR | VRAM update buffer index |
 | $22 | sp | C stack pointer |
-| $3C | RAND_SEED | Random seed for PRNG |
+| $3C-$3D | PAD_STATE | Current controller states |
+| $3E-$3F | PAD_STATEP | Previous controller states |
+| $40-$41 | PAD_STATET | Newly pressed controller states |
+| $47 | RAND_SEED | Random seed for PRNG |
+| $48-$4B | RAND_STATE | 32-bit state for rand16 |
 
 ```lua
 -- read_zeropage.lua
@@ -271,10 +275,11 @@ emu.addEventCallback(function()
       [0x0F]="PPU_CTRL_VAR1", [0x10]="PRG_FILEOFFS", [0x12]="PPU_MASK_VAR",
       [0x14]="NMI_CALLBACK", [0x17]="TEMP", [0x18]="TEMP_HI",
       [0x19]="TEMP2", [0x1A]="TEMP3", [0x1B]="OAM_OFF", [0x1C]="UPDPTR",
-      [0x22]="sp", [0x3C]="RAND_SEED"
+      [0x22]="sp", [0x3C]="PAD_STATE", [0x3E]="PAD_STATEP",
+      [0x40]="PAD_STATET", [0x47]="RAND_SEED", [0x48]="RAND_STATE"
     }
 
-    for addr = 0, 31 do
+    for addr = 0, 0x4B do
       local val = emu.read(addr, emu.memType.nesInternalRam)
       local name = names[addr] or ""
       f:write(string.format("  $%02X = $%02X  %s\n", addr, val, name))

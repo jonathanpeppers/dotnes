@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Xunit.Abstractions;
 
 namespace dotnes.tests;
@@ -504,35 +505,37 @@ public class DecompilerTests
     [Fact]
     public void Decompiler_Shoot2_RecoverPadPollResultStorage()
     {
-        // shoot2 calls pad_poll(0) and stores result: LDA #$00 / JSR pad_poll / STA $0380
+        // shoot2 calls pad_poll(0) and stores its result in a local variable.
         var romBytes = GetVerifiedRom("shoot2");
         var rom = new NESRomReader(romBytes);
         var decompiler = new Decompiler(rom, _logger);
 
         var code = decompiler.Decompile();
 
-        // pad_poll result should be stored to a local variable
-        Assert.Contains("var_0380 = pad_poll(0);", code);
-        // Variable storing pad_poll should be typed as PAD, not byte
-        Assert.Contains("PAD var_0380 = 0;", code);
-        Assert.DoesNotContain("byte var_0380", code);
+        var assignment = Regex.Match(code, @"(?<variable>var_[0-9A-F]{4}) = pad_poll\(0\);");
+        Assert.True(assignment.Success, "Expected pad_poll result to be stored in a local variable");
+        var variable = assignment.Groups["variable"].Value;
+
+        Assert.Contains($"PAD {variable} = 0;", code);
+        Assert.DoesNotContain($"byte {variable}", code);
     }
 
     [Fact]
     public void Decompiler_Shoot2_RecoverPadMasking()
     {
-        // shoot2 uses LDA $0380 / AND #$01 / BEQ → if ((var_0380 & PAD.A) != 0)
-        // and pad_dpad_x emits AND #$80 → if ((var_0380 & PAD.RIGHT) != 0)
+        // shoot2 tests the pad_poll result against PAD.A and PAD.RIGHT.
         var romBytes = GetVerifiedRom("shoot2");
         var rom = new NESRomReader(romBytes);
         var decompiler = new Decompiler(rom, _logger);
 
         var code = decompiler.Decompile();
 
-        // PAD.A masking (AND #$01)
-        Assert.Contains("if ((var_0380 & PAD.A) != 0)", code);
-        // PAD.RIGHT masking (AND #$80)
-        Assert.Contains("if ((var_0380 & PAD.RIGHT) != 0)", code);
+        var assignment = Regex.Match(code, @"(?<variable>var_[0-9A-F]{4}) = pad_poll\(0\);");
+        Assert.True(assignment.Success, "Expected pad_poll result to be stored in a local variable");
+        var variable = assignment.Groups["variable"].Value;
+
+        Assert.Contains($"if (({variable} & PAD.A) != 0)", code);
+        Assert.Contains($"if (({variable} & PAD.RIGHT) != 0)", code);
     }
 
     [Fact]
