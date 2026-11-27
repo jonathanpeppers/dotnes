@@ -27,8 +27,8 @@ internal static class NESConstants
     public const int PAD_STATE = 0x3C;  // 2 bytes total (1 per controller): current state
     public const int PAD_STATEP = 0x3E; // 2 bytes total (1 per controller): previous state
     public const int PAD_STATET = 0x40; // 2 bytes total (1 per controller): newly pressed state
-    public const int RAND_SEED = 0x3C;  // 1 byte: random seed for LFSR PRNG (cc65 compatible)
-    public const int RAND_STATE = 0x3D; // 4 bytes: cc65 rand() LCG state ($3D-$40)
+    public const int RAND_SEED = 0x47;  // 1 byte: random seed for LFSR PRNG (cc65 compatible)
+    public const int RAND_STATE = 0x48; // 4 bytes: cc65 rand() LCG state ($48-$4B)
     public const int PAL_FADE_TO = 0x43;   // 1 byte: destination brightness
     public const int PAL_FADE_FROM = 0x44; // 1 byte: current brightness during fade
     public const int TEMP2 = 0x19;  // Additional temporary variable

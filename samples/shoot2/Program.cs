@@ -227,11 +227,7 @@ while (true)
     // --- Fire bullet ---
     if (fire_cooldown != 0) fire_cooldown = (byte)(fire_cooldown - 1);
 
-    // Save PRNG seed before pad_poll — RAND_SEED ($3C) and PAD_STATE share the
-    // same address in cc65 neslib, so pad_poll overwrites the seed every frame.
-    byte rand_save = peek(0x083C);
     PAD pad = pad_poll(0);
-    poke(0x083C, rand_save);
 
     if ((pad & PAD.A) != 0)
     {
