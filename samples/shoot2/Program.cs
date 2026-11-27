@@ -119,10 +119,7 @@ vram_adr(0x1000);
 vram_write(SPRITE_TILES);
 
 // Upload background tiles to CHR RAM pattern table 0 ($0000)
-// Cannot use vram_adr(0x0000) — transpiler doesn't emit LDX #$00 for zero ushort,
-// so X retains stale value from previous vram_write, setting wrong PPU address.
-poke(0x2006, 0x00);
-poke(0x2006, 0x00);
+vram_adr(0x0000);
 vram_write(BG_TILES);
 
 // Set palettes

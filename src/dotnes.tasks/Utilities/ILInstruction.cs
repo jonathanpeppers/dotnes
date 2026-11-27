@@ -11,6 +11,12 @@ record ILInstruction(ILOpCode OpCode, int Offset = 0, int? Integer = null, strin
     internal (int ArgumentCount, bool ReturnsValue)? CallSignature { get; init; }
 
     /// <summary>
+    /// Primitive type of the call target's last parameter, or <c>null</c> for arrays,
+    /// references, and structs.
+    /// </summary>
+    internal PrimitiveTypeCode? CallLastParameterType { get; init; }
+
+    /// <summary>
     /// Gets the local index for a Stloc opcode, or null if not a Stloc.
     /// </summary>
     public int? GetStlocIndex() => OpCode switch

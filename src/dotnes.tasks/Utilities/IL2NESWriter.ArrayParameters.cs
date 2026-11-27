@@ -127,6 +127,81 @@ partial class IL2NESWriter
         return true;
     }
 
+    /// <summary>Loads the address of an array argument into A:X.</summary>
+    void EmitArrayAddress(ILInstruction source)
+    {
+        var array = TryResolveArrayLocal(source);
+        if (array?.ArrayParameterIndex is not null)
+        {
+            EmitArrayParameterPointer(array);
+            Emit(Opcode.LDA, AddressMode.ZeroPage, ptr1);
+            Emit(Opcode.LDX, AddressMode.ZeroPage, ptr1 + 1);
+        }
+        else if (array?.ArraySize > 0 && array.Address is int address)
+        {
+            Emit(Opcode.LDA, AddressMode.Immediate, (byte)address);
+            Emit(Opcode.LDX, AddressMode.Immediate, (byte)(address >> 8));
+        }
+        else if (array?.LabelName is string label)
+        {
+            EmitWithLabel(Opcode.LDA, AddressMode.Immediate_LowByte, label);
+            EmitWithLabel(Opcode.LDX, AddressMode.Immediate_HighByte, label);
+        }
+        else
+            throw new TranspileException("Byte-array arguments must reference an existing fixed array.", MethodName);
+    }
+
+    /// <summary>
+    /// Emits <c>multi_vram_buffer_horz/vert(byte[] data, byte len, ushort ppuAddress)</c>:
+    /// data with pushax, len with pusha, and ppuAddress in A:X. ArrayOperandLowering
+    /// reloads all three arguments immediately before the call.
+    /// </summary>
+    void EmitMultiVramBufferCall(string method)
+    {
+        if (Instructions is null || Index < 3)
+            throw new TranspileException($"{method} call has no argument instructions.", MethodName);
+        var data = Instructions[Index - 3];
+        var length = Instructions[Index - 2];
+        var address = Instructions[Index - 1];
+        RemoveArrayArgumentLoads(data.Offset);
+
+        EmitArrayAddress(data);
+        EmitJSR("pushax");
+        UsedMethods?.Add("pushax");
+        _argStackAdjust += 2;
+        EmitArrayScalar(length);
+        EmitJSR("pusha");
+        UsedMethods?.Add("pusha");
+        _argStackAdjust += 1;
+
+        if (address.GetLdcValue() is int constant)
+        {
+            if (constant is < 0 or > ushort.MaxValue)
+                throw new TranspileException($"{method} address must fit in 16 bits.", MethodName);
+            Emit(Opcode.LDA, AddressMode.Immediate, (byte)constant);
+            Emit(Opcode.LDX, AddressMode.Immediate, (byte)(constant >> 8));
+        }
+        else if (address.GetLdlocIndex() is int index && Locals.TryGetValue(index, out var local)
+            && local.Address is int localAddress)
+        {
+            Emit(Opcode.LDA, AddressMode.Absolute, checked((ushort)localAddress));
+            if (local.IsWord)
+                Emit(Opcode.LDX, AddressMode.Absolute, checked((ushort)(localAddress + 1)));
+            else
+                Emit(Opcode.LDX, AddressMode.Immediate, 0x00);
+        }
+        else
+            throw new TranspileException($"{method} address must be materialized before the call.", MethodName);
+
+        EmitJSR(method);
+        _argStackAdjust -= 3;
+        _lastByteArrayLabel = null;
+        _lastByteArraySize = 0;
+        _needsByteArrayLoadInCall = false;
+        _immediateInA = null;
+        _pokeLastValue = null;
+    }
+
     bool TryEmitArrayParameterCall(string method)
     {
         if (!UserMethodArrayParameters.TryGetValue(method, out var parameters) ||
@@ -148,27 +223,7 @@ partial class IL2NESWriter
         {
             var source = Instructions[first + i];
             if (parameters[i])
-            {
-                var array = TryResolveArrayLocal(source);
-                if (array?.ArrayParameterIndex is not null)
-                {
-                    EmitArrayParameterPointer(array);
-                    Emit(Opcode.LDA, AddressMode.ZeroPage, ptr1);
-                    Emit(Opcode.LDX, AddressMode.ZeroPage, ptr1 + 1);
-                }
-                else if (array?.ArraySize > 0 && array.Address is int address)
-                {
-                    Emit(Opcode.LDA, AddressMode.Immediate, (byte)address);
-                    Emit(Opcode.LDX, AddressMode.Immediate, (byte)(address >> 8));
-                }
-                else if (array?.LabelName is string label)
-                {
-                    EmitWithLabel(Opcode.LDA, AddressMode.Immediate_LowByte, label);
-                    EmitWithLabel(Opcode.LDX, AddressMode.Immediate_HighByte, label);
-                }
-                else
-                    throw new TranspileException("Byte-array helper arguments must reference an existing fixed array.", MethodName);
-            }
+                EmitArrayAddress(source);
             else
                 EmitArrayScalar(source);
 

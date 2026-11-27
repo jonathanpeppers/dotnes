@@ -3209,12 +3209,7 @@ partial class IL2NESWriter
                         break;
                     case nameof(NESLib.vram_fill):
                         // vram_fill(value, count) — count is passed in A:X (16-bit).
-                        // WriteLdc(ushort) already sets both A and X.
-                        // WriteLdc(byte) only sets A, so X may be garbage — clear it.
-                        if (Stack.Count > 0 && Stack.Peek() <= byte.MaxValue)
-                        {
-                            Emit(Opcode.LDX, AddressMode.Immediate, 0x00);
-                        }
+                        EmitWordArgumentWidening(GetLastWordArgumentWidening(operand));
                         EmitWithLabel(Opcode.JSR, AddressMode.Absolute, operand);
                         _immediateInA = null;
                         break;
@@ -3350,18 +3345,15 @@ partial class IL2NESWriter
                         WriteLdc(1);
                         argsAlreadyPopped = true;
                         break;
+                    case nameof(NESLib.multi_vram_buffer_horz):
+                    case nameof(NESLib.multi_vram_buffer_vert):
+                        EmitMultiVramBufferCall(operand);
+                        break;
                     default:
-                        // set_vram_update(ushort) takes the full address in A:X, but a
-                        // byte-sized argument only loads A — widen it with LDX #$00
-                        // (dotnes#642). Array arguments, word values, and NTADR results
-                        // already load X, so they are not widened. This must be captured
-                        // before the array handling below consumes the markers.
-                        bool widenSetVramUpdateArg = operand is nameof(NESLib.set_vram_update)
-                            && _ldlocByteArrayLabel is null
-                            && _lastByteArrayLabel is null
-                            && !_ntadrRuntimeResult
-                            && !_ushortInAX
-                            && Stack.Count > 0 && Stack.Peek() is >= 0 and <= byte.MaxValue;
+                        // A 16-bit last parameter is passed in A:X, but byte-sized
+                        // arguments only load A (dotnes#642). Decide before the array
+                        // handling below consumes the markers used by the fallback.
+                        var lastArgWidening = GetLastWordArgumentWidening(operand);
                         if (TryEmitArrayParameterCall(operand))
                             break;
                         // Handle byte array locals loaded via ldloc (pushax pattern).
@@ -3401,6 +3393,8 @@ partial class IL2NESWriter
                             }
                             if (needsLoad)
                             {
+                                // A:X now hold the array address (or its size), not the last argument
+                                lastArgWidening = WordArgumentWidening.None;
                                 EmitWithLabel(Opcode.LDA, AddressMode.Immediate_LowByte, _lastByteArrayLabel);
                                 EmitWithLabel(Opcode.LDX, AddressMode.Immediate_HighByte, _lastByteArrayLabel);
                                 // vram_write/vram_read use cc65 calling convention: pointer on stack, size in A:X
@@ -3418,10 +3412,7 @@ partial class IL2NESWriter
                                 _lastByteArraySize = 0;
                             }
                         }
-                        if (widenSetVramUpdateArg)
-                        {
-                            Emit(Opcode.LDX, AddressMode.Immediate, 0x00);
-                        }
+                        EmitWordArgumentWidening(lastArgWidening);
                         // Emit JSR — extern methods use cc65 _prefix convention
                         if (ExternMethodNames.Contains(operand))
                             EmitWithLabel(Opcode.JSR, AddressMode.Absolute, $"_{operand}");

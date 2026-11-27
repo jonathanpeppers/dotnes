@@ -45,6 +45,69 @@ partial class IL2NESWriter
         }
     }
 
+    /// <summary>How to extend a narrow argument in A into A:X for a 16-bit parameter.</summary>
+    internal enum WordArgumentWidening
+    {
+        /// <summary>The argument already fills A:X, or the parameter is not 16-bit.</summary>
+        None,
+        /// <summary><c>LDX #$00</c></summary>
+        ZeroExtend,
+        /// <summary><c>LDX #$00; CMP #$80; BCC +1; DEX</c></summary>
+        SignExtend,
+    }
+
+    /// <summary>
+    /// A narrow last argument only loads A, so a 16-bit parameter would read a stale
+    /// X (dotnes#642). Chooses the extension from the declared parameter type and the
+    /// argument's type. Call this before the call handler clears the byte-array and
+    /// NTADR markers, because the unknown-type fallback reads them.
+    /// </summary>
+    WordArgumentWidening GetLastWordArgumentWidening(string operand)
+    {
+        if (Instructions == null || Index < 0 || Index >= Instructions.Length)
+            return WordArgumentWidening.None;
+
+        switch (Instructions[Index].CallLastParameterType)
+        {
+            case PrimitiveTypeCode.UInt16 or PrimitiveTypeCode.Int16 or PrimitiveTypeCode.Char:
+                break;
+            // neslib passes uint/int sizes (vram_fill, ...) in A:X; extern methods have no 32-bit ABI.
+            case PrimitiveTypeCode.UInt32 or PrimitiveTypeCode.Int32 when !ExternMethodNames.Contains(operand):
+                break;
+            default:
+                return WordArgumentWidening.None;
+        }
+
+        var inputs = _numericValues?.Inputs[Index];
+        int producer = inputs is { Length: > 0 } ? inputs[inputs.Length - 1] : -1;
+        return NumericType(producer) switch
+        {
+            PrimitiveTypeCode.Byte or PrimitiveTypeCode.Boolean => WordArgumentWidening.ZeroExtend,
+            PrimitiveTypeCode.SByte => WordArgumentWidening.SignExtend,
+            // Unknown type: keep the #642 heuristic and widen only when X holds no
+            // array address, NTADR result, or 16-bit value.
+            null when _ldlocByteArrayLabel is null
+                && _lastByteArrayLabel is null
+                && !_ntadrRuntimeResult
+                && !_ushortInAX
+                && Stack.Count > 0 && Stack.Peek() is >= 0 and <= byte.MaxValue => WordArgumentWidening.ZeroExtend,
+            _ => WordArgumentWidening.None,
+        };
+    }
+
+    void EmitWordArgumentWidening(WordArgumentWidening widening)
+    {
+        if (widening == WordArgumentWidening.None)
+            return;
+        Emit(Opcode.LDX, AddressMode.Immediate, 0x00);
+        if (widening == WordArgumentWidening.SignExtend)
+        {
+            Emit(Opcode.CMP, AddressMode.Immediate, 0x80);
+            Emit(Opcode.BCC, AddressMode.Relative, 1);
+            Emit(Opcode.DEX, AddressMode.Implied);
+        }
+    }
+
     PrimitiveTypeCode? NumericType(int producer)
     {
         if (producer < 0 || Instructions == null || _numericValues == null)
@@ -283,9 +346,13 @@ partial class IL2NESWriter
                 {
                     int producer = _numericValues != null && _numericValues.Inputs[Index].Length == 1
                         ? _numericValues.Inputs[Index][0] : -1;
+                    // A compile-time NTADR_* fold already loaded the full address into A:X.
+                    bool constantNtadr = producer >= 0 && producer == Index - 1 && !_ntadrRuntimeResult
+                        && Instructions![producer] is { OpCode: ILOpCode.Call, String: nameof(NES.NESLib.NTADR_A)
+                            or nameof(NES.NESLib.NTADR_B) or nameof(NES.NESLib.NTADR_C) or nameof(NES.NESLib.NTADR_D) };
                     if (producer >= 0 && Instructions![producer].GetLdcValue() is int constant)
                         Emit(Opcode.LDX, AddressMode.Immediate, (byte)(constant >> 8));
-                    else
+                    else if (!constantNtadr)
                         EmitNumericExtension(SignedNumericType(NumericType(producer)));
                     _ushortInAX = true;
                 }
