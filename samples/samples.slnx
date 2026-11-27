@@ -49,7 +49,6 @@
   <Project Path="tileset1/tileset1.csproj" />
   <Project Path="tint/tint.csproj" />
   <Project Path="transtable/transtable.csproj" />
-  <Project Path="unknown/unknown.csproj" />
   <Project Path="vertscroll/vertscroll.csproj" />
   <Project Path="vrambuffer/vrambuffer.csproj" />
 </Solution>
