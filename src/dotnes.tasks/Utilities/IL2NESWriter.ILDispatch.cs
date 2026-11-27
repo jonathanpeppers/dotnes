@@ -3345,6 +3345,10 @@ partial class IL2NESWriter
                         WriteLdc(1);
                         argsAlreadyPopped = true;
                         break;
+                    case nameof(NESLib.multi_vram_buffer_horz):
+                    case nameof(NESLib.multi_vram_buffer_vert):
+                        EmitMultiVramBufferCall(operand);
+                        break;
                     default:
                         // A 16-bit last parameter is passed in A:X, but byte-sized
                         // arguments only load A (dotnes#642). Decide before the array

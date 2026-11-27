@@ -153,8 +153,8 @@ value is narrow. Byte and Boolean arguments (constants 0-255, byte locals,
 fields, and byte-returning calls) are zero-extended with `LDX #$00`. `sbyte`
 arguments are sign-extended. Without this, X keeps a stale high byte, as in
 `vram_adr(0)`, `set_scroll_x(0)`, or `one_vram_buffer(t, 0x40)` (dotnes#642).
-The decision uses the callee's declared parameter type, not emitter state.
-Earlier 16-bit arguments are not widened yet.
+The decision uses the callee's declared parameter type and the argument's
+inferred type. Earlier 16-bit arguments are not widened yet.
 
 Ordinary builds batch contiguous, single-use byte arguments into their existing
 software-stack layout when a complete frame can be constructed safely. Earlier

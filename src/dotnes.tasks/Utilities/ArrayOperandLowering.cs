@@ -340,6 +340,12 @@ static class ArrayOperandLowering
                     SelectInputs(i);
                 }
             }
+            else if (instruction.OpCode == ILOpCode.Call &&
+                instruction.String is nameof(NES.NESLib.multi_vram_buffer_horz) or nameof(NES.NESLib.multi_vram_buffer_vert))
+            {
+                // IL2NESWriter.EmitMultiVramBufferCall reloads each argument from a simple source.
+                SelectInputs(i);
+            }
 
             if (instruction.OpCode is ILOpCode.Ldelem_u1 or ILOpCode.Stelem_i1 or ILOpCode.Ldelema &&
                 inputs.Length >= 2 && inputs[0] >= 0 &&

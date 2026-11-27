@@ -11,9 +11,8 @@ record ILInstruction(ILOpCode OpCode, int Offset = 0, int? Integer = null, strin
     internal (int ArgumentCount, bool ReturnsValue)? CallSignature { get; init; }
 
     /// <summary>
-    /// Declared primitive type of the call target's last parameter; arrays, references
-    /// and non-enum structs decode to <c>null</c>. Used to widen narrow arguments
-    /// passed to 16-bit parameters in A:X.
+    /// Primitive type of the call target's last parameter, or <c>null</c> for arrays,
+    /// references, and structs.
     /// </summary>
     internal PrimitiveTypeCode? CallLastParameterType { get; init; }
 
