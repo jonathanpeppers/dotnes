@@ -103,4 +103,25 @@ public class WordArgumentWideningExecutionTests(ITestOutputHelper output) : Exec
         cpu.RunUntil(0x7FF0);
         Assert.Equal(new[] { lo, hi }, cpu.Memory[0x6000..0x6002]);
     }
+
+    [Theory]
+    [InlineData(0, 0xFE, 0xFF)]
+    [InlineData(1, 0x05, 0x00)]
+    public void ExternWordTailPreservesConditionalSignedArgument(byte flag, byte lo, byte hi)
+    {
+        using var transpiler = BuildProgram(
+            """
+            vram_adr(0x2400);
+            Store(peek(0x6010) == 0 ? (sbyte)-2 : (sbyte)5);
+            test_stop(); while (true) ;
+            static extern void test_stop();
+            static extern void Store(short value);
+            """, out var program);
+        program.DefineExternalLabel("_test_stop", 0x7FF0);
+        program.CreateBlock("_Store").Emit(STA_abs(0x6000)).Emit(STX_abs(0x6001)).Emit(RTS());
+        var cpu = new Cpu6502(program.ToBytes(), program.BaseAddress, program.GetLabels()["main"]);
+        cpu.Memory[0x6010] = flag;
+        cpu.RunUntil(0x7FF0);
+        Assert.Equal(new[] { lo, hi }, cpu.Memory[0x6000..0x6002]);
+    }
 }
