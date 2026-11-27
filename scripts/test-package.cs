@@ -104,8 +104,8 @@ sealed class PackageTests(Options options)
         Write(options.Artifacts, "Directory.Packages.props", "<Project />");
         var sdk = await RunProcess(options.Artifacts, "sdk", "--version");
         string sdkVersion = sdk.Output.Trim();
-        Check(Version.TryParse(sdkVersion.Split('-')[0], out var parsedSdk) &&         parsedSdk.Major >= 11,
-                    $"A .NET 11 or newer SDK is required; found {sdkVersion}");
+        Check(Version.TryParse(sdkVersion.Split('-')[0], out var parsedSdk) && parsedSdk.Major >= 11,
+            $"A .NET 11 or newer SDK is required; found {sdkVersion}");
         Console.WriteLine($"SDK: {sdkVersion}; dotnet host: {dotnetHost}");
         candidateRoot = Path.Combine(options.Artifacts, "candidate");
         candidate = PreparePackage(options.Candidate, candidateRoot, "candidate", requireCompiler: true);
