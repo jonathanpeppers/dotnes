@@ -20,8 +20,8 @@ const byte MAX_ACTORS = 8;
 const byte SCREEN_Y_BOTTOM = 208;
 const byte ACTOR_MIN_X = 16;
 const byte ACTOR_MAX_X = 228;
-const byte ACTOR_SCROLL_UP_Y = 110;
-const byte ACTOR_SCROLL_DOWN_Y = 140;
+const byte ACTOR_SCROLL_UP_Y = 96;
+const byte ACTOR_SCROLL_DOWN_Y = 126;
 const byte JUMP_VELOCITY = 18;
 const byte CH_FLOOR = 0xf4;
 const byte CH_LADDER = 0xd4;
@@ -813,8 +813,16 @@ while (true)
                     byte draw_rh;
                     if (scrolled == 1)
                         draw_rh = (byte)(scroll_tile_y + 30); // row above viewport
+                    else if (scroll_tile_y < 4)
+                        draw_rh = (byte)(scroll_tile_y + 56); // row below viewport, -4 mod 60
                     else
-                        draw_rh = scroll_tile_y; // row below viewport
+                        // Row below viewport, one tile early like the up case: the
+                        // viewport's bottom row at tile T is T-2, so the row entering
+                        // at the next step down is T-4. Redrawing scroll_tile_y itself
+                        // (the old code) rewrote a row already on screen and correct,
+                        // so rows entering below kept stale content from 60 rows up
+                        // and the layout switched when moving up and down again.
+                        draw_rh = (byte)(scroll_tile_y - 4); // row below viewport
 
                     // Now update scroll_tile_y
                     scroll_tile_y = (byte)(scroll_yy_lo >> 3);
@@ -896,21 +904,36 @@ while (true)
                     else
                         daddr = NTADR_C(1, (byte)(drowy - 30));
 
-                    // Update attribute table on every 4th row (matches original draw_floor_line)
-                    if ((drowy & 3) == 0)
+                    // Update the attribute byte for the 4-row group whose top
+                    // row is draw_rh (fires when draw_rh is a group top).
+                    // NT A groups start at nametable rows 0,4,8... (drowy % 4 == 0)
+                    // but NT C groups start at rows 30,34,38... ((drowy-30) % 4 == 0);
+                    // firing on (drowy & 3) == 0 for both misaligned NT C by 2 rows.
+                    // The byte covers draw_rh..draw_rh-3, so check each row in the
+                    // group like the initial attribute setup does: a floor-top row
+                    // (dy 0..1) puts palette 1 in its half.
+                    if ((drowy < 30 && (drowy & 3) == 0) || (drowy >= 30 && ((drowy - 30) & 3) == 0))
                     {
-                        byte attr_a = 0x00;
+                        byte top_pal = 0;
+                        byte bot_pal = 0;
                         for (byte af = 0; af < MAX_FLOORS; af++)
                         {
-                            byte ady = (byte)(draw_rh - floor_ypos[af]);
-                            if (ady >= 253) ady = 0;
-                            if (ady < floor_height[af])
+                            for (byte qr = 0; qr < 4; qr++)
                             {
-                                if (ady == 1) attr_a = 0x05;
-                                else if (ady == 3) attr_a = 0x50;
-                                break;
+                                byte grh = (byte)(draw_rh - qr);
+                                byte ady = (byte)(grh - floor_ypos[af]);
+                                if (ady <= 1)
+                                {
+                                    if (qr < 2) top_pal = 1;
+                                    else bot_pal = 1;
+                                }
                             }
                         }
+                        byte attr_a;
+                        if (top_pal != 0 && bot_pal != 0) attr_a = 0x55;
+                        else if (top_pal != 0) attr_a = 0x05;
+                        else if (bot_pal != 0) attr_a = 0x50;
+                        else attr_a = 0x00;
                         Array.Fill(attrbuf, attr_a);
                         ushort attraddr;
                         if (drowy < 30)
