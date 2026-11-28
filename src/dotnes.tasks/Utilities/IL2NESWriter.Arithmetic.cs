@@ -492,6 +492,24 @@ partial class IL2NESWriter
     /// Handles Add and Sub operations. For patterns like x++ or x--, emits optimized INC/DEC.
     /// For other arithmetic, performs compile-time calculation.
     /// </summary>
+    // True when the first Add/Sub operand is a verified 16-bit result whose high byte
+    // is still live in X: the producer left it in A:X, no branch intervenes, and the
+    // second operand was loaded by a plain byte ldloc/ldarg (STA TEMP + LDA), which
+    // leaves X untouched. Array loads (LDX index) and calls clobber X, so they don't qualify.
+    bool FirstOperandIsVerifiedWord()
+    {
+        if (_numericValues == null || Instructions == null || Index >= _numericValues.Inputs.Length
+            || _numericValues.Inputs[Index].Length != 2)
+            return false;
+        int lhs = _numericValues.Inputs[Index][0], rhs = _numericValues.Inputs[Index][1];
+        if (lhs < 0 || rhs < 0)
+            return false;
+        if (!_verifiedWordResults.Contains(lhs) || ILBranchTargets.HasEntryAfter(Instructions, lhs, Index))
+            return false;
+        return Instructions[rhs].GetLdlocIndex() is int
+            || NumericArgIndex(Instructions[rhs]) is int;
+    }
+
     void HandleAddSub(bool isAdd)
     {
         _lastStaticFieldAddress = null;
@@ -746,6 +764,17 @@ partial class IL2NESWriter
                     // Two runtime values: first in TEMP, second in A
                     Emit(Opcode.CLC, AddressMode.Implied);
                     Emit(Opcode.ADC, AddressMode.ZeroPage, (byte)NESConstants.TEMP);
+                    if (FirstOperandIsVerifiedWord())
+                    {
+                        // The first operand is a 16-bit value whose high byte is still
+                        // live in X (only its low byte was saved to TEMP when the second
+                        // operand was loaded). Propagate the carry into X so the result
+                        // stays a full 16-bit value in A:X instead of being truncated.
+                        Emit(Opcode.BCC, AddressMode.Relative, 1);
+                        Emit(Opcode.INX, AddressMode.Implied);
+                        _ushortInAX = true;
+                        _verifiedWordResults.Add(Index);
+                    }
                 }
                 else if (_savedConstantViaPusha && (operand == 0 || _runtimeValueInA))
                 {
@@ -785,6 +814,19 @@ partial class IL2NESWriter
                     Emit(Opcode.LDA, AddressMode.ZeroPage, (byte)NESConstants.TEMP);
                     Emit(Opcode.SEC, AddressMode.Implied);
                     Emit(Opcode.SBC, AddressMode.ZeroPage, (byte)(NESConstants.TEMP + 1));
+                    if (FirstOperandIsVerifiedWord())
+                    {
+                        // The first operand is a 16-bit value whose high byte is still
+                        // live in X. Propagate the borrow from the low-byte subtract
+                        // into X so the result stays a full 16-bit value in A:X.
+                        Emit(Opcode.STA, AddressMode.ZeroPage, (byte)NESConstants.TEMP);
+                        Emit(Opcode.TXA, AddressMode.Implied);
+                        Emit(Opcode.SBC, AddressMode.Immediate, 0);
+                        Emit(Opcode.TAX, AddressMode.Implied);
+                        Emit(Opcode.LDA, AddressMode.ZeroPage, (byte)NESConstants.TEMP);
+                        _ushortInAX = true;
+                        _verifiedWordResults.Add(Index);
+                    }
                 }
                 else if (_savedConstantViaPusha && (operand == 0 || _runtimeValueInA))
                 {
