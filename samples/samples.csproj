@@ -1,0 +1,56 @@
+<Project>
+
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net11.0</TargetFramework>
+        <Configuration Condition="'$(Configuration)' == ''">Debug</Configuration>
+    </PropertyGroup>
+
+    <Target Name="Restore"/>
+    <Target Name="Build"/>
+
+    <Target Name="_DiscoverSamples">
+        <Error Condition="!Exists('$(MSBuildThisFileDirectory)samples.slnx')"
+               Text="Cannot find samples.slnx"/>
+
+        <XmlPeek XmlInputPath="$(MSBuildThisFileDirectory)samples.slnx" Query="//Project/@Path">
+            <Output TaskParameter="Result" ItemName="_SampleProject"/>
+        </XmlPeek>
+
+        <Error Condition="'@(_SampleProject)' == ''"
+               Text="No samples found in samples.slnx"/>
+        <Error Condition="!Exists('%(_SampleProject.FullPath)')"
+               Text="Sample project not found: %(_SampleProject.FullPath)"/>
+
+        <ItemGroup>
+            <Devices Include="@(_SampleProject->'%(Filename)')">
+                <ProjectPath>%(_SampleProject.FullPath)</ProjectPath>
+            </Devices>
+        </ItemGroup>
+
+        <RemoveDuplicates Inputs="@(Devices)">
+            <Output TaskParameter="Filtered" ItemName="_DistinctSamples"/>
+        </RemoveDuplicates>
+
+        <Error Condition="'@(Devices->Count())' != '@(_DistinctSamples->Count())'"
+               Text="Sample project names must be unique"/>
+    </Target>
+
+    <Target Name="ComputeAvailableDevices" DependsOnTargets="_DiscoverSamples" Returns="@(Devices)"/>
+
+    <Target Name="ComputeRunArguments" DependsOnTargets="_DiscoverSamples">
+        <ItemGroup>
+            <_SelectedSample Include="@(Devices)" Condition="'%(Devices.Identity)' == '$(Device)'"/>
+        </ItemGroup>
+
+        <Error Condition="'@(_SelectedSample)' == ''"
+               Text="Unknown sample '$(Device)', Use dotnet run --list-devices to list samples"/>
+
+        <PropertyGroup>
+            <RunCommand>dotnet</RunCommand>
+            <RunArguments>run --project &quot;@(_SelectedSample->'%(ProjectPath)')&quot; --configuration &quot;$(Configuration)&quot;</RunArguments>
+            <RunWorkingDirectory>$(MSBuildThisFileDirectory)</RunWorkingDirectory>
+        </PropertyGroup>
+    </Target>
+
+</Project>

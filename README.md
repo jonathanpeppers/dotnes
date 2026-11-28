@@ -43,7 +43,9 @@
 | **tint** ⬇️ | **flicker** ⬇️ |
 | ![tint](samples/tint/tint.png) | ![flicker](samples/flicker/flicker.gif) |
 
-> See the [samples/](samples/) folder for all 46 sample projects. Generate images with `dotnet run scripts/record-all-samples.cs`.
+> See the [samples/](samples/) folder for all sample projects. Generate images with `dotnet run scripts/record-all-samples.cs`.
+
+You can test the samples by using `dotnet run` inside `samples/` to choose a sample, or use `dotnet run --device samplename` to run one directly.
 
 ## Contributing
 
