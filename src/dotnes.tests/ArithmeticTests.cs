@@ -250,6 +250,57 @@ public class ArithmeticTests : ExecutionTests
     }
 
     [Fact]
+    public void ClimberHiTimes256_Isolated()
+    {
+        // Isolate the multiply: hi * 256 alone (no following add).
+        // Regression coverage for the climber's floor-Y math (PR #659 follow-up):
+        // (ushort)(byte * 8 + 16) keeps the +16 and (byte)(ushort >> 8) returns
+        // the real high byte. NOTE: the chained form (ushort)(hi * 256 + lo)
+        // (mul feeding directly into an add, no intermediate store) is a KNOWN
+        // transpiler bug — it drops the hi byte (recomposed hi = 0). It does not
+        // affect the climber game (which splits via >>8), so it is left for a
+        // separate transpiler fix; do not re-add that form as a test until fixed.
+        var cpu = ExecuteProgram(
+            """
+            byte hi = 1;
+            byte lo = 240;
+            ushort m = (ushort)(hi * 256);
+            poke(0x6000, (byte)m);
+            poke(0x6001, (byte)(m >> 8));
+            ushort s = (ushort)(m + lo);
+            poke(0x6002, (byte)s);
+            poke(0x6003, (byte)(s >> 8));
+            test_stop(); while (true);
+            static extern void test_stop();
+            """);
+        // m = 256 (lo 0, hi 1); s = 496 (lo 240, hi 1)
+        Assert.Equal(new byte[] { 0, 1, 240, 1 }, cpu.Memory[0x6000..0x6004]);
+    }
+
+    [Fact]
+    public void ClimberFloorYy_LocalVsArray()
+    {
+        // Same (ushort)(byte * 8 + 16) + >>8 split, but with a plain local byte
+        // instead of an array element — isolates whether array indexing is the trigger.
+        var cpu = ExecuteProgram(
+            """
+            byte pflocal = 60;
+            ushort floor_yy_local = (ushort)(pflocal * 8 + 16);
+            poke(0x6000, (byte)floor_yy_local);
+            poke(0x6001, (byte)(floor_yy_local >> 8));
+            poke(0x6002, (byte)(floor_yy_local / 256));
+            poke(0x6003, (byte)(floor_yy_local % 256));
+            test_stop(); while (true);
+            static extern void test_stop();
+            """);
+        // 60*8+16 = 496 (lo 240, hi 1) by every extraction method
+        Assert.Equal(240, cpu.Memory[0x6000]);
+        Assert.Equal(1, cpu.Memory[0x6001]);
+        Assert.Equal(1, cpu.Memory[0x6002]);
+        Assert.Equal(240, cpu.Memory[0x6003]);
+    }
+
+    [Fact]
     public void Ushort16BitAdd()
     {
         // ushort + byte constant with carry propagation
