@@ -498,6 +498,9 @@ partial class IL2NESWriter
     // plain byte ldloc/ldarg (STA TEMP + LDA), which leaves X untouched.
     // Array loads (LDX index) and calls clobber X, so they don't qualify.
     // Returns -1 when the pattern doesn't hold.
+    // The carry/borrow into X is also skipped when the result is immediately
+    // truncated to a byte: conv.u1 keeps only A and discards X, so the
+    // propagation would be dead code that still shifts sample ROMs.
     int VerifiedWordRhs()
     {
         if (_numericValues == null || Instructions == null || Index >= _numericValues.Inputs.Length
@@ -507,6 +510,8 @@ partial class IL2NESWriter
         if (lhs < 0 || rhs < 0)
             return -1;
         if (!_verifiedWordResults.Contains(lhs) || ILBranchTargets.HasEntryAfter(Instructions, lhs, Index))
+            return -1;
+        if (Index + 1 < Instructions.Length && Instructions[Index + 1].OpCode == ILOpCode.Conv_u1)
             return -1;
         return Instructions[rhs].GetLdlocIndex() is int
             || NumericArgIndex(Instructions[rhs]) is int ? rhs : -1;
