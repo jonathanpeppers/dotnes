@@ -313,6 +313,81 @@ public class ArithmeticTests : ExecutionTests
     }
 
     [Fact]
+    public void UshortMul256PlusSByte_KeepsHighByte()
+    {
+        // Regression (PR #663 review): the carry-propagation path is only valid
+        // for an unsigned-byte addend. A negative sbyte must sign-extend:
+        // (ushort)(2 * 256 + -16) = 496, not 752 ($02F0, the carry-only result).
+        var cpu = ExecuteProgram(
+            """
+            byte hi = 2;
+            sbyte delta = -16;
+            ushort recomposed = (ushort)(hi * 256 + delta);
+            poke(0x6000, (byte)recomposed);
+            poke(0x6001, (byte)(recomposed >> 8));
+            test_stop(); while (true);
+            static extern void test_stop();
+            """);
+        // 2*256 + -16 = 496 (lo 240, hi 1)
+        Assert.Equal(new byte[] { 240, 1 }, cpu.Memory[0x6000..0x6002]);
+    }
+
+    [Fact]
+    public void UshortMul256PlusSByte_Positive()
+    {
+        // Positive sbyte addend: sign byte is 0x00, carry still propagates.
+        var cpu = ExecuteProgram(
+            """
+            byte hi = 2;
+            sbyte delta = 16;
+            ushort recomposed = (ushort)(hi * 256 + delta);
+            poke(0x6000, (byte)recomposed);
+            poke(0x6001, (byte)(recomposed >> 8));
+            test_stop(); while (true);
+            static extern void test_stop();
+            """);
+        // 2*256 + 16 = 528 (lo 16, hi 2)
+        Assert.Equal(new byte[] { 16, 2 }, cpu.Memory[0x6000..0x6002]);
+    }
+
+    [Fact]
+    public void UshortMul256MinusSByte_KeepsHighByte()
+    {
+        // Regression (PR #663 review): subtracting a negative sbyte adds:
+        // (ushort)(2 * 256 - -16) = 528, not 496 ($01F0, the borrow-only result).
+        var cpu = ExecuteProgram(
+            """
+            byte hi = 2;
+            sbyte delta = -16;
+            ushort recomposed = (ushort)(hi * 256 - delta);
+            poke(0x6000, (byte)recomposed);
+            poke(0x6001, (byte)(recomposed >> 8));
+            test_stop(); while (true);
+            static extern void test_stop();
+            """);
+        // 2*256 - -16 = 528 (lo 16, hi 2)
+        Assert.Equal(new byte[] { 16, 2 }, cpu.Memory[0x6000..0x6002]);
+    }
+
+    [Fact]
+    public void UshortMul256MinusSByte_Positive()
+    {
+        // Positive sbyte subtrahend: sign byte is 0x00, borrow still propagates.
+        var cpu = ExecuteProgram(
+            """
+            byte hi = 2;
+            sbyte delta = 16;
+            ushort recomposed = (ushort)(hi * 256 - delta);
+            poke(0x6000, (byte)recomposed);
+            poke(0x6001, (byte)(recomposed >> 8));
+            test_stop(); while (true);
+            static extern void test_stop();
+            """);
+        // 2*256 - 16 = 496 (lo 240, hi 1)
+        Assert.Equal(new byte[] { 240, 1 }, cpu.Memory[0x6000..0x6002]);
+    }
+
+    [Fact]
     public void BytePlusUshortConstant()
     {
         // byte + ushort constant (> 255) produces 16-bit result
